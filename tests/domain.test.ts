@@ -1,0 +1,552 @@
+import { describe, expect, it } from "vitest";
+
+import {
+  cancelSession,
+  canCoachManageAthlete,
+  canCompleteSession,
+  cloneDemoState,
+  completeSession,
+  createProgram,
+  createTrainingPlan,
+  createInvite,
+  createTemplate,
+  deleteScheduledWorkout,
+  duplicateTemplate,
+  getSessionProgress,
+  isInviteExpired,
+  saveSessionNote,
+  scheduleWorkout,
+  startProgramWorkout,
+  startSession,
+  updateProgram,
+  updateSessionSet,
+} from "@/lib/domain";
+
+describe("domain helpers", () => {
+  it("creates template sets from builder input", () => {
+    const template = createTemplate(
+      {
+        title: "Työntöpäivä",
+        description: "Rakennetaan varma ylävartalon treeni.",
+        goal: "Työntövoima",
+        splitType: "upper",
+        blockTitle: "Pääbloki",
+        exercises: [
+          {
+            exerciseId: "ex_bench_press",
+            instruction: "Pidä toisto puhtaana",
+            setCount: 4,
+            targetReps: 6,
+            targetLoad: 50,
+            restSeconds: 120,
+          },
+        ],
+      },
+      "user_coach_1",
+    );
+
+    expect(template.blocks).toHaveLength(1);
+    expect(template.blocks[0]?.exercises[0]?.sets).toHaveLength(4);
+    expect(template.blocks[0]?.exercises[0]?.sets[0]?.targetReps).toBe(6);
+  });
+
+  it("duplicates template with new identifiers", () => {
+    const state = cloneDemoState();
+    const original = state.templates[0];
+    expect(original).toBeDefined();
+    if (!original) {
+      return;
+    }
+
+    const copy = duplicateTemplate(original, "user_coach_1");
+
+    expect(copy.id).not.toBe(original.id);
+    expect(copy.title).toContain("Copy");
+    expect(copy.blocks[0]?.id).not.toBe(original.blocks[0]?.id);
+  });
+
+  it("starts a scheduled workout and creates missing set logs", () => {
+    const state = cloneDemoState();
+    const freshWorkout = scheduleWorkout(
+      state.templates[0]!,
+      "user_athlete_2",
+      "user_coach_1",
+      new Date().toISOString(),
+    );
+
+    state.scheduledWorkouts.push(freshWorkout);
+    const result = startSession(state, freshWorkout.id);
+
+    expect(result.session.scheduledWorkoutId).toBe(freshWorkout.id);
+    expect(result.session.setLogs.length).toBeGreaterThan(0);
+    expect(result.state.scheduledWorkouts.find((item) => item.id === freshWorkout.id)?.status).toBe(
+      "in_progress",
+    );
+  });
+
+  it("updates set logs and completes a session", () => {
+    const state = cloneDemoState();
+    const session = state.sessions.find((item) => item.scheduledWorkoutId === "scheduled_2");
+    expect(session).toBeDefined();
+    if (!session) {
+      return;
+    }
+
+    const logId = session.setLogs[0]?.id;
+    expect(logId).toBeDefined();
+    if (!logId) {
+      return;
+    }
+
+    expect(canCompleteSession(state, "scheduled_2")).toBe(false);
+
+    const updated = updateSessionSet(state, "scheduled_2", logId, {
+      actualLoad: 47.5,
+      actualReps: 8,
+      done: true,
+    });
+
+    expect(updated.sessions.find((item) => item.id === session.id)?.setLogs[0]?.done).toBe(true);
+    expect(canCompleteSession(updated, "scheduled_2")).toBe(false);
+
+    const completed = completeSession(updated, "scheduled_2");
+    expect(completed.scheduledWorkouts.find((item) => item.id === "scheduled_2")?.status).toBe("in_progress");
+  });
+
+  it("creates pending invites for onboarding", () => {
+    const invite = createInvite(
+      {
+        email: "uusi@rookiapp.fi",
+        role: "athlete",
+        coachId: "user_coach_1",
+      },
+      "user_coach_1",
+    );
+
+    expect(invite.status).toBe("pending");
+    expect(invite.coachId).toBe("user_coach_1");
+  });
+
+  it("creates a 2+1 training plan with weekly scheduled workouts", () => {
+    const created = createTrainingPlan(
+      {
+        title: "2+1 ohjelma",
+        athleteId: "user_athlete_1",
+        startDate: "2026-03-22",
+        weekCount: 2,
+        templateIds: ["template_upper_1", "template_lower_1", "template_full_1"],
+      },
+      "user_coach_1",
+    );
+
+    expect(created.plan.templateIds).toHaveLength(3);
+    expect(created.plan.weekCount).toBe(2);
+    expect(created.scheduledWorkouts).toHaveLength(6);
+    expect(created.scheduledWorkouts[0]?.templateId).toBe("template_upper_1");
+    expect(created.scheduledWorkouts[1]?.templateId).toBe("template_lower_1");
+    expect(created.scheduledWorkouts[2]?.templateId).toBe("template_full_1");
+  });
+
+  it("creates a dynamic program with workout name overrides", () => {
+    const program = createProgram(
+      {
+        title: "Coach custom ohjelma",
+        athleteId: "user_athlete_1",
+        workouts: [
+          {
+            splitType: "upper",
+            nameOverride: "Upper Prime",
+            defaultRestSeconds: 90,
+            exercises: [
+              {
+                exerciseId: "ex_bench_press",
+                exerciseName: "Penkkipunnerrus",
+                exerciseNameOverride: "Penkki kisastopilla",
+                instruction: "Pidä toisto puhtaana.",
+                setCount: 3,
+                targetReps: 8,
+                targetLoad: 47.5,
+                restSeconds: 120,
+              },
+            ],
+          },
+          {
+            splitType: "custom",
+            defaultRestSeconds: 80,
+            exercises: [
+              {
+                exerciseId: "ex_row",
+                exerciseName: "Kulmasoutu",
+                instruction: "Vedä hallitusti.",
+                setCount: 2,
+                targetReps: 10,
+                targetLoad: 20,
+              },
+            ],
+          },
+        ],
+      },
+      "user_coach_1",
+    );
+
+    expect(program.workouts).toHaveLength(2);
+    expect(program.workouts?.[0]?.name).toBe("Upper Prime");
+    expect(program.workouts?.[0]?.exercises[0]?.exerciseName).toBe("Penkki kisastopilla");
+    expect(program.workouts?.[1]?.name).toContain("Harjoitus");
+  });
+
+  it("updates program title and starts a program workout with session logs", () => {
+    const baseState = cloneDemoState();
+    const createdProgram = createProgram(
+      {
+        title: "Startattava ohjelma",
+        athleteId: "user_athlete_1",
+        workouts: [
+          {
+            splitType: "full_body",
+            nameOverride: "Koko kroppa Start",
+            defaultRestSeconds: 75,
+            exercises: [
+              {
+                exerciseId: "ex_split_squat",
+                exerciseName: "Bulgarialainen askelkyykky",
+                supersetGroup: "A",
+                instruction: "Kontrolli.",
+                setCount: 2,
+                targetReps: 8,
+                targetLoad: 16,
+                restSeconds: 60,
+              },
+              {
+                exerciseId: "ex_plank",
+                exerciseName: "Lankku",
+                supersetGroup: "A",
+                instruction: "Pidä core tiukkana.",
+                setCount: 1,
+                targetReps: 1,
+                targetLoad: 0,
+              },
+            ],
+          },
+        ],
+      },
+      "user_coach_1",
+    );
+
+    const updatedProgram = updateProgram(createdProgram, { title: "Päivitetty ohjelma" });
+    expect(updatedProgram.title).toBe("Päivitetty ohjelma");
+
+    const state = {
+      ...baseState,
+      plans: [updatedProgram, ...baseState.plans],
+    };
+
+    const workoutId = updatedProgram.workouts?.[0]?.id;
+    expect(workoutId).toBeDefined();
+    if (!workoutId) {
+      return;
+    }
+
+    const started = startProgramWorkout(state, updatedProgram.id, workoutId, "user_athlete_1");
+    expect(started.scheduledWorkout.programWorkoutId).toBe(workoutId);
+    expect(started.scheduledWorkout.status).toBe("scheduled");
+    expect(started.session.setLogs.length).toBeGreaterThan(0);
+    expect(started.session.setLogs[0]?.targetRestSeconds).toBe(60);
+    expect(started.session.setLogs[0]?.supersetGroup).toBe("A");
+    expect(started.session.setLogs[2]?.targetRestSeconds).toBe(75);
+    expect(started.session.setLogs[2]?.supersetGroup).toBe("A");
+    expect(
+      started.state.scheduledWorkouts.find((item) => item.id === started.scheduledWorkout.id)?.status,
+    ).toBe("in_progress");
+  });
+
+  it("preserves workout, exercise and set IDs when updating existing program workouts", () => {
+    const createdProgram = createProgram(
+      {
+        title: "ID säilytys ohjelma",
+        athleteId: "user_athlete_1",
+        workouts: [
+          {
+            splitType: "upper",
+            nameOverride: "Yläpäivä",
+            defaultRestSeconds: 90,
+            exercises: [
+              {
+                exerciseId: "ex_bench_press",
+                exerciseName: "Penkki",
+                instruction: "Pidä lapatuet.",
+                setCount: 2,
+                targetReps: 6,
+                targetLoad: 60,
+                restSeconds: 120,
+              },
+            ],
+          },
+        ],
+      },
+      "user_coach_1",
+    );
+
+    const originalWorkoutId = createdProgram.workouts?.[0]?.id;
+    const originalExerciseId = createdProgram.workouts?.[0]?.exercises[0]?.id;
+    const originalSetOneId = createdProgram.workouts?.[0]?.exercises[0]?.sets[0]?.id;
+    const originalSetTwoId = createdProgram.workouts?.[0]?.exercises[0]?.sets[1]?.id;
+
+    expect(originalWorkoutId).toBeDefined();
+    expect(originalExerciseId).toBeDefined();
+    expect(originalSetOneId).toBeDefined();
+    expect(originalSetTwoId).toBeDefined();
+
+    const updatedProgram = updateProgram(createdProgram, {
+      workouts: [
+        {
+          splitType: "upper",
+          nameOverride: "Yläpäivä päivitetty",
+          defaultRestSeconds: 105,
+          exercises: [
+            {
+              exerciseId: "ex_bench_press",
+              exerciseName: "Penkki",
+              instruction: "Pidä rinta ylhäällä.",
+              setCount: 3,
+              targetReps: 7,
+              targetLoad: 62.5,
+              restSeconds: 120,
+            },
+          ],
+        },
+      ],
+    });
+
+    const updatedWorkout = updatedProgram.workouts?.[0];
+    const updatedExercise = updatedWorkout?.exercises[0];
+    const updatedSets = updatedExercise?.sets ?? [];
+
+    expect(updatedWorkout?.id).toBe(originalWorkoutId);
+    expect(updatedExercise?.id).toBe(originalExerciseId);
+    expect(updatedSets[0]?.id).toBe(originalSetOneId);
+    expect(updatedSets[1]?.id).toBe(originalSetTwoId);
+    expect(updatedSets[2]?.id).toBeDefined();
+    expect(updatedSets[2]?.id).not.toBe(originalSetOneId);
+    expect(updatedSets[2]?.id).not.toBe(originalSetTwoId);
+  });
+
+  it("stores rep ranges to session logs for range-based progression", () => {
+    const baseState = cloneDemoState();
+    const createdProgram = createProgram(
+      {
+        title: "Range progression ohjelma",
+        athleteId: "user_athlete_1",
+        workouts: [
+          {
+            splitType: "upper",
+            nameOverride: "Yläpäivä 6-8",
+            defaultRestSeconds: 90,
+            exercises: [
+              {
+                exerciseId: "ex_bench_press",
+                exerciseName: "Penkkipunnerrus",
+                instruction: "Nosta kuormaa kun kaikki sarjat osuvat 8:aan.",
+                repMode: "range",
+                setCount: 3,
+                targetReps: 6,
+                targetRepsMin: 6,
+                targetRepsMax: 8,
+                targetLoad: 50,
+                restSeconds: 120,
+              },
+            ],
+          },
+        ],
+      },
+      "user_coach_1",
+    );
+
+    const state = {
+      ...baseState,
+      plans: [createdProgram, ...baseState.plans],
+    };
+
+    const workoutId = createdProgram.workouts?.[0]?.id;
+    expect(workoutId).toBeDefined();
+    if (!workoutId) {
+      return;
+    }
+
+    const started = startProgramWorkout(state, createdProgram.id, workoutId, "user_athlete_1");
+    const firstLog = started.session.setLogs[0];
+    expect(firstLog).toBeDefined();
+    expect(firstLog?.targetReps).toBe(6);
+    expect(firstLog?.targetRepsMin).toBe(6);
+    expect(firstLog?.targetRepsMax).toBe(8);
+  });
+
+  it("reports workout progress and only completes when every set is done", () => {
+    const state = cloneDemoState();
+    const started = startSession(state, "scheduled_3").state;
+    const session = started.sessions.find((item) => item.scheduledWorkoutId === "scheduled_3");
+    expect(session).toBeDefined();
+    if (!session) {
+      return;
+    }
+
+    const allDone = session.setLogs.reduce((current, log) => {
+      return updateSessionSet(current, "scheduled_3", log.id, { done: true });
+    }, started);
+
+    const progress = getSessionProgress(allDone, "scheduled_3");
+    expect(progress.allDone).toBe(true);
+    expect(progress.completedSets).toBe(progress.totalSets);
+    expect(canCompleteSession(allDone, "scheduled_3")).toBe(true);
+  });
+
+  it("cancels a started workout and clears its session data", () => {
+    const baseState = cloneDemoState();
+    const started = startSession(baseState, "scheduled_1").state;
+    const withNote = saveSessionNote(started, "scheduled_1", "Testimuistiinpano");
+
+    expect(withNote.sessions.some((session) => session.scheduledWorkoutId === "scheduled_1")).toBe(true);
+    expect(withNote.notes.length).toBeGreaterThan(0);
+
+    const cancelled = cancelSession(withNote, "scheduled_1");
+
+    expect(cancelled.sessions.some((session) => session.scheduledWorkoutId === "scheduled_1")).toBe(false);
+    expect(cancelled.notes.some((note) => note.body === "Testimuistiinpano")).toBe(false);
+    expect(cancelled.scheduledWorkouts.find((item) => item.id === "scheduled_1")?.status).toBe("scheduled");
+  });
+
+  it("deletes a scheduled workout with linked session and notes", () => {
+    const baseState = cloneDemoState();
+    const createdProgram = createProgram(
+      {
+        title: "Poistettava ohjelmatreeni",
+        athleteId: "user_athlete_1",
+        workouts: [
+          {
+            splitType: "upper",
+            nameOverride: "Poistettava workout",
+            defaultRestSeconds: 90,
+            exercises: [
+              {
+                exerciseId: "ex_bench_press",
+                exerciseName: "Penkki",
+                instruction: "Kontrolli.",
+                setCount: 2,
+                targetReps: 6,
+                targetLoad: 50,
+                restSeconds: 90,
+              },
+            ],
+          },
+        ],
+      },
+      "user_coach_1",
+    );
+    const workoutId = createdProgram.workouts?.[0]?.id;
+    expect(workoutId).toBeDefined();
+    if (!workoutId) {
+      return;
+    }
+
+    const stateWithProgram = {
+      ...baseState,
+      plans: [createdProgram, ...baseState.plans],
+    };
+    const started = startProgramWorkout(
+      stateWithProgram,
+      createdProgram.id,
+      workoutId,
+      "user_athlete_1",
+    );
+    const withNote = saveSessionNote(
+      started.state,
+      started.scheduledWorkout.id,
+      "Poistettava treeni",
+    );
+
+    const next = deleteScheduledWorkout(withNote, started.scheduledWorkout.id);
+
+    expect(next.scheduledWorkouts.some((item) => item.id === started.scheduledWorkout.id)).toBe(false);
+    expect(next.sessions.some((session) => session.scheduledWorkoutId === started.scheduledWorkout.id)).toBe(false);
+    expect(next.notes.some((note) => note.body === "Poistettava treeni")).toBe(false);
+  });
+
+  it("prefills new session logs from previous completed exercise results", () => {
+    const baseState = cloneDemoState();
+    const createdProgram = createProgram(
+      {
+        title: "Autofill testiohjelma",
+        athleteId: "user_athlete_1",
+        workouts: [
+          {
+            splitType: "lower",
+            nameOverride: "Kyykky päivitys",
+            defaultRestSeconds: 120,
+            exercises: [
+              {
+                exerciseId: "ex_back_squat",
+                exerciseName: "Takakyykky",
+                instruction: "Pidä keskivartalo tiukkana.",
+                setCount: 2,
+                targetReps: 5,
+                targetLoad: 72.5,
+                restSeconds: 120,
+              },
+              {
+                exerciseId: "ex_split_squat",
+                exerciseName: "Bulgarialainen askelkyykky",
+                instruction: "Kontrolloi alasmeno.",
+                setCount: 1,
+                targetReps: 10,
+                targetLoad: 16,
+                restSeconds: 90,
+              },
+            ],
+          },
+        ],
+      },
+      "user_coach_1",
+    );
+    const workoutId = createdProgram.workouts?.[0]?.id;
+    expect(workoutId).toBeDefined();
+    if (!workoutId) {
+      return;
+    }
+
+    const stateWithProgram = {
+      ...baseState,
+      plans: [createdProgram, ...baseState.plans],
+    };
+
+    const started = startProgramWorkout(
+      stateWithProgram,
+      createdProgram.id,
+      workoutId,
+      "user_athlete_1",
+    );
+    const squatLogs = started.session.setLogs.filter((log) => log.exerciseId === "ex_back_squat");
+    expect(squatLogs).toHaveLength(2);
+    expect(squatLogs[0]?.actualReps).toBe(5);
+    expect(squatLogs[0]?.actualLoad).toBe(70);
+    expect(squatLogs[0]?.rpe).toBe(7);
+    expect(squatLogs[0]?.done).toBe(false);
+    expect(squatLogs[1]?.actualReps).toBe(5);
+    expect(squatLogs[1]?.actualLoad).toBe(70);
+    expect(squatLogs[1]?.rpe).toBe(8);
+    expect(squatLogs[1]?.done).toBe(false);
+
+    const unknownExerciseLog = started.session.setLogs.find((log) => log.exerciseId === "ex_split_squat");
+    expect(unknownExerciseLog?.actualReps).toBeUndefined();
+    expect(unknownExerciseLog?.actualLoad).toBeUndefined();
+    expect(unknownExerciseLog?.rpe).toBeUndefined();
+  });
+
+  it("checks coach ownership and invite expiry", () => {
+    const state = cloneDemoState();
+
+    expect(canCoachManageAthlete(state, "user_coach_1", "user_athlete_1")).toBe(true);
+    expect(canCoachManageAthlete(state, "user_coach_1", "user_athlete_3")).toBe(false);
+    expect(isInviteExpired("2000-01-01T00:00:00.000Z")).toBe(true);
+    expect(isInviteExpired("2999-01-01T00:00:00.000Z")).toBe(false);
+  });
+});
