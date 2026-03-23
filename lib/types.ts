@@ -1,11 +1,20 @@
 export type Role = "admin" | "coach" | "athlete";
 export type UserStatus = "active" | "invited";
 export type TemplateStatus = "draft" | "published";
-export type ScheduledWorkoutStatus = "scheduled" | "in_progress" | "completed";
+export type ScheduledWorkoutStatus = "in_progress" | "completed" | "cancelled";
 export type InviteStatus = "pending" | "accepted";
 export type SplitType = "upper" | "lower" | "full_body" | "custom";
 export type ExerciseScope = "global" | "coach_custom";
 export type RepTargetMode = "exact" | "range";
+export type DashboardHomeView = "overview" | "templates" | "invites" | "athlete-log" | "conversation";
+export type MuscleGroupKey = "shoulders" | "arms" | "chest" | "abs" | "back" | "legs" | "other";
+export type ThemeMode = "light" | "dark";
+
+export interface UserSettings {
+  defaultDashboardView: DashboardHomeView;
+  emailNotifications: boolean;
+  themeMode: ThemeMode;
+}
 
 export interface UserProfile {
   id: string;
@@ -14,6 +23,7 @@ export interface UserProfile {
   email: string;
   status: UserStatus;
   demoPassword?: string;
+  settings?: UserSettings;
   createdAt: string;
   updatedAt: string;
 }
@@ -89,6 +99,7 @@ export interface ProgramWorkoutExercise {
   id: string;
   exerciseId?: string;
   exerciseName: string;
+  muscleGroup?: MuscleGroupKey;
   supersetGroup?: string;
   instruction: string;
   sets: ProgramWorkoutSet[];
@@ -107,7 +118,6 @@ export interface TrainingPlan {
   coachId: string;
   athleteId: string;
   title: string;
-  templateIds?: string[];
   workouts?: ProgramWorkout[];
   startDate: string;
   weekCount: number;
@@ -137,6 +147,7 @@ export interface WorkoutSetLog {
   setId: string;
   exerciseId: string;
   exerciseName: string;
+  muscleGroup?: MuscleGroupKey;
   supersetGroup?: string;
   setLabel: string;
   targetReps: number;
@@ -172,6 +183,34 @@ export interface WorkoutNote {
   updatedAt: string;
 }
 
+export type ConversationEntryType =
+  | "comment"
+  | "workout_note_saved"
+  | "workout_started"
+  | "workout_completed"
+  | "workout_cancelled"
+  | "workout_deleted"
+  | "workout_updated"
+  | "program_created"
+  | "program_updated";
+
+export type ConversationContextType = "general" | "workout" | "program";
+
+export interface ConversationEntry {
+  id: string;
+  athleteId: string;
+  coachId: string;
+  authorUserId: string;
+  authorRole: Role;
+  type: ConversationEntryType;
+  body: string;
+  contextType: ConversationContextType;
+  contextId?: string;
+  contextLabel?: string;
+  createdAt: string;
+  readByUserIds: string[];
+}
+
 export interface Invite {
   id: string;
   token: string;
@@ -184,6 +223,18 @@ export interface Invite {
   expiresAt: string;
 }
 
+export interface PasswordResetRequest {
+  id: string;
+  userId: string;
+  email: string;
+  tokenHash: string;
+  createdAt: string;
+  expiresAt: string;
+  requestedByUserId?: string;
+  requestedByRole: Role | "self_service";
+  consumedAt?: string;
+}
+
 export interface AppState {
   users: UserProfile[];
   assignments: CoachAthleteAssignment[];
@@ -193,7 +244,9 @@ export interface AppState {
   scheduledWorkouts: ScheduledWorkout[];
   sessions: WorkoutSession[];
   notes: WorkoutNote[];
+  conversationEntries: ConversationEntry[];
   invites: Invite[];
+  passwordResetRequests: PasswordResetRequest[];
 }
 
 export interface TemplateExerciseInput {
@@ -229,6 +282,7 @@ export interface ProgramWorkoutExerciseInput {
   exerciseName?: string;
   exerciseNameOverride?: string;
   customExerciseName?: string;
+  customMuscleGroup?: MuscleGroupKey;
   supersetGroup?: string;
   instruction: string;
   repMode?: RepTargetMode;

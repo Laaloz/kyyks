@@ -21,6 +21,8 @@ function nowIso() {
   return new Date().toISOString();
 }
 
+const DEFAULT_RPE = 8;
+
 function defaultWorkoutName(splitType: SplitType, _index: number) {
   if (splitType === "upper") return "Yläkroppa";
   if (splitType === "lower") return "Alakroppa";
@@ -56,6 +58,7 @@ function buildProgramWorkouts(
             exercise.exerciseName?.trim() ||
             exercise.customExerciseName?.trim() ||
             `Liike ${exerciseIndex + 1}`,
+          muscleGroup: exercise.customMuscleGroup,
           supersetGroup: exercise.supersetGroup,
           instruction: exercise.instruction,
           sets: Array.from({ length: exercise.setCount }, (_, setIndex) => ({
@@ -81,6 +84,24 @@ type AutofillSnapshot = {
   actualLoad?: number;
   rpe?: number;
 };
+
+type SetLogDefaultsTarget = {
+  targetReps: number;
+  targetRepsMin?: number;
+  targetLoad?: number;
+};
+
+function resolveDefaultActualReps(target: SetLogDefaultsTarget) {
+  return target.targetRepsMin ?? target.targetReps;
+}
+
+function resolveDefaultActualLoad(target: SetLogDefaultsTarget) {
+  if (target.targetLoad === undefined || target.targetLoad <= 0) {
+    return undefined;
+  }
+
+  return target.targetLoad;
+}
 
 function buildExerciseAutofillSnapshots(
   state: AppState,
@@ -258,7 +279,8 @@ export function getSessionProgress(state: AppState, scheduledWorkoutId: string) 
 }
 
 export function canCompleteSession(state: AppState, scheduledWorkoutId: string) {
-  return getSessionProgress(state, scheduledWorkoutId).allDone;
+  const progress = getSessionProgress(state, scheduledWorkoutId);
+  return progress.totalSets > 0;
 }
 
 export function duplicateTemplate(template: WorkoutTemplate, actorId: string): WorkoutTemplate {
@@ -301,84 +323,6 @@ export function createInvite(input: InviteInput, invitedBy: string): Invite {
   };
 }
 
-export function scheduleWorkout(
-  template: WorkoutTemplate,
-  athleteId: string,
-  coachId: string,
-  scheduledDate: string,
-): ScheduledWorkout {
-  const timestamp = nowIso();
-  return {
-    id: makeId("scheduled"),
-    templateId: template.id,
-    athleteId,
-    coachId,
-    title: template.title,
-    scheduledDate,
-    status: "scheduled",
-    createdAt: timestamp,
-    updatedAt: timestamp,
-  };
-}
-
-type LegacyTrainingPlanInput = {
-  title: string;
-  athleteId: string;
-  startDate: string;
-  weekCount: number;
-  templateIds: string[];
-};
-
-export function createTrainingPlan(input: LegacyTrainingPlanInput, coachId: string): {
-  plan: TrainingPlan;
-  scheduledWorkouts: ScheduledWorkout[];
-} {
-  const createdAt = nowIso();
-  const planId = makeId("plan");
-  const cycleDayOffsets = [0, 2, 4];
-  const startBase = new Date(`${input.startDate}T08:00:00`);
-
-  const toIso = (dayOffset: number) => {
-    const date = new Date(startBase);
-    date.setDate(date.getDate() + dayOffset);
-    return date.toISOString();
-  };
-
-  const scheduledWorkouts: ScheduledWorkout[] = [];
-
-  for (let week = 0; week < input.weekCount; week += 1) {
-    input.templateIds.forEach((templateId, index) => {
-      const dayOffset = week * 7 + (cycleDayOffsets[index] ?? index);
-      scheduledWorkouts.push({
-        id: makeId("scheduled"),
-        trainingPlanId: planId,
-        templateId,
-        athleteId: input.athleteId,
-        coachId,
-        title: `Viikko ${week + 1} · Päivä ${index + 1}`,
-        scheduledDate: toIso(dayOffset),
-        status: "scheduled",
-        createdAt,
-        updatedAt: createdAt,
-      });
-    });
-  }
-
-  return {
-    plan: {
-      id: planId,
-      coachId,
-      athleteId: input.athleteId,
-      title: input.title,
-      templateIds: input.templateIds,
-      startDate: toIso(0),
-      weekCount: input.weekCount,
-      createdAt,
-    },
-    scheduledWorkouts,
-  };
-}
-
 export function startProgramWorkout(
   state: AppState,
   programId: string,
@@ -397,14 +341,14 @@ export function startProgramWorkout(
 
   const timestamp = nowIso();
   const scheduledWorkout: ScheduledWorkout = {
-    id: makeId("scheduled"),
+    id: makeId("workout"),
     trainingPlanId: plan.id,
     programWorkoutId: workout.id,
     athleteId,
     coachId: plan.coachId,
     title: workout.name,
     scheduledDate: timestamp,
-    status: "scheduled",
+    status: "cancelled",
     createdAt: timestamp,
     updatedAt: timestamp,
   };
@@ -424,7 +368,23 @@ export function startSession(
 ): { state: AppState; session: WorkoutSession } {
   const existing = state.sessions.find((session) => session.scheduledWorkoutId === scheduledWorkoutId);
   if (existing) {
-    return { state, session: existing };
+    const scheduled = state.scheduledWorkouts.find((item) => item.id === scheduledWorkoutId);
+    if (!scheduled || scheduled.status === "completed" || scheduled.status === "in_progress") {
+      return { state, session: existing };
+    }
+
+    const resumedAt = nowIso();
+    return {
+      state: {
+        ...state,
+        scheduledWorkouts: state.scheduledWorkouts.map((item) =>
+          item.id === scheduledWorkoutId
+            ? { ...item, status: "in_progress", updatedAt: resumedAt }
+            : item,
+        ),
+      },
+      session: existing,
+    };
   }
 
   const scheduledWorkout = state.scheduledWorkouts.find((item) => item.id === scheduledWorkoutId);
@@ -467,9 +427,9 @@ export function startSession(
             targetRepsMax: undefined,
             targetLoad: set.targetLoad,
             targetRestSeconds: set.restSeconds,
-            actualReps: snapshot?.actualReps,
-            actualLoad: snapshot?.actualLoad,
-            rpe: snapshot?.rpe,
+            actualReps: snapshot?.actualReps ?? resolveDefaultActualReps(set),
+            actualLoad: snapshot?.actualLoad ?? resolveDefaultActualLoad(set),
+            rpe: snapshot?.rpe ?? DEFAULT_RPE,
             done: false,
           };
         }),
@@ -498,6 +458,7 @@ export function startSession(
           setId: set.id,
           exerciseId: resolvedExerciseId,
           exerciseName: exercise.exerciseName,
+          muscleGroup: exercise.muscleGroup,
           supersetGroup: exercise.supersetGroup,
           setLabel: set.label,
           targetReps: set.targetReps,
@@ -506,9 +467,9 @@ export function startSession(
           targetLoad: set.targetLoad,
           targetRestSeconds: set.restSeconds ?? programWorkout.defaultRestSeconds,
           programWorkoutId: programWorkout.id,
-          actualReps: snapshot?.actualReps,
-          actualLoad: snapshot?.actualLoad,
-          rpe: snapshot?.rpe,
+          actualReps: snapshot?.actualReps ?? resolveDefaultActualReps(set),
+          actualLoad: snapshot?.actualLoad ?? resolveDefaultActualLoad(set),
+          rpe: snapshot?.rpe ?? DEFAULT_RPE,
           done: false,
         };
       }),
@@ -544,21 +505,67 @@ export function updateSessionSet(
   logId: string,
   patch: WorkoutUpdateInput,
 ): AppState {
+  const updatedAt = nowIso();
+
   return {
     ...state,
     sessions: state.sessions.map((session) =>
       session.scheduledWorkoutId === scheduledWorkoutId
         ? {
             ...session,
-            updatedAt: nowIso(),
-            setLogs: session.setLogs.map((log) =>
-              log.id === logId ? { ...log, ...patch } : log,
-            ),
+            updatedAt,
+            setLogs: (() => {
+              const targetLog = session.setLogs.find((log) => log.id === logId);
+              if (!targetLog) {
+                return session.setLogs;
+              }
+
+              return session.setLogs.map((log) => {
+                if (log.id === logId) {
+                  const nextLog = { ...log, ...patch };
+                  if (patch.done) {
+                    return {
+                      ...nextLog,
+                      actualReps: nextLog.actualReps ?? resolveDefaultActualReps(nextLog),
+                      actualLoad: nextLog.actualLoad ?? resolveDefaultActualLoad(nextLog),
+                    };
+                  }
+
+                  return nextLog;
+                }
+
+                if (
+                  patch.done !== undefined &&
+                  targetLog.supersetGroup &&
+                  log.supersetGroup === targetLog.supersetGroup &&
+                  log.setLabel === targetLog.setLabel
+                ) {
+                  const nextLog = { ...log, done: patch.done };
+                  if (patch.done) {
+                    return {
+                      ...nextLog,
+                      actualReps: nextLog.actualReps ?? resolveDefaultActualReps(nextLog),
+                      actualLoad: nextLog.actualLoad ?? resolveDefaultActualLoad(nextLog),
+                    };
+                  }
+
+                  return nextLog;
+                }
+
+                return log;
+              });
+            })(),
           }
         : session,
     ),
     scheduledWorkouts: state.scheduledWorkouts.map((item) =>
-      item.id === scheduledWorkoutId ? { ...item, status: "in_progress", updatedAt: nowIso() } : item,
+      item.id === scheduledWorkoutId
+        ? {
+            ...item,
+            status: item.status === "completed" ? "completed" : "in_progress",
+            updatedAt,
+          }
+        : item,
     ),
   };
 }
@@ -609,21 +616,13 @@ export function cancelSession(state: AppState, scheduledWorkoutId: string): AppS
     return state;
   }
 
-  const sessionIds = new Set(
-    state.sessions
-      .filter((session) => session.scheduledWorkoutId === scheduledWorkoutId)
-      .map((session) => session.id),
-  );
-
   return {
     ...state,
-    sessions: state.sessions.filter((session) => session.scheduledWorkoutId !== scheduledWorkoutId),
-    notes: state.notes.filter((note) => !sessionIds.has(note.sessionId)),
     scheduledWorkouts: state.scheduledWorkouts.map((item) =>
       item.id === scheduledWorkoutId
         ? {
             ...item,
-            status: "scheduled",
+            status: "cancelled",
             completedAt: undefined,
             updatedAt: nowIso(),
           }

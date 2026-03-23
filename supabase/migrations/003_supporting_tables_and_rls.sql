@@ -1,228 +1,25 @@
-create extension if not exists "pgcrypto";
+-- Adds current supporting tables and replaces broad legacy RLS policies.
 
-create type public.app_role as enum ('admin', 'coach', 'athlete');
-create type public.user_status as enum ('active', 'invited');
-create type public.template_status as enum ('draft', 'published');
-create type public.scheduled_workout_status as enum ('in_progress', 'completed', 'cancelled');
-create type public.invite_status as enum ('pending', 'accepted');
-create type public.exercise_scope as enum ('global', 'coach_custom');
-create type public.theme_mode as enum ('light', 'dark');
-create type public.conversation_entry_type as enum (
-  'comment',
-  'workout_note_saved',
-  'workout_started',
-  'workout_completed',
-  'workout_cancelled',
-  'workout_deleted',
-  'workout_updated',
-  'program_created',
-  'program_updated'
-);
-create type public.conversation_context_type as enum ('general', 'workout', 'program');
+do $$
+begin
+  if not exists (select 1 from pg_type where typname = 'conversation_entry_type') then
+    create type public.conversation_entry_type as enum (
+      'comment',
+      'workout_note_saved',
+      'workout_started',
+      'workout_completed',
+      'workout_cancelled',
+      'workout_deleted',
+      'workout_updated',
+      'program_created',
+      'program_updated'
+    );
+  end if;
 
-create table if not exists public.profiles (
-  id uuid primary key references auth.users(id) on delete cascade,
-  role public.app_role not null,
-  status public.user_status not null default 'invited',
-  full_name text not null,
-  email text not null,
-  default_dashboard_view text,
-  email_notifications boolean not null default false,
-  theme_mode public.theme_mode not null default 'light',
-  created_at timestamptz not null default now(),
-  updated_at timestamptz not null default now()
-);
-
-create unique index if not exists profiles_email_lower_unique
-on public.profiles (lower(email));
-
-create table if not exists public.coach_athlete_assignments (
-  id uuid primary key default gen_random_uuid(),
-  coach_id uuid not null references public.profiles(id) on delete cascade,
-  athlete_id uuid not null references public.profiles(id) on delete cascade,
-  active boolean not null default true,
-  created_at timestamptz not null default now()
-);
-
-create unique index if not exists coach_athlete_active_unique
-on public.coach_athlete_assignments (athlete_id)
-where active = true;
-
-create index if not exists coach_athlete_assignments_coach_idx
-on public.coach_athlete_assignments (coach_id);
-
-create table if not exists public.exercises (
-  id uuid primary key default gen_random_uuid(),
-  name text not null,
-  category text not null,
-  equipment text not null,
-  cue text not null,
-  scope public.exercise_scope not null default 'global',
-  coach_id uuid references public.profiles(id) on delete cascade,
-  created_at timestamptz not null default now(),
-  constraint exercises_scope_owner_check
-    check (
-      (scope = 'global' and coach_id is null)
-      or (scope = 'coach_custom' and coach_id is not null)
-    )
-);
-
-create index if not exists exercises_scope_idx on public.exercises (scope);
-create index if not exists exercises_coach_idx on public.exercises (coach_id);
-
-create table if not exists public.workout_templates (
-  id uuid primary key default gen_random_uuid(),
-  coach_id uuid not null references public.profiles(id) on delete cascade,
-  title text not null,
-  description text not null default '',
-  goal text not null default '',
-  split_type text not null default 'custom',
-  status public.template_status not null default 'draft',
-  created_by uuid not null references public.profiles(id),
-  updated_by uuid not null references public.profiles(id),
-  created_at timestamptz not null default now(),
-  updated_at timestamptz not null default now()
-);
-
-create index if not exists workout_templates_coach_idx
-on public.workout_templates (coach_id);
-
-create table if not exists public.workout_template_blocks (
-  id uuid primary key default gen_random_uuid(),
-  template_id uuid not null references public.workout_templates(id) on delete cascade,
-  title text not null,
-  note text,
-  sort_order int not null default 0
-);
-
-create index if not exists workout_template_blocks_template_idx
-on public.workout_template_blocks (template_id, sort_order);
-
-create table if not exists public.workout_template_exercises (
-  id uuid primary key default gen_random_uuid(),
-  block_id uuid not null references public.workout_template_blocks(id) on delete cascade,
-  exercise_id uuid not null references public.exercises(id) on delete restrict,
-  instruction text not null default '',
-  sort_order int not null default 0
-);
-
-create index if not exists workout_template_exercises_block_idx
-on public.workout_template_exercises (block_id, sort_order);
-
-create table if not exists public.workout_template_sets (
-  id uuid primary key default gen_random_uuid(),
-  template_exercise_id uuid not null references public.workout_template_exercises(id) on delete cascade,
-  label text not null,
-  target_reps int not null,
-  target_load numeric(6,2),
-  rest_seconds int not null default 90,
-  notes text,
-  sort_order int not null default 0
-);
-
-create index if not exists workout_template_sets_exercise_idx
-on public.workout_template_sets (template_exercise_id, sort_order);
-
-create table if not exists public.training_plans (
-  id uuid primary key default gen_random_uuid(),
-  coach_id uuid not null references public.profiles(id) on delete cascade,
-  athlete_id uuid not null references public.profiles(id) on delete cascade,
-  title text not null,
-  start_date date not null,
-  week_count int not null default 4 check (week_count > 0),
-  workouts jsonb not null default '[]'::jsonb,
-  created_at timestamptz not null default now(),
-  updated_at timestamptz not null default now()
-);
-
-create index if not exists training_plans_coach_idx
-on public.training_plans (coach_id);
-
-create index if not exists training_plans_athlete_idx
-on public.training_plans (athlete_id);
-
-create table if not exists public.scheduled_workouts (
-  id uuid primary key default gen_random_uuid(),
-  training_plan_id uuid references public.training_plans(id) on delete set null,
-  template_id uuid references public.workout_templates(id) on delete set null,
-  program_workout_id text,
-  athlete_id uuid not null references public.profiles(id) on delete cascade,
-  coach_id uuid not null references public.profiles(id) on delete cascade,
-  title text not null,
-  scheduled_date timestamptz not null,
-  status public.scheduled_workout_status not null default 'cancelled',
-  created_by uuid not null references public.profiles(id),
-  updated_by uuid not null references public.profiles(id),
-  completed_at timestamptz,
-  created_at timestamptz not null default now(),
-  updated_at timestamptz not null default now(),
-  constraint scheduled_workouts_source_check
-    check (template_id is not null or program_workout_id is not null)
-);
-
-create index if not exists scheduled_workouts_athlete_idx
-on public.scheduled_workouts (athlete_id, scheduled_date desc);
-
-create index if not exists scheduled_workouts_coach_idx
-on public.scheduled_workouts (coach_id, scheduled_date desc);
-
-create index if not exists scheduled_workouts_plan_idx
-on public.scheduled_workouts (training_plan_id);
-
-create table if not exists public.workout_sessions (
-  id uuid primary key default gen_random_uuid(),
-  scheduled_workout_id uuid not null unique references public.scheduled_workouts(id) on delete cascade,
-  athlete_id uuid not null references public.profiles(id) on delete cascade,
-  energy_level int,
-  started_at timestamptz not null default now(),
-  completed_at timestamptz,
-  updated_at timestamptz not null default now()
-);
-
-create index if not exists workout_sessions_athlete_idx
-on public.workout_sessions (athlete_id, started_at desc);
-
-create table if not exists public.workout_set_logs (
-  id uuid primary key default gen_random_uuid(),
-  session_id uuid not null references public.workout_sessions(id) on delete cascade,
-  scheduled_workout_id uuid not null references public.scheduled_workouts(id) on delete cascade,
-  template_exercise_id text not null,
-  set_id text not null,
-  exercise_id text not null,
-  exercise_name text not null,
-  muscle_group text,
-  superset_group text,
-  set_label text not null,
-  target_reps int not null,
-  target_reps_min int,
-  target_reps_max int,
-  target_load numeric(6,2),
-  target_rest_seconds int,
-  program_workout_id text,
-  actual_reps int,
-  actual_load numeric(6,2),
-  rpe numeric(4,1),
-  done boolean not null default false,
-  created_at timestamptz not null default now(),
-  updated_at timestamptz not null default now(),
-  unique (session_id, template_exercise_id, set_id)
-);
-
-create index if not exists workout_set_logs_session_idx
-on public.workout_set_logs (session_id);
-
-create index if not exists workout_set_logs_scheduled_idx
-on public.workout_set_logs (scheduled_workout_id);
-
-create table if not exists public.workout_notes (
-  id uuid primary key default gen_random_uuid(),
-  session_id uuid not null unique references public.workout_sessions(id) on delete cascade,
-  athlete_id uuid not null references public.profiles(id) on delete cascade,
-  coach_id uuid not null references public.profiles(id) on delete cascade,
-  body text not null,
-  created_at timestamptz not null default now(),
-  updated_at timestamptz not null default now()
-);
+  if not exists (select 1 from pg_type where typname = 'conversation_context_type') then
+    create type public.conversation_context_type as enum ('general', 'workout', 'program');
+  end if;
+end $$;
 
 create table if not exists public.conversation_entries (
   id uuid primary key default gen_random_uuid(),
@@ -244,21 +41,6 @@ on public.conversation_entries (athlete_id, created_at desc);
 
 create index if not exists conversation_entries_coach_idx
 on public.conversation_entries (coach_id, created_at desc);
-
-create table if not exists public.invites (
-  id uuid primary key default gen_random_uuid(),
-  token text not null unique,
-  email text not null,
-  role public.app_role not null check (role <> 'admin'),
-  invited_by uuid not null references public.profiles(id) on delete cascade,
-  coach_id uuid references public.profiles(id) on delete set null,
-  status public.invite_status not null default 'pending',
-  created_at timestamptz not null default now(),
-  expires_at timestamptz not null
-);
-
-create index if not exists invites_invited_by_idx
-on public.invites (invited_by, created_at desc);
 
 create table if not exists public.password_reset_requests (
   id uuid primary key default gen_random_uuid(),
@@ -334,9 +116,101 @@ alter table public.scheduled_workouts enable row level security;
 alter table public.workout_sessions enable row level security;
 alter table public.workout_set_logs enable row level security;
 alter table public.workout_notes enable row level security;
-alter table public.conversation_entries enable row level security;
 alter table public.invites enable row level security;
+alter table public.conversation_entries enable row level security;
 alter table public.password_reset_requests enable row level security;
+
+drop policy if exists "profiles self, admin, coach-roster read" on public.profiles;
+drop policy if exists "profiles admin manage" on public.profiles;
+drop policy if exists "profiles read by self admin linked users" on public.profiles;
+drop policy if exists "profiles insert by admin" on public.profiles;
+drop policy if exists "profiles update by self or admin" on public.profiles;
+drop policy if exists "profiles delete by admin" on public.profiles;
+
+drop policy if exists "assignments admin or owning coach" on public.coach_athlete_assignments;
+drop policy if exists "assignments read by participant or admin" on public.coach_athlete_assignments;
+drop policy if exists "assignments insert by owning coach or admin" on public.coach_athlete_assignments;
+drop policy if exists "assignments update by owning coach or admin" on public.coach_athlete_assignments;
+drop policy if exists "assignments delete by owning coach or admin" on public.coach_athlete_assignments;
+
+drop policy if exists "exercises authenticated read" on public.exercises;
+drop policy if exists "exercises admin manage" on public.exercises;
+drop policy if exists "exercises read by authenticated users" on public.exercises;
+drop policy if exists "exercises insert by admin or owning coach" on public.exercises;
+drop policy if exists "exercises update by admin or owning coach" on public.exercises;
+drop policy if exists "exercises delete by admin or owning coach" on public.exercises;
+
+drop policy if exists "templates admin or owning coach" on public.workout_templates;
+drop policy if exists "templates read by admin or owning coach" on public.workout_templates;
+drop policy if exists "templates insert by admin or owning coach" on public.workout_templates;
+drop policy if exists "templates update by admin or owning coach" on public.workout_templates;
+drop policy if exists "templates delete by admin or owning coach" on public.workout_templates;
+
+drop policy if exists "template blocks readable through parent template" on public.workout_template_blocks;
+drop policy if exists "template blocks writable through parent template" on public.workout_template_blocks;
+drop policy if exists "template blocks read via parent template" on public.workout_template_blocks;
+drop policy if exists "template blocks insert via parent template" on public.workout_template_blocks;
+drop policy if exists "template blocks update via parent template" on public.workout_template_blocks;
+drop policy if exists "template blocks delete via parent template" on public.workout_template_blocks;
+
+drop policy if exists "template exercises access via parent block" on public.workout_template_exercises;
+drop policy if exists "template exercises read via parent block" on public.workout_template_exercises;
+drop policy if exists "template exercises insert via parent block" on public.workout_template_exercises;
+drop policy if exists "template exercises update via parent block" on public.workout_template_exercises;
+drop policy if exists "template exercises delete via parent block" on public.workout_template_exercises;
+
+drop policy if exists "template sets access via parent exercise" on public.workout_template_sets;
+drop policy if exists "template sets read via parent exercise" on public.workout_template_sets;
+drop policy if exists "template sets insert via parent exercise" on public.workout_template_sets;
+drop policy if exists "template sets update via parent exercise" on public.workout_template_sets;
+drop policy if exists "template sets delete via parent exercise" on public.workout_template_sets;
+
+drop policy if exists "training plans admin or owning coach" on public.training_plans;
+drop policy if exists "training plans read by participant or admin" on public.training_plans;
+drop policy if exists "training plans insert by coach or admin" on public.training_plans;
+drop policy if exists "training plans update by coach or admin" on public.training_plans;
+drop policy if exists "training plans delete by coach or admin" on public.training_plans;
+
+drop policy if exists "scheduled workouts admin coach athlete" on public.scheduled_workouts;
+drop policy if exists "scheduled workouts admin or coach manage" on public.scheduled_workouts;
+drop policy if exists "scheduled workouts read by participant or admin" on public.scheduled_workouts;
+drop policy if exists "scheduled workouts insert by coach or admin" on public.scheduled_workouts;
+drop policy if exists "scheduled workouts update by coach or admin" on public.scheduled_workouts;
+drop policy if exists "scheduled workouts delete by coach or admin" on public.scheduled_workouts;
+
+drop policy if exists "sessions admin coach athlete" on public.workout_sessions;
+drop policy if exists "sessions read by participant or admin" on public.workout_sessions;
+drop policy if exists "sessions insert by participant or admin" on public.workout_sessions;
+drop policy if exists "sessions update by participant or admin" on public.workout_sessions;
+drop policy if exists "sessions delete by participant or admin" on public.workout_sessions;
+
+drop policy if exists "set logs admin coach athlete" on public.workout_set_logs;
+drop policy if exists "set logs read by participant or admin" on public.workout_set_logs;
+drop policy if exists "set logs insert by participant or admin" on public.workout_set_logs;
+drop policy if exists "set logs update by participant or admin" on public.workout_set_logs;
+drop policy if exists "set logs delete by participant or admin" on public.workout_set_logs;
+
+drop policy if exists "notes admin coach athlete" on public.workout_notes;
+drop policy if exists "notes read by participant or admin" on public.workout_notes;
+drop policy if exists "notes insert by participant or admin" on public.workout_notes;
+drop policy if exists "notes update by participant or admin" on public.workout_notes;
+drop policy if exists "notes delete by participant or admin" on public.workout_notes;
+
+drop policy if exists "invites admin or owning coach" on public.invites;
+drop policy if exists "invites read by inviter or admin" on public.invites;
+drop policy if exists "invites insert by inviter or admin" on public.invites;
+drop policy if exists "invites update by inviter or admin" on public.invites;
+drop policy if exists "invites delete by inviter or admin" on public.invites;
+
+drop policy if exists "conversation entries read by participant or admin" on public.conversation_entries;
+drop policy if exists "conversation entries insert by author participant or admin" on public.conversation_entries;
+drop policy if exists "conversation entries update by participant or admin" on public.conversation_entries;
+drop policy if exists "conversation entries delete by author or admin" on public.conversation_entries;
+
+drop policy if exists "password reset requests read by owner or admin" on public.password_reset_requests;
+drop policy if exists "password reset requests insert by owner or admin" on public.password_reset_requests;
+drop policy if exists "password reset requests update by owner or admin" on public.password_reset_requests;
+drop policy if exists "password reset requests delete by admin" on public.password_reset_requests;
 
 create policy "profiles read by self admin linked users"
 on public.profiles for select
@@ -804,6 +678,23 @@ using (
   or (coach_id = auth.uid() and public.is_coach_of(athlete_id))
 );
 
+create policy "invites read by inviter or admin"
+on public.invites for select
+using (public.is_admin() or invited_by = auth.uid());
+
+create policy "invites insert by inviter or admin"
+on public.invites for insert
+with check (public.is_admin() or invited_by = auth.uid());
+
+create policy "invites update by inviter or admin"
+on public.invites for update
+using (public.is_admin() or invited_by = auth.uid())
+with check (public.is_admin() or invited_by = auth.uid());
+
+create policy "invites delete by inviter or admin"
+on public.invites for delete
+using (public.is_admin() or invited_by = auth.uid());
+
 create policy "conversation entries read by participant or admin"
 on public.conversation_entries for select
 using (
@@ -842,23 +733,6 @@ with check (
 create policy "conversation entries delete by author or admin"
 on public.conversation_entries for delete
 using (public.is_admin() or author_user_id = auth.uid());
-
-create policy "invites read by inviter or admin"
-on public.invites for select
-using (public.is_admin() or invited_by = auth.uid());
-
-create policy "invites insert by inviter or admin"
-on public.invites for insert
-with check (public.is_admin() or invited_by = auth.uid());
-
-create policy "invites update by inviter or admin"
-on public.invites for update
-using (public.is_admin() or invited_by = auth.uid())
-with check (public.is_admin() or invited_by = auth.uid());
-
-create policy "invites delete by inviter or admin"
-on public.invites for delete
-using (public.is_admin() or invited_by = auth.uid());
 
 create policy "password reset requests read by owner or admin"
 on public.password_reset_requests for select
