@@ -594,7 +594,16 @@ function getSupabaseLoginErrorMessage(message: string) {
   if (normalized.includes("email not confirmed")) {
     return "Sähköpostiosoite täytyy vahvistaa ennen kirjautumista.";
   }
-  return "Kirjautuminen epäonnistui. Tarkista tunnuksesi ja yritä uudelleen.";
+  if (normalized.includes("captcha")) {
+    if (normalized.includes("failed")) {
+      return "Captcha-tarkistus epäonnistui. Tarkista hCaptcha-asetukset ja yritä uudelleen.";
+    }
+    if (normalized.includes("missing")) {
+      return "Captcha-token puuttuu. Vahvista captcha uudelleen.";
+    }
+    return `Captcha esti kirjautumisen: ${message}`;
+  }
+  return `Kirjautuminen epäonnistui: ${message}`;
 }
 
 function isConversationVisibleToUser(entry: ConversationEntry, user: UserProfile) {
