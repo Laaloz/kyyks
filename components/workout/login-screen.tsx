@@ -184,14 +184,18 @@ export function LoginScreen() {
                     setCaptchaError("Captcha ei latautunut oikein. Kokeile päivittää sivu.");
                   }}
                 />
-                <p aria-live="polite" className="min-h-5 text-sm text-[var(--danger)]">
-                  {captchaError ?? ""}
-                </p>
+                {captchaError ? (
+                  <p aria-live="polite" className="text-sm text-[var(--danger)]">
+                    {captchaError}
+                  </p>
+                ) : null}
               </div>
             ) : null}
-            <p aria-live="polite" className="min-h-5 text-sm text-[var(--danger)]">
-              {error ?? ""}
-            </p>
+            {error ? (
+              <p aria-live="polite" className="text-sm text-[var(--danger)]">
+                {error}
+              </p>
+            ) : null}
             <Button className="w-full" type="submit" disabled={isSubmitting || (requiresCaptcha && !captchaToken)}>
               {isSubmitting ? "Kirjaudutaan..." : "Avaa työtila"}
             </Button>
