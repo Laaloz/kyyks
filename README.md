@@ -24,8 +24,12 @@ Coach-first, mobile-first treenisovellus valmentajille ja treenaajille.
 
 ## Käynnistys
 1. `source ~/.nvm/nvm.sh`
-2. `npm install`
-3. `npm run dev`
+2. `nvm install`
+3. `nvm use`
+4. `npm install`
+5. `npm run dev`
+
+Projektin suositeltu Node-versio on `22.x`. Sama linja kannattaa asettaa myös Vercel-projektiin.
 
 ## Supabase tuotantopolku
 1. Luo Supabase-projekti.
