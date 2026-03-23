@@ -1,121 +1,389 @@
 "use client";
 
-import { Dumbbell } from "lucide-react";
-import { useState } from "react";
+import { Bell, BellRing, Dumbbell, Home, LogOut, NotebookPen, Settings, Sparkles, Users, type LucideIcon } from "lucide-react";
+import { useEffect, useRef, useState, type KeyboardEvent } from "react";
 
 import { AdminDashboard } from "@/components/workout/admin-dashboard";
+import { MeasurementReminderDialog } from "@/components/workout/athlete/measurement-reminder-dialog";
 import { AthleteDashboard } from "@/components/workout/athlete-dashboard";
 import { CoachDashboard } from "@/components/workout/coach-dashboard";
+import { UserSettingsPanel } from "@/components/workout/user-settings-panel";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { isSupabaseConfigured } from "@/lib/config";
+import { isConversationEntryNotifiable } from "@/lib/conversation";
+import { getMeasurementReminderState } from "@/lib/measurement-reminder";
 import { useAppState } from "@/providers/app-state-provider";
 
-import { metricTone, roleHeadline, roleLabel, type WorkspaceView } from "@/components/workout/shared";
+import { roleLabel, type WorkspaceView } from "@/components/workout/shared";
+
+type PrimaryWorkspaceView = Exclude<WorkspaceView, "settings">;
+const MEASUREMENT_REMINDER_STORAGE_VERSION = "v2";
+
+function navItemsForRole(role: "admin" | "coach" | "athlete"): PrimaryWorkspaceView[] {
+  return role === "admin"
+    ? ["overview", "templates", "athlete-log", "invites"]
+    : role === "coach"
+      ? ["overview", "templates", "athlete-log", "conversation", "invites"]
+      : ["overview", "athlete-log", "conversation"];
+}
+
+function resolveInitialView(role: "admin" | "coach" | "athlete", preferredView: WorkspaceView | undefined) {
+  const roleNavItems = navItemsForRole(role);
+  if (preferredView && preferredView !== "settings" && roleNavItems.includes(preferredView)) {
+    return preferredView;
+  }
+
+  return role === "athlete" ? "athlete-log" : "overview";
+}
 
 export function DashboardShell() {
-  const { currentUser, logout, state } = useAppState();
-  const [view, setView] = useState<WorkspaceView>("overview");
+  const {
+    authenticatedUser,
+    currentUser,
+    isImpersonating,
+    logout,
+    state,
+    stopAdminImpersonation,
+    markConversationRead,
+  } = useAppState();
+  const [view, setView] = useState<WorkspaceView>(() =>
+    currentUser
+      ? resolveInitialView(currentUser.role, currentUser.settings?.defaultDashboardView)
+      : "overview",
+  );
+  const [isMeasurementReminderOpen, setIsMeasurementReminderOpen] = useState(false);
+  const [isReminderPreviewMode, setIsReminderPreviewMode] = useState(false);
+  const didAutoOpenAthleteLog = useRef(false);
+  const navButtonRefs = useRef<Record<string, HTMLButtonElement | null>>({});
 
   if (!currentUser) {
     return null;
   }
 
-  const navItems: WorkspaceView[] =
-    currentUser.role === "admin"
-      ? ["overview", "invites"]
-      : currentUser.role === "coach"
-        ? ["overview", "templates", "invites"]
-        : ["overview", "athlete-log"];
-  const scopedWorkouts =
-    currentUser.role === "athlete"
-      ? state.scheduledWorkouts.filter((workout) => workout.athleteId === currentUser.id)
-      : currentUser.role === "coach"
-        ? state.scheduledWorkouts.filter((workout) => workout.coachId === currentUser.id)
-        : state.scheduledWorkouts;
-  const activeWorkouts = scopedWorkouts.filter((workout) => workout.status !== "completed").length;
-  const completedWorkouts = scopedWorkouts.filter((workout) => workout.status === "completed").length;
+  const navItems = navItemsForRole(currentUser.role);
   const navLabelByView: Record<WorkspaceView, string> = {
     overview: "Yleiskuva",
     templates: "Ohjelmat",
-    invites: "Kutsut",
+    invites: "Käyttäjäkutsut",
     "athlete-log": "Treeniloki",
+    conversation: "Keskustelu",
+    settings: "Asetukset",
+  };
+  const navIconByView: Record<PrimaryWorkspaceView, LucideIcon> = {
+    overview: Home,
+    templates: Sparkles,
+    invites: Users,
+    "athlete-log": NotebookPen,
+    conversation: Bell,
+  };
+  const activePrimaryView = view === "settings" ? resolveInitialView(currentUser.role, currentUser.settings?.defaultDashboardView) : view;
+  const activeTabId = `workspace-tab-${activePrimaryView}`;
+  const activePanelId = `workspace-panel-${activePrimaryView}`;
+  const measurementReminder = getMeasurementReminderState(state, currentUser);
+  const shouldShowMeasurementReminder = currentUser.role === "athlete" && (measurementReminder.isDue || isReminderPreviewMode);
+  const weightReminderDue = measurementReminder.weightDue || isReminderPreviewMode;
+  const waistReminderDue = measurementReminder.waistDue || isReminderPreviewMode;
+  const unreadConversationCount = state.conversationEntries.filter((entry) => {
+    if (currentUser.role === "athlete" && entry.athleteId !== currentUser.id) {
+      return false;
+    }
+    if (currentUser.role === "coach" && entry.coachId !== currentUser.id) {
+      return false;
+    }
+    if (currentUser.role === "admin") {
+      return false;
+    }
+    return isConversationEntryNotifiable(entry) && !entry.readByUserIds.includes(currentUser.id);
+  }).length;
+
+  useEffect(() => {
+    if (didAutoOpenAthleteLog.current || !navItemsForRole(currentUser.role).includes("athlete-log")) {
+      return;
+    }
+
+    const hasInProgressWorkout = state.scheduledWorkouts.some(
+      (workout) => workout.athleteId === currentUser.id && workout.status === "in_progress",
+    );
+
+    if (!hasInProgressWorkout) {
+      return;
+    }
+
+    setView("athlete-log");
+    didAutoOpenAthleteLog.current = true;
+  }, [currentUser, state.scheduledWorkouts]);
+
+  useEffect(() => {
+    if (view === "settings") {
+      return;
+    }
+
+    const roleNavItems = navItemsForRole(currentUser.role);
+    if (!roleNavItems.includes(view as PrimaryWorkspaceView)) {
+      setView(resolveInitialView(currentUser.role, currentUser.settings?.defaultDashboardView));
+    }
+  }, [currentUser, view]);
+
+  useEffect(() => {
+    if (view === "conversation") {
+      markConversationRead();
+    }
+  }, [markConversationRead, view]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") {
+      return;
+    }
+
+    const hostname = window.location.hostname;
+    setIsReminderPreviewMode(
+      hostname === "localhost" ||
+        hostname === "127.0.0.1" ||
+        hostname === "::1" ||
+        hostname.endsWith(".local"),
+    );
+  }, []);
+
+  useEffect(() => {
+    if (isReminderPreviewMode) {
+      const storageKey = `measurement-reminder-preview-opened:${currentUser.id}`;
+      try {
+        if (window.sessionStorage.getItem(storageKey) === "shown") {
+          return;
+        }
+        window.sessionStorage.setItem(storageKey, "shown");
+      } catch {
+        // Ignore storage failures and still open the preview.
+      }
+
+      setIsMeasurementReminderOpen(true);
+      return;
+    }
+
+    if (!measurementReminder.isDue || !measurementReminder.cycleKey || currentUser.role !== "athlete") {
+      setIsMeasurementReminderOpen(false);
+      return;
+    }
+
+    const storageKey = `measurement-reminder-shown:${MEASUREMENT_REMINDER_STORAGE_VERSION}:${currentUser.id}:${measurementReminder.cycleKey}`;
+    try {
+      if (window.localStorage.getItem(storageKey) === "shown") {
+        return;
+      }
+      window.localStorage.setItem(storageKey, "shown");
+    } catch {
+      // Ignore storage failures and still open the reminder.
+    }
+
+    setIsMeasurementReminderOpen(true);
+  }, [currentUser.id, currentUser.role, isReminderPreviewMode, measurementReminder.cycleKey, measurementReminder.isDue]);
+
+  const handleNavKeyDown = (event: KeyboardEvent<HTMLButtonElement>, index: number) => {
+    if (event.key !== "ArrowRight" && event.key !== "ArrowLeft" && event.key !== "Home" && event.key !== "End") {
+      return;
+    }
+
+    event.preventDefault();
+
+    const itemCount = navItems.length;
+    const nextIndex =
+      event.key === "Home"
+        ? 0
+        : event.key === "End"
+          ? itemCount - 1
+          : event.key === "ArrowRight"
+            ? (index + 1) % itemCount
+            : (index - 1 + itemCount) % itemCount;
+    const nextItem = navItems[nextIndex];
+    const nextButton = navButtonRefs.current[nextItem];
+
+    if (nextButton) {
+      nextButton.focus();
+      setView(nextItem);
+    }
   };
 
   return (
     <div className="mx-auto flex min-h-screen max-w-7xl flex-col gap-6 px-4 py-4 sm:px-6 lg:px-8">
+      {shouldShowMeasurementReminder && isMeasurementReminderOpen ? (
+        <MeasurementReminderDialog
+          weightDue={weightReminderDue}
+          waistDue={waistReminderDue}
+          onClose={() => setIsMeasurementReminderOpen(false)}
+          onOpenSettings={() => {
+            setIsMeasurementReminderOpen(false);
+            setView("settings");
+          }}
+        />
+      ) : null}
+
       <header
-        className="z-20 rounded-3xl border border-[var(--border-strong)] bg-[var(--surface)] px-5 py-4 shadow-[0_1px_0_0_var(--shadow-soft),0_14px_30px_-20px_var(--shadow)]"
+        className="z-20 rounded-3xl border border-[var(--border-strong)] bg-[var(--surface)] px-4 py-4 shadow-[0_1px_0_0_var(--shadow-soft),0_14px_30px_-20px_var(--shadow)] sm:px-5"
       >
-        <div className="flex flex-col gap-5">
-          <div className="flex flex-wrap items-start justify-between gap-4">
-            <div className="flex items-center gap-4">
-              <div className="flex size-14 items-center justify-center rounded-2xl border border-[var(--accent-strong)] bg-[var(--accent)] shadow-[0_1px_0_0_var(--accent-strong),0_14px_24px_-18px_var(--accent)]">
-                <Dumbbell className="size-6 text-white" />
+        <div className="flex flex-col gap-4">
+          <div className="flex items-start justify-between gap-3">
+            <div className="flex min-w-0 items-center gap-3">
+              <div className="flex size-12 shrink-0 items-center justify-center rounded-2xl border border-[var(--accent-strong)] bg-[var(--accent)] shadow-[0_1px_0_0_var(--accent-strong),0_14px_24px_-18px_var(--accent)]">
+                <Dumbbell className="size-5 text-white" />
               </div>
-              <div>
-                <p className="text-xs font-semibold tracking-[0.04em] text-[var(--text-subtle)]">Rookiapp training log</p>
-                <h2 className="font-[family-name:var(--font-display)] text-2xl font-semibold text-[var(--text)] md:text-[1.75rem]">
+              <div className="min-w-0">
+                <p className="text-[0.68rem] font-semibold uppercase tracking-[0.08em] text-[var(--text-subtle)]">
+                  Treenihallinta
+                </p>
+                <h2 className="truncate font-[family-name:var(--font-display)] text-xl font-semibold text-[var(--text)] sm:text-2xl">
                   {currentUser.fullName}
                 </h2>
-                <p className="text-sm leading-6 text-[var(--text-muted)]">{roleHeadline(currentUser.role)}</p>
               </div>
             </div>
 
-            <Button onClick={logout} type="button" variant="secondary" className="min-w-32">
-              Kirjaudu ulos
-            </Button>
+            <div className="flex items-center gap-2">
+              {shouldShowMeasurementReminder ? (
+                <Button
+                  onClick={() => setIsMeasurementReminderOpen(true)}
+                  type="button"
+                  variant="secondary"
+                  className="size-11 !rounded-2xl !px-0 !py-0 !border-[var(--accent)] !bg-[var(--surface-2)] !text-[var(--accent)] shadow-[0_0_0_1px_var(--accent)]"
+                  aria-label="Avaa kehon seurannan muistutus"
+                  title="Päivitä kehon seuranta"
+                >
+                  <BellRing className="size-5 text-[var(--accent)]" aria-hidden="true" />
+                  <span className="sr-only">Avaa kehon seurannan muistutus</span>
+                </Button>
+              ) : null}
+              <Button
+                onClick={() => setView("settings")}
+                type="button"
+                variant="secondary"
+                className={`relative size-11 !rounded-2xl !px-0 !py-0 ${
+                  view === "settings"
+                    ? "!border-[var(--accent)] !bg-[var(--surface-2)] !text-[var(--accent)] shadow-[0_0_0_1px_var(--accent)]"
+                    : ""
+                }`}
+                aria-label="Asetukset"
+                title="Asetukset"
+                aria-pressed={view === "settings"}
+              >
+                <Settings
+                  className={`size-5 ${view === "settings" ? "text-[var(--accent)]" : ""}`}
+                  aria-hidden="true"
+                />
+                <span className="sr-only">Asetukset</span>
+              </Button>
+              <Button
+                onClick={logout}
+                type="button"
+                variant="secondary"
+                className="size-11 !rounded-2xl !px-0 !py-0"
+                aria-label="Kirjaudu ulos"
+                title="Kirjaudu ulos"
+              >
+                <LogOut className="size-5" aria-hidden="true" />
+                <span className="sr-only">Kirjaudu ulos</span>
+              </Button>
+            </div>
           </div>
 
-          <div className="flex flex-wrap items-center gap-2">
-            <Badge className={`bg-[var(--surface-3)] ${metricTone(currentUser.role)}`}>
+          <div className="flex items-center gap-2">
+            <Badge className="border-[var(--border-strong)] bg-[var(--surface-3)] text-[var(--text-subtle)]">
               {roleLabel(currentUser.role)}
             </Badge>
-            <Badge className="border-[var(--border-strong)] bg-[var(--surface-3)] text-[var(--text-subtle)]">
-              Aktiiviset {activeWorkouts}
-            </Badge>
-            <Badge className="border-[var(--border-strong)] bg-[var(--surface-3)] text-[var(--text-subtle)]">
-              Valmiit {completedWorkouts}
-            </Badge>
-            {!isSupabaseConfigured ? (
-              <Badge className="border-[var(--accent-secondary)] bg-[var(--surface-3)] text-[var(--accent-secondary)]">Demo mode</Badge>
-            ) : (
-              <Badge className="border-[var(--accent-tertiary)] bg-[var(--surface-3)] text-[var(--accent-tertiary)]">Supabase ready</Badge>
-            )}
+            {isImpersonating ? (
+              <Badge className="border-[var(--accent)] bg-[var(--surface-3)] text-[var(--accent)]">
+                Admin-vaihto aktiivinen
+              </Badge>
+            ) : null}
           </div>
 
-          <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-            <p className="text-xs font-semibold tracking-[0.04em] text-[var(--text-subtle)]">
-              Työtila: {navLabelByView[view]}
-            </p>
-            <nav aria-label="Työtilan navigaatio" className="flex flex-wrap items-center gap-2 rounded-2xl border border-[var(--border)] bg-[var(--surface-2)] p-1.5">
-              {navItems.map((item) => (
+          {isImpersonating && authenticatedUser ? (
+            <div className="flex flex-wrap items-center gap-2 rounded-xl border border-[var(--border-strong)] bg-[var(--surface-2)] px-3 py-2 text-sm">
+              <p className="text-[var(--text-muted)]">
+                Toimit käyttäjänä <span className="font-semibold text-[var(--text)]">{currentUser.fullName}</span>.
+                Alkuperäinen admin: <span className="font-semibold text-[var(--text)]">{authenticatedUser.fullName}</span>.
+              </p>
+              <Button
+                type="button"
+                variant="secondary"
+                className="h-8 px-3 py-1.5 text-xs"
+                onClick={() => {
+                  const result = stopAdminImpersonation();
+                  if (result.ok) {
+                    setView("overview");
+                  }
+                }}
+              >
+                Palaa admin-tilaan
+              </Button>
+            </div>
+          ) : null}
+
+          <nav aria-label="Työtilan navigaatio" className="w-full max-w-3xl min-w-0">
+            <div
+              role="tablist"
+              aria-label="Työtilan näkymät"
+              className="grid w-full min-w-0 grid-cols-2 gap-1 sm:grid-cols-3"
+            >
+            {navItems.map((item, index) => {
+              const Icon = navIconByView[item];
+              const isActive = view === item;
+              return (
                 <Button
                   key={item}
+                  ref={(node) => {
+                    navButtonRefs.current[item] = node;
+                  }}
                   type="button"
-                  variant={view === item ? "primary" : "ghost"}
-                  aria-pressed={view === item}
-                  className="min-w-28"
+                  variant={isActive ? "primary" : "ghost"}
+                  role="tab"
+                  id={`workspace-tab-${item}`}
+                  aria-selected={isActive}
+                  aria-controls={`workspace-panel-${item}`}
+                  tabIndex={isActive ? 0 : -1}
+                  className={
+                    isActive
+                      ? "min-w-0 min-h-12 w-full flex-col gap-1 px-2 py-2 text-center text-[13px] leading-tight hover:translate-y-0 hover:brightness-100 sm:h-10 sm:min-h-10 sm:flex-row sm:gap-1.5 sm:px-3 sm:text-sm"
+                      : "min-w-0 min-h-12 w-full flex-col gap-1 px-2 py-2 text-center text-[13px] leading-tight sm:h-10 sm:min-h-10 sm:flex-row sm:gap-1.5 sm:px-3 sm:text-sm"
+                  }
+                  onKeyDown={(event) => handleNavKeyDown(event, index)}
                   onClick={() => setView(item)}
                 >
+                  <Icon className="size-4" aria-hidden="true" />
                   {navLabelByView[item]}
+                  {item === "conversation" && unreadConversationCount > 0 ? (
+                    <span className="inline-flex min-w-5 items-center justify-center rounded-full bg-[var(--surface)] px-1.5 text-[10px] font-semibold text-[var(--accent)]">
+                      {unreadConversationCount}
+                    </span>
+                  ) : null}
                 </Button>
-              ))}
-            </nav>
-          </div>
+              );
+            })}
+            </div>
+          </nav>
         </div>
       </header>
 
       <main id="main-content">
-        {currentUser.role === "admin" ? (
-          <AdminDashboard view={view} />
-        ) : currentUser.role === "coach" ? (
-          <CoachDashboard view={view} />
+        {view === "settings" ? (
+          <UserSettingsPanel />
         ) : (
-          <AthleteDashboard
-            view={view}
-            onOpenWorkoutLog={() => setView("athlete-log")}
-          />
+          <div role="tabpanel" id={activePanelId} aria-labelledby={activeTabId} tabIndex={0}>
+            {view === "athlete-log" ? (
+              <AthleteDashboard
+                view={view}
+                onOpenWorkoutLog={() => setView("athlete-log")}
+              />
+            ) : view === "templates" ? (
+              <CoachDashboard view={view} onOpenConversation={() => setView("conversation")} />
+            ) : currentUser.role === "admin" ? (
+              <AdminDashboard view={view} />
+            ) : currentUser.role === "coach" ? (
+              <CoachDashboard view={view} onOpenConversation={() => setView("conversation")} />
+            ) : (
+              <AthleteDashboard
+                view={view}
+                onOpenWorkoutLog={() => setView("athlete-log")}
+              />
+            )}
+          </div>
         )}
       </main>
     </div>

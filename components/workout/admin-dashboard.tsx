@@ -41,38 +41,47 @@ export function AdminDashboard({ view }: { view: WorkspaceView }) {
         <>
           <MetricGrid
             metrics={[
-              { label: "Coachit", value: coaches.length, icon: ShieldCheck },
+              { label: "Valmentajat", value: coaches.length, icon: ShieldCheck },
               { label: "Treenaajat", value: athletes.length, icon: UserRoundPlus },
               { label: "Aktiiviset treenit", value: state.scheduledWorkouts.length, icon: CalendarDays },
-              { label: "Kutsut avoinna", value: pendingInvites.length, icon: ClipboardPenLine },
+              { label: "Avoimet kutsut", value: pendingInvites.length, icon: ClipboardPenLine },
             ]}
             role={currentUser?.role ?? null}
           />
 
           <Card className="border-[var(--border-strong)]">
-            <div className="flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between">
+            <div className="grid gap-5 xl:grid-cols-[1.15fr_0.85fr] xl:items-end">
               <div className="space-y-3">
-                <p className="text-xs font-semibold tracking-[0.04em] text-[var(--text-subtle)]">Admin orchestration</p>
-                <CardTitle className="text-2xl">Pidä valmennusverkko hallinnassa yhdestä näkymästä</CardTitle>
+                <p className="text-xs font-semibold tracking-[0.04em] text-[var(--text-subtle)]">Hallintanäkymä</p>
+                <CardTitle className="text-2xl">Pidä valmennusverkko hallinnassa yhdestä paikasta</CardTitle>
                 <CardDescription className="max-w-3xl leading-6">
                   Yleiskuva näyttää nopeasti verkoston tilan ja valmennuskuormituksen ilman erillistä raportointia.
                 </CardDescription>
               </div>
-              <div className="grid gap-3 text-sm text-[var(--text-muted)] md:grid-cols-3">
-                <div className="rounded-xl border-2 border-[var(--border)] bg-[var(--surface-2)] px-4 py-3">1. Tarkista kuormitus</div>
-                <div className="rounded-xl border-2 border-[var(--border)] bg-[var(--surface-2)] px-4 py-3">2. Tunnista pullonkaulat</div>
-                <div className="rounded-xl border-2 border-[var(--border)] bg-[var(--surface-2)] px-4 py-3">3. Siirry kutsuihin</div>
+              <div className="grid gap-3 sm:grid-cols-3 xl:grid-cols-1 2xl:grid-cols-3">
+                <div className="rounded-xl border-2 border-[var(--border)] bg-[var(--surface-2)] px-4 py-4">
+                  <p className="text-xs font-semibold tracking-[0.04em] text-[var(--text-subtle)]">1. Tarkista</p>
+                  <p className="mt-2 text-sm font-medium text-[var(--text)]">Kuormitus</p>
+                </div>
+                <div className="rounded-xl border-2 border-[var(--border)] bg-[var(--surface-2)] px-4 py-4">
+                  <p className="text-xs font-semibold tracking-[0.04em] text-[var(--text-subtle)]">2. Tunnista</p>
+                  <p className="mt-2 text-sm font-medium text-[var(--text)]">Pullonkaulat</p>
+                </div>
+                <div className="rounded-xl border-2 border-[var(--border)] bg-[var(--surface-2)] px-4 py-4">
+                  <p className="text-xs font-semibold tracking-[0.04em] text-[var(--text-subtle)]">3. Siirry</p>
+                  <p className="mt-2 text-sm font-medium text-[var(--text)]">Kutsuihin</p>
+                </div>
               </div>
             </div>
           </Card>
 
           <Card>
-            <p className="text-xs font-semibold tracking-[0.04em] text-[var(--text-subtle)]">Network snapshot</p>
+            <p className="text-xs font-semibold tracking-[0.04em] text-[var(--text-subtle)]">Rosteri</p>
             <CardTitle className="text-2xl">Valmentajien rosterit</CardTitle>
             <CardDescription className="mt-2">
               Näet nopeasti kunkin valmentajan aktiivisen rosterin koon ja pystyt tunnistamaan kuormituksen.
             </CardDescription>
-            <div className="mt-6 grid gap-4">
+            <div className="mt-6 grid gap-4 md:grid-cols-2 2xl:grid-cols-3">
               {coaches.length === 0 ? (
                 <p className="text-sm text-[var(--text-muted)]">Valmentajia ei ole vielä lisätty.</p>
               ) : (
@@ -101,10 +110,10 @@ export function AdminDashboard({ view }: { view: WorkspaceView }) {
       {view === "invites" ? (
         <div className="grid gap-6 lg:grid-cols-[0.9fr_1.1fr]">
           <Card className="border-[var(--border-strong)]">
-            <p className="text-xs font-semibold tracking-[0.04em] text-[var(--text-subtle)]">User provisioning</p>
-            <CardTitle className="text-2xl">Luo uudet tunnukset</CardTitle>
+            <p className="text-xs font-semibold tracking-[0.04em] text-[var(--text-subtle)]">Käyttäjähallinta</p>
+            <CardTitle className="text-2xl">Lähetä uusi kutsu</CardTitle>
             <CardDescription className="mt-2">
-              Admin voi kutsua joko uuden valmentajan tai treenaajan. Treenaajalle voi samalla lukita vastuuvalmentajan.
+              Ylläpitäjä voi kutsua uuden valmentajan tai treenaajan. Treenaajalle voi samalla valita vastuuvalmentajan.
             </CardDescription>
             <form
               className="mt-6 space-y-4"
@@ -178,7 +187,7 @@ export function AdminDashboard({ view }: { view: WorkspaceView }) {
           </Card>
 
           <Card>
-            <p className="text-xs font-semibold tracking-[0.04em] text-[var(--text-subtle)]">Invite flow</p>
+            <p className="text-xs font-semibold tracking-[0.04em] text-[var(--text-subtle)]">Kutsutilanne</p>
             <CardTitle className="text-2xl">Avoimet kutsut</CardTitle>
             <CardDescription className="mt-2">
               Seuraa, mikä kutsu on avoinna, ja avaa liittymislinkki tarvittaessa uudelleen.
@@ -197,7 +206,7 @@ export function AdminDashboard({ view }: { view: WorkspaceView }) {
                         </p>
                       </div>
                       <Link className="text-sm font-semibold text-[var(--accent)]" href={`/invite/${invite.token}`}>
-                        Avaa linkki
+                        Avaa kutsu
                       </Link>
                     </div>
                   </div>

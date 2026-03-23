@@ -19,7 +19,9 @@ alter table if exists public.profiles
   add column if not exists status public.user_status,
   add column if not exists default_dashboard_view text,
   add column if not exists email_notifications boolean,
-  add column if not exists theme_mode public.theme_mode;
+  add column if not exists theme_mode public.theme_mode,
+  add column if not exists weight_kg numeric(5,2),
+  add column if not exists waist_cm numeric(5,2);
 
 update public.profiles
 set
@@ -40,6 +42,32 @@ alter table if exists public.profiles
 
 create unique index if not exists profiles_email_lower_unique
 on public.profiles (lower(email));
+
+create table if not exists public.body_measurements (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null references public.profiles(id) on delete cascade,
+  weight_kg numeric(5,2),
+  waist_cm numeric(5,2),
+  measured_at timestamptz not null default now(),
+  created_at timestamptz not null default now()
+);
+
+do $$
+begin
+  if not exists (
+    select 1
+    from pg_constraint
+    where conname = 'body_measurements_value_check'
+      and conrelid = 'public.body_measurements'::regclass
+  ) then
+    alter table public.body_measurements
+      add constraint body_measurements_value_check
+      check (weight_kg is not null or waist_cm is not null);
+  end if;
+end $$;
+
+create index if not exists body_measurements_user_idx
+on public.body_measurements (user_id, measured_at desc);
 
 alter table if exists public.exercises
   add column if not exists scope public.exercise_scope,

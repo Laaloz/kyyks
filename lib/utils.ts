@@ -13,6 +13,15 @@ export function formatDate(value: string) {
   }).format(new Date(value));
 }
 
+export function formatDateWithWeekday(value: string) {
+  return new Intl.DateTimeFormat("fi-FI", {
+    weekday: "short",
+    day: "numeric",
+    month: "short",
+    year: "numeric",
+  }).format(new Date(value));
+}
+
 export function formatRelativeDate(value: string) {
   const date = new Date(value);
   const today = new Date();

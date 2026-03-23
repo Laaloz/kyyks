@@ -1,8 +1,27 @@
 import { z } from "zod";
 
+function optionalEnumField<const TValues extends readonly [string, ...string[]]>(values: TValues) {
+  return z.union([z.enum(values), z.literal("")]).transform((value) => (value === "" ? undefined : value));
+}
+
+function optionalNumberField(schema: z.ZodNumber) {
+  return z.union([z.literal(""), z.coerce.number().pipe(schema)]).transform((value) =>
+    value === "" ? undefined : value,
+  );
+}
+
 export const loginSchema = z.object({
   email: z.string().email("Anna kelvollinen sähköposti."),
   password: z.string().min(4, "Salasana puuttuu."),
+});
+
+export const userSettingsSchema = z.object({
+  fullName: z.string().trim().min(2, "Anna koko nimi."),
+  defaultDashboardView: z.enum(["overview", "templates", "invites", "athlete-log", "conversation"]),
+  emailNotifications: z.boolean(),
+  themeMode: z.enum(["light", "dark"]),
+  weightKg: optionalNumberField(z.number().min(20).max(350)),
+  waistCm: optionalNumberField(z.number().min(30).max(250)),
 });
 
 export const inviteSchema = z
@@ -43,6 +62,16 @@ export const acceptInviteSchema = z.object({
   password: z.string().min(6, "Salasanan pitää olla vähintään 6 merkkiä."),
 });
 
+export const resetPasswordSchema = z
+  .object({
+    password: z.string().min(8, "Salasanan pitää olla vähintään 8 merkkiä."),
+    confirmPassword: z.string().min(8, "Vahvista uusi salasana."),
+  })
+  .refine((value) => value.password === value.confirmPassword, {
+    message: "Salasanat eivät täsmää.",
+    path: ["confirmPassword"],
+  });
+
 export const programSchema = z
   .object({
     title: z.string().min(3, "Anna ohjelmalle nimi."),
@@ -64,29 +93,30 @@ export const programSchema = z
 
 export const CUSTOM_EXERCISE_VALUE = "__custom__";
 export const SUPERSET_GROUP_OPTIONS = ["A", "B", "C", "D"] as const;
+export const CUSTOM_MUSCLE_GROUP_OPTIONS = [
+  "shoulders",
+  "arms",
+  "chest",
+  "abs",
+  "back",
+  "legs",
+  "other",
+] as const;
 
 export const programWorkoutExerciseSchema = z
   .object({
     exerciseId: z.string().min(1, "Valitse liike tai lisää custom-liike."),
     exerciseNameOverride: z.string().optional(),
     customExerciseName: z.string().optional(),
-    supersetGroup: z.preprocess(
-      (value) => (value === "" ? undefined : value),
-      z.enum(SUPERSET_GROUP_OPTIONS).optional(),
-    ),
+    customMuscleGroup: optionalEnumField(CUSTOM_MUSCLE_GROUP_OPTIONS),
+    supersetGroup: optionalEnumField(SUPERSET_GROUP_OPTIONS),
     instruction: z.string().min(2, "Anna lyhyt valmennusohje."),
     repMode: z.enum(["exact", "range"]).default("range"),
     setCount: z.coerce.number().min(1).max(10),
     targetReps: z.coerce.number().min(1).max(50),
-    targetRepsMin: z.preprocess(
-      (value) => (value === "" ? undefined : value),
-      z.coerce.number().min(1).max(50).optional(),
-    ),
-    targetRepsMax: z.preprocess(
-      (value) => (value === "" ? undefined : value),
-      z.coerce.number().min(1).max(50).optional(),
-    ),
-    targetLoad: z.coerce.number().min(0).optional(),
+    targetRepsMin: optionalNumberField(z.number().min(1).max(50)),
+    targetRepsMax: optionalNumberField(z.number().min(1).max(50)),
+    targetLoad: optionalNumberField(z.number().min(0)),
     restSeconds: z.coerce.number().min(15).max(600),
     notes: z.string().optional(),
   })
@@ -97,6 +127,15 @@ export const programWorkoutExerciseSchema = z
     {
       message: "Kirjoita custom-liikkeelle nimi.",
       path: ["customExerciseName"],
+    },
+  )
+  .refine(
+    (value) =>
+      value.exerciseId !== CUSTOM_EXERCISE_VALUE ||
+      Boolean(value.customMuscleGroup),
+    {
+      message: "Valitse custom-liikkeelle lihasryhmä.",
+      path: ["customMuscleGroup"],
     },
   )
   .refine(
@@ -144,17 +183,18 @@ export function emptyTemplateExercise() {
     setCount: 3,
     targetReps: 8,
     targetLoad: 0,
-    restSeconds: 90,
+    restSeconds: 180,
     notes: "",
   };
 }
 
-export function emptyProgramWorkoutExercise(defaultRestSeconds = 90) {
+export function emptyProgramWorkoutExercise(defaultRestSeconds = 180) {
   return {
     exerciseId: "",
     exerciseNameOverride: "",
     customExerciseName: "",
-    supersetGroup: "",
+    customMuscleGroup: "" as "" | (typeof CUSTOM_MUSCLE_GROUP_OPTIONS)[number],
+    supersetGroup: "" as "" | (typeof SUPERSET_GROUP_OPTIONS)[number],
     instruction: "",
     repMode: "range" as const,
     setCount: 3,
@@ -169,7 +209,7 @@ export function emptyProgramWorkoutExercise(defaultRestSeconds = 90) {
 
 export function emptyProgramWorkout(
   splitType: "upper" | "lower" | "full_body" | "custom" = "custom",
-  defaultRestSeconds = 90,
+  defaultRestSeconds = 180,
 ) {
   return {
     splitType,

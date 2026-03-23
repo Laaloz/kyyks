@@ -4,15 +4,7 @@ do $$
 begin
   if not exists (select 1 from pg_type where typname = 'conversation_entry_type') then
     create type public.conversation_entry_type as enum (
-      'comment',
-      'workout_note_saved',
-      'workout_started',
-      'workout_completed',
-      'workout_cancelled',
-      'workout_deleted',
-      'workout_updated',
-      'program_created',
-      'program_updated'
+      'comment'
     );
   end if;
 
@@ -105,6 +97,7 @@ as $$
 $$;
 
 alter table public.profiles enable row level security;
+alter table public.body_measurements enable row level security;
 alter table public.coach_athlete_assignments enable row level security;
 alter table public.exercises enable row level security;
 alter table public.workout_templates enable row level security;
@@ -126,6 +119,10 @@ drop policy if exists "profiles read by self admin linked users" on public.profi
 drop policy if exists "profiles insert by admin" on public.profiles;
 drop policy if exists "profiles update by self or admin" on public.profiles;
 drop policy if exists "profiles delete by admin" on public.profiles;
+drop policy if exists "body measurements read by self coach or admin" on public.body_measurements;
+drop policy if exists "body measurements insert by self or admin" on public.body_measurements;
+drop policy if exists "body measurements update by self or admin" on public.body_measurements;
+drop policy if exists "body measurements delete by self or admin" on public.body_measurements;
 
 drop policy if exists "assignments admin or owning coach" on public.coach_athlete_assignments;
 drop policy if exists "assignments read by participant or admin" on public.coach_athlete_assignments;
@@ -241,6 +238,23 @@ with check (
 create policy "profiles delete by admin"
 on public.profiles for delete
 using (public.is_admin());
+
+create policy "body measurements read by self coach or admin"
+on public.body_measurements for select
+using (auth.uid() = user_id or public.is_admin() or public.is_coach_of(user_id));
+
+create policy "body measurements insert by self or admin"
+on public.body_measurements for insert
+with check (auth.uid() = user_id or public.is_admin());
+
+create policy "body measurements update by self or admin"
+on public.body_measurements for update
+using (auth.uid() = user_id or public.is_admin())
+with check (auth.uid() = user_id or public.is_admin());
+
+create policy "body measurements delete by self or admin"
+on public.body_measurements for delete
+using (auth.uid() = user_id or public.is_admin());
 
 create policy "assignments read by participant or admin"
 on public.coach_athlete_assignments for select

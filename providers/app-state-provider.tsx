@@ -121,15 +121,6 @@ type LegacyWorkoutComment = {
   createdAt: string;
 };
 
-function buildWorkoutNoteConversationPreview(body: string) {
-  const normalizedBody = body.trim().replace(/\s+/g, " ");
-  if (normalizedBody.length <= 160) {
-    return normalizedBody;
-  }
-
-  return `${normalizedBody.slice(0, 157).trimEnd()}...`;
-}
-
 function displayWorkoutTitle(title: string) {
   return normalizeWorkoutHistoryTitle(title);
 }
@@ -144,80 +135,28 @@ function normalizeWorkoutConversationBody(body: string, title: string) {
 }
 
 function normalizeConversationEntries(raw: AppState & { workoutComments?: LegacyWorkoutComment[] }) {
-  const legacyComments = (raw.workoutComments ?? []).map((comment) => ({
+  const legacyComments: ConversationEntry[] = (raw.workoutComments ?? []).map((comment) => ({
     id: comment.id,
     athleteId: comment.athleteId,
     coachId: comment.coachId,
     authorUserId: comment.authorUserId,
     authorRole: comment.authorRole,
-    type: "comment" as const,
+    type: "comment",
     body: comment.body,
-    contextType: comment.scheduledWorkoutId ? ("workout" as const) : ("general" as const),
+    contextType: comment.scheduledWorkoutId ? "workout" : "general",
     contextId: comment.scheduledWorkoutId,
     createdAt: comment.createdAt,
     readByUserIds: [comment.authorUserId],
   }));
 
-  const existingWorkoutNoteEntryKeys = new Set(
-    (raw.conversationEntries ?? [])
-      .filter(
-        (entry) =>
-          entry.type === "workout_note_saved" &&
-          entry.contextType === "workout" &&
-          Boolean(entry.contextId) &&
-          Boolean(entry.authorUserId),
-      )
-      .map((entry) => `${entry.contextId}:${entry.authorUserId}`),
-  );
-
-  const persistedNotes = raw.notes
-    .map((note) => {
-      const body = note.body?.trim();
-      if (!body) {
-        return null;
-      }
-
-      const session = raw.sessions.find((item) => item.id === note.sessionId);
-      if (!session) {
-        return null;
-      }
-
-      const workout = raw.scheduledWorkouts.find((item) => item.id === session.scheduledWorkoutId);
-      if (!workout) {
-        return null;
-      }
-
-      const dedupeKey = `${workout.id}:${note.athleteId}`;
-      if (existingWorkoutNoteEntryKeys.has(dedupeKey)) {
-        return null;
-      }
-
-      return {
-        id: `note_${note.id}`,
-        athleteId: note.athleteId,
-        coachId: note.coachId,
-        authorUserId: note.athleteId,
-        authorRole: "athlete" as const,
-        type: "workout_note_saved" as const,
-        body: buildWorkoutNoteConversationPreview(body),
-        contextType: "workout" as const,
-        contextId: workout.id,
-        contextLabel: displayWorkoutTitle(workout.title),
-        createdAt: note.updatedAt || note.createdAt,
-        readByUserIds: [note.athleteId],
-      };
-    })
-    .filter((entry): entry is ConversationEntry => Boolean(entry));
-
-  const mergedEntries = [...(raw.conversationEntries ?? []), ...legacyComments, ...persistedNotes].filter(
-    (entry) =>
+  const mergedEntries = [...(raw.conversationEntries ?? []), ...legacyComments].filter(
+    (entry): entry is ConversationEntry =>
       Boolean(entry.id) &&
       Boolean(entry.athleteId) &&
       Boolean(entry.coachId) &&
       Boolean(entry.authorUserId) &&
       Boolean(entry.authorRole) &&
-      Boolean(entry.type) &&
-      entry.type !== "workout_started" &&
+      entry.type === "comment" &&
       Boolean(entry.body) &&
       Boolean(entry.contextType) &&
       Boolean(entry.createdAt) &&
@@ -275,8 +214,33 @@ function buildConversationEntry(input: {
 }
 
 function normalizeState(raw: AppState): AppState {
+  const normalizedBodyMeasurements = (raw.bodyMeasurements ?? []).filter(
+    (entry) =>
+      Boolean(entry.id) &&
+      Boolean(entry.userId) &&
+      Boolean(entry.measuredAt) &&
+      Boolean(entry.createdAt) &&
+      (typeof entry.weightKg === "number" || typeof entry.waistCm === "number"),
+  );
+  const latestMeasurementByUserId = new Map<string, (typeof normalizedBodyMeasurements)[number]>();
+  normalizedBodyMeasurements
+    .slice()
+    .sort((a, b) => new Date(b.measuredAt).getTime() - new Date(a.measuredAt).getTime())
+    .forEach((entry) => {
+      if (!latestMeasurementByUserId.has(entry.userId)) {
+        latestMeasurementByUserId.set(entry.userId, entry);
+      }
+    });
   const normalizedUsers = raw.users.map((user) => ({
     ...user,
+    weightKg:
+      typeof user.weightKg === "number"
+        ? user.weightKg
+        : latestMeasurementByUserId.get(user.id)?.weightKg,
+    waistCm:
+      typeof user.waistCm === "number"
+        ? user.waistCm
+        : latestMeasurementByUserId.get(user.id)?.waistCm,
     settings: normalizeUserSettings(user.role, user.settings),
   }));
   const normalizedExercises = raw.exercises.map((exercise) => ({
@@ -290,6 +254,7 @@ function normalizeState(raw: AppState): AppState {
 
   return {
     ...raw,
+    bodyMeasurements: normalizedBodyMeasurements,
     users: normalizedUsers,
     exercises: Array.from(mergedExerciseById.values()),
     passwordResetRequests: (raw.passwordResetRequests ?? []).filter(
@@ -346,6 +311,8 @@ type UserSettingsInput = {
   defaultDashboardView: DashboardHomeView;
   emailNotifications: boolean;
   themeMode: "light" | "dark";
+  weightKg?: number;
+  waistCm?: number;
 };
 
 const CUSTOM_EXERCISE_VALUE = "__custom__";
@@ -470,39 +437,6 @@ function appendConversationEntry(state: AppState, entry: ConversationEntry) {
   };
 }
 
-function upsertWorkoutNoteConversationEntry(state: AppState, entry: ConversationEntry) {
-  return {
-    ...state,
-    conversationEntries: [
-      entry,
-      ...state.conversationEntries.filter(
-        (item) =>
-          !(
-            item.type === "workout_note_saved" &&
-            item.contextType === "workout" &&
-            item.contextId === entry.contextId &&
-            item.authorUserId === entry.authorUserId
-          ),
-      ),
-    ],
-  };
-}
-
-function removeWorkoutNoteConversationEntry(state: AppState, scheduledWorkoutId: string, authorUserId: string) {
-  return {
-    ...state,
-    conversationEntries: state.conversationEntries.filter(
-      (entry) =>
-        !(
-          entry.type === "workout_note_saved" &&
-          entry.contextType === "workout" &&
-          entry.contextId === scheduledWorkoutId &&
-          entry.authorUserId === authorUserId
-        ),
-    ),
-  };
-}
-
 function isConversationVisibleToUser(entry: ConversationEntry, user: UserProfile) {
   if (user.role === "athlete") {
     return entry.athleteId === user.id;
@@ -530,6 +464,7 @@ interface AppStateContextValue {
   updateCurrentUserSettings: (input: UserSettingsInput) => ActionResult;
   requestCurrentUserPasswordReset: () => Promise<PasswordResetRequestResult>;
   adminSendPasswordResetEmail: (userId: string) => Promise<PasswordResetRequestResult>;
+  adminUpdateUserRole: (userId: string, role: Role) => ActionResult;
   completePasswordReset: (token: string, nextPassword: string) => Promise<ActionResult>;
   adminDeleteUser: (userId: string) => ActionResult;
   createInvite: (input: InviteInput) => ActionResult;
@@ -749,13 +684,36 @@ export function AppStateProvider({ children }: PropsWithChildren) {
         }
 
         const timestamp = new Date().toISOString();
+        const weightKg = typeof input.weightKg === "number" ? input.weightKg : undefined;
+        const waistCm = typeof input.waistCm === "number" ? input.waistCm : undefined;
+        const hasMeasurementChange =
+          currentUser.weightKg !== weightKg || currentUser.waistCm !== waistCm;
+
         setState((previous) => ({
           ...previous,
+          bodyMeasurements:
+            currentUser.role === "athlete" &&
+            hasMeasurementChange &&
+            (weightKg !== undefined || waistCm !== undefined)
+              ? [
+                  {
+                    id: makeId("measurement"),
+                    userId: currentUser.id,
+                    weightKg,
+                    waistCm,
+                    measuredAt: timestamp,
+                    createdAt: timestamp,
+                  },
+                  ...previous.bodyMeasurements,
+                ]
+              : previous.bodyMeasurements,
           users: previous.users.map((user) =>
             user.id === currentUser.id
               ? {
                   ...user,
                   fullName,
+                  weightKg,
+                  waistCm,
                   updatedAt: timestamp,
                   settings: normalizeUserSettings(user.role, {
                     ...user.settings,
@@ -862,6 +820,82 @@ export function AppStateProvider({ children }: PropsWithChildren) {
           ok: true,
           message: `Nollausviesti lähetettiin osoitteeseen ${targetUser.email}.`,
           previewUrl,
+        };
+      },
+      adminUpdateUserRole(userId, role) {
+        if (!currentUser || currentUser.role !== "admin") {
+          return { ok: false, message: "Vain admin voi vaihtaa käyttäjän roolia." };
+        }
+
+        const targetUser = state.users.find((user) => user.id === userId);
+        if (!targetUser) {
+          return { ok: false, message: "Käyttäjää ei löytynyt." };
+        }
+
+        if (targetUser.id === currentUser.id) {
+          return { ok: false, message: "Et voi vaihtaa omaa admin-rooliasi." };
+        }
+
+        if (targetUser.role === role) {
+          return { ok: true, message: "Rooli oli jo valittuna." };
+        }
+
+        if (targetUser.role === "admin" && role !== "admin") {
+          const adminCount = state.users.filter((user) => user.role === "admin").length;
+          if (adminCount <= 1) {
+            return { ok: false, message: "Viimeisen admin-käyttäjän roolia ei voi vaihtaa." };
+          }
+        }
+
+        if (targetUser.role === "coach" && role !== "coach") {
+          const activeAthleteCount = state.assignments.filter(
+            (assignment) => assignment.coachId === targetUser.id && assignment.active,
+          ).length;
+          if (activeAthleteCount > 0) {
+            return {
+              ok: false,
+              message: "Siirrä ensin valmennettavat toiselle valmentajalle ennen roolin vaihtoa.",
+            };
+          }
+
+          const coachedProgramCount = state.plans.filter((plan) => plan.coachId === targetUser.id).length;
+          if (coachedProgramCount > 0) {
+            return {
+              ok: false,
+              message: "Siirrä tai päätä ensin käyttäjän valmennusohjelmat ennen roolin vaihtoa.",
+            };
+          }
+        }
+
+        const updatedAt = new Date().toISOString();
+        setState((previous) => ({
+          ...previous,
+          users: previous.users.map((user) =>
+            user.id === targetUser.id
+              ? {
+                  ...user,
+                  role,
+                  updatedAt,
+                  settings: normalizeUserSettings(role, user.settings),
+                }
+              : user,
+          ),
+          assignments: previous.assignments.filter((assignment) => {
+            if (role === "admin") {
+              return assignment.coachId !== targetUser.id && assignment.athleteId !== targetUser.id;
+            }
+
+            if (role === "coach") {
+              return assignment.athleteId !== targetUser.id;
+            }
+
+            return assignment.coachId !== targetUser.id;
+          }),
+        }));
+
+        return {
+          ok: true,
+          message: `Rooli päivitettiin: ${targetUser.fullName} on nyt ${role === "admin" ? "admin" : role === "coach" ? "valmentaja" : "treenaaja"}.`,
         };
       },
       async completePasswordReset(token, nextPassword) {
@@ -1176,20 +1210,6 @@ export function AppStateProvider({ children }: PropsWithChildren) {
           ...previous,
           exercises: [...resolved.customExercises, ...previous.exercises],
           plans: [createdProgram, ...previous.plans],
-          conversationEntries: [
-            buildConversationEntry({
-              athleteId: createdProgram.athleteId,
-              coachId: createdProgram.coachId,
-              authorUserId: currentUser.id,
-              authorRole: currentUser.role,
-              type: "program_created",
-              body: `Sinulle luotiin uusi ohjelma "${createdProgram.title}".`,
-              contextType: "program",
-              contextId: createdProgram.id,
-              contextLabel: createdProgram.title,
-            }),
-            ...previous.conversationEntries,
-          ],
         }));
 
         return { ok: true };
@@ -1223,20 +1243,6 @@ export function AppStateProvider({ children }: PropsWithChildren) {
             ? [...resolvedWorkouts.customExercises, ...previous.exercises]
             : previous.exercises,
           plans: previous.plans.map((item) => (item.id === updatedProgram.id ? updatedProgram : item)),
-          conversationEntries: [
-            buildConversationEntry({
-              athleteId: updatedProgram.athleteId,
-              coachId: updatedProgram.coachId,
-              authorUserId: currentUser.id,
-              authorRole: currentUser.role,
-              type: "program_updated",
-              body: `Ohjelmaa "${updatedProgram.title}" päivitettiin.`,
-              contextType: "program",
-              contextId: updatedProgram.id,
-              contextLabel: updatedProgram.title,
-            }),
-            ...previous.conversationEntries,
-          ],
         }));
 
         return { ok: true };
@@ -1389,7 +1395,8 @@ export function AppStateProvider({ children }: PropsWithChildren) {
         }
 
         if (currentUser.role === "coach" && options?.athleteId) {
-          if (!canCoachManageAthlete(state, currentUser.id, options.athleteId)) {
+          const athleteId = options.athleteId;
+          if (!canCoachManageAthlete(state, currentUser.id, athleteId)) {
             return { ok: false, message: "Voit keskustella vain omien valmennettaviesi kanssa." };
           }
 
@@ -1397,7 +1404,7 @@ export function AppStateProvider({ children }: PropsWithChildren) {
             appendConversationEntry(
               previous,
               buildConversationEntry({
-                athleteId: options.athleteId,
+                athleteId,
                 coachId: currentUser.id,
                 authorUserId: currentUser.id,
                 authorRole: currentUser.role,
@@ -1460,28 +1467,7 @@ export function AppStateProvider({ children }: PropsWithChildren) {
           return;
         }
 
-        const shouldLogUpdate = workout.status === "completed";
-        setState((previous) => {
-          const next = domainUpdateSessionSet(previous, scheduledWorkoutId, logId, patch);
-          if (!shouldLogUpdate) {
-            return next;
-          }
-
-          return appendConversationEntry(
-            next,
-            buildConversationEntry({
-              athleteId: workout.athleteId,
-              coachId: workout.coachId,
-              authorUserId: currentUser.id,
-              authorRole: currentUser.role,
-              type: "workout_updated",
-              body: `Valmista treeniä "${displayWorkoutTitle(workout.title)}" muokattiin.`,
-              contextType: "workout",
-              contextId: workout.id,
-              contextLabel: displayWorkoutTitle(workout.title),
-            }),
-          );
-        });
+        setState((previous) => domainUpdateSessionSet(previous, scheduledWorkoutId, logId, patch));
       },
       saveWorkoutNote(scheduledWorkoutId, body) {
         if (!currentUser) {
@@ -1503,27 +1489,7 @@ export function AppStateProvider({ children }: PropsWithChildren) {
           return;
         }
 
-        setState((previous) => {
-          const next = domainSaveSessionNote(previous, scheduledWorkoutId, body);
-          if (!trimmedBody) {
-            return removeWorkoutNoteConversationEntry(next, scheduledWorkoutId, currentUser.id);
-          }
-
-          return upsertWorkoutNoteConversationEntry(
-            next,
-            buildConversationEntry({
-              athleteId: workout.athleteId,
-              coachId: workout.coachId,
-              authorUserId: currentUser.id,
-              authorRole: currentUser.role,
-              type: "workout_note_saved",
-              body: buildWorkoutNoteConversationPreview(trimmedBody),
-              contextType: "workout",
-              contextId: workout.id,
-              contextLabel: displayWorkoutTitle(workout.title),
-            }),
-          );
-        });
+        setState((previous) => domainSaveSessionNote(previous, scheduledWorkoutId, body));
       },
       completeWorkout(scheduledWorkoutId) {
         if (!currentUser) {
@@ -1544,22 +1510,7 @@ export function AppStateProvider({ children }: PropsWithChildren) {
           return { ok: false, message: "Treeniä ei voitu merkitä valmiiksi." };
         }
 
-        setState((previous) =>
-          appendConversationEntry(
-            domainCompleteSession(previous, scheduledWorkoutId),
-            buildConversationEntry({
-              athleteId: workout.athleteId,
-              coachId: workout.coachId,
-              authorUserId: currentUser.id,
-              authorRole: currentUser.role,
-              type: "workout_completed",
-              body: `Treeni "${displayWorkoutTitle(workout.title)}" merkittiin valmiiksi.`,
-              contextType: "workout",
-              contextId: workout.id,
-              contextLabel: displayWorkoutTitle(workout.title),
-            }),
-          ),
-        );
+        setState((previous) => domainCompleteSession(previous, scheduledWorkoutId));
         return { ok: true };
       },
       cancelWorkout(scheduledWorkoutId) {
@@ -1576,22 +1527,7 @@ export function AppStateProvider({ children }: PropsWithChildren) {
           return { ok: false, message: "Valmista treeniä ei voi keskeyttää." };
         }
 
-        setState((previous) =>
-          appendConversationEntry(
-            domainCancelSession(previous, scheduledWorkoutId),
-            buildConversationEntry({
-              athleteId: workout.athleteId,
-              coachId: workout.coachId,
-              authorUserId: currentUser.id,
-              authorRole: currentUser.role,
-              type: "workout_cancelled",
-              body: `Treeni "${displayWorkoutTitle(workout.title)}" keskeytettiin.`,
-              contextType: "workout",
-              contextId: workout.id,
-              contextLabel: displayWorkoutTitle(workout.title),
-            }),
-          ),
-        );
+        setState((previous) => domainCancelSession(previous, scheduledWorkoutId));
         return { ok: true };
       },
       deleteWorkout(scheduledWorkoutId) {
@@ -1608,22 +1544,7 @@ export function AppStateProvider({ children }: PropsWithChildren) {
           return { ok: false, message: "Vain ohjelmasta käynnistetyn treenin voi poistaa." };
         }
 
-        setState((previous) =>
-          appendConversationEntry(
-            domainDeleteScheduledWorkout(previous, scheduledWorkoutId),
-            buildConversationEntry({
-              athleteId: workout.athleteId,
-              coachId: workout.coachId,
-              authorUserId: currentUser.id,
-              authorRole: currentUser.role,
-              type: "workout_deleted",
-              body: `Treeni "${displayWorkoutTitle(workout.title)}" poistettiin.`,
-              contextType: "workout",
-              contextId: workout.id,
-              contextLabel: displayWorkoutTitle(workout.title),
-            }),
-          ),
-        );
+        setState((previous) => domainDeleteScheduledWorkout(previous, scheduledWorkoutId));
         return { ok: true };
       },
       getCoachAthletes(coachId) {

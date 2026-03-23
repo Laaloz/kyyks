@@ -23,9 +23,20 @@ export interface UserProfile {
   email: string;
   status: UserStatus;
   demoPassword?: string;
+  weightKg?: number;
+  waistCm?: number;
   settings?: UserSettings;
   createdAt: string;
   updatedAt: string;
+}
+
+export interface BodyMeasurement {
+  id: string;
+  userId: string;
+  weightKg?: number;
+  waistCm?: number;
+  measuredAt: string;
+  createdAt: string;
 }
 
 export interface CoachAthleteAssignment {
@@ -183,16 +194,7 @@ export interface WorkoutNote {
   updatedAt: string;
 }
 
-export type ConversationEntryType =
-  | "comment"
-  | "workout_note_saved"
-  | "workout_started"
-  | "workout_completed"
-  | "workout_cancelled"
-  | "workout_deleted"
-  | "workout_updated"
-  | "program_created"
-  | "program_updated";
+export type ConversationEntryType = "comment";
 
 export type ConversationContextType = "general" | "workout" | "program";
 
@@ -237,6 +239,7 @@ export interface PasswordResetRequest {
 
 export interface AppState {
   users: UserProfile[];
+  bodyMeasurements: BodyMeasurement[];
   assignments: CoachAthleteAssignment[];
   exercises: Exercise[];
   templates: WorkoutTemplate[];

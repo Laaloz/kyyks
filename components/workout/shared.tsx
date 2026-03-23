@@ -3,12 +3,12 @@ import type { ComponentType } from "react";
 import { Card } from "@/components/ui/card";
 import type { Role } from "@/lib/types";
 
-export type WorkspaceView = "overview" | "templates" | "athlete-log" | "invites";
+export type WorkspaceView = "overview" | "templates" | "athlete-log" | "conversation" | "invites" | "settings";
 
 export function metricTone(role: Role | null) {
   switch (role) {
     case "admin":
-      return "border-[var(--accent-secondary)] text-[var(--accent-secondary)]";
+      return "border-[var(--border-strong)] text-[var(--accent-secondary)]";
     case "coach":
       return "border-[var(--accent-tertiary)] text-[var(--accent-tertiary)]";
     case "athlete":
@@ -24,16 +24,16 @@ export function roleLabel(role: Role) {
   return "Treenaaja";
 }
 
-export function scheduledStatusLabel(status: string) {
+export function workoutStatusLabel(status: string) {
   switch (status) {
-    case "scheduled":
-      return "Ajastettu";
     case "in_progress":
       return "Kesken";
     case "completed":
       return "Valmis";
+    case "cancelled":
+      return "Keskeytetty";
     default:
-      return status;
+      return "Keskeytetty";
   }
 }
 

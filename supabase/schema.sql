@@ -8,15 +8,7 @@ create type public.invite_status as enum ('pending', 'accepted');
 create type public.exercise_scope as enum ('global', 'coach_custom');
 create type public.theme_mode as enum ('light', 'dark');
 create type public.conversation_entry_type as enum (
-  'comment',
-  'workout_note_saved',
-  'workout_started',
-  'workout_completed',
-  'workout_cancelled',
-  'workout_deleted',
-  'workout_updated',
-  'program_created',
-  'program_updated'
+  'comment'
 );
 create type public.conversation_context_type as enum ('general', 'workout', 'program');
 
@@ -29,12 +21,28 @@ create table if not exists public.profiles (
   default_dashboard_view text,
   email_notifications boolean not null default false,
   theme_mode public.theme_mode not null default 'light',
+  weight_kg numeric(5,2),
+  waist_cm numeric(5,2),
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
 
 create unique index if not exists profiles_email_lower_unique
 on public.profiles (lower(email));
+
+create table if not exists public.body_measurements (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null references public.profiles(id) on delete cascade,
+  weight_kg numeric(5,2),
+  waist_cm numeric(5,2),
+  measured_at timestamptz not null default now(),
+  created_at timestamptz not null default now(),
+  constraint body_measurements_value_check
+    check (weight_kg is not null or waist_cm is not null)
+);
+
+create index if not exists body_measurements_user_idx
+on public.body_measurements (user_id, measured_at desc);
 
 create table if not exists public.coach_athlete_assignments (
   id uuid primary key default gen_random_uuid(),
@@ -323,6 +331,7 @@ as $$
 $$;
 
 alter table public.profiles enable row level security;
+alter table public.body_measurements enable row level security;
 alter table public.coach_athlete_assignments enable row level security;
 alter table public.exercises enable row level security;
 alter table public.workout_templates enable row level security;
@@ -367,6 +376,23 @@ with check (
 create policy "profiles delete by admin"
 on public.profiles for delete
 using (public.is_admin());
+
+create policy "body measurements read by self coach or admin"
+on public.body_measurements for select
+using (auth.uid() = user_id or public.is_admin() or public.is_coach_of(user_id));
+
+create policy "body measurements insert by self or admin"
+on public.body_measurements for insert
+with check (auth.uid() = user_id or public.is_admin());
+
+create policy "body measurements update by self or admin"
+on public.body_measurements for update
+using (auth.uid() = user_id or public.is_admin())
+with check (auth.uid() = user_id or public.is_admin());
+
+create policy "body measurements delete by self or admin"
+on public.body_measurements for delete
+using (auth.uid() = user_id or public.is_admin());
 
 create policy "assignments read by participant or admin"
 on public.coach_athlete_assignments for select

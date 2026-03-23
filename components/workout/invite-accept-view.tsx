@@ -33,7 +33,7 @@ export function InviteAcceptView({ token }: { token: string }) {
     return (
       <div className="mx-auto flex min-h-screen max-w-xl items-center px-4">
         <Card className="w-full border-[var(--border-strong)]">
-          <p className="text-xs font-semibold tracking-[0.04em] text-[var(--text-subtle)]">Invite status</p>
+          <p className="text-xs font-semibold tracking-[0.04em] text-[var(--text-subtle)]">Kutsun tila</p>
           <CardTitle>Kutsua ei löytynyt</CardTitle>
           <CardDescription className="mt-3">
             Tarkista linkki tai luo uusi kutsu admin- tai coach-näkymästä.
@@ -52,7 +52,7 @@ export function InviteAcceptView({ token }: { token: string }) {
     <div className="mx-auto flex min-h-screen max-w-xl items-center px-4 py-10">
       <Card className="w-full border-[var(--border-strong)]">
         <Badge>{roleLabel(invite.role)}</Badge>
-        <p className="mt-4 text-xs font-semibold tracking-[0.04em] text-[var(--text-subtle)]">Onboarding</p>
+        <p className="mt-4 text-xs font-semibold tracking-[0.04em] text-[var(--text-subtle)]">Käyttöönotto</p>
         <CardTitle className="text-2xl">Viimeistele tunnus</CardTitle>
         <CardDescription className="mt-2">
           Kutsu osoitteeseen {invite.email}. Luo nimi ja salasana, niin pääset heti treenialustalle.

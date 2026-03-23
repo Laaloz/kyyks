@@ -3,43 +3,89 @@
 import { zodResolver } from "@hookform/resolvers/zod";
 import {
   Activity,
+  ChevronDown,
+  ChevronUp,
   CircleCheckBig,
   ClipboardList,
   ClipboardPenLine,
   Plus,
 } from "lucide-react";
 import { useEffect, useId, useMemo, useState } from "react";
-import { useFieldArray, useForm, type Control, type UseFormRegister, type UseFormWatch } from "react-hook-form";
-import { z } from "zod";
+import { type Resolver, useFieldArray, useForm } from "react-hook-form";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardDescription, CardTitle } from "@/components/ui/card";
-import { Input, Label, Select, Textarea } from "@/components/ui/field";
+import { Input, Label, Select } from "@/components/ui/field";
 import { InfoTooltip } from "@/components/ui/tooltip";
-import { splitLabel } from "@/lib/domain";
-import type { AppState, ScheduledWorkoutStatus, WorkoutSession } from "@/lib/types";
-import { formatDate } from "@/lib/utils";
+import { ConversationPanel } from "@/components/workout/conversation-panel";
+import { MetricTrendChart } from "@/components/workout/metric-trend-chart";
+import { CoachInvitePanel } from "@/components/workout/coach/invite-panel";
+import { ProgramWorkoutEditor } from "@/components/workout/coach/program-workout-editor";
+import {
+  type ProgramComposerExerciseFormValues,
+  type ProgramComposerFormValues,
+  type ProgramComposerValues,
+} from "@/components/workout/coach/program-composer";
+import { estimateStrengthCalories, getLatestMeasurement, getMeasurementsForUser, getWeightAtMoment } from "@/lib/body-metrics";
+import { buildWorkoutConversationContextOptions } from "@/lib/workout-conversation-context";
+import { buildWorkoutHistoryTitleMap } from "@/lib/workout-history-title";
+import type { AppState, ConversationEntry, ScheduledWorkoutStatus, WorkoutSession } from "@/lib/types";
+import { formatDate, formatDateWithWeekday } from "@/lib/utils";
 import { useAppState } from "@/providers/app-state-provider";
 
 import {
   CUSTOM_EXERCISE_VALUE,
-  emptyProgramWorkout,
   emptyProgramWorkoutExercise,
-  inviteSchema,
+  emptyProgramWorkout,
   programComposerSchema,
-  SUPERSET_GROUP_OPTIONS,
 } from "@/components/workout/schemas";
-import { scheduledStatusLabel, type WorkspaceView } from "@/components/workout/shared";
+import { workoutStatusLabel, type WorkspaceView } from "@/components/workout/shared";
 
-type ProgramComposerValues = z.infer<typeof programComposerSchema>;
+type CoachHistoryMuscleGroupKey = "shoulders" | "arms" | "chest" | "abs" | "back" | "legs" | "other";
 
-export function CoachDashboard({ view }: { view: WorkspaceView }) {
+type CoachWorkoutInsight = {
+  exerciseCount: number;
+  setCount: number;
+  completedSetCount: number;
+  completionPercent: number;
+  totalLoadKg: number;
+  liftedKg: number;
+  durationSeconds: number;
+  estimatedCalories: number;
+  muscleGroupLiftedKg: Record<CoachHistoryMuscleGroupKey, number>;
+};
+
+type CoachExerciseSetGroup = {
+  key: string;
+  exerciseName: string;
+  supersetGroup?: string;
+  logs: WorkoutSession["setLogs"];
+};
+
+const coachHistoryMuscleGroups: Array<{ key: CoachHistoryMuscleGroupKey; label: string }> = [
+  { key: "shoulders", label: "Olkapää" },
+  { key: "arms", label: "Kädet" },
+  { key: "chest", label: "Rinta" },
+  { key: "abs", label: "Vatsalihakset" },
+  { key: "back", label: "Selkä" },
+  { key: "legs", label: "Jalat" },
+  { key: "other", label: "Muu" },
+];
+
+export function CoachDashboard({
+  view,
+  onOpenConversation,
+}: {
+  view: WorkspaceView;
+  onOpenConversation?: () => void;
+}) {
   const {
     currentUser,
     state,
     createProgram,
     updateProgram,
+    addConversationComment,
     getCoachAthletes,
   } = useAppState();
   const formId = useId();
@@ -48,6 +94,20 @@ export function CoachDashboard({ view }: { view: WorkspaceView }) {
   const [selectedAthleteId, setSelectedAthleteId] = useState<string>("");
 
   const athletes = currentUser ? getCoachAthletes(currentUser.id) : [];
+  const programTargets = useMemo(() => {
+    if (!currentUser) {
+      return [];
+    }
+
+    const managedAthletes = currentUser.role === "coach" ? athletes : [];
+    const selfTarget = {
+      id: currentUser.id,
+      fullName: `${currentUser.fullName} (sinä)`,
+      email: currentUser.email,
+    };
+
+    return [selfTarget, ...managedAthletes.filter((athlete) => athlete.id !== currentUser.id)];
+  }, [athletes, currentUser]);
   const coachPrograms = state.plans.filter(
     (plan) => plan.coachId === currentUser?.id && Boolean(plan.workouts?.length),
   );
@@ -71,14 +131,32 @@ export function CoachDashboard({ view }: { view: WorkspaceView }) {
     [state.exercises, currentUser],
   );
 
-  const form = useForm<ProgramComposerValues>({
-    resolver: zodResolver(programComposerSchema),
+  const form = useForm<ProgramComposerFormValues, unknown, ProgramComposerValues>({
+    resolver: zodResolver(programComposerSchema) as Resolver<
+      ProgramComposerFormValues,
+      unknown,
+      ProgramComposerValues
+    >,
     defaultValues: {
       title: "",
-      athleteId: athletes[0]?.id ?? "",
+      athleteId: programTargets[0]?.id ?? "",
       workouts: [emptyProgramWorkout("custom")],
     },
   });
+
+  useEffect(() => {
+    const currentTargetId = form.getValues("athleteId");
+    if (!programTargets.length) {
+      if (currentTargetId) {
+        form.setValue("athleteId", "");
+      }
+      return;
+    }
+
+    if (!programTargets.some((target) => target.id === currentTargetId)) {
+      form.setValue("athleteId", programTargets[0]?.id ?? "", { shouldDirty: false });
+    }
+  }, [form, programTargets]);
 
   const workoutFields = useFieldArray({
     control: form.control,
@@ -89,7 +167,7 @@ export function CoachDashboard({ view }: { view: WorkspaceView }) {
   const editorTitle = isEditingProgram ? "Muokkaa treeniohjelmaa" : "Uusi treeniohjelma";
   const editorDescription = isEditingProgram
     ? "Päivitä ohjelman harjoitukset, liikkeet ja kuormitus. Treenaajaa ei voi vaihtaa muokkaustilassa."
-    : "Luo ohjelma kokonaisuutena: lisää harjoitukset ja valitse liikkeet valmiista pankista tai customina.";
+    : "Luo ohjelma itsellesi tai valmennettavalle: lisää harjoitukset ja valitse liikkeet valmiista pankista tai omana liikkeenä.";
 
   const resetComposer = (athleteId: string) => {
     form.reset({
@@ -109,13 +187,29 @@ export function CoachDashboard({ view }: { view: WorkspaceView }) {
           selectedAthleteId={selectedAthleteId}
           onSelectAthlete={setSelectedAthleteId}
           state={state}
+          onOpenConversation={onOpenConversation}
+        />
+      ) : null}
+
+      {view === "conversation" && currentUser ? (
+        <CoachConversationView
+          athletes={athletes}
+          currentUserId={currentUser.id}
+          entries={state.conversationEntries}
+          onSend={addConversationComment}
+          selectedAthleteId={selectedAthleteId}
+          onSelectAthlete={setSelectedAthleteId}
+          plans={state.plans}
+          scheduledWorkouts={state.scheduledWorkouts}
+          templates={state.templates}
+          users={state.users}
         />
       ) : null}
 
       {view === "templates" && (
         <div className="grid gap-6 xl:grid-cols-[1.08fr_0.92fr]">
           <Card className="border-[var(--border-strong)]" id="coach-program-composer">
-            <p className="text-xs font-semibold text-[var(--text-subtle)]">Program composer</p>
+            <p className="text-xs font-semibold text-[var(--text-subtle)]">Ohjelman rakentaja</p>
             <CardTitle className="text-2xl">{editorTitle}</CardTitle>
             <CardDescription className="mt-2">{editorDescription}</CardDescription>
             {isEditingProgram ? (
@@ -173,21 +267,21 @@ export function CoachDashboard({ view }: { view: WorkspaceView }) {
                 <div className="grid gap-4 md:grid-cols-2">
                   <div>
                     <Label htmlFor={`${formId}-title`}>Ohjelman nimi</Label>
-                    <Input id={`${formId}-title`} {...form.register("title")} placeholder="Esim. Ylä-ala-kokokroppa ohjelma" />
+                    <Input id={`${formId}-title`} {...form.register("title")} placeholder="Esim. Ylä-ala-koko kroppa" />
                   </div>
                   <div>
-                    <Label htmlFor={`${formId}-athlete`}>Treenaaja</Label>
+                    <Label htmlFor={`${formId}-athlete`}>Käyttäjä</Label>
                     <Select id={`${formId}-athlete`} {...form.register("athleteId")} disabled={isEditingProgram}>
-                      <option value="">Valitse treenaaja</option>
-                      {athletes.map((athlete) => (
-                        <option key={athlete.id} value={athlete.id}>
-                          {athlete.fullName}
+                      <option value="">Valitse käyttäjä</option>
+                      {programTargets.map((target) => (
+                        <option key={target.id} value={target.id}>
+                          {target.fullName}
                         </option>
                       ))}
                     </Select>
                     {isEditingProgram ? (
                       <p className="mt-1 text-xs text-[var(--text-subtle)]">
-                        Treenaajaa ei voi vaihtaa olemassa olevalle ohjelmalle.
+                        Käyttäjää ei voi vaihtaa olemassa olevalle ohjelmalle.
                       </p>
                     ) : null}
                   </div>
@@ -280,7 +374,7 @@ export function CoachDashboard({ view }: { view: WorkspaceView }) {
 
           <div className="grid gap-6">
             <Card>
-              <p className="text-xs font-semibold text-[var(--text-subtle)]">Program library</p>
+              <p className="text-xs font-semibold text-[var(--text-subtle)]">Ohjelmakirjasto</p>
               <CardTitle className="text-2xl">Luodut ohjelmat</CardTitle>
               <CardDescription className="mt-2">
                 Avaa ohjelma muokattavaksi ja päivitä rakenne yhdestä paikasta.
@@ -288,7 +382,9 @@ export function CoachDashboard({ view }: { view: WorkspaceView }) {
               <div className="mt-5 grid gap-4">
                 {coachPrograms.map((program) => {
                   const athleteName =
-                    state.users.find((user) => user.id === program.athleteId)?.fullName ?? "Treenaaja";
+                    program.athleteId === currentUser?.id
+                      ? "Sinä"
+                      : (state.users.find((user) => user.id === program.athleteId)?.fullName ?? "Käyttäjä");
                   const isActiveEditorTarget = editingProgramId === program.id;
 
                   return (
@@ -349,6 +445,10 @@ function mapComposerWorkouts(workouts: ProgramComposerValues["workouts"]) {
       exerciseId: exercise.exerciseId,
       exerciseNameOverride: exercise.exerciseNameOverride,
       customExerciseName: exercise.customExerciseName,
+      customMuscleGroup:
+        exercise.exerciseId === CUSTOM_EXERCISE_VALUE
+          ? (exercise.customMuscleGroup || undefined)
+          : undefined,
       supersetGroup: exercise.supersetGroup || undefined,
       instruction: exercise.instruction,
       setCount: exercise.setCount,
@@ -370,7 +470,7 @@ function mapComposerWorkouts(workouts: ProgramComposerValues["workouts"]) {
 function buildProgramComposerValues(
   program: AppState["plans"][number],
   exercises: AppState["exercises"],
-): ProgramComposerValues {
+): ProgramComposerFormValues {
   const exerciseById = new Map(exercises.map((exercise) => [exercise.id, exercise]));
 
   return {
@@ -405,7 +505,8 @@ function buildProgramComposerValues(
             : (exerciseItem.exerciseId ?? CUSTOM_EXERCISE_VALUE),
           exerciseNameOverride,
           customExerciseName: isCustomExercise ? exerciseItem.exerciseName : "",
-          supersetGroup: exerciseItem.supersetGroup ?? "",
+          customMuscleGroup: isCustomExercise ? (exerciseItem.muscleGroup ?? "other") : "",
+          supersetGroup: (exerciseItem.supersetGroup ?? "") as ProgramComposerExerciseFormValues["supersetGroup"],
           instruction: exerciseItem.instruction,
           repMode: hasRangeTarget ? "range" : "exact",
           setCount: Math.max(exerciseItem.sets.length, 1),
@@ -425,300 +526,36 @@ function buildProgramComposerValues(
   };
 }
 
-function ProgramWorkoutEditor({
-  fieldId,
-  index,
-  control,
-  register,
-  watch,
-  exerciseOptions,
-  onRemove,
-  removable,
-  allowExerciseRemoval,
-}: {
-  fieldId: string;
-  index: number;
-  control: Control<ProgramComposerValues>;
-  register: UseFormRegister<ProgramComposerValues>;
-  watch: UseFormWatch<ProgramComposerValues>;
-  exerciseOptions: Array<{ id: string; name: string; scope: string }>;
-  onRemove: () => void;
-  removable: boolean;
-  allowExerciseRemoval: boolean;
-}) {
-  const exerciseFields = useFieldArray({
-    control,
-    name: `workouts.${index}.exercises` as const,
-  });
-  const defaultRestSeconds = watch(`workouts.${index}.defaultRestSeconds` as const);
-
-  return (
-    <fieldset
-      className="space-y-4 rounded-xl border-2 border-[var(--border)] bg-[var(--surface-2)] p-4"
-      data-program-workout="true"
-      id={`program-workout-${fieldId}`}
-    >
-      <legend className="px-2 text-sm font-semibold text-[var(--text-subtle)]">
-        Harjoitus {index + 1}
-      </legend>
-
-      <div className="grid gap-4 [grid-template-columns:repeat(auto-fit,minmax(15rem,1fr))]">
-        <div>
-          <Label htmlFor={`workout-${index}-split`}>Jako</Label>
-          <Select id={`workout-${index}-split`} {...register(`workouts.${index}.splitType` as const)}>
-            <option value="upper">Yläkroppa</option>
-            <option value="lower">Alakroppa</option>
-            <option value="full_body">Koko kroppa</option>
-            <option value="custom">Custom</option>
-          </Select>
-        </div>
-        <div>
-          <div className="mb-1 flex items-center gap-1">
-            <Label className="mb-0" htmlFor={`workout-${index}-default-rest`}>Oletuslepo (s)</Label>
-            <InfoTooltip text="Tätä lepoa käytetään uuden liikkeen oletuksena. Voit säätää lepoa myös liikekohtaisesti." />
-          </div>
-          <Input
-            id={`workout-${index}-default-rest`}
-            type="number"
-            min={15}
-            max={600}
-            {...register(`workouts.${index}.defaultRestSeconds` as const)}
-          />
-        </div>
-      </div>
-
-      <div className="space-y-3">
-        {exerciseFields.fields.map((exerciseField, exerciseIndex) => {
-          const selectedExerciseId = watch(
-            `workouts.${index}.exercises.${exerciseIndex}.exerciseId` as const,
-          );
-          const repMode = watch(
-            `workouts.${index}.exercises.${exerciseIndex}.repMode` as const,
-          );
-
-          return (
-            <div key={exerciseField.id} className="rounded-xl border border-[var(--border)] bg-[var(--surface-3)] p-4">
-              <div className="mb-3 flex items-center justify-between">
-                <p className="text-sm font-semibold text-[var(--text)]">Liike {exerciseIndex + 1}</p>
-                {exerciseFields.fields.length > 1 && allowExerciseRemoval ? (
-                  <Button type="button" variant="ghost" onClick={() => exerciseFields.remove(exerciseIndex)}>
-                    Poista
-                  </Button>
-                ) : null}
-              </div>
-
-              <div className="grid gap-4 md:grid-cols-2">
-                <div>
-                  <Label htmlFor={`workout-${index}-exercise-${exerciseIndex}`}>Liike</Label>
-                  <Select
-                    id={`workout-${index}-exercise-${exerciseIndex}`}
-                    {...register(`workouts.${index}.exercises.${exerciseIndex}.exerciseId` as const)}
-                  >
-                    <option value="">Valitse liike</option>
-                    {exerciseOptions.map((exercise) => (
-                      <option key={exercise.id} value={exercise.id}>
-                        {exercise.name}
-                      </option>
-                    ))}
-                    <option value={CUSTOM_EXERCISE_VALUE}>Muu (custom)</option>
-                  </Select>
-                </div>
-
-                {selectedExerciseId === CUSTOM_EXERCISE_VALUE ? (
-                  <div>
-                    <Label htmlFor={`workout-${index}-custom-${exerciseIndex}`}>Custom-liikkeen nimi</Label>
-                    <Input
-                      id={`workout-${index}-custom-${exerciseIndex}`}
-                      {...register(`workouts.${index}.exercises.${exerciseIndex}.customExerciseName` as const)}
-                      placeholder="Esim. Landmine press"
-                    />
-                  </div>
-                ) : selectedExerciseId ? (
-                  <div>
-                    <Label htmlFor={`workout-${index}-nickname-${exerciseIndex}`}>
-                      Liikkeen lempinimi (valinnainen)
-                    </Label>
-                    <Input
-                      id={`workout-${index}-nickname-${exerciseIndex}`}
-                      {...register(
-                        `workouts.${index}.exercises.${exerciseIndex}.exerciseNameOverride` as const,
-                      )}
-                      placeholder="Esim. Penkki kilpailuotteella"
-                    />
-                  </div>
-                ) : null}
-              </div>
-
-              <div className="mt-4">
-                <Label htmlFor={`workout-${index}-instruction-${exerciseIndex}`}>Valmennusohje</Label>
-                <Textarea
-                  id={`workout-${index}-instruction-${exerciseIndex}`}
-                  {...register(`workouts.${index}.exercises.${exerciseIndex}.instruction` as const)}
-                  placeholder="Mitä treenaajan pitää muistaa tässä liikkeessä?"
-                />
-              </div>
-
-              <div className="mt-4 grid gap-4 [grid-template-columns:repeat(auto-fit,minmax(13rem,1fr))]">
-                <div>
-                  <Label htmlFor={`workout-${index}-sets-${exerciseIndex}`}>Sarjat</Label>
-                  <Input
-                    id={`workout-${index}-sets-${exerciseIndex}`}
-                    type="number"
-                    min={1}
-                    max={10}
-                    {...register(`workouts.${index}.exercises.${exerciseIndex}.setCount` as const)}
-                  />
-                </div>
-                <div>
-                  <div className="mb-1 flex items-center gap-1">
-                    <Label className="mb-0" htmlFor={`workout-${index}-superset-${exerciseIndex}`}>Superset</Label>
-                    <InfoTooltip text="Anna sama kirjain liikkeille, jotka tehdään putkeen ilman pitkää lepoa." />
-                  </div>
-                  <Select
-                    id={`workout-${index}-superset-${exerciseIndex}`}
-                    {...register(`workouts.${index}.exercises.${exerciseIndex}.supersetGroup` as const)}
-                  >
-                    <option value="">Ei supersettiä</option>
-                    {SUPERSET_GROUP_OPTIONS.map((group) => (
-                      <option key={group} value={group}>
-                        Superset {group}
-                      </option>
-                    ))}
-                  </Select>
-                </div>
-                <div>
-                  <div className="mb-1 flex items-center gap-1">
-                    <Label className="mb-0" htmlFor={`workout-${index}-rep-mode-${exerciseIndex}`}>Toistotyyli</Label>
-                    <InfoTooltip text="Tarkka määrä = esimerkiksi 8 toistoa. Toistoalue = esimerkiksi 6-8 toistoa." />
-                  </div>
-                  <Select
-                    id={`workout-${index}-rep-mode-${exerciseIndex}`}
-                    {...register(`workouts.${index}.exercises.${exerciseIndex}.repMode` as const)}
-                  >
-                    <option value="exact">Tarkka määrä</option>
-                    <option value="range">Toistoalue</option>
-                  </Select>
-                </div>
-                {repMode === "range" ? (
-                  <>
-                    <div>
-                      <div className="mb-1 flex items-center gap-1">
-                        <Label className="mb-0" htmlFor={`workout-${index}-reps-min-${exerciseIndex}`}>Min toistot</Label>
-                        <InfoTooltip text="Alaraja toistoalueelle. Esim. 6-8 tarkoittaa että minimi on 6." />
-                      </div>
-                      <Input
-                        id={`workout-${index}-reps-min-${exerciseIndex}`}
-                        type="number"
-                        min={1}
-                        max={50}
-                        {...register(`workouts.${index}.exercises.${exerciseIndex}.targetRepsMin` as const)}
-                      />
-                    </div>
-                    <div>
-                      <div className="mb-1 flex items-center gap-1">
-                        <Label className="mb-0" htmlFor={`workout-${index}-reps-max-${exerciseIndex}`}>Max toistot</Label>
-                        <InfoTooltip text="Yläraja toistoalueelle. Kun kaikki sarjat osuvat maksimiin, kuormaa voidaan nostaa." />
-                      </div>
-                      <Input
-                        id={`workout-${index}-reps-max-${exerciseIndex}`}
-                        type="number"
-                        min={1}
-                        max={50}
-                        {...register(`workouts.${index}.exercises.${exerciseIndex}.targetRepsMax` as const)}
-                      />
-                    </div>
-                  </>
-                ) : (
-                  <div>
-                    <Label htmlFor={`workout-${index}-reps-${exerciseIndex}`}>Toistot</Label>
-                    <Input
-                      id={`workout-${index}-reps-${exerciseIndex}`}
-                      type="number"
-                      min={1}
-                      max={50}
-                      {...register(`workouts.${index}.exercises.${exerciseIndex}.targetReps` as const)}
-                    />
-                  </div>
-                )}
-                <div>
-                  <div className="mb-1 flex items-center gap-1">
-                    <Label className="mb-0" htmlFor={`workout-${index}-load-${exerciseIndex}`}>Kuorma (kg)</Label>
-                    <InfoTooltip text="Suosituslähtökuorma sarjalle. Treenaaja voi kirjata toteutuneen kuorman erikseen." />
-                  </div>
-                  <Input
-                    id={`workout-${index}-load-${exerciseIndex}`}
-                    type="number"
-                    min={0}
-                    step="0.5"
-                    {...register(`workouts.${index}.exercises.${exerciseIndex}.targetLoad` as const)}
-                  />
-                </div>
-                <div>
-                  <div className="mb-1 flex items-center gap-1">
-                    <Label className="mb-0" htmlFor={`workout-${index}-rest-${exerciseIndex}`}>Lepo (s)</Label>
-                    <InfoTooltip text="Lepo sarjojen välissä sekunteina. Ajastin käynnistyy treenaajalla sarjan kuittauksen jälkeen." />
-                  </div>
-                  <Input
-                    id={`workout-${index}-rest-${exerciseIndex}`}
-                    type="number"
-                    min={15}
-                    max={600}
-                    {...register(`workouts.${index}.exercises.${exerciseIndex}.restSeconds` as const)}
-                  />
-                </div>
-              </div>
-              <p className="mt-2 text-xs text-[var(--text-subtle)]">
-                Aseta sama superset-kirjain liikkeille, jotka tehdään parina.
-              </p>
-            </div>
-          );
-        })}
-      </div>
-
-      <div className="flex flex-wrap gap-3">
-        <Button
-          type="button"
-          variant="secondary"
-          onClick={() =>
-            exerciseFields.append(
-              emptyProgramWorkoutExercise(Number(defaultRestSeconds) || 90),
-            )
-          }
-        >
-          <Plus className="mr-2 size-4" />
-          Lisää liike
-        </Button>
-        {removable ? (
-          <Button type="button" variant="ghost" onClick={onRemove}>
-            Poista harjoitus
-          </Button>
-        ) : null}
-      </div>
-
-      <p className="text-xs text-[var(--text-subtle)]">
-        Oletusjako: {splitLabel(watch(`workouts.${index}.splitType` as const))}
-      </p>
-    </fieldset>
-  );
-}
-
 function CoachAthleteInsights({
   athletes,
   coachId,
   selectedAthleteId,
   onSelectAthlete,
   state,
+  onOpenConversation,
 }: {
   athletes: Array<{ id: string; fullName: string }>;
   coachId?: string;
   selectedAthleteId: string;
   onSelectAthlete: (athleteId: string) => void;
   state: AppState;
+  onOpenConversation?: () => void;
 }) {
+  const [expandedWorkoutDetailsId, setExpandedWorkoutDetailsId] = useState<string | null>(null);
+  const [selectedWorkoutByGroup, setSelectedWorkoutByGroup] = useState<Record<string, string>>({});
   const selectedAthlete = athletes.find((athlete) => athlete.id === selectedAthleteId) ?? null;
+  const selectedAthleteProfile = useMemo(
+    () => state.users.find((user) => user.id === selectedAthleteId) ?? null,
+    [selectedAthleteId, state.users],
+  );
   const now = new Date();
   const lastThirtyDays = new Date(now);
   lastThirtyDays.setDate(lastThirtyDays.getDate() - 30);
+
+  useEffect(() => {
+    setExpandedWorkoutDetailsId(null);
+    setSelectedWorkoutByGroup({});
+  }, [selectedAthleteId]);
 
   const athleteWorkouts = useMemo(() => {
     if (!coachId || !selectedAthleteId) {
@@ -744,6 +581,20 @@ function CoachAthleteInsights({
       });
     return map;
   }, [selectedAthleteId, state.sessions]);
+  const athleteWorkoutHistory = useMemo(() => {
+    return athleteWorkouts
+      .filter(
+        (workout) =>
+          Boolean(workout.programWorkoutId) &&
+          (sessionByWorkoutId.has(workout.id) || workout.status === "completed"),
+      )
+      .sort((a, b) => b.scheduledDate.localeCompare(a.scheduledDate));
+  }, [athleteWorkouts, sessionByWorkoutId]);
+
+  const workoutInsights = useMemo(
+    () => buildCoachWorkoutInsights(state, athleteWorkouts, sessionByWorkoutId),
+    [athleteWorkouts, sessionByWorkoutId, state],
+  );
 
   const noteBySessionId = useMemo(() => {
     const map = new Map<string, string>();
@@ -758,37 +609,136 @@ function CoachAthleteInsights({
       });
     return map;
   }, [coachId, selectedAthleteId, state.notes]);
+  const workoutHistoryTitles = useMemo(
+    () => buildWorkoutHistoryTitleMap(athleteWorkoutHistory),
+    [athleteWorkoutHistory],
+  );
+  const conversationEntriesByWorkoutId = useMemo(() => {
+    const map = new Map<string, ConversationEntry[]>();
+    state.conversationEntries
+      .filter(
+        (entry) =>
+          entry.athleteId === selectedAthleteId &&
+          (!coachId || entry.coachId === coachId) &&
+          entry.contextType === "workout" &&
+          Boolean(entry.contextId),
+      )
+      .sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime())
+      .forEach((entry) => {
+        if (!entry.contextId) {
+          return;
+        }
+        map.set(entry.contextId, [...(map.get(entry.contextId) ?? []), entry]);
+      });
+    return map;
+  }, [coachId, selectedAthleteId, state.conversationEntries]);
 
-  const recentRows = useMemo(() => {
-    return athleteWorkouts.slice(0, 8).map((workout) => {
+  const workoutRows = useMemo(() => {
+    return athleteWorkoutHistory.map((workout) => {
       const session = sessionByWorkoutId.get(workout.id);
-      const completedSets = session
-        ? session.setLogs.filter((log) => log.done).length
-        : 0;
-      const totalSets = session?.setLogs.length ?? 0;
-      const volume = session ? getSessionVolume(session) : 0;
+      const insight = workoutInsights.get(workout.id) ?? createEmptyCoachWorkoutInsight();
+      const historyTitle = workoutHistoryTitles.get(workout.id);
+      const completedSets = insight.completedSetCount;
+      const totalSets = insight.setCount;
+      const volume = insight.liftedKg;
       const completedAt =
         workout.completedAt ??
         session?.completedAt ??
         workout.updatedAt ??
         workout.scheduledDate;
       const note = session ? noteBySessionId.get(session.id) : undefined;
+      const setGroups = buildCoachExerciseSetGroups(session);
+      const rpeStats = buildCoachRpeStats(session);
+      const pendingSetCount = Math.max(0, totalSets - completedSets);
+      const conversationEntries = conversationEntriesByWorkoutId.get(workout.id) ?? [];
 
       return {
         id: workout.id,
-        title: workout.title,
+        title: historyTitle?.title ?? workout.title,
+        occurrenceLabel: historyTitle?.occurrenceLabel ?? "Treeni 1",
         status: workout.status,
         completedSets,
         totalSets,
         volume,
         completedAt,
         note,
+        conversationEntries,
+        insight,
+        setGroups,
+        pendingSetCount,
+        averageRpe: rpeStats.average,
+        maxRpe: rpeStats.max,
+        rpeSetCount: rpeStats.count,
       };
     });
-  }, [athleteWorkouts, noteBySessionId, sessionByWorkoutId]);
+  }, [athleteWorkoutHistory, conversationEntriesByWorkoutId, noteBySessionId, sessionByWorkoutId, workoutHistoryTitles, workoutInsights]);
+
+  const groupedWorkoutRows = useMemo(() => {
+    const grouped = new Map<
+      string,
+      {
+        key: string;
+        title: string;
+        rows: typeof workoutRows;
+      }
+    >();
+
+    workoutRows.forEach((row) => {
+      const groupKey = row.title.toLowerCase();
+      const existing = grouped.get(groupKey);
+      if (existing) {
+        existing.rows.push(row);
+        return;
+      }
+
+      grouped.set(groupKey, {
+        key: groupKey,
+        title: row.title,
+        rows: [row],
+      });
+    });
+
+    return Array.from(grouped.values())
+      .map((group) => {
+        const rows = [...group.rows].sort(
+          (a, b) => new Date(b.completedAt).getTime() - new Date(a.completedAt).getTime(),
+        );
+        const noteEntries = rows
+          .filter((row) => Boolean(row.note))
+          .map((row) => ({
+            id: `note-${row.id}`,
+            body: row.note ?? "",
+            completedAt: row.completedAt,
+            occurrenceLabel: row.occurrenceLabel,
+          }));
+        const conversationEntries = rows
+          .flatMap((row) =>
+            row.conversationEntries
+              .map((entry) => ({
+                ...entry,
+                workoutId: row.id,
+                workoutCompletedAt: row.completedAt,
+                occurrenceLabel: row.occurrenceLabel,
+              })),
+          )
+          .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+
+        return {
+          key: group.key,
+          title: group.title,
+          rows,
+          noteEntries,
+          conversationEntries,
+        };
+      })
+      .sort(
+        (a, b) =>
+          new Date(b.rows[0]?.completedAt ?? 0).getTime() - new Date(a.rows[0]?.completedAt ?? 0).getTime(),
+      );
+  }, [workoutRows]);
 
   const completedRows = useMemo(() => {
-    return athleteWorkouts
+    return athleteWorkoutHistory
       .map((workout) => {
         const session = sessionByWorkoutId.get(workout.id);
         if (!session || workout.status !== "completed") {
@@ -804,14 +754,14 @@ function CoachAthleteInsights({
       })
       .filter((item): item is { id: string; completedAt: string; volume: number } => Boolean(item))
       .sort((a, b) => new Date(a.completedAt).getTime() - new Date(b.completedAt).getTime());
-  }, [athleteWorkouts, sessionByWorkoutId]);
+  }, [athleteWorkoutHistory, sessionByWorkoutId]);
 
-  const completedLastThirtyDays = athleteWorkouts.filter(
+  const completedLastThirtyDays = athleteWorkoutHistory.filter(
     (workout) =>
       workout.status === "completed" &&
       new Date(workout.scheduledDate).getTime() >= lastThirtyDays.getTime(),
   ).length;
-  const scheduledLastThirtyDays = athleteWorkouts.filter(
+  const scheduledLastThirtyDays = athleteWorkoutHistory.filter(
     (workout) => new Date(workout.scheduledDate).getTime() >= lastThirtyDays.getTime(),
   ).length;
   const completionRateLastThirtyDays = scheduledLastThirtyDays
@@ -832,11 +782,43 @@ function CoachAthleteInsights({
     .sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime())[0]?.updatedAt;
 
   const volumeTrendPoints = completedRows.slice(-10).map((row) => ({
-    label: shortDate(row.completedAt),
+    date: row.completedAt,
     value: row.volume,
   }));
+  const bodyMeasurements = useMemo(
+    () => (selectedAthleteId ? getMeasurementsForUser(state, selectedAthleteId) : []),
+    [selectedAthleteId, state],
+  );
+  const latestBodyMeasurement = useMemo(
+    () => (selectedAthleteId ? getLatestMeasurement(state, selectedAthleteId) : undefined),
+    [selectedAthleteId, state],
+  );
+  const weightTrendPoints = useMemo(
+    () =>
+      bodyMeasurements
+        .filter((entry) => entry.weightKg !== undefined)
+        .slice(0, 12)
+        .reverse()
+        .map((entry) => ({
+          date: entry.measuredAt,
+          value: entry.weightKg as number,
+        })),
+    [bodyMeasurements],
+  );
+  const waistTrendPoints = useMemo(
+    () =>
+      bodyMeasurements
+        .filter((entry) => entry.waistCm !== undefined)
+        .slice(0, 12)
+        .reverse()
+        .map((entry) => ({
+          date: entry.measuredAt,
+          value: entry.waistCm as number,
+        })),
+    [bodyMeasurements],
+  );
 
-  const phaseBars = buildPhaseBars(athleteWorkouts, 8);
+  const phaseBars = buildPhaseBars(athleteWorkoutHistory, 8);
 
   if (!athletes.length) {
     return (
@@ -853,7 +835,7 @@ function CoachAthleteInsights({
     <Card className="border-[var(--border-strong)]">
       <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
         <div>
-          <p className="text-xs font-semibold tracking-[0.04em] text-[var(--text-subtle)]">Athlete analytics</p>
+          <p className="text-xs font-semibold tracking-[0.04em] text-[var(--text-subtle)]">Treenaajan seuranta</p>
           <CardTitle className="text-2xl">Treenaajan kehitys ja toteuma</CardTitle>
           <CardDescription className="mt-2">
             Seuraa toteumaa, valmennusmuistiinpanoja ja kehityksen suuntaa yhdestä paikasta.
@@ -879,7 +861,7 @@ function CoachAthleteInsights({
         <>
           <div className="mt-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
             <InsightMetric
-              label="30 pv completion"
+              label="Valmistumisaste 30 pv"
               value={`${completionRateLastThirtyDays}%`}
               hint={`${completedLastThirtyDays}/${scheduledLastThirtyDays} treeniä`}
               icon={CircleCheckBig}
@@ -904,54 +886,388 @@ function CoachAthleteInsights({
             />
           </div>
 
-          <div className="mt-5 grid gap-4 xl:grid-cols-2">
+          <div className="mt-5 grid gap-4 xl:grid-cols-[1.08fr_0.92fr]">
             <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface-2)] p-4">
               <p className="text-sm font-semibold text-[var(--text)]">Kehitysgraafi (volyymi)</p>
               <p className="mt-1 text-xs text-[var(--text-subtle)]">Viimeiset 10 valmista treeniä</p>
-              <TrendChart points={volumeTrendPoints} />
+              <MetricTrendChart
+                points={volumeTrendPoints}
+                ariaLabel="Volyymin kehitystrendi"
+                emptyMessage="Ei valmiita treenejä graafiin vielä."
+                helperText="Alarivillä näkyy kuukausi ja vuosi, oikealla volyymin asteikko."
+                valueLabel="Volyymi"
+                unit="kg"
+                decimals={0}
+                useZeroBaseline
+              />
             </div>
             <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface-2)] p-4">
               <p className="text-sm font-semibold text-[var(--text)]">Vaihejakauma 8 viikolta</p>
               <p className="mt-1 text-xs text-[var(--text-subtle)]">
-                Kuinka paljon treenejä ollut vaiheissa ajastettu, kesken ja valmis.
+                Kuinka paljon treenejä ollut vaiheissa keskeytetty, kesken ja valmis.
               </p>
               <PhaseBars bars={phaseBars} />
             </div>
           </div>
 
+          <div className="mt-4 rounded-2xl border border-[var(--border)] bg-[var(--surface-2)] p-4">
+            <div className="flex flex-col gap-3 xl:flex-row xl:items-start xl:justify-between">
+              <div className="max-w-2xl">
+                <p className="text-sm font-semibold text-[var(--text)]">Kehon seuranta</p>
+                <p className="mt-1 text-xs text-[var(--text-subtle)]">
+                  Paino ja vyötärö auttavat hahmottamaan, mihin suuntaan treenaajan arki ja palautuminen liikkuvat.
+                </p>
+              </div>
+              <div className="grid gap-3 sm:grid-cols-3 xl:min-w-[28rem]">
+                <div className="rounded-xl border border-[var(--border)] bg-[var(--surface)] px-4 py-3">
+                  <p className="text-[11px] font-semibold tracking-[0.04em] text-[var(--text-subtle)]">Paino</p>
+                  <p className="mt-1 text-sm font-semibold text-[var(--text)]">
+                    {selectedAthleteProfile?.weightKg !== undefined
+                      ? `${formatTrendNumber(selectedAthleteProfile.weightKg)} kg`
+                      : "Ei asetettu"}
+                  </p>
+                </div>
+                <div className="rounded-xl border border-[var(--border)] bg-[var(--surface)] px-4 py-3">
+                  <p className="text-[11px] font-semibold tracking-[0.04em] text-[var(--text-subtle)]">Vyötärö</p>
+                  <p className="mt-1 text-sm font-semibold text-[var(--text)]">
+                    {selectedAthleteProfile?.waistCm !== undefined
+                      ? `${formatTrendNumber(selectedAthleteProfile.waistCm)} cm`
+                      : "Ei asetettu"}
+                  </p>
+                </div>
+                <div className="rounded-xl border border-[var(--border)] bg-[var(--surface)] px-4 py-3">
+                  <p className="text-[11px] font-semibold tracking-[0.04em] text-[var(--text-subtle)]">Viimeisin mittaus</p>
+                  <p className="mt-1 text-sm font-semibold text-[var(--text)]">
+                    {latestBodyMeasurement ? shortDate(latestBodyMeasurement.measuredAt) : "Ei vielä"}
+                  </p>
+                </div>
+              </div>
+            </div>
+            <div className="mt-4 grid gap-4 xl:grid-cols-2">
+              <div>
+                <p className="text-xs font-semibold tracking-[0.04em] text-[var(--text-subtle)]">Painotrendi</p>
+                <MetricTrendChart
+                  points={weightTrendPoints}
+                  ariaLabel="Painon kehitystrendi"
+                  emptyMessage="Painomittauksia ei ole vielä kirjattu."
+                  helperText="Alarivillä näkyy kuukausi ja vuosi, oikealla painon asteikko."
+                  valueLabel="Paino"
+                  unit="kg"
+                />
+              </div>
+              <div>
+                <p className="text-xs font-semibold tracking-[0.04em] text-[var(--text-subtle)]">Vyötärötrendi</p>
+                <MetricTrendChart
+                  points={waistTrendPoints}
+                  ariaLabel="Vyötärön kehitystrendi"
+                  emptyMessage="Vyötärömittauksia ei ole vielä kirjattu."
+                  helperText="Alarivillä näkyy kuukausi ja vuosi, oikealla vyötärön asteikko."
+                  valueLabel="Vyötärö"
+                  unit="cm"
+                />
+              </div>
+            </div>
+          </div>
+
           <div className="mt-5">
-            <p className="text-sm font-semibold text-[var(--text)]">Viimeisimmät treenit ja muistiinpanot</p>
-            <div className="mt-3 grid gap-3">
-              {recentRows.length === 0 ? (
-                <p className="text-sm text-[var(--text-muted)]">Treenejä ei vielä löytynyt valitulle treenaajalle.</p>
+            <p className="text-sm font-semibold text-[var(--text)]">Treenialueet, toteumat ja kommunikointi</p>
+            <p className="mt-1 text-sm text-[var(--text-muted)]">
+              Jokainen treenialue näkyy omana korttinaan. Valitse toteutus päivämäärän mukaan ja näe muistiinpanot sekä kommunikointi samasta näkymästä.
+            </p>
+            <div className="mx-auto mt-3 grid max-w-[72rem] gap-4 2xl:max-w-none 2xl:grid-cols-2">
+              {groupedWorkoutRows.length === 0 ? (
+                <p className="text-sm text-[var(--text-muted)] 2xl:col-span-2">Treenejä ei vielä löytynyt valitulle treenaajalle.</p>
               ) : (
-                recentRows.map((row) => (
-                  <div key={row.id} className="rounded-2xl border border-[var(--border)] bg-[var(--surface-2)] p-4">
-                    <div className="flex flex-wrap items-center justify-between gap-3">
-                      <div>
-                        <p className="font-medium text-[var(--text)]">{row.title}</p>
-                        <p className="text-sm text-[var(--text-muted)]">
-                          {formatDate(row.completedAt)} · {row.completedSets}/{row.totalSets || 0} sarjaa
-                        </p>
-                      </div>
-                      <div className="flex flex-wrap items-center gap-2">
-                        <Badge className={coachStatusTone(row.status)}>
-                          {scheduledStatusLabel(row.status)}
-                        </Badge>
-                        <Badge>{Math.round(row.volume)} volyymi</Badge>
+                groupedWorkoutRows.map((group) => {
+                  const selectedRow =
+                    group.rows.find((row) => row.id === selectedWorkoutByGroup[group.key]) ?? group.rows[0];
+                  if (!selectedRow) {
+                    return null;
+                  }
+
+                  const isDetailsOpen = expandedWorkoutDetailsId === selectedRow.id;
+                  const dateLabel =
+                    selectedRow.status === "completed"
+                      ? formatDateWithWeekday(selectedRow.completedAt)
+                      : formatDate(selectedRow.completedAt);
+                  return (
+                    <div key={group.key} className="rounded-3xl border border-[var(--border)] bg-[var(--surface-2)] p-5">
+                      <div className="flex flex-col gap-4">
+                        <div className="flex flex-wrap items-start justify-between gap-3">
+                          <div className="min-w-0">
+                            <p className="text-xs font-semibold tracking-[0.04em] text-[var(--text-subtle)]">Treenialue</p>
+                            <p className="mt-1 font-[family-name:var(--font-display)] text-xl font-semibold text-[var(--text)]">
+                              {group.title}
+                            </p>
+                            <p className="mt-1 text-sm text-[var(--text-muted)]">
+                              {dateLabel} · {selectedRow.insight.exerciseCount} liikettä · {selectedRow.occurrenceLabel}
+                            </p>
+                          </div>
+                          <div className="grid w-full min-w-0 gap-2 sm:w-72 sm:max-w-full">
+                            <div>
+                              <Label htmlFor={`coach-group-${group.key}-date`} className="text-xs">
+                                Näytä toteutus
+                              </Label>
+                              <Select
+                                id={`coach-group-${group.key}-date`}
+                                value={selectedRow.id}
+                                onChange={(event) =>
+                                  setSelectedWorkoutByGroup((current) => ({
+                                    ...current,
+                                    [group.key]: event.target.value,
+                                  }))
+                                }
+                              >
+                                {group.rows.map((row) => (
+                                  <option key={row.id} value={row.id}>
+                                    {formatDateWithWeekday(row.completedAt)} · {row.occurrenceLabel}
+                                  </option>
+                                ))}
+                              </Select>
+                            </div>
+                            <div className="flex flex-wrap gap-2">
+                              <Badge className={coachStatusTone(selectedRow.status)}>
+                                {workoutStatusLabel(selectedRow.status)}
+                              </Badge>
+                              <Badge>{Math.round(selectedRow.volume)} kg</Badge>
+                              <Badge className="border-[var(--border)] bg-[var(--surface-3)] text-[var(--text)]">
+                                Toteuma {selectedRow.insight.completionPercent}%
+                              </Badge>
+                            </div>
+                          </div>
+                        </div>
+
+                        <div className="grid gap-2 sm:grid-cols-2 2xl:grid-cols-4">
+                          <CoachOverviewStat
+                            label="Sarjat valmiina"
+                            value={`${selectedRow.completedSets}/${selectedRow.totalSets || 0}`}
+                            tone={selectedRow.pendingSetCount > 0 ? "warning" : "success"}
+                          />
+                          <CoachOverviewStat
+                            label="RPE"
+                            value={
+                              selectedRow.rpeSetCount > 0 && selectedRow.averageRpe !== undefined
+                                ? `${selectedRow.averageRpe.toFixed(1)} avg`
+                                : "Ei kirjattu"
+                            }
+                          />
+                          <CoachOverviewStat
+                            label="Kesto"
+                            value={formatCoachWorkoutDuration(selectedRow.insight.durationSeconds)}
+                          />
+                          <CoachOverviewStat
+                            label="Kalorit"
+                            value={`${selectedRow.insight.estimatedCalories} kcal`}
+                          />
+                        </div>
+
+                        <div className="grid gap-4">
+                          <div className="space-y-4">
+                            <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-4">
+                              <div className="flex items-center justify-between gap-2">
+                                <div>
+                                  <p className="text-sm font-semibold text-[var(--text)]">Toteuma</p>
+                                  <p className="mt-1 text-xs text-[var(--text-subtle)]">
+                                    Valitun toteutuksen keskeiset mittarit yhdellä silmäyksellä.
+                                  </p>
+                                </div>
+                                {selectedRow.pendingSetCount > 0 ? (
+                                  <Badge className="border-[var(--danger)] bg-[var(--surface)] text-[var(--danger)]">
+                                    Kesken {selectedRow.pendingSetCount} sarjaa
+                                  </Badge>
+                                ) : (
+                                  <Badge className="border-[var(--accent-tertiary)] bg-[var(--surface)] text-[var(--accent-tertiary)]">
+                                    Kaikki sarjat valmiina
+                                  </Badge>
+                                )}
+                              </div>
+                              <div className="mt-3 grid grid-cols-2 gap-2 2xl:grid-cols-3">
+                                <CoachHistoryMetric label="Kuorma yht." value={`${Math.round(selectedRow.insight.totalLoadKg)} kg`} />
+                                <CoachHistoryMetric
+                                  label="Volyymi (kg x toistot)"
+                                  value={`${Math.round(selectedRow.insight.liftedKg)} kg`}
+                                />
+                                <CoachHistoryMetric label="Suoritus" value={`${selectedRow.insight.completionPercent}%`} />
+                                <CoachHistoryMetric
+                                  label="RPE keskiarvo"
+                                  value={
+                                    selectedRow.rpeSetCount > 0 && selectedRow.averageRpe !== undefined
+                                      ? selectedRow.averageRpe.toFixed(1)
+                                      : "Ei kirjattu"
+                                  }
+                                />
+                                <CoachHistoryMetric
+                                  label="Max RPE"
+                                  value={
+                                    selectedRow.rpeSetCount > 0 && selectedRow.maxRpe !== undefined
+                                      ? selectedRow.maxRpe.toFixed(1)
+                                      : "Ei kirjattu"
+                                  }
+                                />
+                                <CoachHistoryMetric label="Harjoitteet" value={`${selectedRow.insight.exerciseCount}`} />
+                              </div>
+                              <div className="mt-3 rounded-xl border border-[var(--border)] bg-[var(--surface-2)] px-3 py-2">
+                                <p className="text-[11px] font-semibold tracking-[0.04em] text-[var(--text-subtle)]">
+                                  Lihasryhmäyleiskatsaus
+                                </p>
+                                <div className="mt-2 grid grid-cols-2 gap-1.5 sm:grid-cols-3">
+                                  {coachHistoryMuscleGroups.map((group) => (
+                                    <p key={group.key} className="text-[11px] text-[var(--text-muted)]">
+                                      {group.label}: {Math.round(selectedRow.insight.muscleGroupLiftedKg[group.key])} kg
+                                    </p>
+                                  ))}
+                                </div>
+                              </div>
+                            </div>
+
+                            <div>
+                              <Button
+                                type="button"
+                                variant="ghost"
+                                className="w-full justify-between"
+                                aria-expanded={isDetailsOpen}
+                                onClick={() =>
+                                  setExpandedWorkoutDetailsId((current) => (current === selectedRow.id ? null : selectedRow.id))
+                                }
+                              >
+                                <span>Sarjat, toistot ja RPE</span>
+                                {isDetailsOpen ? (
+                                  <ChevronUp className="size-4" aria-hidden="true" />
+                                ) : (
+                                  <ChevronDown className="size-4" aria-hidden="true" />
+                                )}
+                              </Button>
+                              {isDetailsOpen ? (
+                                <div className="mt-2 rounded-xl border border-[var(--border)] bg-[var(--surface)] p-3">
+                                  {selectedRow.setGroups.length === 0 ? (
+                                    <p className="text-sm text-[var(--text-subtle)]">Sarjadataa ei löytynyt tästä treenistä.</p>
+                                  ) : (
+                                    <div className="grid gap-2">
+                                      {selectedRow.setGroups.map((group) => (
+                                        <div
+                                          key={group.key}
+                                          className="rounded-lg border border-[var(--border)] bg-[var(--surface-2)] px-3 py-2"
+                                        >
+                                          <div className="flex flex-wrap items-start justify-between gap-2">
+                                            <div>
+                                              <p className="text-xs font-semibold text-[var(--text)]">
+                                                {group.exerciseName}
+                                                {group.supersetGroup ? ` · Superset ${group.supersetGroup}` : ""}
+                                              </p>
+                                              <p className="mt-1 text-[11px] text-[var(--text-subtle)]">
+                                                Tavoite: {formatCoachTargetReps(group.logs[0])} toistoa
+                                              </p>
+                                            </div>
+                                          </div>
+                                          <div className="mt-2 space-y-2">
+                                            {group.logs.map((log) => (
+                                              <div
+                                                key={log.id}
+                                                className="rounded-lg border border-[var(--border)] bg-[var(--surface)] px-3 py-2"
+                                              >
+                                                <div className="flex flex-wrap items-center justify-between gap-2">
+                                                  <p className="text-xs font-semibold text-[var(--text)]">Sarja {log.setLabel}</p>
+                                                  <span
+                                                    className={
+                                                      log.done
+                                                        ? "inline-flex items-center rounded-full border border-[var(--accent-tertiary)] px-2 py-0.5 text-[11px] font-semibold text-[var(--accent-tertiary)]"
+                                                        : "inline-flex items-center rounded-full border border-[var(--danger)] px-2 py-0.5 text-[11px] font-semibold text-[var(--danger)]"
+                                                    }
+                                                  >
+                                                    {log.done ? "Valmis" : "Kesken"}
+                                                  </span>
+                                                </div>
+                                                <p className="mt-1 text-xs leading-5 text-[var(--text-subtle)]">
+                                                  {formatCoachSetActual(log)}
+                                                  {log.rpe !== undefined ? ` · RPE ${log.rpe}` : " · RPE ei kirjattu"}
+                                                </p>
+                                              </div>
+                                            ))}
+                                          </div>
+                                        </div>
+                                      ))}
+                                    </div>
+                                  )}
+                                </div>
+                              ) : null}
+                            </div>
+                          </div>
+
+                          <div className="space-y-4">
+                            <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-4">
+                              <div className="flex items-center gap-1">
+                                <p className="text-sm font-semibold text-[var(--text)]">Muistiinpanot</p>
+                                <InfoTooltip text="Treenaajan muistiinpanot kootaan tähän kohteen mukaan, jotta löydät saman treenialueen huomiot yhdestä paikasta." />
+                              </div>
+                              <p className="mt-1 text-xs text-[var(--text-subtle)]">
+                                Kaikki saman treenialueen kirjaukset ilman että päivämäärää tarvitsee vaihtaa edestakaisin.
+                              </p>
+                              <div className="mt-3 max-h-56 space-y-3 overflow-y-auto pr-1">
+                                {group.noteEntries.length ? (
+                                  group.noteEntries.map((noteEntry) => (
+                                    <div
+                                      key={noteEntry.id}
+                                      className="rounded-lg border border-[var(--border)] bg-[var(--surface-2)] px-3 py-3"
+                                    >
+                                      <p className="text-xs font-semibold tracking-[0.04em] text-[var(--text-subtle)]">
+                                        {formatDateWithWeekday(noteEntry.completedAt)} · {noteEntry.occurrenceLabel}
+                                      </p>
+                                      <p className="mt-1 text-sm leading-6 text-[var(--text-muted)]">{noteEntry.body}</p>
+                                    </div>
+                                  ))
+                                ) : (
+                                  <p className="rounded-lg border border-dashed border-[var(--border)] bg-[var(--surface-2)] px-3 py-2 text-sm text-[var(--text-subtle)]">
+                                    Tälle treenialueelle ei ole vielä kirjattu muistiinpanoja.
+                                  </p>
+                                )}
+                              </div>
+                            </div>
+
+                            <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-4">
+                              <div className="flex items-center gap-1">
+                                <p className="text-sm font-semibold text-[var(--text)]">Kommentit</p>
+                                <InfoTooltip text="Kaikki tämän treenialueen viestit näkyvät yhdessä listassa riippumatta valitusta toteutuspäivästä." />
+                              </div>
+                              <p className="mt-1 text-xs text-[var(--text-subtle)]">
+                                Näet valmentajan ja treenaajan kommunikoinnin samassa paikassa kuin toteuman.
+                              </p>
+                              <div className="mt-3 max-h-64 space-y-3 overflow-y-auto pr-1">
+                                {group.conversationEntries.length ? (
+                                  group.conversationEntries.map((entry) => (
+                                    <div
+                                      key={entry.id}
+                                      className="rounded-lg border border-[var(--border)] bg-[var(--surface-2)] px-3 py-2"
+                                    >
+                                      <div className="flex flex-wrap items-center gap-2">
+                                        <Badge className={coachConversationEntryTone(entry.type)}>
+                                          {coachConversationEntryLabel(entry.type)}
+                                        </Badge>
+                                        <p className="text-xs text-[var(--text-subtle)]">
+                                          {formatDateWithWeekday(entry.workoutCompletedAt)} · {entry.occurrenceLabel}
+                                        </p>
+                                      </div>
+                                      <p className="mt-1 text-sm text-[var(--text-muted)]">{entry.body}</p>
+                                      <p className="mt-1 text-xs text-[var(--text-subtle)]">{formatDateWithWeekday(entry.createdAt)}</p>
+                                    </div>
+                                  ))
+                                ) : (
+                                  <p className="rounded-lg border border-dashed border-[var(--border)] bg-[var(--surface-2)] px-3 py-2 text-sm text-[var(--text-subtle)]">
+                                    Tälle treenialueelle ei ole vielä kertynyt kommentteja keskusteluvirtaan.
+                                  </p>
+                                )}
+                              </div>
+                              <div className="mt-3">
+                                <Button type="button" variant="secondary" onClick={() => onOpenConversation?.()}>
+                                  Avaa keskustelu
+                                </Button>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
                       </div>
                     </div>
-                    {row.note ? (
-                      <p className="mt-2 text-sm text-[var(--text-subtle)]">
-                        Muistiinpano: {truncateText(row.note, 200)}
-                      </p>
-                    ) : (
-                      <p className="mt-2 text-sm text-[var(--text-subtle)]">
-                        Ei muistiinpanoa tästä treenistä.
-                      </p>
-                    )}
-                  </div>
-                ))
+                  );
+                })
               )}
             </div>
           </div>
@@ -990,60 +1306,159 @@ function InsightMetric({
   );
 }
 
-function TrendChart({ points }: { points: Array<{ label: string; value: number }> }) {
-  if (points.length === 0) {
-    return <p className="mt-3 text-sm text-[var(--text-muted)]">Ei valmiita treenejä graafiin vielä.</p>;
-  }
-
-  const maxValue = Math.max(...points.map((point) => point.value), 1);
-  const mapped = points.map((point, index) => {
-    const x = points.length === 1 ? 50 : (index / (points.length - 1)) * 100;
-    const y = 46 - (point.value / maxValue) * 40;
-    return { ...point, x, y };
-  });
-  const polyline = mapped.map((point) => `${point.x},${point.y}`).join(" ");
-
+function CoachHistoryMetric({ label, value }: { label: string; value: string }) {
   return (
-    <div className="mt-3">
-      <svg className="h-40 w-full rounded-xl border border-[var(--border)] bg-[var(--surface)] p-2" viewBox="0 0 100 50" preserveAspectRatio="none" role="img" aria-label="Kehitystrendi">
-        <polyline
-          points={polyline}
-          fill="none"
-          stroke="var(--accent)"
-          strokeWidth="1.8"
-          vectorEffect="non-scaling-stroke"
-          strokeLinecap="round"
-          strokeLinejoin="round"
-        />
-        {mapped.map((point) => (
-          <circle
-            key={`${point.label}-${point.x}`}
-            cx={point.x}
-            cy={point.y}
-            r="1.6"
-            fill="var(--surface)"
-            stroke="var(--accent)"
-            strokeWidth="1.2"
-            vectorEffect="non-scaling-stroke"
-          />
-        ))}
-      </svg>
-      <div className="mt-2 grid gap-2 [grid-template-columns:repeat(auto-fit,minmax(4.2rem,1fr))]">
-        {points.map((point) => (
-          <div key={`${point.label}-${point.value}`} className="rounded-lg border border-[var(--border)] bg-[var(--surface)] px-2 py-1.5 text-center">
-            <p className="text-[11px] text-[var(--text-subtle)]">{point.label}</p>
-            <p className="text-xs font-semibold text-[var(--text)]">{Math.round(point.value)}</p>
-          </div>
-        ))}
-      </div>
+    <div className="rounded-xl border border-[var(--border)] bg-[var(--surface)] px-3 py-2">
+      <p className="text-[11px] font-semibold tracking-[0.04em] text-[var(--text-subtle)]">{label}</p>
+      <p className="mt-1 text-sm font-medium text-[var(--text)]">{value}</p>
     </div>
   );
+}
+
+function CoachOverviewStat({
+  label,
+  value,
+  tone = "default",
+}: {
+  label: string;
+  value: string;
+  tone?: "default" | "success" | "warning";
+}) {
+  const toneClass =
+    tone === "success"
+      ? "border-[var(--accent-tertiary)] bg-[var(--surface)]"
+      : tone === "warning"
+        ? "border-[var(--danger)] bg-[var(--surface)]"
+        : "border-[var(--border)] bg-[var(--surface)]";
+
+  return (
+    <div className={`rounded-xl border px-3 py-2 ${toneClass}`}>
+      <p className="text-[11px] font-semibold tracking-[0.04em] text-[var(--text-subtle)]">{label}</p>
+      <p className="mt-1 text-sm font-medium text-[var(--text)]">{value}</p>
+    </div>
+  );
+}
+
+function coachConversationEntryLabel(type: ConversationEntry["type"]) {
+  return type === "comment" ? "Kommentti" : type;
+}
+
+function coachConversationEntryTone(type: ConversationEntry["type"]) {
+  return type === "comment"
+    ? "border-[var(--accent)] bg-[var(--surface)] text-[var(--accent)]"
+    : "border-[var(--border)] bg-[var(--surface)] text-[var(--text-subtle)]";
+}
+
+function formatCoachDuration(seconds: number) {
+  const safe = Math.max(0, seconds);
+  const minutes = Math.floor(safe / 60);
+  const remainder = safe % 60;
+  return `${String(minutes).padStart(2, "0")}:${String(remainder).padStart(2, "0")}`;
+}
+
+function formatCoachWorkoutDuration(seconds: number) {
+  const safe = Math.max(0, seconds);
+  if (safe < 3600) {
+    return formatCoachDuration(safe);
+  }
+
+  const hours = Math.floor(safe / 3600);
+  const minutes = Math.floor((safe % 3600) / 60);
+  const remainder = safe % 60;
+  return `${String(hours).padStart(2, "0")}:${String(minutes).padStart(2, "0")}:${String(remainder).padStart(2, "0")}`;
+}
+
+function buildCoachExerciseSetGroups(session?: WorkoutSession): CoachExerciseSetGroup[] {
+  if (!session) {
+    return [];
+  }
+
+  const grouped = new Map<string, CoachExerciseSetGroup>();
+  session.setLogs.forEach((log) => {
+    const key = log.templateExerciseId;
+    const current = grouped.get(key);
+    if (current) {
+      grouped.set(key, {
+        ...current,
+        logs: [...current.logs, log],
+      });
+      return;
+    }
+
+    grouped.set(key, {
+      key,
+      exerciseName: log.exerciseName,
+      supersetGroup: log.supersetGroup,
+      logs: [log],
+    });
+  });
+
+  return Array.from(grouped.values());
+}
+
+function buildCoachRpeStats(session?: WorkoutSession): {
+  count: number;
+  average?: number;
+  max?: number;
+} {
+  if (!session) {
+    return { count: 0 };
+  }
+
+  const values = session.setLogs
+    .filter((log) => log.done && log.rpe !== undefined)
+    .map((log) => log.rpe as number);
+  if (values.length === 0) {
+    return { count: 0 };
+  }
+
+  const average = values.reduce((sum, value) => sum + value, 0) / values.length;
+  return {
+    count: values.length,
+    average: Math.round(average * 10) / 10,
+    max: Math.max(...values),
+  };
+}
+
+function formatCoachSetTarget(log: WorkoutSession["setLogs"][number]) {
+  const repsText = `${formatCoachTargetReps(log)} toistoa`;
+  const loadText = log.targetLoad !== undefined ? `${log.targetLoad} kg` : "kuorma ei määritetty";
+  return `${repsText} · ${loadText}`;
+}
+
+function formatCoachSetActual(log: WorkoutSession["setLogs"][number]) {
+  const hasActualReps = log.actualReps !== undefined;
+  const hasActualLoad = log.actualLoad !== undefined;
+  if (!hasActualReps && !hasActualLoad) {
+    return "ei toteumaa kirjattu";
+  }
+
+  const repsText = hasActualReps ? `${log.actualReps} toistoa` : "toistoja ei kirjattu";
+  const loadText = hasActualLoad ? `${log.actualLoad} kg` : "kuormaa ei kirjattu";
+  return `${repsText} · ${loadText}`;
+}
+
+function formatCoachTargetReps(log: WorkoutSession["setLogs"][number]) {
+  if (
+    log.targetRepsMin !== undefined &&
+    log.targetRepsMax !== undefined &&
+    log.targetRepsMax >= log.targetRepsMin &&
+    log.targetRepsMax !== log.targetRepsMin
+  ) {
+    return `${log.targetRepsMin}-${log.targetRepsMax}`;
+  }
+
+  return String(log.targetReps);
+}
+
+function formatTrendNumber(value: number) {
+  return Number.isInteger(value) ? String(value) : value.toFixed(1);
 }
 
 function PhaseBars({
   bars,
 }: {
-  bars: Array<{ label: string; scheduled: number; inProgress: number; completed: number }>;
+  bars: Array<{ label: string; cancelled: number; inProgress: number; completed: number }>;
 }) {
   if (bars.length === 0) {
     return <p className="mt-3 text-sm text-[var(--text-muted)]">Ei vaihedataa vielä.</p>;
@@ -1052,8 +1467,8 @@ function PhaseBars({
   return (
     <div className="mt-3 grid gap-2">
       {bars.map((bar) => {
-        const total = bar.scheduled + bar.inProgress + bar.completed;
-        const scheduledWidth = total ? (bar.scheduled / total) * 100 : 0;
+        const total = bar.cancelled + bar.inProgress + bar.completed;
+        const cancelledWidth = total ? (bar.cancelled / total) * 100 : 0;
         const inProgressWidth = total ? (bar.inProgress / total) * 100 : 0;
         const completedWidth = total ? (bar.completed / total) * 100 : 0;
 
@@ -1064,12 +1479,12 @@ function PhaseBars({
               <span>{total} treeniä</span>
             </div>
             <div className="flex h-3 overflow-hidden rounded-full border border-[var(--border)] bg-[var(--surface)]">
-              <div className="bg-[var(--border-strong)]" style={{ width: `${scheduledWidth}%` }} />
+              <div className="bg-[var(--danger)]/80" style={{ width: `${cancelledWidth}%` }} />
               <div className="bg-[var(--accent)]" style={{ width: `${inProgressWidth}%` }} />
               <div className="bg-[var(--accent-tertiary)]" style={{ width: `${completedWidth}%` }} />
             </div>
             <div className="flex flex-wrap gap-2 text-[11px] text-[var(--text-subtle)]">
-              <span>Ajastettu {bar.scheduled}</span>
+              <span>Keskeytetty {bar.cancelled}</span>
               <span>Kesken {bar.inProgress}</span>
               <span>Valmis {bar.completed}</span>
             </div>
@@ -1077,12 +1492,219 @@ function PhaseBars({
         );
       })}
       <div className="mt-1 flex flex-wrap gap-2 text-xs text-[var(--text-subtle)]">
-        <Badge className="border-[var(--border-strong)] bg-[var(--surface)] text-[var(--text-subtle)]">Ajastettu</Badge>
+        <Badge className="border-[var(--danger)] bg-[var(--surface)] text-[var(--danger)]">Keskeytetty</Badge>
         <Badge className="border-[var(--accent)] bg-[var(--surface)] text-[var(--accent)]">Kesken</Badge>
         <Badge className="border-[var(--accent-tertiary)] bg-[var(--surface)] text-[var(--accent-tertiary)]">Valmis</Badge>
       </div>
     </div>
   );
+}
+
+function createEmptyCoachMuscleGroupLiftedKg(): Record<CoachHistoryMuscleGroupKey, number> {
+  return {
+    shoulders: 0,
+    arms: 0,
+    chest: 0,
+    abs: 0,
+    back: 0,
+    legs: 0,
+    other: 0,
+  };
+}
+
+function createEmptyCoachWorkoutInsight(): CoachWorkoutInsight {
+  return {
+    exerciseCount: 0,
+    setCount: 0,
+    completedSetCount: 0,
+    completionPercent: 0,
+    totalLoadKg: 0,
+    liftedKg: 0,
+    durationSeconds: 0,
+    estimatedCalories: 0,
+    muscleGroupLiftedKg: createEmptyCoachMuscleGroupLiftedKg(),
+  };
+}
+
+function ensureCoachMuscleGroups(groups: CoachHistoryMuscleGroupKey[]): CoachHistoryMuscleGroupKey[] {
+  return groups.length ? groups : ["other"];
+}
+
+function mapCoachCategoryToMuscleGroups(category?: string): CoachHistoryMuscleGroupKey[] {
+  if (!category) {
+    return [];
+  }
+
+  const normalized = category.toLowerCase();
+  if (
+    normalized.includes("koko kroppa") ||
+    normalized.includes("full body") ||
+    normalized.includes("whole body")
+  ) {
+    return [];
+  }
+  const groups = new Set<CoachHistoryMuscleGroupKey>();
+
+  if (normalized.includes("hartia") || normalized.includes("shoulder")) groups.add("shoulders");
+  if (normalized.includes("hauis") || normalized.includes("ojent") || normalized.includes("arm")) groups.add("arms");
+  if (normalized.includes("rinta") || normalized.includes("chest")) groups.add("chest");
+  if (normalized.includes("core") || normalized.includes("vatsa") || normalized.includes("abs")) groups.add("abs");
+  if (normalized.includes("selkä") || normalized.includes("back")) groups.add("back");
+  if (
+    normalized.includes("alavartalo") ||
+    normalized.includes("takaketju") ||
+    normalized.includes("pakara") ||
+    normalized.includes("leg") ||
+    normalized.includes("glute") ||
+    normalized.includes("hamstring") ||
+    normalized.includes("quad")
+  ) {
+    groups.add("legs");
+  }
+
+  return Array.from(groups);
+}
+
+function mapCoachExerciseToMuscleGroups(
+  category: string | undefined,
+  exerciseName: string,
+  explicitGroup?: string,
+): CoachHistoryMuscleGroupKey[] {
+  const mappedFromExplicit = parseCoachMuscleGroup(explicitGroup);
+  if (mappedFromExplicit) {
+    return [mappedFromExplicit];
+  }
+
+  const mappedFromCategory = mapCoachCategoryToMuscleGroups(category);
+  if (mappedFromCategory.length > 0) {
+    return mappedFromCategory;
+  }
+
+  const normalized = exerciseName.toLowerCase();
+  const groups = new Set<CoachHistoryMuscleGroupKey>();
+
+  if (normalized.includes("olkap") || normalized.includes("pystypunn") || normalized.includes("shoulder") || normalized.includes("overhead press") || normalized.includes("shoulder press")) groups.add("shoulders");
+  if (normalized.includes("hauis") || normalized.includes("ojent") || normalized.includes("curl") || normalized.includes("tricep") || normalized.includes("bicep")) groups.add("arms");
+  if (normalized.includes("penkki") || normalized.includes("rinta") || normalized.includes("punnerrus") || normalized.includes("chest") || normalized.includes("bench")) groups.add("chest");
+  if (normalized.includes("vatsa") || normalized.includes("core") || normalized.includes("plank") || normalized.includes("abs")) groups.add("abs");
+  if (normalized.includes("soutu") || normalized.includes("ylätalja") || normalized.includes("selkä") || normalized.includes("veto") || normalized.includes("row") || normalized.includes("pulldown") || normalized.includes("deadlift")) groups.add("back");
+  if (normalized.includes("kyykky") || normalized.includes("jalka") || normalized.includes("askel") || normalized.includes("pakara") || normalized.includes("squat") || normalized.includes("leg") || normalized.includes("lunge") || normalized.includes("hip thrust")) groups.add("legs");
+
+  return Array.from(groups);
+}
+
+function parseCoachMuscleGroup(value?: string): CoachHistoryMuscleGroupKey | undefined {
+  if (!value) {
+    return undefined;
+  }
+
+  switch (value) {
+    case "shoulders":
+    case "arms":
+    case "chest":
+    case "abs":
+    case "back":
+    case "legs":
+    case "other":
+      return value;
+    default:
+      return undefined;
+  }
+}
+
+function buildCoachWorkoutInsights(
+  state: AppState,
+  athleteWorkouts: AppState["scheduledWorkouts"],
+  sessionByWorkoutId: Map<string, WorkoutSession>,
+) {
+  const templateById = new Map(state.templates.map((template) => [template.id, template]));
+  const planById = new Map(state.plans.map((plan) => [plan.id, plan]));
+  const exerciseById = new Map(state.exercises.map((exercise) => [exercise.id, exercise]));
+  const userById = new Map(state.users.map((user) => [user.id, user]));
+  const bodyMeasurementsByUserId = new Map(
+    state.users.map((user) => [user.id, getMeasurementsForUser(state, user.id)]),
+  );
+  const insights = new Map<string, CoachWorkoutInsight>();
+
+  athleteWorkouts.forEach((workout) => {
+    const session = sessionByWorkoutId.get(workout.id);
+    const insight = createEmptyCoachWorkoutInsight();
+
+    if (session) {
+      insight.exerciseCount = new Set(session.setLogs.map((log) => log.templateExerciseId)).size;
+      insight.setCount = session.setLogs.length;
+      insight.completedSetCount = session.setLogs.filter((log) => log.done).length;
+      insight.completionPercent =
+        insight.setCount > 0 ? Math.round((insight.completedSetCount / insight.setCount) * 100) : 0;
+      insight.totalLoadKg = session.setLogs.reduce((sum, log) => {
+        if (!log.done) {
+          return sum;
+        }
+        return sum + (log.actualLoad ?? log.targetLoad ?? 0);
+      }, 0);
+      insight.liftedKg = session.setLogs.reduce((sum, log) => {
+        if (!log.done) {
+          return sum;
+        }
+
+        const reps = log.actualReps ?? log.targetReps;
+        const load = log.actualLoad ?? log.targetLoad ?? 0;
+        return sum + reps * load;
+      }, 0);
+
+      const startedAtMs = new Date(session.startedAt).getTime();
+      const finishedAtMs = new Date(session.completedAt ?? session.updatedAt).getTime();
+      if (Number.isFinite(startedAtMs) && Number.isFinite(finishedAtMs) && finishedAtMs >= startedAtMs) {
+        insight.durationSeconds = Math.max(0, Math.round((finishedAtMs - startedAtMs) / 1000));
+      }
+      insight.estimatedCalories = estimateStrengthCalories({
+        durationSeconds: insight.durationSeconds,
+        completionPercent: insight.completionPercent,
+        completedSetCount: insight.completedSetCount,
+        weightKg: getWeightAtMoment(
+          userById.get(workout.athleteId),
+          bodyMeasurementsByUserId.get(workout.athleteId) ?? [],
+          session.completedAt ?? session.updatedAt,
+        ),
+      });
+
+      session.setLogs
+        .filter((log) => log.done)
+        .forEach((log) => {
+          const category = exerciseById.get(log.exerciseId)?.category;
+          const groups = ensureCoachMuscleGroups(
+            mapCoachExerciseToMuscleGroups(category, log.exerciseName, log.muscleGroup),
+          );
+          const reps = log.actualReps ?? log.targetReps;
+          const load = log.actualLoad ?? log.targetLoad ?? 0;
+          const liftedForLog = reps * load;
+          const distributedLiftedForLog = groups.length > 0 ? liftedForLog / groups.length : liftedForLog;
+          groups.forEach((groupKey) => {
+            insight.muscleGroupLiftedKg[groupKey] += distributedLiftedForLog;
+          });
+        });
+    } else if (workout.templateId) {
+      const template = templateById.get(workout.templateId);
+      if (template) {
+        insight.exerciseCount = template.blocks.reduce((sum, block) => sum + block.exercises.length, 0);
+        insight.setCount = template.blocks.reduce(
+          (sum, block) => sum + block.exercises.reduce((exerciseSum, exercise) => exerciseSum + exercise.sets.length, 0),
+          0,
+        );
+      }
+    } else if (workout.trainingPlanId && workout.programWorkoutId) {
+      const plan = planById.get(workout.trainingPlanId);
+      const programWorkout = plan?.workouts?.find((item) => item.id === workout.programWorkoutId);
+      if (programWorkout) {
+        insight.exerciseCount = programWorkout.exercises.length;
+        insight.setCount = programWorkout.exercises.reduce((sum, exercise) => sum + exercise.sets.length, 0);
+      }
+    }
+
+    insights.set(workout.id, insight);
+  });
+
+  return insights;
 }
 
 function getSessionVolume(session: WorkoutSession) {
@@ -1107,7 +1729,7 @@ function buildPhaseBars(workouts: AppState["scheduledWorkouts"], weeks: number) 
       localDateKey(weekStart),
       {
         label: shortDate(weekStart),
-        scheduled: 0,
+        cancelled: 0,
         inProgress: 0,
         completed: 0,
       },
@@ -1121,8 +1743,8 @@ function buildPhaseBars(workouts: AppState["scheduledWorkouts"], weeks: number) 
       return;
     }
 
-    if (workout.status === "scheduled") {
-      bucket.scheduled += 1;
+    if (workout.status === "cancelled") {
+      bucket.cancelled += 1;
       return;
     }
     if (workout.status === "in_progress") {
@@ -1172,6 +1794,10 @@ function coachStatusTone(status: ScheduledWorkoutStatus) {
     return "border-[var(--accent)] bg-[var(--surface)] text-[var(--accent)]";
   }
 
+  if (status === "cancelled") {
+    return "border-[var(--danger)] bg-[var(--surface)] text-[var(--danger)]";
+  }
+
   return "border-[var(--border-strong)] bg-[var(--surface)] text-[var(--text-subtle)]";
 }
 
@@ -1182,85 +1808,117 @@ function truncateText(value: string, length: number) {
   return `${value.slice(0, length).trimEnd()}...`;
 }
 
-function CoachInvitePanel() {
-  const { currentUser, createInvite, getCoachAthletes, state } = useAppState();
-  const formId = useId();
-  const [inviteMessage, setInviteMessage] = useState<string>("");
-  const athletes = currentUser ? getCoachAthletes(currentUser.id) : [];
-  const form = useForm<z.infer<typeof inviteSchema>>({
-    resolver: zodResolver(inviteSchema),
-    defaultValues: {
-      email: "",
-      role: "athlete",
-      coachId: currentUser?.id ?? "",
-    },
-  });
+function CoachConversationView({
+  athletes,
+  currentUserId,
+  entries,
+  onSend,
+  selectedAthleteId,
+  onSelectAthlete,
+  plans,
+  scheduledWorkouts,
+  templates,
+  users,
+}: {
+  athletes: Array<{ id: string; fullName: string; email: string }>;
+  currentUserId: string;
+  entries: AppState["conversationEntries"];
+  onSend: (
+    body: string,
+    options?: { scheduledWorkoutId?: string; trainingPlanId?: string; athleteId?: string; contextLabel?: string },
+  ) => { ok: true; scheduledWorkoutId?: string } | { ok: false; message: string };
+  selectedAthleteId: string;
+  onSelectAthlete: (athleteId: string) => void;
+  plans: AppState["plans"];
+  scheduledWorkouts: AppState["scheduledWorkouts"];
+  templates: AppState["templates"];
+  users: AppState["users"];
+}) {
+  const filteredEntries = useMemo(
+    () =>
+      entries
+        .filter((entry) => entry.coachId === currentUserId && (!selectedAthleteId || entry.athleteId === selectedAthleteId))
+        .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()),
+    [currentUserId, entries, selectedAthleteId],
+  );
+  const contextOptions = useMemo(() => {
+    const selectedAthletePlans = plans.filter((plan) => plan.athleteId === selectedAthleteId && plan.coachId === currentUserId);
+    const selectedAthleteWorkouts = scheduledWorkouts.filter(
+      (workout) => workout.athleteId === selectedAthleteId && workout.coachId === currentUserId,
+    );
+
+    return [
+      { id: "general", label: "Yleinen keskustelu", contextType: "general" as const },
+      ...buildWorkoutConversationContextOptions({
+        workouts: selectedAthleteWorkouts,
+        plans: selectedAthletePlans,
+        templates,
+      }),
+      ...selectedAthletePlans.map((plan) => ({
+        id: `program-${plan.id}`,
+        label: `Ohjelma: ${plan.title}`,
+        contextType: "program" as const,
+        contextId: plan.id,
+        contextLabel: plan.title,
+      })),
+    ];
+  }, [currentUserId, plans, scheduledWorkouts, selectedAthleteId, templates]);
+  const workoutOccurrenceLabelById = useMemo(() => {
+    const selectedAthleteWorkouts = scheduledWorkouts.filter(
+      (workout) => workout.athleteId === selectedAthleteId && workout.coachId === currentUserId,
+    );
+    const titleMap = buildWorkoutHistoryTitleMap(selectedAthleteWorkouts);
+    return new Map(
+      Array.from(titleMap.entries()).map(([workoutId, info]) => [workoutId, info.occurrenceLabel]),
+    );
+  }, [currentUserId, scheduledWorkouts, selectedAthleteId]);
+
+  if (!athletes.length) {
+    return (
+      <Card>
+        <CardTitle className="text-2xl">Keskustelu</CardTitle>
+        <CardDescription className="mt-2">
+          Lisää ensin treenaaja rosteriin, niin yhteinen keskustelu alkaa kertyä tähän.
+        </CardDescription>
+      </Card>
+    );
+  }
 
   return (
-    <div className="grid gap-6 xl:grid-cols-[0.92fr_1.08fr]">
-      <Card>
-        <CardTitle>Kutsu uusi treenaaja</CardTitle>
-        <CardDescription className="mt-2">
-          Coach voi lisätä oman asiakkaansa suoraan palveluun. Kutsu muodostaa samalla valmentaja-treenaaja-suhteen.
-        </CardDescription>
-        <form
-          className="mt-6 space-y-4"
-          onSubmit={form.handleSubmit((values) => {
-            const result = createInvite({
-              email: values.email,
-              role: "athlete",
-              coachId: currentUser?.id,
-            });
-            setInviteMessage(result.ok ? `Kutsu lähetettiin osoitteeseen ${values.email}.` : result.message);
-            if (result.ok) {
-              form.reset({ email: "", role: "athlete", coachId: currentUser?.id });
-            }
-          })}
-        >
-          <div>
-            <Label htmlFor={`${formId}-coach-athlete-email`}>Treenaajan sähköposti</Label>
-            <Input
-              id={`${formId}-coach-athlete-email`}
-              autoComplete="email"
-              {...form.register("email")}
-              placeholder="asiakas@example.com"
-            />
-          </div>
-          <p
-            aria-live="polite"
-            className={`min-h-5 text-sm ${inviteMessage.includes("lähetettiin") ? "text-[var(--success)]" : "text-[var(--danger)]"}`}
+    <ConversationPanel
+      heading="Treenaajan keskusteluvirta"
+      description="Seuraa yhdestä paikasta treenaajan ja valmentajan viestejä."
+      entries={filteredEntries}
+      users={users}
+      currentRole="coach"
+      currentUserId={currentUserId}
+      emptyMessage="Valitulle treenaajalle ei ole vielä viestejä keskusteluvirrassa."
+      contextOptions={contextOptions}
+      occurrenceLabelByWorkoutId={workoutOccurrenceLabelById}
+      onSend={(body, option) =>
+        onSend(body, {
+          scheduledWorkoutId: option.contextType === "workout" ? option.contextId : undefined,
+          trainingPlanId: option.contextType === "program" ? option.contextId : undefined,
+          athleteId: option.contextType === "general" ? selectedAthleteId : undefined,
+          contextLabel: option.contextLabel,
+        })
+      }
+      headerSlot={
+        <div className="w-full lg:w-72">
+          <Label htmlFor="coach-conversation-athlete-select">Treenaaja</Label>
+          <Select
+            id="coach-conversation-athlete-select"
+            value={selectedAthleteId}
+            onChange={(event) => onSelectAthlete(event.target.value)}
           >
-            {inviteMessage}
-          </p>
-          <Button type="submit" className="w-full">
-            Lähetä kutsu treenaajalle
-          </Button>
-        </form>
-      </Card>
-
-      <Card>
-        <CardTitle>Rosteri</CardTitle>
-        <div className="mt-5 grid gap-3">
-          {athletes.map((athlete) => (
-            <div key={athlete.id} className="rounded-xl border-2 border-[var(--border)] bg-[var(--surface-2)] p-5">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="font-medium text-[var(--text)]">{athlete.fullName}</p>
-                  <p className="text-sm text-[var(--text-muted)]">{athlete.email}</p>
-                </div>
-                <Badge>
-                  {
-                    state.scheduledWorkouts.filter(
-                      (workout) => workout.athleteId === athlete.id && workout.status !== "completed",
-                    ).length
-                  }{" "}
-                  avointa
-                </Badge>
-              </div>
-            </div>
-          ))}
+            {athletes.map((athlete) => (
+              <option key={athlete.id} value={athlete.id}>
+                {athlete.fullName}
+              </option>
+            ))}
+          </Select>
         </div>
-      </Card>
-    </div>
+      }
+    />
   );
 }

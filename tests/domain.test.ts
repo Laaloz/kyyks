@@ -468,26 +468,24 @@ describe("domain helpers", () => {
 
   it("cancels a started workout and keeps session data for resume", () => {
     const baseState = cloneDemoState();
-    const started = startSession(baseState, "scheduled_1").state;
-    const withNote = saveSessionNote(started, "scheduled_1", "Testimuistiinpano");
+    const withNote = saveSessionNote(baseState, "scheduled_2", "Testimuistiinpano");
 
-    expect(withNote.sessions.some((session) => session.scheduledWorkoutId === "scheduled_1")).toBe(true);
+    expect(withNote.sessions.some((session) => session.scheduledWorkoutId === "scheduled_2")).toBe(true);
     expect(withNote.notes.length).toBeGreaterThan(0);
 
-    const cancelled = cancelSession(withNote, "scheduled_1");
+    const cancelled = cancelSession(withNote, "scheduled_2");
 
-    expect(cancelled.sessions.some((session) => session.scheduledWorkoutId === "scheduled_1")).toBe(true);
+    expect(cancelled.sessions.some((session) => session.scheduledWorkoutId === "scheduled_2")).toBe(true);
     expect(cancelled.notes.some((note) => note.body === "Testimuistiinpano")).toBe(true);
-    expect(cancelled.scheduledWorkouts.find((item) => item.id === "scheduled_1")?.status).toBe("cancelled");
+    expect(cancelled.scheduledWorkouts.find((item) => item.id === "scheduled_2")?.status).toBe("cancelled");
   });
 
   it("resumes a cancelled workout back to in progress", () => {
     const baseState = cloneDemoState();
-    const started = startSession(baseState, "scheduled_1").state;
-    const cancelled = cancelSession(started, "scheduled_1");
+    const cancelled = cancelSession(baseState, "scheduled_2");
 
-    const resumed = startSession(cancelled, "scheduled_1");
-    expect(resumed.state.scheduledWorkouts.find((item) => item.id === "scheduled_1")?.status).toBe(
+    const resumed = startSession(cancelled, "scheduled_2");
+    expect(resumed.state.scheduledWorkouts.find((item) => item.id === "scheduled_2")?.status).toBe(
       "in_progress",
     );
   });
@@ -613,8 +611,8 @@ describe("domain helpers", () => {
     expect(squatLogs[1]?.done).toBe(false);
 
     const unknownExerciseLog = started.session.setLogs.find((log) => log.exerciseId === "ex_split_squat");
-    expect(unknownExerciseLog?.actualReps).toBeUndefined();
-    expect(unknownExerciseLog?.actualLoad).toBeUndefined();
+    expect(unknownExerciseLog?.actualReps).toBe(10);
+    expect(unknownExerciseLog?.actualLoad).toBe(16);
     expect(unknownExerciseLog?.rpe).toBe(8);
   });
 

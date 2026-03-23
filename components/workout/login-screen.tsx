@@ -1,9 +1,7 @@
 "use client";
 
 import { zodResolver } from "@hookform/resolvers/zod";
-import { Flame, LayoutDashboard, ShieldCheck } from "lucide-react";
-import Link from "next/link";
-import { useId, useState } from "react";
+import { useEffect, useId, useState } from "react";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
 
@@ -11,8 +9,6 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardDescription, CardTitle } from "@/components/ui/card";
 import { Input, Label } from "@/components/ui/field";
-import { isInviteExpired } from "@/lib/domain";
-import { formatDate } from "@/lib/utils";
 import { useAppState } from "@/providers/app-state-provider";
 
 import { loginSchema } from "@/components/workout/schemas";
@@ -21,79 +17,76 @@ import { roleLabel } from "@/components/workout/shared";
 export function LoginScreen() {
   const { login, loginAsDemoUser, state } = useAppState();
   const [error, setError] = useState<string | null>(null);
+  const [showLocalDemoUsers, setShowLocalDemoUsers] = useState(false);
   const formId = useId();
   const form = useForm<z.infer<typeof loginSchema>>({
     resolver: zodResolver(loginSchema),
     defaultValues: {
-      email: "coach@rookiapp.fi",
-      password: "demo123",
+      email: "",
+      password: "",
     },
   });
-
   const demoUsers = state.users.filter((user) => user.status === "active");
-  const pendingInvites = state.invites.filter((invite) => invite.status === "pending");
+
+  useEffect(() => {
+    if (typeof window === "undefined") {
+      return;
+    }
+
+    const hostname = window.location.hostname;
+    setShowLocalDemoUsers(
+      hostname === "localhost" ||
+        hostname === "127.0.0.1" ||
+        hostname === "::1" ||
+        hostname.endsWith(".local"),
+    );
+  }, []);
 
   return (
-    <div className="mx-auto grid min-h-screen max-w-6xl items-center gap-6 px-4 py-10 lg:grid-cols-[1.15fr_0.85fr]">
+    <div className="mx-auto grid min-h-screen max-w-5xl gap-6 px-4 py-10 lg:grid-cols-[0.95fr_1.05fr] lg:items-center">
       <section className="space-y-6">
-        <div className="flex flex-wrap items-center gap-3">
-          <Badge className="border-[var(--accent-tertiary)] bg-[var(--surface-3)] text-[var(--accent-tertiary)]">
-            white monster / powerlifting / anime progress
-          </Badge>
-          <Badge className="border-[var(--border)] bg-[var(--surface-3)] text-[var(--text)]">mobile-first</Badge>
-          <Badge className="border-[var(--accent-secondary)] bg-[var(--surface-3)] text-[var(--accent-secondary)]">coach-first</Badge>
-        </div>
         <div className="space-y-4">
-          <h1 className="max-w-3xl font-[family-name:var(--font-display)] text-5xl font-semibold leading-tight text-[var(--text)] md:text-6xl">
-            Valkoinen energia, rautainen progressio ja selkeä treeninhallinta samassa näkymässä.
+          <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[var(--accent)]">Rookiapp</p>
+          <h1 className="max-w-2xl font-[family-name:var(--font-display)] text-4xl font-semibold leading-tight text-[var(--text)] md:text-5xl">
+            Kirjaudu omaan treenityötilaasi.
           </h1>
-          <p className="max-w-2xl text-lg leading-8 text-[var(--text-muted)]">
-            Valmentaja rakentaa ohjelmat nopeasti, treenaaja kirjaa sarjat puhelimella ja koko
-            valmennus pysyy selkeänä. Tyyli hakee White Monsterin kylmää energiaa, powerliftingin
-            numerofokusta ja anime-arcin etenemisen tuntua.
+          <p className="max-w-xl text-lg leading-8 text-[var(--text-muted)]">
+            Tämä näkymä on tarkoitettu jo hyväksytyille käyttäjille. Kun tilisi on luotu tai kutsu on aktivoitu,
+            pääset tästä suoraan omaan näkymääsi.
           </p>
         </div>
 
-        <div className="grid gap-4 md:grid-cols-3">
-          {[
-            {
-              icon: LayoutDashboard,
-              title: "Program Arc",
-              copy: "Rakentele ohjelmat blokkina ja toistuvana progression kaartena, ei irtonaisina treeneinä.",
-            },
-            {
-              icon: Flame,
-              title: "Lift Flow",
-              copy: "Kuittaa sarjat, painot ja RPE yhdellä silmäyksellä ilman, että salin flow katkeaa.",
-            },
-            {
-              icon: ShieldCheck,
-              title: "Role Locked",
-              copy: "Roolit, kutsut ja datamalli on tehty niin, että admin, coach ja treenaaja pysyvät selkeinä.",
-            },
-          ].map((item) => (
-            <Card key={item.title} className="border-[var(--border-strong)] bg-[var(--surface)]">
-              <item.icon className="mb-4 size-8 text-[var(--accent)]" />
-              <CardTitle>{item.title}</CardTitle>
-              <CardDescription className="mt-2 leading-6">{item.copy}</CardDescription>
-            </Card>
-          ))}
-        </div>
-
-        <Card className="border-[var(--border-strong)]">
-          <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+        <Card className="border-[var(--border-strong)] bg-[var(--surface)]">
+          <div className="space-y-5">
             <div>
-              <p className="text-xs font-semibold tracking-[0.04em] text-[var(--text-subtle)]">Control panel</p>
-              <CardTitle className="mt-2 text-2xl">Selkeä aloitus jokaiselle roolille</CardTitle>
+              <p className="text-xs font-semibold tracking-[0.04em] text-[var(--text-subtle)]">Sisäänpääsy</p>
+              <CardTitle className="mt-2 text-2xl">Näin pääset sisään</CardTitle>
               <CardDescription className="mt-2 max-w-2xl leading-6">
-                Admin hallitsee kutsuja, coach rakentaa ohjelmat ja treenaaja seuraa päivän nostot.
-                Jokaisessa näkymässä tärkein seuraava tehtävä on nostettu ensimmäiseksi.
+                Tämä sivu on kirjautumisportti olemassa oleville käyttäjille. Näytämme tässä vain sen tiedon, jota
+                tarvitset päästäksesi omaan työtilaasi ilman ylimääräistä sisältöä.
               </CardDescription>
             </div>
             <div className="grid gap-3 text-sm text-[var(--text-muted)]">
-              <div className="rounded-xl border-2 border-[var(--border)] bg-[var(--surface-2)] px-4 py-3">1. Luo rosteri</div>
-              <div className="rounded-xl border-2 border-[var(--border)] bg-[var(--surface-2)] px-4 py-3">2. Rakenna ohjelma</div>
-              <div className="rounded-xl border-2 border-[var(--border)] bg-[var(--surface-2)] px-4 py-3">3. Seuraa progressia</div>
+              <div className="rounded-xl border-2 border-[var(--border)] bg-[var(--surface-2)] px-4 py-3">
+                <p className="text-xs font-semibold tracking-[0.04em] text-[var(--text-subtle)]">1. Käyttöoikeus</p>
+                <p className="mt-1 font-medium text-[var(--text)]">
+                  Ylläpito lisää käyttäjän palveluun ja määrittää oikean roolin ennen ensimmäistä kirjautumista.
+                </p>
+              </div>
+              <div className="rounded-xl border-2 border-[var(--border)] bg-[var(--surface-2)] px-4 py-3">
+                <p className="text-xs font-semibold tracking-[0.04em] text-[var(--text-subtle)]">2. Kutsu tai tunnus</p>
+                <p className="mt-1 font-medium text-[var(--text)]">
+                  Uusi käyttäjä aktivoi tilin kutsulinkistä. Sen jälkeen sisään kirjaudutaan omalla sähköpostilla ja
+                  salasanalla.
+                </p>
+              </div>
+              <div className="rounded-xl border-2 border-[var(--border)] bg-[var(--surface-2)] px-4 py-3">
+                <p className="text-xs font-semibold tracking-[0.04em] text-[var(--text-subtle)]">3. Jos et pääse sisään</p>
+                <p className="mt-1 font-medium text-[var(--text)]">
+                  Tarkista ensin sähköposti ja salasana. Jos ongelma jatkuu, pyydä ylläpidolta uusi kutsu tai
+                  salasanan nollauslinkki.
+                </p>
+              </div>
             </div>
           </div>
         </Card>
@@ -101,10 +94,11 @@ export function LoginScreen() {
 
       <section className="space-y-4">
         <Card className="border-[var(--border-strong)] bg-[var(--surface)]">
-          <p className="text-xs font-semibold tracking-[0.04em] text-[var(--text-subtle)]">Session Gate</p>
+          <p className="text-xs font-semibold tracking-[0.04em] text-[var(--text-subtle)]">Kirjautuminen</p>
           <CardTitle>Kirjaudu sisään</CardTitle>
           <CardDescription className="mt-2">
-            Demo-tilassa kaikki data tallentuu selaimen localStorageen. Oletussalasana demo-käyttäjille on `demo123`.
+            Käytä sähköpostia ja salasanaa, jotka on liitetty käyttäjätiliisi. Jos tiliäsi ei ole vielä aktivoitu,
+            aloita saamastasi kutsulinkistä.
           </CardDescription>
           <form
             className="mt-6 space-y-4"
@@ -153,59 +147,48 @@ export function LoginScreen() {
               {error ?? ""}
             </p>
             <Button className="w-full" type="submit">
-              Siirry työtilaan
+              Avaa työtila
             </Button>
+            <p className="rounded-xl border-2 border-[var(--border)] bg-[var(--surface-2)] px-4 py-3 text-sm leading-6 text-[var(--text-muted)]">
+              Etkö pääse sisään? Tarkista ensin, että käytät oikeaa sähköpostiosoitetta. Jos ongelma jatkuu, pyydä
+              ylläpidolta uusi kutsu tai salasanan nollaus.
+            </p>
           </form>
         </Card>
 
-        <Card>
-          <CardTitle>Testikäyttäjät</CardTitle>
-          <CardDescription className="mt-2">Avaa näkymä yhdellä painalluksella ja testaa eri roolit nopeasti.</CardDescription>
-          <div className="mt-4 grid gap-3">
-            {demoUsers.map((user) => (
-              <button
-                key={user.id}
-                className="rounded-xl border-2 border-[var(--border)] bg-[var(--surface-2)] p-4 text-left transition hover:bg-[var(--surface-3)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--background)]"
-                onClick={() => loginAsDemoUser(user.id)}
-                type="button"
-              >
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="font-medium text-[var(--text)]">{user.fullName}</p>
-                    <p className="text-sm text-[var(--text-muted)]">{user.email}</p>
-                  </div>
-                  <Badge>{roleLabel(user.role)}</Badge>
-                </div>
-              </button>
-            ))}
-          </div>
-        </Card>
-
-        <Card>
-          <CardTitle>Odottavat kutsut</CardTitle>
-          <CardDescription className="mt-2">Kutsuvirta näkyy heti ilman erillistä hallintapaneelia.</CardDescription>
-          <div className="mt-4 space-y-3">
-            {pendingInvites.map((invite) => (
-              <div key={invite.id} className="rounded-xl border-2 border-[var(--border)] bg-[var(--surface-2)] p-4">
-                <div className="flex items-center justify-between gap-4">
-                  <div>
-                    <p className="font-medium text-[var(--text)]">{invite.email}</p>
-                    <p className="text-sm text-[var(--text-muted)]">
-                      {roleLabel(invite.role)} ·{" "}
-                      {isInviteExpired(invite.expiresAt) ? "vanhentunut" : `vanhenee ${formatDate(invite.expiresAt)}`}
-                    </p>
-                  </div>
-                  <Link
-                    className="rounded-xl border-2 border-[var(--accent-strong)] bg-[var(--accent)] px-3 py-2 text-sm font-semibold tracking-[0.02em] text-white"
-                    href={`/invite/${invite.token}`}
-                  >
-                    Avaa kutsu
-                  </Link>
-                </div>
+        {showLocalDemoUsers ? (
+          <Card className="border-[var(--border-strong)] bg-[var(--surface)]">
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <p className="text-xs font-semibold tracking-[0.04em] text-[var(--text-subtle)]">Lokaali kehitys</p>
+                <CardTitle className="mt-2">Demotunnukset</CardTitle>
+                <CardDescription className="mt-2">
+                  Tämä lista näkyy vain localhostissa, jotta eri roolit saa nopeasti auki testauksen aikana.
+                </CardDescription>
               </div>
-            ))}
-          </div>
-        </Card>
+              <Badge className="border-[var(--border)] bg-[var(--surface-2)] text-[var(--text)]">vain lokaalissa</Badge>
+            </div>
+
+            <div className="mt-4 grid gap-3">
+              {demoUsers.map((user) => (
+                <button
+                  key={user.id}
+                  className="rounded-xl border-2 border-[var(--border)] bg-[var(--surface-2)] p-4 text-left transition hover:bg-[var(--surface-3)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--background)]"
+                  onClick={() => loginAsDemoUser(user.id)}
+                  type="button"
+                >
+                  <div className="flex items-center justify-between gap-3">
+                    <div>
+                      <p className="font-medium text-[var(--text)]">{user.fullName}</p>
+                      <p className="text-sm text-[var(--text-muted)]">{user.email}</p>
+                    </div>
+                    <Badge>{roleLabel(user.role)}</Badge>
+                  </div>
+                </button>
+              ))}
+            </div>
+          </Card>
+        ) : null}
       </section>
     </div>
   );
