@@ -616,7 +616,7 @@ interface AppStateContextValue {
   currentRole: Role | null;
   isImpersonating: boolean;
   isHydrated: boolean;
-  login: (email: string, password: string) => Promise<LoginResult>;
+  login: (email: string, password: string, options?: { captchaToken?: string }) => Promise<LoginResult>;
   logout: () => Promise<void>;
   loginAsDemoUser: (userId: string) => void;
   startAdminImpersonation: (userId: string) => ActionResult;
@@ -845,7 +845,7 @@ export function AppStateProvider({ children }: PropsWithChildren) {
       currentRole: currentUser?.role ?? null,
       isImpersonating,
       isHydrated,
-      async login(email, password) {
+      async login(email, password, options) {
         const localUser = state.users.find((candidate) => candidate.email.toLowerCase() === email.toLowerCase());
 
         if (
@@ -863,6 +863,11 @@ export function AppStateProvider({ children }: PropsWithChildren) {
           const { data, error } = await supabase.auth.signInWithPassword({
             email,
             password,
+            options: options?.captchaToken
+              ? {
+                  captchaToken: options.captchaToken,
+                }
+              : undefined,
           });
 
           if (error) {

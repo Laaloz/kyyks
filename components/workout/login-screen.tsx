@@ -1,7 +1,8 @@
 "use client";
 
+import HCaptcha from "@hcaptcha/react-hcaptcha";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { useEffect, useId, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
 
@@ -9,6 +10,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardDescription, CardTitle } from "@/components/ui/card";
 import { Input, Label } from "@/components/ui/field";
+import { hCaptchaSiteKey, isHCaptchaConfigured, isSupabaseConfigured } from "@/lib/config";
 import { useAppState } from "@/providers/app-state-provider";
 
 import { loginSchema } from "@/components/workout/schemas";
@@ -19,6 +21,9 @@ export function LoginScreen() {
   const [error, setError] = useState<string | null>(null);
   const [showLocalDemoUsers, setShowLocalDemoUsers] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [captchaToken, setCaptchaToken] = useState<string | null>(null);
+  const [captchaError, setCaptchaError] = useState<string | null>(null);
+  const captchaRef = useRef<HCaptcha | null>(null);
   const formId = useId();
   const form = useForm<z.infer<typeof loginSchema>>({
     resolver: zodResolver(loginSchema),
@@ -28,6 +33,7 @@ export function LoginScreen() {
     },
   });
   const demoUsers = state.users.filter((user) => user.status === "active");
+  const requiresCaptcha = isSupabaseConfigured && isHCaptchaConfigured && !showLocalDemoUsers;
 
   useEffect(() => {
     if (typeof window === "undefined") {
@@ -104,9 +110,20 @@ export function LoginScreen() {
           <form
             className="mt-6 space-y-4"
             onSubmit={form.handleSubmit(async (values) => {
+              if (requiresCaptcha && !captchaToken) {
+                setError("Vahvista ensin captcha ennen kirjautumista.");
+                return;
+              }
+
               setIsSubmitting(true);
-              const result = await login(values.email, values.password);
+              const result = await login(values.email, values.password, {
+                captchaToken: captchaToken ?? undefined,
+              });
               setIsSubmitting(false);
+              if (requiresCaptcha) {
+                captchaRef.current?.resetCaptcha();
+                setCaptchaToken(null);
+              }
               if (!result.ok) {
                 setError(result.message);
                 return;
@@ -147,10 +164,35 @@ export function LoginScreen() {
                 </p>
               ) : null}
             </div>
+            {requiresCaptcha ? (
+              <div className="space-y-2">
+                <HCaptcha
+                  ref={captchaRef}
+                  sitekey={hCaptchaSiteKey}
+                  theme="light"
+                  onVerify={(token) => {
+                    setCaptchaToken(token);
+                    setCaptchaError(null);
+                    setError(null);
+                  }}
+                  onExpire={() => {
+                    setCaptchaToken(null);
+                    setCaptchaError("Captcha vanheni. Vahvista se uudelleen.");
+                  }}
+                  onError={() => {
+                    setCaptchaToken(null);
+                    setCaptchaError("Captcha ei latautunut oikein. Kokeile päivittää sivu.");
+                  }}
+                />
+                <p aria-live="polite" className="min-h-5 text-sm text-[var(--danger)]">
+                  {captchaError ?? ""}
+                </p>
+              </div>
+            ) : null}
             <p aria-live="polite" className="min-h-5 text-sm text-[var(--danger)]">
               {error ?? ""}
             </p>
-            <Button className="w-full" type="submit" disabled={isSubmitting}>
+            <Button className="w-full" type="submit" disabled={isSubmitting || (requiresCaptcha && !captchaToken)}>
               {isSubmitting ? "Kirjaudutaan..." : "Avaa työtila"}
             </Button>
             <p className="rounded-xl border-2 border-[var(--border)] bg-[var(--surface-2)] px-4 py-3 text-sm leading-6 text-[var(--text-muted)]">
