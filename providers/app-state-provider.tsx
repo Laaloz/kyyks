@@ -48,8 +48,8 @@ import {
   type PropsWithChildren,
 } from "react";
 
-const STATE_KEY = "rookiapp-state-v2";
-const SESSION_KEY = "rookiapp-session-v1";
+const STATE_KEY = "rookiapp-state-v3";
+const SESSION_KEY = "rookiapp-session-v2";
 const RESET_TOKEN_EXPIRY_MINUTES = 30;
 
 type PersistedSession = {
@@ -468,6 +468,27 @@ function isLocalDevelopmentHost() {
   );
 }
 
+function createEmptyAppState(): AppState {
+  return {
+    users: [],
+    bodyMeasurements: [],
+    assignments: [],
+    exercises: defaultGlobalExercises,
+    templates: [],
+    plans: [],
+    scheduledWorkouts: [],
+    sessions: [],
+    notes: [],
+    conversationEntries: [],
+    invites: [],
+    passwordResetRequests: [],
+  };
+}
+
+function createInitialAppState() {
+  return normalizeState(isLocalDevelopmentHost() ? cloneDemoState() : createEmptyAppState());
+}
+
 function mapSupabaseProfileToUser(profile: SupabaseProfileRecord): UserProfile {
   return {
     id: profile.id,
@@ -630,7 +651,7 @@ interface AppStateContextValue {
 const AppStateContext = createContext<AppStateContextValue | null>(null);
 
 export function AppStateProvider({ children }: PropsWithChildren) {
-  const [state, setState] = useState<AppState>(() => normalizeState(cloneDemoState()));
+  const [state, setState] = useState<AppState>(() => createInitialAppState());
   const [authenticatedUserId, setAuthenticatedUserId] = useState<string | null>(null);
   const [impersonatedUserId, setImpersonatedUserId] = useState<string | null>(null);
   const [isStorageHydrated, setIsStorageHydrated] = useState(false);
@@ -646,7 +667,7 @@ export function AppStateProvider({ children }: PropsWithChildren) {
       try {
         setState(normalizeState(JSON.parse(rawState) as AppState));
       } catch {
-        setState(normalizeState(cloneDemoState()));
+        setState(createInitialAppState());
       }
     }
 
@@ -696,7 +717,7 @@ export function AppStateProvider({ children }: PropsWithChildren) {
 
       if (event.key === STATE_KEY) {
         if (!event.newValue) {
-          setState(normalizeState(cloneDemoState()));
+          setState(createInitialAppState());
           return;
         }
 

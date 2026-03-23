@@ -6,8 +6,8 @@ import "./globals.css";
 
 const themeInitScript = `
 (() => {
-  const stateKey = "rookiapp-state-v2";
-  const sessionKey = "rookiapp-session-v1";
+  const stateKey = "rookiapp-state-v3";
+  const sessionKey = "rookiapp-session-v2";
   const applyTheme = (themeMode) => {
     const theme = themeMode === "dark" ? "dark" : "light";
     document.documentElement.dataset.theme = theme;
