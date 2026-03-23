@@ -18,6 +18,7 @@ export function LoginScreen() {
   const { login, loginAsDemoUser, state } = useAppState();
   const [error, setError] = useState<string | null>(null);
   const [showLocalDemoUsers, setShowLocalDemoUsers] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const formId = useId();
   const form = useForm<z.infer<typeof loginSchema>>({
     resolver: zodResolver(loginSchema),
@@ -102,13 +103,16 @@ export function LoginScreen() {
           </CardDescription>
           <form
             className="mt-6 space-y-4"
-            onSubmit={form.handleSubmit((values) => {
-              const result = login(values.email, values.password);
+            onSubmit={form.handleSubmit(async (values) => {
+              setIsSubmitting(true);
+              const result = await login(values.email, values.password);
+              setIsSubmitting(false);
               if (!result.ok) {
                 setError(result.message);
-              } else {
-                setError(null);
+                return;
               }
+
+              setError(null);
             })}
           >
             <div>
@@ -146,8 +150,8 @@ export function LoginScreen() {
             <p aria-live="polite" className="min-h-5 text-sm text-[var(--danger)]">
               {error ?? ""}
             </p>
-            <Button className="w-full" type="submit">
-              Avaa työtila
+            <Button className="w-full" type="submit" disabled={isSubmitting}>
+              {isSubmitting ? "Kirjaudutaan..." : "Avaa työtila"}
             </Button>
             <p className="rounded-xl border-2 border-[var(--border)] bg-[var(--surface-2)] px-4 py-3 text-sm leading-6 text-[var(--text-muted)]">
               Etkö pääse sisään? Tarkista ensin, että käytät oikeaa sähköpostiosoitetta. Jos ongelma jatkuu, pyydä

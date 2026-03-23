@@ -1,5 +1,6 @@
 "use client";
 
+import type { User as SupabaseAuthUser } from "@supabase/supabase-js";
 import {
   canCoachManageAthlete,
   canCompleteSession,
@@ -20,6 +21,7 @@ import {
   updateSessionSet as domainUpdateSessionSet,
 } from "@/lib/domain";
 import { defaultGlobalExercises } from "@/lib/demo-data";
+import { createSupabaseBrowserClient } from "@/lib/supabase/client";
 import type {
   AppState,
   ConversationEntry,
@@ -437,6 +439,143 @@ function appendConversationEntry(state: AppState, entry: ConversationEntry) {
   };
 }
 
+type SupabaseProfileRecord = {
+  id: string;
+  role: Role;
+  status: UserProfile["status"];
+  full_name: string;
+  email: string;
+  default_dashboard_view: DashboardHomeView | null;
+  email_notifications: boolean;
+  theme_mode: "light" | "dark";
+  weight_kg: number | null;
+  waist_cm: number | null;
+  created_at: string;
+  updated_at: string;
+};
+
+function isLocalDevelopmentHost() {
+  if (typeof window === "undefined") {
+    return false;
+  }
+
+  const hostname = window.location.hostname;
+  return (
+    hostname === "localhost" ||
+    hostname === "127.0.0.1" ||
+    hostname === "::1" ||
+    hostname.endsWith(".local")
+  );
+}
+
+function mapSupabaseProfileToUser(profile: SupabaseProfileRecord): UserProfile {
+  return {
+    id: profile.id,
+    role: profile.role,
+    fullName: profile.full_name,
+    email: profile.email,
+    status: profile.status,
+    weightKg: profile.weight_kg ?? undefined,
+    waistCm: profile.waist_cm ?? undefined,
+    settings: {
+      defaultDashboardView: normalizeDefaultDashboardView(profile.role, profile.default_dashboard_view ?? undefined),
+      emailNotifications: profile.email_notifications,
+      themeMode: profile.theme_mode,
+    },
+    createdAt: profile.created_at,
+    updatedAt: profile.updated_at,
+  };
+}
+
+function resolveSupabaseUserForState(
+  previous: AppState,
+  authUser: SupabaseAuthUser,
+  profile: SupabaseProfileRecord | null,
+) {
+  const authEmail = authUser.email?.toLowerCase();
+  const existingUser = authEmail
+    ? previous.users.find((candidate) => candidate.email.toLowerCase() === authEmail) ?? null
+    : null;
+
+  if (profile) {
+    const mappedUser = mapSupabaseProfileToUser(profile);
+    if (existingUser) {
+      return {
+        nextState: {
+          ...previous,
+          users: previous.users.map((user) =>
+            user.id === existingUser.id
+              ? {
+                  ...user,
+                  role: mappedUser.role,
+                  fullName: mappedUser.fullName,
+                  email: mappedUser.email,
+                  status: mappedUser.status,
+                  weightKg: mappedUser.weightKg,
+                  waistCm: mappedUser.waistCm,
+                  settings: normalizeUserSettings(mappedUser.role, mappedUser.settings),
+                  updatedAt: mappedUser.updatedAt,
+                }
+              : user,
+          ),
+        },
+        resolvedUserId: existingUser.id,
+      };
+    }
+
+    return {
+      nextState: {
+        ...previous,
+        users: [mappedUser, ...previous.users],
+      },
+      resolvedUserId: mappedUser.id,
+    };
+  }
+
+  if (existingUser) {
+    return {
+      nextState: previous,
+      resolvedUserId: existingUser.id,
+    };
+  }
+
+  return {
+    nextState: previous,
+    resolvedUserId: null,
+  };
+}
+
+async function fetchSupabaseProfile(supabase: NonNullable<ReturnType<typeof createSupabaseBrowserClient>>, userId: string) {
+  if (!supabase) {
+    return null;
+  }
+
+  const { data, error } = await supabase
+    .from("profiles")
+    .select(
+      "id, role, status, full_name, email, default_dashboard_view, email_notifications, theme_mode, weight_kg, waist_cm, created_at, updated_at",
+    )
+    .eq("id", userId)
+    .maybeSingle();
+
+  if (error) {
+    return null;
+  }
+
+  return data as SupabaseProfileRecord | null;
+}
+
+function getSupabaseLoginErrorMessage(message: string) {
+  const normalized = message.toLowerCase();
+  if (normalized.includes("invalid login credentials")) {
+    return "Väärä sähköposti tai salasana.";
+  }
+  if (normalized.includes("email not confirmed")) {
+    return "Sähköpostiosoite täytyy vahvistaa ennen kirjautumista.";
+  }
+  return "Kirjautuminen epäonnistui. Tarkista tunnuksesi ja yritä uudelleen.";
+}
+
 function isConversationVisibleToUser(entry: ConversationEntry, user: UserProfile) {
   if (user.role === "athlete") {
     return entry.athleteId === user.id;
@@ -456,8 +595,8 @@ interface AppStateContextValue {
   currentRole: Role | null;
   isImpersonating: boolean;
   isHydrated: boolean;
-  login: (email: string, password: string) => LoginResult;
-  logout: () => void;
+  login: (email: string, password: string) => Promise<LoginResult>;
+  logout: () => Promise<void>;
   loginAsDemoUser: (userId: string) => void;
   startAdminImpersonation: (userId: string) => ActionResult;
   stopAdminImpersonation: () => ActionResult;
@@ -494,7 +633,10 @@ export function AppStateProvider({ children }: PropsWithChildren) {
   const [state, setState] = useState<AppState>(() => normalizeState(cloneDemoState()));
   const [authenticatedUserId, setAuthenticatedUserId] = useState<string | null>(null);
   const [impersonatedUserId, setImpersonatedUserId] = useState<string | null>(null);
-  const [isHydrated, setIsHydrated] = useState(false);
+  const [isStorageHydrated, setIsStorageHydrated] = useState(false);
+  const [isSupabaseAuthResolved, setIsSupabaseAuthResolved] = useState(false);
+  const supabase = useMemo(() => createSupabaseBrowserClient(), []);
+  const isHydrated = isStorageHydrated && (supabase ? isSupabaseAuthResolved : true);
 
   useEffect(() => {
     const rawState = window.localStorage.getItem(STATE_KEY);
@@ -512,19 +654,19 @@ export function AppStateProvider({ children }: PropsWithChildren) {
     setAuthenticatedUserId(session.authenticatedUserId);
     setImpersonatedUserId(session.impersonatedUserId);
 
-    setIsHydrated(true);
+    setIsStorageHydrated(true);
   }, []);
 
   useEffect(() => {
-    if (!isHydrated) {
+    if (!isStorageHydrated) {
       return;
     }
 
     window.localStorage.setItem(STATE_KEY, JSON.stringify(state));
-  }, [isHydrated, state]);
+  }, [isStorageHydrated, state]);
 
   useEffect(() => {
-    if (!isHydrated) {
+    if (!isStorageHydrated) {
       return;
     }
 
@@ -540,10 +682,10 @@ export function AppStateProvider({ children }: PropsWithChildren) {
     } else {
       window.localStorage.removeItem(SESSION_KEY);
     }
-  }, [authenticatedUserId, impersonatedUserId, isHydrated]);
+  }, [authenticatedUserId, impersonatedUserId, isStorageHydrated]);
 
   useEffect(() => {
-    if (!isHydrated) {
+    if (!isStorageHydrated) {
       return;
     }
 
@@ -576,7 +718,71 @@ export function AppStateProvider({ children }: PropsWithChildren) {
     return () => {
       window.removeEventListener("storage", syncFromStorage);
     };
-  }, [isHydrated]);
+  }, [isStorageHydrated]);
+
+  useEffect(() => {
+    if (!isStorageHydrated) {
+      return;
+    }
+
+    if (!supabase) {
+      setIsSupabaseAuthResolved(true);
+      return;
+    }
+
+    let active = true;
+
+    const syncFromAuthUser = async (authUser: SupabaseAuthUser | null) => {
+      if (!active) {
+        return;
+      }
+
+      if (!authUser?.email) {
+        setAuthenticatedUserId(null);
+        setImpersonatedUserId(null);
+        setIsSupabaseAuthResolved(true);
+        return;
+      }
+
+      const profile = await fetchSupabaseProfile(supabase, authUser.id);
+      if (!active) {
+        return;
+      }
+
+      let resolvedUserId: string | null = null;
+      setState((previous) => {
+        const resolution = resolveSupabaseUserForState(previous, authUser, profile);
+        resolvedUserId = resolution.resolvedUserId;
+        return resolution.nextState;
+      });
+
+      if (!resolvedUserId) {
+        setAuthenticatedUserId(null);
+        setImpersonatedUserId(null);
+        setIsSupabaseAuthResolved(true);
+        return;
+      }
+
+      setAuthenticatedUserId(resolvedUserId);
+      setImpersonatedUserId(null);
+      setIsSupabaseAuthResolved(true);
+    };
+
+    setIsSupabaseAuthResolved(false);
+
+    void supabase.auth.getUser().then(({ data }) => syncFromAuthUser(data.user ?? null));
+
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange((_event, session) => {
+      void syncFromAuthUser(session?.user ?? null);
+    });
+
+    return () => {
+      active = false;
+      subscription.unsubscribe();
+    };
+  }, [isStorageHydrated, supabase]);
 
   const authenticatedUser = useMemo(
     () => state.users.find((user) => user.id === authenticatedUserId) ?? null,
@@ -618,26 +824,77 @@ export function AppStateProvider({ children }: PropsWithChildren) {
       currentRole: currentUser?.role ?? null,
       isImpersonating,
       isHydrated,
-      login(email, password) {
-        const user = state.users.find((candidate) => candidate.email.toLowerCase() === email.toLowerCase());
+      async login(email, password) {
+        const localUser = state.users.find((candidate) => candidate.email.toLowerCase() === email.toLowerCase());
 
-        if (!user) {
+        if (
+          isLocalDevelopmentHost() &&
+          localUser &&
+          localUser.status === "active" &&
+          localUser.demoPassword === password
+        ) {
+          setAuthenticatedUserId(localUser.id);
+          setImpersonatedUserId(null);
+          return { ok: true };
+        }
+
+        if (supabase) {
+          const { data, error } = await supabase.auth.signInWithPassword({
+            email,
+            password,
+          });
+
+          if (error) {
+            return { ok: false, message: getSupabaseLoginErrorMessage(error.message) };
+          }
+
+          const authUser = data.user;
+          if (!authUser?.email) {
+            await supabase.auth.signOut();
+            return { ok: false, message: "Käyttäjätiliä ei voitu tunnistaa kirjautumisen jälkeen." };
+          }
+
+          const profile = await fetchSupabaseProfile(supabase, authUser.id);
+          let resolvedUserId: string | null = null;
+          setState((previous) => {
+            const resolution = resolveSupabaseUserForState(previous, authUser, profile);
+            resolvedUserId = resolution.resolvedUserId;
+            return resolution.nextState;
+          });
+
+          if (!resolvedUserId) {
+            await supabase.auth.signOut();
+            return {
+              ok: false,
+              message: "Käyttäjälle ei löytynyt profiilia tai käyttöoikeutta tähän sovellukseen.",
+            };
+          }
+
+          setAuthenticatedUserId(resolvedUserId);
+          setImpersonatedUserId(null);
+          return { ok: true };
+        }
+
+        if (!localUser) {
           return { ok: false, message: "Käyttäjää ei löytynyt." };
         }
 
-        if (user.status !== "active") {
+        if (localUser.status !== "active") {
           return { ok: false, message: "Kutsu on vielä hyväksymättä." };
         }
 
-        if (user.demoPassword !== password) {
+        if (localUser.demoPassword !== password) {
           return { ok: false, message: "Väärä salasana." };
         }
 
-        setAuthenticatedUserId(user.id);
+        setAuthenticatedUserId(localUser.id);
         setImpersonatedUserId(null);
         return { ok: true };
       },
-      logout() {
+      async logout() {
+        if (supabase) {
+          await supabase.auth.signOut();
+        }
         setAuthenticatedUserId(null);
         setImpersonatedUserId(null);
       },

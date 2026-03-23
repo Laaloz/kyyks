@@ -270,7 +270,9 @@ export function DashboardShell() {
                 <span className="sr-only">Asetukset</span>
               </Button>
               <Button
-                onClick={logout}
+                onClick={() => {
+                  void logout();
+                }}
                 type="button"
                 variant="secondary"
                 className="size-11 !rounded-2xl !px-0 !py-0"
