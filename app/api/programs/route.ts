@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 
+import { createRequestTimer } from "@/lib/server/request-timing";
 import { createProgramOnServer } from "@/lib/server/training-workflows";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 
@@ -51,9 +52,10 @@ const requestSchema = z.object({
 });
 
 export async function POST(request: Request) {
+  const timer = createRequestTimer("programs-create");
   const supabase = await createSupabaseServerClient();
   if (!supabase) {
-    return NextResponse.json({ message: "Supabase ei ole käytössä tässä ympäristössä." }, { status: 503 });
+    return timer.json({ message: "Supabase ei ole käytössä tässä ympäristössä." }, { status: 503 });
   }
 
   const {
@@ -61,7 +63,7 @@ export async function POST(request: Request) {
   } = await supabase.auth.getUser();
 
   if (!user) {
-    return NextResponse.json({ message: "Kirjaudu sisään ennen ohjelman tallennusta." }, { status: 401 });
+    return timer.json({ message: "Kirjaudu sisään ennen ohjelman tallennusta." }, { status: 401 });
   }
 
   const { data: requester } = await supabase
@@ -71,13 +73,13 @@ export async function POST(request: Request) {
     .maybeSingle();
 
   if (!requester) {
-    return NextResponse.json({ message: "Käyttäjäprofiilia ei löytynyt." }, { status: 403 });
+    return timer.json({ message: "Käyttäjäprofiilia ei löytynyt." }, { status: 403 });
   }
 
   const body = await request.json().catch(() => null);
   const parsed = requestSchema.safeParse(body);
   if (!parsed.success) {
-    return NextResponse.json({ message: "Virheellinen ohjelmapyyntö." }, { status: 400 });
+    return timer.json({ message: "Virheellinen ohjelmapyyntö." }, { status: 400 });
   }
 
   const result = await createProgramOnServer({
@@ -87,8 +89,9 @@ export async function POST(request: Request) {
   });
 
   if (!result.ok) {
-    return NextResponse.json({ message: result.message }, { status: 400 });
+    return timer.json({ message: result.message }, { status: 400 });
   }
 
-  return NextResponse.json({ ok: true, programId: result.programId });
+  timer.log({ userId: user.id, athleteId: parsed.data.athleteId, programId: result.programId });
+  return timer.json({ ok: true, programId: result.programId });
 }

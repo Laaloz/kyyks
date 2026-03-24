@@ -1,12 +1,14 @@
 import { NextResponse } from "next/server";
 
+import { createRequestTimer } from "@/lib/server/request-timing";
 import { cancelWorkoutOnServer } from "@/lib/server/training-workflows";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 
 export async function POST(_request: Request, context: { params: Promise<{ scheduledWorkoutId: string }> }) {
+  const timer = createRequestTimer("workout-cancel");
   const supabase = await createSupabaseServerClient();
   if (!supabase) {
-    return NextResponse.json({ message: "Supabase ei ole käytössä tässä ympäristössä." }, { status: 503 });
+    return timer.json({ message: "Supabase ei ole käytössä tässä ympäristössä." }, { status: 503 });
   }
 
   const {
@@ -14,7 +16,7 @@ export async function POST(_request: Request, context: { params: Promise<{ sched
   } = await supabase.auth.getUser();
 
   if (!user) {
-    return NextResponse.json({ message: "Kirjaudu sisään ennen treenin keskeytystä." }, { status: 401 });
+    return timer.json({ message: "Kirjaudu sisään ennen treenin keskeytystä." }, { status: 401 });
   }
 
   const { data: requester } = await supabase
@@ -24,7 +26,7 @@ export async function POST(_request: Request, context: { params: Promise<{ sched
     .maybeSingle();
 
   if (!requester) {
-    return NextResponse.json({ message: "Käyttäjäprofiilia ei löytynyt." }, { status: 403 });
+    return timer.json({ message: "Käyttäjäprofiilia ei löytynyt." }, { status: 403 });
   }
 
   const { scheduledWorkoutId } = await context.params;
@@ -34,8 +36,9 @@ export async function POST(_request: Request, context: { params: Promise<{ sched
   });
 
   if (!result.ok) {
-    return NextResponse.json({ message: result.message }, { status: 400 });
+    return timer.json({ message: result.message }, { status: 400 });
   }
 
-  return NextResponse.json({ ok: true });
+  timer.log({ userId: user.id, scheduledWorkoutId });
+  return timer.json({ ok: true });
 }

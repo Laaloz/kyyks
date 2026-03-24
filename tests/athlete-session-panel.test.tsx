@@ -60,6 +60,7 @@ describe("AthleteSessionPanel", () => {
         previousExerciseResults={new Map()}
         exerciseInstructions={new Map([["exercise_group_1", "Pidä lapatuet tiukkana ja hallitse ala-asento."]])}
         workoutMessage=""
+        isCompleting={false}
       />,
     );
 
@@ -92,6 +93,7 @@ describe("AthleteSessionPanel", () => {
         previousExerciseResults={new Map()}
         exerciseInstructions={new Map([["exercise_group_1", longInstruction]])}
         workoutMessage=""
+        isCompleting={false}
       />,
     );
 

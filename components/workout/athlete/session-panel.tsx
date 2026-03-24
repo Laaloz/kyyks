@@ -288,6 +288,7 @@ export function AthleteSessionPanel({
   previousExerciseResults,
   exerciseInstructions,
   workoutMessage,
+  isCompleting,
 }: {
   scheduledWorkoutId: string;
   scheduledWorkoutTitle: string;
@@ -308,6 +309,7 @@ export function AthleteSessionPanel({
   previousExerciseResults: Map<string, PreviousExerciseResult>;
   exerciseInstructions: Map<string, string>;
   workoutMessage: string;
+  isCompleting: boolean;
 }) {
   const [localNote, setLocalNote] = useState(note);
   const [correctionMode, setCorrectionMode] = useState(false);
@@ -1079,7 +1081,13 @@ export function AthleteSessionPanel({
                   Jatka treeniä
                 </Button>
               ) : (
-                <Button onClick={onComplete} type="button" className="w-full sm:w-auto">
+                <Button
+                  onClick={onComplete}
+                  type="button"
+                  className="w-full sm:w-auto"
+                  loading={isCompleting}
+                  loadingText="Merkitään valmiiksi..."
+                >
                   Merkitse treeni valmiiksi
                 </Button>
               )}

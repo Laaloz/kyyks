@@ -167,6 +167,7 @@ export function AthleteDashboard({
   const [measurementMessage, setMeasurementMessage] = useState("");
   const [measurementMessageTone, setMeasurementMessageTone] = useState<MeasurementMessageTone>("info");
   const [isSavingMeasurements, setIsSavingMeasurements] = useState(false);
+  const [isCompletingWorkout, setIsCompletingWorkout] = useState(false);
   const isDebugEnabled =
     typeof window !== "undefined" &&
     new URLSearchParams(window.location.search).get("debug_state") === "1";
@@ -1168,20 +1169,25 @@ export function AthleteDashboard({
                 onComplete={async () => {
                   const completedWorkoutId = selectedWorkout.id;
                   const completionPercent = progress?.percent ?? 0;
-                  const result = await completeWorkout(completedWorkoutId);
-                  if (result.ok) {
-                    setWorkoutMessage(
-                      completionPercent < 100
-                        ? `Treeni merkittiin valmiiksi (${completionPercent}% toteutui). Kirjaa muistiinpanoihin, miksi treeni jäi osittaiseksi.`
-                        : "Treeni merkittiin valmiiksi.",
-                    );
-                    setHistoryFocusWorkoutId(completedWorkoutId);
-                    setCorrectionModeWorkoutId(null);
-                    setAthleteLogMode("library");
-                    return;
-                  }
+                  setIsCompletingWorkout(true);
+                  try {
+                    const result = await completeWorkout(completedWorkoutId);
+                    if (result.ok) {
+                      setWorkoutMessage(
+                        completionPercent < 100
+                          ? `Treeni merkittiin valmiiksi (${completionPercent}% toteutui). Kirjaa muistiinpanoihin, miksi treeni jäi osittaiseksi.`
+                          : "Treeni merkittiin valmiiksi.",
+                      );
+                      setHistoryFocusWorkoutId(completedWorkoutId);
+                      setCorrectionModeWorkoutId(null);
+                      setAthleteLogMode("library");
+                      return;
+                    }
 
-                  setWorkoutMessage(result.message);
+                    setWorkoutMessage(result.message);
+                  } finally {
+                    setIsCompletingWorkout(false);
+                  }
                 }}
                 onCancel={async () => {
                   const confirmed = window.confirm(
@@ -1223,6 +1229,7 @@ export function AthleteDashboard({
                 previousExerciseResults={previousExerciseResults}
                 exerciseInstructions={selectedWorkoutInstructions}
                 workoutMessage={workoutMessage}
+                isCompleting={isCompletingWorkout}
               />
             ) : (
               <CardDescription className="mt-4">Ei vielä treenejä.</CardDescription>

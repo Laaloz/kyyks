@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 
+import { createRequestTimer } from "@/lib/server/request-timing";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 
@@ -12,9 +13,10 @@ const settingsSchema = z.object({
 });
 
 export async function PATCH(request: Request) {
+  const timer = createRequestTimer("settings-patch");
   const supabase = await createSupabaseServerClient();
   if (!supabase) {
-    return NextResponse.json({ message: "Supabase ei ole käytössä tässä ympäristössä." }, { status: 503 });
+    return timer.json({ message: "Supabase ei ole käytössä tässä ympäristössä." }, { status: 503 });
   }
 
   const authorization = request.headers.get("authorization");
@@ -24,14 +26,14 @@ export async function PATCH(request: Request) {
   } = accessToken ? await supabase.auth.getUser(accessToken) : await supabase.auth.getUser();
 
   if (!user) {
-    return NextResponse.json({ message: "Kirjaudu sisään ennen asetusten tallennusta." }, { status: 401 });
+    return timer.json({ message: "Kirjaudu sisään ennen asetusten tallennusta." }, { status: 401 });
   }
 
   const payload = await request.json().catch(() => null);
   const parsed = settingsSchema.safeParse(payload);
 
   if (!parsed.success) {
-    return NextResponse.json({ message: "Asetusten tiedot olivat virheelliset." }, { status: 400 });
+    return timer.json({ message: "Asetusten tiedot olivat virheelliset." }, { status: 400 });
   }
 
   const timestamp = new Date().toISOString();
@@ -51,11 +53,12 @@ export async function PATCH(request: Request) {
     .eq("id", user.id);
 
   if (error) {
-    return NextResponse.json(
+    return timer.json(
       { message: error.message || "Asetusten tallennus epäonnistui." },
       { status: 400 },
     );
   }
 
-  return NextResponse.json({ ok: true });
+  timer.log({ userId: user.id });
+  return timer.json({ ok: true });
 }

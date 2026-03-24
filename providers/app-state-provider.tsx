@@ -1853,6 +1853,39 @@ function findResolvedUserIdInSnapshot(
         }
 
         const timestamp = new Date().toISOString();
+        const currentSettings = normalizeUserSettings(currentUser.role, currentUser.settings);
+        const nextSettings = {
+          defaultDashboardView: input.defaultDashboardView,
+          emailNotifications: input.emailNotifications,
+          themeMode: input.themeMode,
+        };
+
+        const hasChanges =
+          currentUser.fullName !== fullName ||
+          currentSettings.defaultDashboardView !== nextSettings.defaultDashboardView ||
+          currentSettings.emailNotifications !== nextSettings.emailNotifications ||
+          currentSettings.themeMode !== nextSettings.themeMode;
+
+        if (!hasChanges) {
+          return { ok: true, message: "Ei tallennettavia muutoksia." };
+        }
+
+        setState((previous) => ({
+          ...previous,
+          users: previous.users.map((user) =>
+            user.id === currentUser.id
+              ? {
+                  ...user,
+                  fullName,
+                  updatedAt: timestamp,
+                  settings: normalizeUserSettings(user.role, {
+                    ...user.settings,
+                    ...nextSettings,
+                  }),
+                }
+              : user,
+          ),
+        }));
 
         if (supabase) {
           const {
@@ -1879,28 +1912,12 @@ function findResolvedUserIdInSnapshot(
 
           if (!response.ok) {
             const payload = (await response.json().catch(() => null)) as { message?: string } | null;
+            await refreshSupabaseVisibleState();
             return { ok: false, message: payload?.message ?? "Asetusten tallennus epäonnistui." };
           }
-        }
 
-        setState((previous) => ({
-          ...previous,
-          users: previous.users.map((user) =>
-            user.id === currentUser.id
-              ? {
-                  ...user,
-                  fullName,
-                  updatedAt: timestamp,
-                  settings: normalizeUserSettings(user.role, {
-                    ...user.settings,
-                    defaultDashboardView: input.defaultDashboardView,
-                    emailNotifications: input.emailNotifications,
-                    themeMode: input.themeMode,
-                  }),
-                }
-              : user,
-          ),
-        }));
+          return { ok: true };
+        }
 
         return { ok: true };
       },
@@ -2871,7 +2888,14 @@ function findResolvedUserIdInSnapshot(
           return { ok: false, message: "Vain admin tai valmentaja voi luoda treenipohjan." };
         }
 
+        const template = domainCreateTemplate(input, currentUser.id);
+
         if (supabase) {
+          const previousState = state;
+          setState((previous) => ({
+            ...previous,
+            templates: [template, ...previous.templates],
+          }));
           const response = await fetch("/api/templates", {
             method: "POST",
             headers: {
@@ -2881,14 +2905,15 @@ function findResolvedUserIdInSnapshot(
           });
           const payload = (await response.json().catch(() => null)) as { message?: string } | null;
           if (!response.ok) {
+            setState(previousState);
+            await refreshSupabaseVisibleState();
             return { ok: false, message: payload?.message ?? "Treenipohjan luonti epäonnistui." };
           }
 
-          await refreshSupabaseVisibleState();
+          void refreshSupabaseVisibleState();
           return { ok: true };
         }
 
-        const template = domainCreateTemplate(input, currentUser.id);
         setState((previous) => ({
           ...previous,
           templates: [template, ...previous.templates],
@@ -2908,8 +2933,24 @@ function findResolvedUserIdInSnapshot(
         }
 
         const resolved = resolveProgramWorkouts(input.workouts, state.exercises, currentUser.id);
+        const createdProgram = domainCreateProgram(
+          { ...input, athleteId: nextAthleteId, athleteEmail: resolvedTargetUser?.email, workouts: resolved.workouts },
+          currentUser.id,
+        );
 
         if (supabase) {
+          const previousState = state;
+          setState((previous) =>
+            applyProgramStatusUpdate(
+              {
+                ...previous,
+                exercises: [...resolved.customExercises, ...previous.exercises],
+                plans: [createdProgram, ...previous.plans],
+              },
+              createdProgram.id,
+              "active",
+            ),
+          );
           const response = await fetch("/api/programs", {
             method: "POST",
             headers: {
@@ -2925,17 +2966,14 @@ function findResolvedUserIdInSnapshot(
           });
           const payload = (await response.json().catch(() => null)) as { message?: string } | null;
           if (!response.ok) {
+            setState(previousState);
+            await refreshSupabaseVisibleState();
             return { ok: false, message: payload?.message ?? "Treeniohjelman luonti epäonnistui." };
           }
 
-          await refreshSupabaseVisibleState();
+          void refreshSupabaseVisibleState();
           return { ok: true };
         }
-
-        const createdProgram = domainCreateProgram(
-          { ...input, athleteId: nextAthleteId, athleteEmail: resolvedTargetUser?.email, workouts: resolved.workouts },
-          currentUser.id,
-        );
 
         setState((previous) =>
           applyProgramStatusUpdate(
@@ -2986,8 +3024,22 @@ function findResolvedUserIdInSnapshot(
         const resolvedWorkouts = patch.workouts
           ? resolveProgramWorkouts(patch.workouts, state.exercises, currentUser.id)
           : null;
+        const updatedProgram = domainUpdateProgram(program, {
+          ...patch,
+          athleteId: patch.athleteId ? nextAthleteId : undefined,
+          athleteEmail: resolvedTargetUser?.email,
+          workouts: resolvedWorkouts?.workouts,
+        });
 
         if (supabase) {
+          const previousState = state;
+          setState((previous) => ({
+            ...previous,
+            exercises: resolvedWorkouts
+              ? [...resolvedWorkouts.customExercises, ...previous.exercises]
+              : previous.exercises,
+            plans: previous.plans.map((item) => (item.id === updatedProgram.id ? updatedProgram : item)),
+          }));
           const response = await fetch(`/api/programs/${encodeURIComponent(programId)}`, {
             method: "PATCH",
             headers: {
@@ -3003,19 +3055,14 @@ function findResolvedUserIdInSnapshot(
           });
           const payload = (await response.json().catch(() => null)) as { message?: string } | null;
           if (!response.ok) {
+            setState(previousState);
+            await refreshSupabaseVisibleState();
             return { ok: false, message: payload?.message ?? "Treeniohjelman päivitys epäonnistui." };
           }
 
-          await refreshSupabaseVisibleState();
+          void refreshSupabaseVisibleState();
           return { ok: true };
         }
-
-        const updatedProgram = domainUpdateProgram(program, {
-          ...patch,
-          athleteId: patch.athleteId ? nextAthleteId : undefined,
-          athleteEmail: resolvedTargetUser?.email,
-          workouts: resolvedWorkouts?.workouts,
-        });
 
         setState((previous) => ({
           ...previous,
@@ -3046,6 +3093,8 @@ function findResolvedUserIdInSnapshot(
         }
 
         if (supabase) {
+          const previousState = state;
+          setState((previous) => applyProgramStatusUpdate(previous, programId, status));
           const response = await fetch(`/api/programs/${encodeURIComponent(programId)}/status`, {
             method: "POST",
             headers: {
@@ -3055,10 +3104,12 @@ function findResolvedUserIdInSnapshot(
           });
           const payload = (await response.json().catch(() => null)) as { message?: string } | null;
           if (!response.ok) {
+            setState(previousState);
+            await refreshSupabaseVisibleState();
             return { ok: false, message: payload?.message ?? "Ohjelman tilan päivitys epäonnistui." };
           }
 
-          await refreshSupabaseVisibleState();
+          void refreshSupabaseVisibleState();
           return { ok: true };
         }
 
@@ -3087,15 +3138,19 @@ function findResolvedUserIdInSnapshot(
         }
 
         if (supabase) {
+          const previousState = state;
+          setState((previous) => applyProgramDeletion(previous, programId));
           const response = await fetch(`/api/programs/${encodeURIComponent(programId)}`, {
             method: "DELETE",
           });
           const payload = (await response.json().catch(() => null)) as { message?: string } | null;
           if (!response.ok) {
+            setState(previousState);
+            await refreshSupabaseVisibleState();
             return { ok: false, message: payload?.message ?? "Treeniohjelman poisto epäonnistui." };
           }
 
-          await refreshSupabaseVisibleState();
+          void refreshSupabaseVisibleState();
           return { ok: true };
         }
 
@@ -3135,20 +3190,43 @@ function findResolvedUserIdInSnapshot(
         }
 
         if (supabase) {
-          const response = await fetch("/api/workouts/start", {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-            },
-            body: JSON.stringify({ programId, programWorkoutId }),
-          });
-          const payload = (await response.json().catch(() => null)) as { message?: string; scheduledWorkoutId?: string } | null;
-          if (!response.ok) {
-            return { ok: false, message: payload?.message ?? "Harjoituksen käynnistys epäonnistui." };
-          }
+          try {
+            const started = domainStartProgramWorkout(state, programId, programWorkoutId, currentUser.id);
+            const previousState = state;
+            setState(started.state);
 
-          await refreshSupabaseVisibleState();
-          return { ok: true, scheduledWorkoutId: payload?.scheduledWorkoutId };
+            const response = await fetch("/api/workouts/start", {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/json",
+              },
+              body: JSON.stringify({ programId, programWorkoutId }),
+            });
+            const payload = (await response.json().catch(() => null)) as { message?: string; scheduledWorkoutId?: string } | null;
+            if (!response.ok) {
+              setState(previousState);
+              await refreshSupabaseVisibleState();
+              return { ok: false, message: payload?.message ?? "Harjoituksen käynnistys epäonnistui." };
+            }
+
+            void refreshSupabaseVisibleState();
+            return { ok: true, scheduledWorkoutId: started.scheduledWorkout.id };
+          } catch {
+            const response = await fetch("/api/workouts/start", {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/json",
+              },
+              body: JSON.stringify({ programId, programWorkoutId }),
+            });
+            const payload = (await response.json().catch(() => null)) as { message?: string; scheduledWorkoutId?: string } | null;
+            if (!response.ok) {
+              return { ok: false, message: payload?.message ?? "Harjoituksen käynnistys epäonnistui." };
+            }
+
+            void refreshSupabaseVisibleState();
+            return { ok: true, scheduledWorkoutId: payload?.scheduledWorkoutId };
+          }
         }
 
         try {
@@ -3170,15 +3248,23 @@ function findResolvedUserIdInSnapshot(
         }
 
         if (supabase) {
+          const duplicatedTemplate = domainDuplicateTemplate(template, currentUser.id);
+          const previousState = state;
+          setState((previous) => ({
+            ...previous,
+            templates: [duplicatedTemplate, ...previous.templates],
+          }));
           const response = await fetch(`/api/templates/${encodeURIComponent(templateId)}/duplicate`, {
             method: "POST",
           });
           const payload = (await response.json().catch(() => null)) as { message?: string } | null;
           if (!response.ok) {
+            setState(previousState);
+            await refreshSupabaseVisibleState();
             return { ok: false, message: payload?.message ?? "Treenipohjan kopiointi epäonnistui." };
           }
 
-          await refreshSupabaseVisibleState();
+          void refreshSupabaseVisibleState();
           return { ok: true };
         }
 
@@ -3370,7 +3456,7 @@ function findResolvedUserIdInSnapshot(
             return { ok: false, message: payload?.message ?? "Treeniä ei voitu käynnistää." };
           }
 
-          await refreshSupabaseVisibleState();
+          void refreshSupabaseVisibleState();
         }
 
         return { ok: true };
@@ -3407,22 +3493,7 @@ function findResolvedUserIdInSnapshot(
           completedAtMs - (durationSeconds + (session.pausedDurationSeconds ?? 0)) * 1000,
         ).toISOString();
 
-        if (supabase) {
-          const response = await fetch(`/api/workouts/${encodeURIComponent(scheduledWorkoutId)}`, {
-            method: "PATCH",
-            headers: {
-              "Content-Type": "application/json",
-            },
-            body: JSON.stringify({ durationSeconds }),
-          });
-          const payload = (await response.json().catch(() => null)) as { message?: string } | null;
-          if (!response.ok) {
-            return { ok: false, message: payload?.message ?? "Treeniajan päivitys epäonnistui." };
-          }
-
-          await refreshSupabaseVisibleState();
-          return { ok: true };
-        }
+        const previousState = state;
 
         setState((previous) => ({
           ...previous,
@@ -3435,6 +3506,25 @@ function findResolvedUserIdInSnapshot(
               : item,
           ),
         }));
+
+        if (supabase) {
+          const response = await fetch(`/api/workouts/${encodeURIComponent(scheduledWorkoutId)}`, {
+            method: "PATCH",
+            headers: {
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({ durationSeconds }),
+          });
+          const payload = (await response.json().catch(() => null)) as { message?: string } | null;
+          if (!response.ok) {
+            setState(previousState);
+            await refreshSupabaseVisibleState();
+            return { ok: false, message: payload?.message ?? "Treeniajan päivitys epäonnistui." };
+          }
+
+          void refreshSupabaseVisibleState();
+          return { ok: true };
+        }
 
         return { ok: true };
       },
@@ -3526,15 +3616,19 @@ function findResolvedUserIdInSnapshot(
         }
 
         if (supabase) {
+          const previousState = state;
+          setState((current) => domainCompleteSession(current, scheduledWorkoutId));
           const response = await fetch(`/api/workouts/${encodeURIComponent(scheduledWorkoutId)}/complete`, {
             method: "POST",
           });
           const payload = (await response.json().catch(() => null)) as { message?: string } | null;
           if (!response.ok) {
+            setState(previousState);
+            await refreshSupabaseVisibleState();
             return { ok: false, message: payload?.message ?? "Treeniä ei voitu merkitä valmiiksi." };
           }
 
-          await refreshSupabaseVisibleState();
+          void refreshSupabaseVisibleState();
           return { ok: true };
         }
 
@@ -3556,15 +3650,19 @@ function findResolvedUserIdInSnapshot(
         }
 
         if (supabase) {
+          const previousState = state;
+          setState((current) => domainCancelSession(current, scheduledWorkoutId));
           const response = await fetch(`/api/workouts/${encodeURIComponent(scheduledWorkoutId)}/cancel`, {
             method: "POST",
           });
           const payload = (await response.json().catch(() => null)) as { message?: string } | null;
           if (!response.ok) {
+            setState(previousState);
+            await refreshSupabaseVisibleState();
             return { ok: false, message: payload?.message ?? "Treenin keskeytys epäonnistui." };
           }
 
-          await refreshSupabaseVisibleState();
+          void refreshSupabaseVisibleState();
           return { ok: true };
         }
 
@@ -3586,15 +3684,19 @@ function findResolvedUserIdInSnapshot(
         }
 
         if (supabase) {
+          const previousState = state;
+          setState((current) => domainDeleteScheduledWorkout(current, scheduledWorkoutId));
           const response = await fetch(`/api/workouts/${encodeURIComponent(scheduledWorkoutId)}`, {
             method: "DELETE",
           });
           const payload = (await response.json().catch(() => null)) as { message?: string } | null;
           if (!response.ok) {
+            setState(previousState);
+            await refreshSupabaseVisibleState();
             return { ok: false, message: payload?.message ?? "Treenin poisto epäonnistui." };
           }
 
-          await refreshSupabaseVisibleState();
+          void refreshSupabaseVisibleState();
           return { ok: true };
         }
 
