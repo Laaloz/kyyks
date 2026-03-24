@@ -1314,6 +1314,26 @@ export function AppStateProvider({ children }: PropsWithChildren) {
       }
 
       let resolvedUserId: string | null = null;
+      if (!profile) {
+        const snapshot = await fetchSupabaseVisibleStateSnapshot();
+        if (!active) {
+          return;
+        }
+
+        if (snapshot) {
+          setState((previous) => reconcileSupabaseVisibleState(previous, snapshot));
+          resolvedUserId = findResolvedUserIdInSnapshot(snapshot, authUser);
+        }
+      }
+
+      if (resolvedUserId) {
+        hasResolvedAuthUser = true;
+        setAuthenticatedUserId(resolvedUserId);
+        setImpersonatedUserId(null);
+        setIsSupabaseAuthResolved(true);
+        return;
+      }
+
       setState((previous) => {
         const resolution = resolveSupabaseUserForState(previous, authUser, profile);
         resolvedUserId = resolution.resolvedUserId;
@@ -1390,18 +1410,47 @@ export function AppStateProvider({ children }: PropsWithChildren) {
   );
   const isImpersonating = Boolean(impersonatedUserId);
 
-  async function refreshSupabaseVisibleState() {
-    if (!supabase || !authenticatedUserId) {
-      return false;
+  async function fetchSupabaseVisibleStateSnapshot() {
+    if (!supabase) {
+      return null;
     }
 
     try {
       const response = await fetch("/api/app-state");
       const payload = (await response.json().catch(() => null)) as SupabaseVisibleAppStateSnapshot | { message?: string } | null;
       if (!response.ok || !payload || !("users" in payload)) {
-        return false;
+        return null;
       }
 
+      return payload;
+    } catch {
+      return null;
+    }
+  }
+
+  function findResolvedUserIdInSnapshot(
+    snapshot: SupabaseVisibleAppStateSnapshot,
+    authUser: SupabaseAuthUser,
+  ) {
+    const authEmail = authUser.email?.trim().toLowerCase();
+    return (
+      snapshot.users.find((user) => user.id === authUser.id)?.id ??
+      snapshot.users.find((user) => authEmail && user.email.trim().toLowerCase() === authEmail)?.id ??
+      null
+    );
+  }
+
+  async function refreshSupabaseVisibleState() {
+    if (!supabase) {
+      return false;
+    }
+
+    const payload = await fetchSupabaseVisibleStateSnapshot();
+    if (!payload) {
+      return false;
+    }
+
+    try {
       setState((previous) => reconcileSupabaseVisibleState(previous, payload));
       return true;
     } catch {
@@ -1431,6 +1480,34 @@ export function AppStateProvider({ children }: PropsWithChildren) {
 
     return () => {
       active = false;
+    };
+  }, [authenticatedUserId, isHydrated, supabase]);
+
+  useEffect(() => {
+    if (!isHydrated || !supabase || !authenticatedUserId) {
+      return;
+    }
+
+    const refreshIfVisible = () => {
+      if (document.visibilityState !== "visible") {
+        return;
+      }
+
+      void refreshSupabaseVisibleState();
+    };
+
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === "visible") {
+        void refreshSupabaseVisibleState();
+      }
+    };
+
+    window.addEventListener("focus", refreshIfVisible);
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+
+    return () => {
+      window.removeEventListener("focus", refreshIfVisible);
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
     };
   }, [authenticatedUserId, isHydrated, supabase]);
 
@@ -1510,6 +1587,21 @@ export function AppStateProvider({ children }: PropsWithChildren) {
       }
 
       const profile = await fetchSupabaseProfileWithRetry(supabase, authUser.id);
+      if (!profile) {
+        const snapshot = await fetchSupabaseVisibleStateSnapshot();
+        const resolvedUserId = snapshot ? findResolvedUserIdInSnapshot(snapshot, authUser) : null;
+
+        if (snapshot) {
+          setState((previous) => reconcileSupabaseVisibleState(previous, snapshot));
+        }
+
+        if (resolvedUserId) {
+          setAuthenticatedUserId(resolvedUserId);
+          setImpersonatedUserId(null);
+          return { ok: true };
+        }
+      }
+
       let resolvedUserId: string | null = null;
       setState((previous) => {
         const resolution = resolveSupabaseUserForState(previous, authUser, profile);

@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 
+import { ensureProfileForAuthenticatedUserOnServer } from "@/lib/server/auth-workflows";
 import { loadVisibleSupabaseAppState } from "@/lib/server/training-sync";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 
@@ -18,6 +19,17 @@ export async function GET() {
   }
 
   try {
+    await ensureProfileForAuthenticatedUserOnServer({
+      authUserId: user.id,
+      email: user.email,
+      fullName:
+        typeof user.user_metadata?.full_name === "string"
+          ? user.user_metadata.full_name
+          : typeof user.user_metadata?.name === "string"
+            ? user.user_metadata.name
+            : null,
+    });
+
     const snapshot = await loadVisibleSupabaseAppState(supabase);
     return NextResponse.json(snapshot);
   } catch {

@@ -95,6 +95,103 @@ function mapStoredProfileRecord(profile: {
   };
 }
 
+export async function ensureProfileForAuthenticatedUserOnServer({
+  authUserId,
+  email,
+  fullName,
+}: {
+  authUserId: string;
+  email?: string | null;
+  fullName?: string | null;
+}) {
+  const admin = createSupabaseAdminClient();
+  if (!admin) {
+    return { ok: false as const, message: "Supabase admin -yhteys puuttuu. Tarkista service role -avain." };
+  }
+
+  if (!email?.trim()) {
+    return { ok: false as const, message: "Kirjautuneelta käyttäjältä puuttuu sähköposti." };
+  }
+
+  const normalizedEmail = email.trim().toLowerCase();
+
+  const { data: existingProfile } = await admin
+    .from("profiles")
+    .select("id")
+    .eq("id", authUserId)
+    .maybeSingle<{ id: string }>();
+
+  if (existingProfile) {
+    return { ok: true as const, repaired: false };
+  }
+
+  const { data: invite } = await admin
+    .from("invites")
+    .select("id, role, coach_id, status")
+    .ilike("email", normalizedEmail)
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle<{ id: string; role: "coach" | "athlete"; coach_id: string | null; status: "pending" | "accepted" }>();
+
+  if (!invite) {
+    return { ok: false as const, message: "Käyttäjäprofiilia ei löytynyt eikä sähköpostille löytynyt kutsua." };
+  }
+
+  const now = new Date().toISOString();
+  const resolvedFullName = fullName?.trim() || normalizedEmail.split("@")[0] || normalizedEmail;
+
+  const { error: profileError } = await admin.from("profiles").upsert({
+    id: authUserId,
+    role: invite.role,
+    full_name: resolvedFullName,
+    email: normalizedEmail,
+    status: "active",
+    default_dashboard_view: invite.role === "athlete" ? "athlete-log" : "overview",
+    email_notifications: false,
+    theme_mode: "light",
+    created_at: now,
+    updated_at: now,
+  });
+
+  if (profileError) {
+    return { ok: false as const, message: "Puuttuvan käyttäjäprofiilin korjaus epäonnistui." };
+  }
+
+  if (invite.role === "athlete" && invite.coach_id) {
+    const { data: existingAssignment } = await admin
+      .from("coach_athlete_assignments")
+      .select("id")
+      .eq("coach_id", invite.coach_id)
+      .eq("athlete_id", authUserId)
+      .eq("active", true)
+      .maybeSingle<{ id: string }>();
+
+    if (!existingAssignment) {
+      const { error: assignmentError } = await admin
+        .from("coach_athlete_assignments")
+        .insert({
+          coach_id: invite.coach_id,
+          athlete_id: authUserId,
+          active: true,
+          created_at: now,
+        });
+
+      if (assignmentError) {
+        return { ok: false as const, message: "Puuttuvan valmentajasuhteen korjaus epäonnistui." };
+      }
+    }
+  }
+
+  if (invite.status !== "accepted") {
+    await admin
+      .from("invites")
+      .update({ status: "accepted" })
+      .eq("id", invite.id);
+  }
+
+  return { ok: true as const, repaired: true };
+}
+
 async function sendInviteEmail({
   email,
   role,
