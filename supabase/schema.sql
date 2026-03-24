@@ -52,8 +52,8 @@ create table if not exists public.coach_athlete_assignments (
   created_at timestamptz not null default now()
 );
 
-create unique index if not exists coach_athlete_active_unique
-on public.coach_athlete_assignments (athlete_id)
+create unique index if not exists coach_athlete_active_pair_unique
+on public.coach_athlete_assignments (coach_id, athlete_id)
 where active = true;
 
 create index if not exists coach_athlete_assignments_coach_idx
@@ -61,6 +61,7 @@ on public.coach_athlete_assignments (coach_id);
 
 create table if not exists public.exercises (
   id uuid primary key default gen_random_uuid(),
+  external_key text,
   name text not null,
   category text not null,
   equipment text not null,
@@ -77,6 +78,9 @@ create table if not exists public.exercises (
 
 create index if not exists exercises_scope_idx on public.exercises (scope);
 create index if not exists exercises_coach_idx on public.exercises (coach_id);
+create unique index if not exists exercises_external_key_unique
+on public.exercises (external_key)
+where external_key is not null;
 
 create table if not exists public.workout_templates (
   id uuid primary key default gen_random_uuid(),

@@ -11,6 +11,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardDescription, CardTitle } from "@/components/ui/card";
 import { Input, Label, Select } from "@/components/ui/field";
+import { getAdminOverviewAthleteGroups } from "@/lib/admin-overview";
 import { getInviteLifecycleLabel } from "@/lib/invite-status";
 import { canResendInvite, getAssignableCoachUsers } from "@/lib/role-access";
 import { formatDate } from "@/lib/utils";
@@ -26,12 +27,15 @@ export function AdminDashboard({ view }: { view: WorkspaceView }) {
   const [resendMessage, setResendMessage] = useState<string>("");
   const [resendingInviteId, setResendingInviteId] = useState<string | null>(null);
   const coaches = getAssignableCoachUsers(state.users);
-  const athletes = state.users.filter((user) => user.role === "athlete");
+  const { activeAthletes, invitedAthletes } = getAdminOverviewAthleteGroups(state.users);
   const pendingInvites = state.invites.filter((invite) => invite.status === "pending");
   const overview = useMemo(() => {
     const dayMs = 24 * 60 * 60 * 1000;
     const now = Date.now();
-    const activeAssignments = state.assignments.filter((assignment) => assignment.active);
+    const activeAthleteIds = new Set(activeAthletes.map((athlete) => athlete.id));
+    const activeAssignments = state.assignments.filter(
+      (assignment) => assignment.active && activeAthleteIds.has(assignment.athleteId),
+    );
     const athleteAssignmentCount = new Map<string, number>();
     const coachAssignmentCount = new Map<string, number>();
     const planCountByAthlete = new Map<string, number>();
@@ -43,10 +47,18 @@ export function AdminDashboard({ view }: { view: WorkspaceView }) {
     });
 
     state.plans.forEach((plan) => {
+      if (!activeAthleteIds.has(plan.athleteId)) {
+        return;
+      }
+
       planCountByAthlete.set(plan.athleteId, (planCountByAthlete.get(plan.athleteId) ?? 0) + 1);
     });
 
     state.sessions.forEach((session) => {
+      if (!activeAthleteIds.has(session.athleteId)) {
+        return;
+      }
+
       const activityMoment = Date.parse(session.completedAt ?? session.updatedAt);
       if (!Number.isFinite(activityMoment)) {
         return;
@@ -59,6 +71,10 @@ export function AdminDashboard({ view }: { view: WorkspaceView }) {
     });
 
     state.scheduledWorkouts.forEach((workout) => {
+      if (!activeAthleteIds.has(workout.athleteId)) {
+        return;
+      }
+
       const activityMoment = Date.parse(workout.completedAt ?? workout.updatedAt);
       if (!Number.isFinite(activityMoment)) {
         return;
@@ -70,29 +86,29 @@ export function AdminDashboard({ view }: { view: WorkspaceView }) {
       );
     });
 
-    const athletesWithoutCoach = athletes
+    const athletesWithoutCoach = activeAthletes
       .filter((athlete) => !athleteAssignmentCount.has(athlete.id))
       .sort((left, right) => left.fullName.localeCompare(right.fullName, "fi"));
-    const athletesWithMultipleCoaches = athletes
+    const athletesWithMultipleCoaches = activeAthletes
       .filter((athlete) => (athleteAssignmentCount.get(athlete.id) ?? 0) > 1)
       .sort(
         (left, right) =>
           (athleteAssignmentCount.get(right.id) ?? 0) - (athleteAssignmentCount.get(left.id) ?? 0) ||
           left.fullName.localeCompare(right.fullName, "fi"),
       );
-    const athletesWithoutProgram = athletes
+    const athletesWithoutProgram = activeAthletes
       .filter((athlete) => !planCountByAthlete.has(athlete.id))
       .sort((left, right) => left.fullName.localeCompare(right.fullName, "fi"));
     const coachesWithoutAthletes = coaches
       .filter((coach) => !coachAssignmentCount.has(coach.id))
       .sort((left, right) => left.fullName.localeCompare(right.fullName, "fi"));
-    const staleAthletes = athletes
+    const staleAthletes = activeAthletes
       .filter((athlete) => {
         const latestActivity = athleteLatestActivity.get(athlete.id);
         return !latestActivity || now - latestActivity > 14 * dayMs;
       })
       .sort((left, right) => left.fullName.localeCompare(right.fullName, "fi"));
-    const activePrograms = state.plans.filter((plan) => Boolean(plan.workouts?.length));
+    const activePrograms = state.plans.filter((plan) => activeAthleteIds.has(plan.athleteId) && Boolean(plan.workouts?.length));
     const workoutsInProgress = state.scheduledWorkouts.filter((workout) => workout.status === "in_progress");
     const completedWorkoutsLastWeek = state.scheduledWorkouts.filter((workout) => {
       if (workout.status !== "completed") {
@@ -108,12 +124,11 @@ export function AdminDashboard({ view }: { view: WorkspaceView }) {
         return Number.isFinite(expiresAt) && expiresAt >= now && expiresAt - now <= 3 * dayMs;
       })
       .sort((left, right) => Date.parse(left.expiresAt) - Date.parse(right.expiresAt));
-    const invitedUsers = state.users.filter((user) => user.status === "invited");
     const coachLoad = coaches
       .map((coach) => ({
         coach,
         athleteCount: coachAssignmentCount.get(coach.id) ?? 0,
-        programCount: state.plans.filter((plan) => plan.coachId === coach.id).length,
+        programCount: state.plans.filter((plan) => plan.coachId === coach.id && activeAthleteIds.has(plan.athleteId)).length,
         pendingInviteCount: pendingInvites.filter((invite) => invite.coachId === coach.id).length,
       }))
       .sort(
@@ -138,12 +153,12 @@ export function AdminDashboard({ view }: { view: WorkspaceView }) {
       workoutsInProgress,
       completedWorkoutsLastWeek,
       pendingInvitesExpiringSoon,
-      invitedUsers,
+      invitedUsers: invitedAthletes,
       staleAthletes,
       coachLoad,
       attentionCount,
     };
-  }, [athletes, coaches, pendingInvites, state.assignments, state.plans, state.scheduledWorkouts, state.sessions, state.users]);
+  }, [activeAthletes, coaches, invitedAthletes, pendingInvites, state.assignments, state.plans, state.scheduledWorkouts, state.sessions]);
   const form = useForm<z.infer<typeof inviteSchema>>({
     resolver: zodResolver(inviteSchema),
     defaultValues: {
@@ -162,7 +177,7 @@ export function AdminDashboard({ view }: { view: WorkspaceView }) {
           <MetricGrid
             metrics={[
               { label: "Valmentajat", value: coaches.length, icon: ShieldCheck },
-              { label: "Treenaajat", value: athletes.length, icon: UserRoundPlus },
+              { label: "Treenaajat", value: activeAthletes.length, icon: UserRoundPlus },
               { label: "Valmennussuhteet", value: overview.activeAssignments.length, icon: UsersRound },
               { label: "Vaatii huomiota", value: overview.attentionCount, icon: AlertTriangle },
             ]}

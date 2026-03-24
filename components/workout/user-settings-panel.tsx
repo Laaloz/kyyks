@@ -561,7 +561,7 @@ export function UserSettingsPanel() {
                         type="button"
                         variant="ghost"
                         className="text-[var(--danger)] hover:text-[var(--danger)]"
-                        onClick={() => {
+                        onClick={async () => {
                           const confirmed = window.confirm(
                             `Poistetaanko käyttäjä ${selectedManagedUser.fullName}? Tämä poistaa myös käyttäjään liittyvät kutsut, roolitukset ja treenidatan.`,
                           );
@@ -569,7 +569,7 @@ export function UserSettingsPanel() {
                             return;
                           }
 
-                          const result = adminDeleteUser(selectedManagedUser.id);
+                          const result = await adminDeleteUser(selectedManagedUser.id);
                           setAdminMessage(result.ok ? "Käyttäjä poistettiin turvallisesti." : result.message);
                           if (result.ok) {
                             setPreviewResetUrl("");

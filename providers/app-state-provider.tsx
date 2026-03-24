@@ -338,6 +338,69 @@ type UserSettingsInput = {
 
 const CUSTOM_EXERCISE_VALUE = "__custom__";
 
+function removeUserFromState(previous: AppState, targetUser: UserProfile): AppState {
+  const deletedPlanIds = new Set(
+    previous.plans
+      .filter((plan) => plan.coachId === targetUser.id || plan.athleteId === targetUser.id)
+      .map((plan) => plan.id),
+  );
+  const deletedWorkoutIds = new Set(
+    previous.scheduledWorkouts
+      .filter(
+        (workout) =>
+          workout.athleteId === targetUser.id ||
+          workout.coachId === targetUser.id ||
+          (workout.trainingPlanId ? deletedPlanIds.has(workout.trainingPlanId) : false),
+      )
+      .map((workout) => workout.id),
+  );
+  const deletedSessionIds = new Set(
+    previous.sessions
+      .filter(
+        (session) =>
+          session.athleteId === targetUser.id || deletedWorkoutIds.has(session.scheduledWorkoutId),
+      )
+      .map((session) => session.id),
+  );
+
+  return {
+    ...previous,
+    users: previous.users.filter((user) => user.id !== targetUser.id),
+    assignments: previous.assignments.filter(
+      (assignment) => assignment.coachId !== targetUser.id && assignment.athleteId !== targetUser.id,
+    ),
+    templates: previous.templates.filter((template) => template.coachId !== targetUser.id),
+    plans: previous.plans.filter(
+      (plan) => plan.coachId !== targetUser.id && plan.athleteId !== targetUser.id,
+    ),
+    scheduledWorkouts: previous.scheduledWorkouts.filter(
+      (workout) => !deletedWorkoutIds.has(workout.id),
+    ),
+    sessions: previous.sessions.filter((session) => !deletedSessionIds.has(session.id)),
+    notes: previous.notes.filter(
+      (note) =>
+        note.athleteId !== targetUser.id &&
+        note.coachId !== targetUser.id &&
+        !deletedSessionIds.has(note.sessionId),
+    ),
+    conversationEntries: previous.conversationEntries.filter(
+      (entry) =>
+        entry.athleteId !== targetUser.id &&
+        entry.coachId !== targetUser.id &&
+        entry.authorUserId !== targetUser.id,
+    ),
+    invites: previous.invites.filter(
+      (invite) =>
+        invite.invitedBy !== targetUser.id &&
+        invite.coachId !== targetUser.id &&
+        invite.email.toLowerCase() !== targetUser.email.toLowerCase(),
+    ),
+    passwordResetRequests: previous.passwordResetRequests.filter(
+      (request) => request.userId !== targetUser.id && request.requestedByUserId !== targetUser.id,
+    ),
+  };
+}
+
 function parsePersistedSession(rawSession: string | null): PersistedSession {
   if (!rawSession) {
     return { authenticatedUserId: null, impersonatedUserId: null };
@@ -651,7 +714,7 @@ interface AppStateContextValue {
   adminUpdateUserRole: (userId: string, role: Role) => ActionResult;
   adminAssignAthleteCoaches: (athleteId: string, coachIds: string[]) => ActionResult;
   completePasswordReset: (token: string, nextPassword: string) => Promise<ActionResult>;
-  adminDeleteUser: (userId: string) => ActionResult;
+  adminDeleteUser: (userId: string) => Promise<ActionResult>;
   createInvite: (input: InviteInput) => Promise<ActionResult>;
   resendInvite: (inviteId: string) => Promise<ActionResult>;
   acceptInvite: (token: string, fullName: string, password: string) => Promise<LoginResult>;
@@ -1409,7 +1472,7 @@ export function AppStateProvider({ children }: PropsWithChildren) {
 
         return { ok: true };
       },
-      adminDeleteUser(userId) {
+      async adminDeleteUser(userId) {
         if (!currentUser || currentUser.role !== "admin") {
           return { ok: false, message: "Vain admin voi poistaa käyttäjiä." };
         }
@@ -1430,68 +1493,24 @@ export function AppStateProvider({ children }: PropsWithChildren) {
           }
         }
 
-        setState((previous) => {
-          const deletedPlanIds = new Set(
-            previous.plans
-              .filter((plan) => plan.coachId === targetUser.id || plan.athleteId === targetUser.id)
-              .map((plan) => plan.id),
-          );
-          const deletedWorkoutIds = new Set(
-            previous.scheduledWorkouts
-              .filter(
-                (workout) =>
-                  workout.athleteId === targetUser.id ||
-                  workout.coachId === targetUser.id ||
-                  (workout.trainingPlanId ? deletedPlanIds.has(workout.trainingPlanId) : false),
-              )
-              .map((workout) => workout.id),
-          );
-          const deletedSessionIds = new Set(
-            previous.sessions
-              .filter(
-                (session) =>
-                  session.athleteId === targetUser.id || deletedWorkoutIds.has(session.scheduledWorkoutId),
-              )
-              .map((session) => session.id),
-          );
+        if (supabase) {
+          const response = await fetch(`/api/users/${encodeURIComponent(userId)}`, {
+            method: "DELETE",
+            headers: {
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({
+              email: targetUser.email,
+              status: targetUser.status,
+            }),
+          });
+          const payload = (await response.json().catch(() => null)) as { message?: string } | null;
+          if (!response.ok) {
+            return { ok: false, message: payload?.message ?? "Käyttäjän poisto epäonnistui." };
+          }
+        }
 
-          return {
-            ...previous,
-            users: previous.users.filter((user) => user.id !== targetUser.id),
-            assignments: previous.assignments.filter(
-              (assignment) => assignment.coachId !== targetUser.id && assignment.athleteId !== targetUser.id,
-            ),
-            templates: previous.templates.filter((template) => template.coachId !== targetUser.id),
-            plans: previous.plans.filter(
-              (plan) => plan.coachId !== targetUser.id && plan.athleteId !== targetUser.id,
-            ),
-            scheduledWorkouts: previous.scheduledWorkouts.filter(
-              (workout) => !deletedWorkoutIds.has(workout.id),
-            ),
-            sessions: previous.sessions.filter((session) => !deletedSessionIds.has(session.id)),
-            notes: previous.notes.filter(
-              (note) =>
-                note.athleteId !== targetUser.id &&
-                note.coachId !== targetUser.id &&
-                !deletedSessionIds.has(note.sessionId),
-            ),
-            conversationEntries: previous.conversationEntries.filter(
-              (entry) =>
-                entry.athleteId !== targetUser.id &&
-                entry.coachId !== targetUser.id &&
-                entry.authorUserId !== targetUser.id,
-            ),
-            invites: previous.invites.filter(
-              (invite) =>
-                invite.invitedBy !== targetUser.id &&
-                invite.coachId !== targetUser.id &&
-                invite.email.toLowerCase() !== targetUser.email.toLowerCase(),
-            ),
-            passwordResetRequests: previous.passwordResetRequests.filter(
-              (request) => request.userId !== targetUser.id && request.requestedByUserId !== targetUser.id,
-            ),
-          };
-        });
+        setState((previous) => removeUserFromState(previous, targetUser));
 
         return { ok: true };
       },
