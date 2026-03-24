@@ -56,6 +56,7 @@ import {
   useContext,
   useEffect,
   useMemo,
+  useRef,
   useState,
   type PropsWithChildren,
 } from "react";
@@ -901,6 +902,8 @@ export function reconcileSupabaseVisibleState(
   previous: AppState,
   snapshot: SupabaseVisibleAppStateSnapshot,
 ) {
+  const previousScheduledWorkoutsById = new Map(previous.scheduledWorkouts.map((workout) => [workout.id, workout]));
+  const previousSessionsById = new Map(previous.sessions.map((session) => [session.id, session]));
   const activeServerEmails = new Set(
     snapshot.users
       .filter((user) => user.status === "active")
@@ -938,8 +941,30 @@ export function reconcileSupabaseVisibleState(
     exercises: snapshot.exercises,
     templates: snapshot.templates,
     plans: snapshot.plans,
-    scheduledWorkouts: snapshot.scheduledWorkouts,
-    sessions: snapshot.sessions,
+    scheduledWorkouts: snapshot.scheduledWorkouts.map((workout) => {
+      const localWorkout = previousScheduledWorkoutsById.get(workout.id);
+      if (!localWorkout) {
+        return workout;
+      }
+
+      const localUpdatedAt = Date.parse(localWorkout.updatedAt);
+      const serverUpdatedAt = Date.parse(workout.updatedAt);
+      return Number.isFinite(localUpdatedAt) && Number.isFinite(serverUpdatedAt) && localUpdatedAt > serverUpdatedAt
+        ? localWorkout
+        : workout;
+    }),
+    sessions: snapshot.sessions.map((session) => {
+      const localSession = previousSessionsById.get(session.id);
+      if (!localSession) {
+        return session;
+      }
+
+      const localUpdatedAt = Date.parse(localSession.updatedAt);
+      const serverUpdatedAt = Date.parse(session.updatedAt);
+      return Number.isFinite(localUpdatedAt) && Number.isFinite(serverUpdatedAt) && localUpdatedAt > serverUpdatedAt
+        ? localSession
+        : session;
+    }),
     notes: snapshot.notes,
   });
 }
@@ -1235,6 +1260,7 @@ export function AppStateProvider({ children }: PropsWithChildren) {
   const [isStorageHydrated, setIsStorageHydrated] = useState(false);
   const [isSupabaseAuthResolved, setIsSupabaseAuthResolved] = useState(false);
   const supabase = useMemo(() => createSupabaseBrowserClient(), []);
+  const refreshSupabaseVisibleStatePromiseRef = useRef<Promise<boolean> | null>(null);
   const isHydrated = isStorageHydrated && (supabase ? isSupabaseAuthResolved : true);
 
   useEffect(() => {
@@ -1547,53 +1573,19 @@ function findResolvedUserIdInSnapshot(
       return false;
     }
 
-    const payload = await fetchSupabaseVisibleStateSnapshot();
-    if (!payload) {
-      return false;
+    if (refreshSupabaseVisibleStatePromiseRef.current) {
+      return refreshSupabaseVisibleStatePromiseRef.current;
     }
 
-    try {
-      setState((previous) => reconcileSupabaseVisibleState(previous, payload));
-      const authUser = await confirmCurrentSupabaseAuthUser(supabase);
-      const resolvedSession = resolveSessionIdsFromSnapshot(
-        state,
-        payload,
-        authUser,
-        authenticatedUserId,
-        impersonatedUserId,
-      );
-      if (resolvedSession.authenticatedUserId !== authenticatedUserId) {
-        setAuthenticatedUserId(resolvedSession.authenticatedUserId);
+    const refreshPromise = (async () => {
+      const payload = await fetchSupabaseVisibleStateSnapshot();
+      if (!payload) {
+        return false;
       }
-      if (resolvedSession.impersonatedUserId !== impersonatedUserId) {
-        setImpersonatedUserId(resolvedSession.impersonatedUserId);
-      }
-      return true;
-    } catch {
-      return false;
-    }
-  }
 
-  useEffect(() => {
-    if (!isHydrated || !supabase || !authenticatedUserId) {
-      return;
-    }
-
-    let active = true;
-
-    void fetch("/api/app-state")
-      .then(async (response) => {
-        const payload = (await response.json().catch(() => null)) as SupabaseVisibleAppStateSnapshot | { message?: string } | null;
-        if (!response.ok || !payload || !("users" in payload) || !active) {
-          return;
-        }
-
+      try {
         setState((previous) => reconcileSupabaseVisibleState(previous, payload));
         const authUser = await confirmCurrentSupabaseAuthUser(supabase);
-        if (!active) {
-          return;
-        }
-
         const resolvedSession = resolveSessionIdsFromSnapshot(
           state,
           payload,
@@ -1607,14 +1599,29 @@ function findResolvedUserIdInSnapshot(
         if (resolvedSession.impersonatedUserId !== impersonatedUserId) {
           setImpersonatedUserId(resolvedSession.impersonatedUserId);
         }
-      })
-      .catch(() => {
-        // Keep the current state if server sync fails.
-      });
+        return true;
+      } catch {
+        return false;
+      }
+    })();
 
-    return () => {
-      active = false;
-    };
+    refreshSupabaseVisibleStatePromiseRef.current = refreshPromise;
+
+    try {
+      return await refreshPromise;
+    } finally {
+      if (refreshSupabaseVisibleStatePromiseRef.current === refreshPromise) {
+        refreshSupabaseVisibleStatePromiseRef.current = null;
+      }
+    }
+  }
+
+  useEffect(() => {
+    if (!isHydrated || !supabase || !authenticatedUserId) {
+      return;
+    }
+
+    void refreshSupabaseVisibleState();
   }, [authenticatedUserId, isHydrated, supabase]);
 
   useEffect(() => {

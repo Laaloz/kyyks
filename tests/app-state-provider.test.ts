@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import type { User as SupabaseAuthUser } from "@supabase/supabase-js";
 
 import { cloneDemoState } from "@/lib/domain";
+import type { WorkoutSession } from "@/lib/types";
 import {
   applyProgramDeletion,
   applyProgramStatusUpdate,
@@ -113,6 +114,71 @@ describe("shouldPreserveStoredSessionDuringSupabaseBootstrap", () => {
     ];
 
     expect(resolvePrimaryCoachIdForAthlete(state, "user_athlete_1")).toBe("user_admin");
+  });
+
+  it("keeps newer local workout session data when an older snapshot arrives", () => {
+    const state = cloneDemoState();
+    const localSession: WorkoutSession = {
+      id: "session_local",
+      scheduledWorkoutId: "workout_local",
+      athleteId: "user_athlete_1",
+      startedAt: "2026-03-24T08:00:00.000Z",
+      updatedAt: "2026-03-24T08:10:00.000Z",
+      setLogs: [
+        {
+          id: "log_local",
+          scheduledWorkoutId: "workout_local",
+          templateExerciseId: "exercise_1",
+          setId: "set_1",
+          exerciseId: "exercise_1",
+          exerciseName: "Kyykky",
+          setLabel: "1",
+          targetReps: 5,
+          actualReps: 5,
+          done: true,
+        },
+      ],
+    };
+
+    state.scheduledWorkouts = [
+      {
+        id: "workout_local",
+        athleteId: "user_athlete_1",
+        coachId: "user_coach_1",
+        title: "Jalkapäivä",
+        scheduledDate: "2026-03-24T08:00:00.000Z",
+        status: "in_progress",
+        createdAt: "2026-03-24T08:00:00.000Z",
+        updatedAt: "2026-03-24T08:10:00.000Z",
+      },
+    ];
+    state.sessions = [localSession];
+
+    const nextState = reconcileSupabaseVisibleState(state, {
+      users: state.users,
+      bodyMeasurements: state.bodyMeasurements,
+      assignments: state.assignments,
+      exercises: state.exercises,
+      templates: state.templates,
+      plans: state.plans,
+      scheduledWorkouts: [
+        {
+          ...state.scheduledWorkouts[0]!,
+          updatedAt: "2026-03-24T08:05:00.000Z",
+        },
+      ],
+      sessions: [
+        {
+          ...localSession,
+          updatedAt: "2026-03-24T08:05:00.000Z",
+          setLogs: localSession.setLogs.map((log) => ({ ...log, done: false })),
+        },
+      ],
+      notes: state.notes,
+    });
+
+    expect(nextState.sessions[0]?.setLogs[0]?.done).toBe(true);
+    expect(nextState.scheduledWorkouts[0]?.updatedAt).toBe("2026-03-24T08:10:00.000Z");
   });
 
   it("rekeys an invited placeholder user to the real Supabase profile id after activation", () => {

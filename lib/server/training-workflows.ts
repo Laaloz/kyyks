@@ -450,8 +450,11 @@ async function resolveExerciseDatabaseRows() {
   };
 }
 
-async function buildAutofillSnapshotMaps(athleteId: string) {
-  const admin = createSupabaseAdminClient();
+async function buildAutofillSnapshotMaps(
+  athleteId: string,
+  adminClient: NonNullable<ReturnType<typeof createSupabaseAdminClient>> | null = null,
+) {
+  const admin = adminClient ?? createSupabaseAdminClient();
   if (!admin) {
     return {
       byExerciseAndSetLabel: new Map<string, { actualReps?: number; actualLoad?: number; rpe?: number }>(),
@@ -479,9 +482,10 @@ async function buildAutofillSnapshotMaps(athleteId: string) {
     .select("session_id, exercise_id, set_label, actual_reps, actual_load, rpe, done")
     .in("session_id", sessionIds);
 
+  const sessionOrder = new Map(sessionIds.map((sessionId, index) => [sessionId, index]));
   const orderedLogs = (logs ?? []).sort((left, right) => {
-    const leftIndex = sessionIds.indexOf(left.session_id);
-    const rightIndex = sessionIds.indexOf(right.session_id);
+    const leftIndex = sessionOrder.get(left.session_id) ?? Number.MAX_SAFE_INTEGER;
+    const rightIndex = sessionOrder.get(right.session_id) ?? Number.MAX_SAFE_INTEGER;
     return leftIndex - rightIndex;
   });
 
@@ -519,13 +523,17 @@ async function buildAutofillSnapshotMaps(athleteId: string) {
   return { byExerciseAndSetLabel, byExercise };
 }
 
-async function buildProgramWorkoutSetLogs(plan: TrainingPlan, workoutId: string) {
+async function buildProgramWorkoutSetLogs(
+  plan: TrainingPlan,
+  workoutId: string,
+  adminClient: NonNullable<ReturnType<typeof createSupabaseAdminClient>> | null = null,
+) {
   const programWorkout = plan.workouts?.find((item) => item.id === workoutId);
   if (!programWorkout) {
     return null;
   }
 
-  const autofill = await buildAutofillSnapshotMaps(plan.athleteId);
+  const autofill = await buildAutofillSnapshotMaps(plan.athleteId, adminClient);
 
   return programWorkout.exercises.flatMap((exercise) =>
     exercise.sets.map((set) => {
@@ -618,8 +626,9 @@ async function createSessionWithLogs(params: {
   scheduledWorkoutId: string;
   athleteId: string;
   setLogs: Array<Record<string, unknown>>;
+  admin?: NonNullable<ReturnType<typeof createSupabaseAdminClient>>;
 }) {
-  const admin = createSupabaseAdminClient();
+  const admin = params.admin ?? createSupabaseAdminClient();
   if (!admin) {
     return { ok: false as const, message: "Supabase admin -yhteys puuttuu. Tarkista service role -avain." };
   }
@@ -945,26 +954,27 @@ export async function startProgramWorkoutOnServer({
     return { ok: false as const, message: "Ohjelma on arkistoitu eikä siitä voi käynnistää uutta treeniä." };
   }
 
-  const existingActive = await admin
-    .from("scheduled_workouts")
-    .select("id")
-    .eq("athlete_id", planRow.athlete_id)
-    .eq("program_workout_id", programWorkoutId)
-    .in("status", ["in_progress", "cancelled"])
-    .maybeSingle<{ id: string }>();
+  const [existingActive, blockingWorkout] = await Promise.all([
+    admin
+      .from("scheduled_workouts")
+      .select("id")
+      .eq("athlete_id", planRow.athlete_id)
+      .eq("program_workout_id", programWorkoutId)
+      .in("status", ["in_progress", "cancelled"])
+      .maybeSingle<{ id: string }>(),
+    admin
+      .from("scheduled_workouts")
+      .select("id, title")
+      .eq("athlete_id", planRow.athlete_id)
+      .eq("status", "in_progress")
+      .neq("program_workout_id", programWorkoutId)
+      .maybeSingle<{ id: string; title: string }>(),
+  ]);
   timer.checkpoint("existing-active-query");
 
   if (existingActive.data?.id) {
     return { ok: true as const, scheduledWorkoutId: existingActive.data.id };
   }
-
-  const blockingWorkout = await admin
-    .from("scheduled_workouts")
-    .select("id, title")
-    .eq("athlete_id", planRow.athlete_id)
-    .eq("status", "in_progress")
-    .neq("program_workout_id", programWorkoutId)
-    .maybeSingle<{ id: string; title: string }>();
   timer.checkpoint("blocking-query");
 
   if (blockingWorkout.data) {
@@ -981,31 +991,34 @@ export async function startProgramWorkoutOnServer({
   }
 
   const timestamp = nowIso();
-  const { data: scheduledWorkout, error: scheduledWorkoutError } = await admin
-    .from("scheduled_workouts")
-    .insert({
-      training_plan_id: plan.id,
-      program_workout_id: programWorkout.id,
-      athlete_id: plan.athleteId,
-      coach_id: plan.coachId,
-      title: programWorkout.name,
-      scheduled_date: timestamp,
-      status: "in_progress",
-      created_by: requester.id,
-      updated_by: requester.id,
-      created_at: timestamp,
-      updated_at: timestamp,
-    })
-    .select("id")
-    .single<{ id: string }>();
+  const [scheduledWorkoutResult, setLogs] = await Promise.all([
+    admin
+      .from("scheduled_workouts")
+      .insert({
+        training_plan_id: plan.id,
+        program_workout_id: programWorkout.id,
+        athlete_id: plan.athleteId,
+        coach_id: plan.coachId,
+        title: programWorkout.name,
+        scheduled_date: timestamp,
+        status: "in_progress",
+        created_by: requester.id,
+        updated_by: requester.id,
+        created_at: timestamp,
+        updated_at: timestamp,
+      })
+      .select("id")
+      .single<{ id: string }>(),
+    buildProgramWorkoutSetLogs(plan, programWorkout.id, admin),
+  ]);
+  const { data: scheduledWorkout, error: scheduledWorkoutError } = scheduledWorkoutResult;
   timer.checkpoint("scheduled-workout-insert");
+  timer.checkpoint("set-log-build");
 
   if (scheduledWorkoutError || !scheduledWorkout) {
     return { ok: false as const, message: "Harjoituksen käynnistys epäonnistui." };
   }
 
-  const setLogs = await buildProgramWorkoutSetLogs(plan, programWorkout.id);
-  timer.checkpoint("set-log-build");
   if (!setLogs) {
     await admin.from("scheduled_workouts").delete().eq("id", scheduledWorkout.id);
     return { ok: false as const, message: "Harjoituksen käynnistys epäonnistui." };
@@ -1015,6 +1028,7 @@ export async function startProgramWorkoutOnServer({
     scheduledWorkoutId: scheduledWorkout.id,
     athleteId: plan.athleteId,
     setLogs,
+    admin,
   });
   timer.checkpoint("session-and-log-insert");
 
@@ -1158,6 +1172,8 @@ export async function updateWorkoutSetOnServer({
     return { ok: false as const, message: "Supabase admin -yhteys puuttuu. Tarkista service role -avain." };
   }
 
+  const timestamp = nowIso();
+
   const { data: workout } = await admin
     .from("scheduled_workouts")
     .select("id, athlete_id, status")
@@ -1204,7 +1220,7 @@ export async function updateWorkoutSetOnServer({
       nextDone ? (nextActualLoad ?? resolveDefaultActualLoad({ targetLoad: toNumberOrUndefined(targetLog.target_load) }) ?? null) : nextActualLoad ?? null,
     rpe: nextRpe ?? null,
     done: nextDone,
-    updated_at: nowIso(),
+    updated_at: timestamp,
   };
 
   const { error: targetError } = await admin
@@ -1217,12 +1233,21 @@ export async function updateWorkoutSetOnServer({
   }
 
   if (patch.done !== undefined && targetLog.superset_group) {
+    const supersetUpdatePayload = {
+      done: patch.done,
+      updated_at: updatePayload.updated_at,
+      ...(patch.done
+        ? {
+            actual_reps: updatePayload.actual_reps,
+            actual_load: updatePayload.actual_load,
+            rpe: updatePayload.rpe,
+          }
+        : {}),
+    };
+
     await admin
       .from("workout_set_logs")
-      .update({
-        done: patch.done,
-        updated_at: updatePayload.updated_at,
-      })
+      .update(supersetUpdatePayload)
       .eq("scheduled_workout_id", scheduledWorkoutId)
       .eq("superset_group", targetLog.superset_group)
       .eq("set_label", targetLog.set_label)
@@ -1308,6 +1333,7 @@ export async function completeWorkoutOnServer({
   scheduledWorkoutId: string;
 }) {
   const admin = createSupabaseAdminClient();
+  const timer = createPhaseTimer(`workout-complete:${scheduledWorkoutId}`);
   if (!admin) {
     return { ok: false as const, message: "Supabase admin -yhteys puuttuu. Tarkista service role -avain." };
   }
@@ -1317,6 +1343,7 @@ export async function completeWorkoutOnServer({
     .select("id, athlete_id")
     .eq("id", scheduledWorkoutId)
     .maybeSingle<{ id: string; athlete_id: string }>();
+  timer.checkpoint("workout-query");
 
   if (!workout || (!isAdminRole(requester.role) && workout.athlete_id !== requester.id)) {
     return { ok: false as const, message: "Treeniä ei löytynyt." };
@@ -1326,34 +1353,38 @@ export async function completeWorkoutOnServer({
     .from("workout_set_logs")
     .select("id", { count: "exact", head: true })
     .eq("scheduled_workout_id", scheduledWorkoutId);
+  timer.checkpoint("set-count-query");
 
   if ((count ?? 0) === 0) {
     return { ok: false as const, message: "Treeniä ei voitu merkitä valmiiksi." };
   }
 
   const completedAt = nowIso();
-  await admin
-    .from("workout_sessions")
-    .update({
-      completed_at: completedAt,
-      paused_at: null,
-      updated_at: completedAt,
-    })
-    .eq("scheduled_workout_id", scheduledWorkoutId);
+  const [{ error: sessionError }, { error }] = await Promise.all([
+    admin
+      .from("workout_sessions")
+      .update({
+        completed_at: completedAt,
+        paused_at: null,
+        updated_at: completedAt,
+      })
+      .eq("scheduled_workout_id", scheduledWorkoutId),
+    admin
+      .from("scheduled_workouts")
+      .update({
+        status: "completed",
+        completed_at: completedAt,
+        updated_at: completedAt,
+      })
+      .eq("id", scheduledWorkoutId),
+  ]);
+  timer.checkpoint("complete-updates");
 
-  const { error } = await admin
-    .from("scheduled_workouts")
-    .update({
-      status: "completed",
-      completed_at: completedAt,
-      updated_at: completedAt,
-    })
-    .eq("id", scheduledWorkoutId);
-
-  if (error) {
+  if (sessionError || error) {
     return { ok: false as const, message: "Treeniä ei voitu merkitä valmiiksi." };
   }
 
+  timer.checkpoint("done");
   return { ok: true as const };
 }
 

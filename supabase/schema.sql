@@ -186,6 +186,12 @@ on public.scheduled_workouts (coach_id, scheduled_date desc);
 create index if not exists scheduled_workouts_plan_idx
 on public.scheduled_workouts (training_plan_id);
 
+create index if not exists scheduled_workouts_athlete_program_status_idx
+on public.scheduled_workouts (athlete_id, program_workout_id, status);
+
+create index if not exists scheduled_workouts_athlete_status_program_idx
+on public.scheduled_workouts (athlete_id, status, program_workout_id);
+
 create table if not exists public.workout_sessions (
   id uuid primary key default gen_random_uuid(),
   scheduled_workout_id uuid not null unique references public.scheduled_workouts(id) on delete cascade,
@@ -232,6 +238,9 @@ on public.workout_set_logs (session_id);
 
 create index if not exists workout_set_logs_scheduled_idx
 on public.workout_set_logs (scheduled_workout_id);
+
+create index if not exists workout_set_logs_session_exercise_label_done_idx
+on public.workout_set_logs (session_id, exercise_id, set_label, done);
 
 create table if not exists public.workout_notes (
   id uuid primary key default gen_random_uuid(),
