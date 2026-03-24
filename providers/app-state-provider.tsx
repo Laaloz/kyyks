@@ -59,6 +59,13 @@ type PersistedSession = {
 };
 
 type SupabaseAuthSyncSource = "bootstrap" | "event";
+type SupabaseAuthEvent =
+  | "INITIAL_SESSION"
+  | "SIGNED_IN"
+  | "SIGNED_OUT"
+  | "TOKEN_REFRESHED"
+  | "USER_UPDATED"
+  | "PASSWORD_RECOVERY";
 
 function normalizeDefaultDashboardView(role: Role, value: DashboardHomeView | undefined): DashboardHomeView {
   if (value && getDashboardViewsForRole(role).includes(value)) {
@@ -373,6 +380,10 @@ export function shouldPreserveStoredSessionDuringSupabaseBootstrap(
   persistedAuthenticatedUserId: string | null,
 ) {
   return source === "bootstrap" && Boolean(persistedAuthenticatedUserId);
+}
+
+export function shouldSyncSupabaseAuthEvent(event: SupabaseAuthEvent) {
+  return event !== "INITIAL_SESSION";
 }
 
 function resolveProgramWorkouts(
@@ -832,7 +843,10 @@ export function AppStateProvider({ children }: PropsWithChildren) {
 
     const {
       data: { subscription },
-    } = supabase.auth.onAuthStateChange((_event, session) => {
+    } = supabase.auth.onAuthStateChange((event, session) => {
+      if (!shouldSyncSupabaseAuthEvent(event as SupabaseAuthEvent)) {
+        return;
+      }
       void syncFromAuthUser(session?.user ?? null, "event");
     });
 
