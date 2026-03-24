@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   shouldCreateFreshInviteOnResendFailure,
   shouldPreserveStoredSessionDuringSupabaseBootstrap,
+  shouldTreatInviteActivationLoginFailureAsPartialSuccess,
   shouldSyncSupabaseAuthEvent,
 } from "@/providers/app-state-provider";
 
@@ -31,5 +32,16 @@ describe("shouldPreserveStoredSessionDuringSupabaseBootstrap", () => {
   it("recreates a fresh server invite when resending a legacy local invite", () => {
     expect(shouldCreateFreshInviteOnResendFailure("Kutsua ei löytynyt.")).toBe(true);
     expect(shouldCreateFreshInviteOnResendFailure("Kutsun uudelleenlähetys epäonnistui.")).toBe(false);
+  });
+
+  it("treats captcha-only auto-login failures as partial success after invite activation", () => {
+    expect(
+      shouldTreatInviteActivationLoginFailureAsPartialSuccess(
+        "Captcha-tarkistus epäonnistui. Tarkista hCaptcha-asetukset ja yritä uudelleen.",
+      ),
+    ).toBe(true);
+    expect(
+      shouldTreatInviteActivationLoginFailureAsPartialSuccess("Väärä sähköposti tai salasana."),
+    ).toBe(false);
   });
 });

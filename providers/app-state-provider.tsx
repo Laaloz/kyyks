@@ -316,7 +316,7 @@ function normalizeState(raw: AppState): AppState {
 }
 
 type LoginResult =
-  | { ok: true }
+  | { ok: true; message?: string }
   | { ok: false; message: string };
 
 type ActionResult =
@@ -435,6 +435,10 @@ export function shouldSyncSupabaseAuthEvent(event: SupabaseAuthEvent) {
 
 export function shouldCreateFreshInviteOnResendFailure(message: string | undefined) {
   return message === "Kutsua ei löytynyt.";
+}
+
+export function shouldTreatInviteActivationLoginFailureAsPartialSuccess(message: string | undefined) {
+  return Boolean(message && message.toLowerCase().includes("captcha"));
 }
 
 function resolveProgramWorkouts(
@@ -717,7 +721,7 @@ interface AppStateContextValue {
   adminDeleteUser: (userId: string) => Promise<ActionResult>;
   createInvite: (input: InviteInput) => Promise<ActionResult>;
   resendInvite: (inviteId: string) => Promise<ActionResult>;
-  acceptInvite: (token: string, fullName: string, password: string) => Promise<LoginResult>;
+  acceptInvite: (token: string, fullName: string, password: string, options?: { captchaToken?: string }) => Promise<LoginResult>;
   createTemplate: (input: TemplateBuilderInput) => ActionResult;
   createProgram: (input: ProgramBuilderInput) => ActionResult;
   updateProgram: (programId: string, patch: ProgramUpdateInput) => ActionResult;
@@ -1804,7 +1808,7 @@ export function AppStateProvider({ children }: PropsWithChildren) {
 
         return { ok: true };
       },
-      async acceptInvite(token, fullName, password) {
+      async acceptInvite(token, fullName, password, options) {
         if (supabase) {
           const response = await fetch(`/api/invites/${encodeURIComponent(token)}/accept`, {
             method: "POST",
@@ -1819,7 +1823,27 @@ export function AppStateProvider({ children }: PropsWithChildren) {
             return { ok: false, message: payload?.message ?? "Kutsun aktivointi epäonnistui." };
           }
 
-          return signInWithSupabasePassword(payload.email, password);
+          setState((previous) => ({
+            ...previous,
+            invites: previous.invites.map((item) =>
+              item.token === token ? { ...item, status: "accepted" } : item,
+            ),
+          }));
+
+          const loginResult = await signInWithSupabasePassword(payload.email, password, options);
+          if (loginResult.ok) {
+            return loginResult;
+          }
+
+          if (shouldTreatInviteActivationLoginFailureAsPartialSuccess(loginResult.message)) {
+            return {
+              ok: true,
+              message:
+                "Tunnus aktivoitiin, mutta automaattinen kirjautuminen pysähtyi captcha-tarkistukseen. Kirjaudu etusivulla sisään samalla sähköpostilla ja salasanalla.",
+            };
+          }
+
+          return loginResult;
         }
 
         const invite = state.invites.find((item) => item.token === token && item.status === "pending");

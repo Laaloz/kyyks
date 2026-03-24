@@ -1,8 +1,9 @@
 "use client";
 
+import HCaptcha from "@hcaptcha/react-hcaptcha";
 import { zodResolver } from "@hookform/resolvers/zod";
 import Link from "next/link";
-import { useId, useState } from "react";
+import { useId, useRef, useState } from "react";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
 
@@ -10,6 +11,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardDescription, CardTitle } from "@/components/ui/card";
 import { Input, Label } from "@/components/ui/field";
+import { hCaptchaSiteKey, isHCaptchaConfigured, isSupabaseConfigured } from "@/lib/config";
 import { isInviteExpired } from "@/lib/domain";
 import { useAppState } from "@/providers/app-state-provider";
 
@@ -39,7 +41,13 @@ export function InviteAcceptView({ token, initialInvite }: { token: string; init
         }
       : null);
   const [message, setMessage] = useState<string | null>(null);
+  const [messageTone, setMessageTone] = useState<"success" | "danger">("success");
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [captchaToken, setCaptchaToken] = useState<string | null>(null);
+  const [captchaError, setCaptchaError] = useState<string | null>(null);
+  const captchaRef = useRef<HCaptcha | null>(null);
   const formId = useId();
+  const requiresCaptcha = isSupabaseConfigured && isHCaptchaConfigured;
   const form = useForm<z.infer<typeof acceptInviteSchema>>({
     resolver: zodResolver(acceptInviteSchema),
     defaultValues: {
@@ -87,8 +95,25 @@ export function InviteAcceptView({ token, initialInvite }: { token: string; init
           <form
             className="mt-6 space-y-4"
             onSubmit={form.handleSubmit(async (values) => {
-              const result = await acceptInvite(token, values.fullName, values.password);
-              setMessage(result.ok ? "Tunnus aktivoitiin. Voit nyt siirtyä työtilaan." : result.message);
+              if (requiresCaptcha && !captchaToken) {
+                setMessageTone("danger");
+                setMessage("Vahvista ensin captcha ennen tunnuksen aktivointia.");
+                return;
+              }
+
+              setIsSubmitting(true);
+              const result = await acceptInvite(token, values.fullName, values.password, {
+                captchaToken: captchaToken ?? undefined,
+              });
+              setIsSubmitting(false);
+
+              if (requiresCaptcha) {
+                captchaRef.current?.resetCaptcha();
+                setCaptchaToken(null);
+              }
+
+              setMessageTone(result.ok ? "success" : "danger");
+              setMessage(result.ok ? result.message ?? "Tunnus aktivoitiin. Voit nyt siirtyä työtilaan." : result.message);
             })}
           >
             <fieldset className="space-y-4 rounded-xl border-2 border-[var(--border)] bg-[var(--surface-2)] p-4">
@@ -102,11 +127,43 @@ export function InviteAcceptView({ token, initialInvite }: { token: string; init
                 <Input id={`${formId}-new-password`} type="password" autoComplete="new-password" {...form.register("password")} />
               </div>
             </fieldset>
-            <p aria-live="polite" className="min-h-5 text-sm text-[var(--text-muted)]">
+            {requiresCaptcha ? (
+              <div className="space-y-2">
+                <HCaptcha
+                  ref={captchaRef}
+                  sitekey={hCaptchaSiteKey}
+                  theme="light"
+                  onVerify={(nextToken) => {
+                    setCaptchaToken(nextToken);
+                    setCaptchaError(null);
+                    setMessage(null);
+                  }}
+                  onExpire={() => {
+                    setCaptchaToken(null);
+                    setCaptchaError("Captcha vanheni. Vahvista se uudelleen.");
+                  }}
+                  onError={() => {
+                    setCaptchaToken(null);
+                    setCaptchaError("Captcha ei latautunut oikein. Kokeile päivittää sivu.");
+                  }}
+                />
+                {captchaError ? (
+                  <p aria-live="polite" className="text-sm text-[var(--danger)]">
+                    {captchaError}
+                  </p>
+                ) : null}
+              </div>
+            ) : null}
+            <p
+              aria-live="polite"
+              className={`min-h-5 text-sm ${messageTone === "success" ? "text-[var(--success)]" : "text-[var(--danger)]"}`}
+            >
               {message ?? ""}
             </p>
             <div className="flex flex-wrap gap-3">
-              <Button type="submit">Aktivoi tunnus</Button>
+              <Button type="submit" disabled={isSubmitting || (requiresCaptcha && !captchaToken)}>
+                {isSubmitting ? "Aktivoidaan..." : "Aktivoi tunnus"}
+              </Button>
               <Link className="rounded-xl border-2 border-[var(--border)] bg-[var(--surface-2)] px-4 py-2.5 text-sm font-semibold text-[var(--text)]" href="/">
                 Takaisin etusivulle
               </Link>
