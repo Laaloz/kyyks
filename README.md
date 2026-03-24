@@ -42,11 +42,14 @@ NEXT_PUBLIC_SUPABASE_URL=...
 NEXT_PUBLIC_SUPABASE_ANON_KEY=...
 SUPABASE_SERVICE_ROLE_KEY=...
 NEXT_PUBLIC_HCAPTCHA_SITE_KEY=...
+RESEND_API_KEY=...
+EMAIL_FROM="rooki.fit <no-reply@rooki.fit>"
 ```
 
 5. Älä aja skeemaa sokkona olemassa olevaan tuotantotietokantaan, koska enum- ja taulurakenne ovat muuttuneet vanhasta template-ajastusmallista ohjelmapohjaiseen malliin.
-6. Korvaa demo-providerin localStorage-tallennus Supabase route handlers / server actions -kutsuilla.
-7. Säilytä domain-logiikka [`lib/domain.ts`](/Users/laalo/Omat projektit/rookiapp/lib/domain.ts):ssa ja kytke se tietokantakerrokseen.
+6. Invite- ja password reset -sähköpostit käyttävät palvelinpuolella Resendiä. Ilman `RESEND_API_KEY`- ja `EMAIL_FROM`-muuttujia oikeaa sähköpostia ei lähetetä.
+7. Demo-providerin muu sovellusdata on edelleen localStorage-pohjainen, joten laajempi tuotantomigraatio Supabaseen kannattaa tehdä vaiheittain tämän päälle.
+8. Säilytä domain-logiikka [`lib/domain.ts`](/Users/laalo/Omat projektit/rookiapp/lib/domain.ts):ssa ja kytke se tietokantakerrokseen.
 
 ## Rakenne
 - [`app`](/Users/laalo/Omat projektit/rookiapp/app): App Router -näkymät, layout, PWA-manifesti

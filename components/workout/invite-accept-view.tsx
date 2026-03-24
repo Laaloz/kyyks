@@ -16,9 +16,28 @@ import { useAppState } from "@/providers/app-state-provider";
 import { acceptInviteSchema } from "@/components/workout/schemas";
 import { roleLabel } from "@/components/workout/shared";
 
-export function InviteAcceptView({ token }: { token: string }) {
+type InviteLookup = {
+  email: string;
+  role: "coach" | "athlete";
+  coachId?: string | null;
+  expiresAt: string;
+  status: "pending" | "accepted";
+};
+
+export function InviteAcceptView({ token, initialInvite }: { token: string; initialInvite?: InviteLookup | null }) {
   const { state, acceptInvite } = useAppState();
-  const invite = state.invites.find((item) => item.token === token);
+  const invite =
+    state.invites.find((item) => item.token === token) ??
+    (initialInvite
+      ? {
+          token,
+          email: initialInvite.email,
+          role: initialInvite.role,
+          coachId: initialInvite.coachId,
+          expiresAt: initialInvite.expiresAt,
+          status: initialInvite.status,
+        }
+      : null);
   const [message, setMessage] = useState<string | null>(null);
   const formId = useId();
   const form = useForm<z.infer<typeof acceptInviteSchema>>({
@@ -46,7 +65,7 @@ export function InviteAcceptView({ token }: { token: string }) {
     );
   }
 
-  const expired = isInviteExpired(invite.expiresAt);
+  const expired = invite.status !== "pending" || isInviteExpired(invite.expiresAt);
 
   return (
     <div className="mx-auto flex min-h-screen max-w-xl items-center px-4 py-10">
@@ -67,8 +86,8 @@ export function InviteAcceptView({ token }: { token: string }) {
         ) : (
           <form
             className="mt-6 space-y-4"
-            onSubmit={form.handleSubmit((values) => {
-              const result = acceptInvite(token, values.fullName, values.password);
+            onSubmit={form.handleSubmit(async (values) => {
+              const result = await acceptInvite(token, values.fullName, values.password);
               setMessage(result.ok ? "Tunnus aktivoitiin. Voit nyt siirtyä työtilaan." : result.message);
             })}
           >

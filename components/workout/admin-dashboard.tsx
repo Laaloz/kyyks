@@ -474,8 +474,8 @@ export function AdminDashboard({ view }: { view: WorkspaceView }) {
             </CardDescription>
             <form
               className="mt-6 space-y-4"
-              onSubmit={form.handleSubmit((values) => {
-                const result = createInvite(values);
+              onSubmit={form.handleSubmit(async (values) => {
+                const result = await createInvite(values);
                 setInviteMessage(result.ok ? `Kutsu lähetetty osoitteeseen ${values.email}.` : result.message);
                 if (result.ok) {
                   form.reset({ email: "", role: values.role, coachId: values.coachId });

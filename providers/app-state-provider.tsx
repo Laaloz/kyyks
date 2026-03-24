@@ -20,6 +20,13 @@ import {
   updateProgram as domainUpdateProgram,
   updateSessionSet as domainUpdateSessionSet,
 } from "@/lib/domain";
+import {
+  addMinutesIso,
+  createSecureToken,
+  hashToken,
+  isTimestampExpired,
+  RESET_TOKEN_EXPIRY_MINUTES,
+} from "@/lib/auth-tokens";
 import { defaultGlobalExercises } from "@/lib/demo-data";
 import { canActAsCoach, getDashboardViewsForRole, getDefaultDashboardView, isAdminRole } from "@/lib/role-access";
 import { createSupabaseBrowserClient } from "@/lib/supabase/client";
@@ -51,8 +58,6 @@ import {
 
 const STATE_KEY = "rooki-fit-state-v1";
 const SESSION_KEY = "rooki-fit-session-v1";
-const RESET_TOKEN_EXPIRY_MINUTES = 30;
-
 type PersistedSession = {
   authenticatedUserId: string | null;
   impersonatedUserId: string | null;
@@ -330,29 +335,6 @@ type UserSettingsInput = {
 };
 
 const CUSTOM_EXERCISE_VALUE = "__custom__";
-
-function addMinutesIso(baseIso: string, minutes: number) {
-  return new Date(new Date(baseIso).getTime() + minutes * 60_000).toISOString();
-}
-
-function isTimestampExpired(value: string) {
-  return new Date(value).getTime() <= Date.now();
-}
-
-function createSecureToken(byteLength = 32) {
-  const bytes = new Uint8Array(byteLength);
-  crypto.getRandomValues(bytes);
-  const binary = Array.from(bytes, (byte) => String.fromCharCode(byte)).join("");
-  return btoa(binary).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/g, "");
-}
-
-async function hashToken(token: string) {
-  const encoded = new TextEncoder().encode(token);
-  const digest = await crypto.subtle.digest("SHA-256", encoded);
-  return Array.from(new Uint8Array(digest))
-    .map((value) => value.toString(16).padStart(2, "0"))
-    .join("");
-}
 
 function parsePersistedSession(rawSession: string | null): PersistedSession {
   if (!rawSession) {
@@ -664,8 +646,8 @@ interface AppStateContextValue {
   adminAssignAthleteCoaches: (athleteId: string, coachIds: string[]) => ActionResult;
   completePasswordReset: (token: string, nextPassword: string) => Promise<ActionResult>;
   adminDeleteUser: (userId: string) => ActionResult;
-  createInvite: (input: InviteInput) => ActionResult;
-  acceptInvite: (token: string, fullName: string, password: string) => LoginResult;
+  createInvite: (input: InviteInput) => Promise<ActionResult>;
+  acceptInvite: (token: string, fullName: string, password: string) => Promise<LoginResult>;
   createTemplate: (input: TemplateBuilderInput) => ActionResult;
   createProgram: (input: ProgramBuilderInput) => ActionResult;
   updateProgram: (programId: string, patch: ProgramUpdateInput) => ActionResult;
@@ -889,6 +871,56 @@ export function AppStateProvider({ children }: PropsWithChildren) {
   }, [currentUser?.settings?.themeMode, isHydrated]);
 
   const value = useMemo<AppStateContextValue>(() => {
+    const signInWithSupabasePassword = async (
+      email: string,
+      password: string,
+      options?: { captchaToken?: string },
+    ): Promise<LoginResult> => {
+      if (!supabase) {
+        return { ok: false, message: "Supabase-kirjautuminen ei ole käytettävissä." };
+      }
+
+      const { data, error } = await supabase.auth.signInWithPassword({
+        email,
+        password,
+        options: options?.captchaToken
+          ? {
+              captchaToken: options.captchaToken,
+            }
+          : undefined,
+      });
+
+      if (error) {
+        return { ok: false, message: getSupabaseLoginErrorMessage(error.message) };
+      }
+
+      const authUser = data.user;
+      if (!authUser?.email) {
+        await supabase.auth.signOut();
+        return { ok: false, message: "Käyttäjätiliä ei voitu tunnistaa kirjautumisen jälkeen." };
+      }
+
+      const profile = await fetchSupabaseProfile(supabase, authUser.id);
+      let resolvedUserId: string | null = null;
+      setState((previous) => {
+        const resolution = resolveSupabaseUserForState(previous, authUser, profile);
+        resolvedUserId = resolution.resolvedUserId;
+        return resolution.nextState;
+      });
+
+      if (!resolvedUserId) {
+        await supabase.auth.signOut();
+        return {
+          ok: false,
+          message: "Käyttäjälle ei löytynyt profiilia tai käyttöoikeutta tähän sovellukseen.",
+        };
+      }
+
+      setAuthenticatedUserId(resolvedUserId);
+      setImpersonatedUserId(null);
+      return { ok: true };
+    };
+
     return {
       state,
       authenticatedUser,
@@ -911,45 +943,7 @@ export function AppStateProvider({ children }: PropsWithChildren) {
         }
 
         if (supabase) {
-          const { data, error } = await supabase.auth.signInWithPassword({
-            email,
-            password,
-            options: options?.captchaToken
-              ? {
-                  captchaToken: options.captchaToken,
-                }
-              : undefined,
-          });
-
-          if (error) {
-            return { ok: false, message: getSupabaseLoginErrorMessage(error.message) };
-          }
-
-          const authUser = data.user;
-          if (!authUser?.email) {
-            await supabase.auth.signOut();
-            return { ok: false, message: "Käyttäjätiliä ei voitu tunnistaa kirjautumisen jälkeen." };
-          }
-
-          const profile = await fetchSupabaseProfile(supabase, authUser.id);
-          let resolvedUserId: string | null = null;
-          setState((previous) => {
-            const resolution = resolveSupabaseUserForState(previous, authUser, profile);
-            resolvedUserId = resolution.resolvedUserId;
-            return resolution.nextState;
-          });
-
-          if (!resolvedUserId) {
-            await supabase.auth.signOut();
-            return {
-              ok: false,
-              message: "Käyttäjälle ei löytynyt profiilia tai käyttöoikeutta tähän sovellukseen.",
-            };
-          }
-
-          setAuthenticatedUserId(resolvedUserId);
-          setImpersonatedUserId(null);
-          return { ok: true };
+          return signInWithSupabasePassword(email, password, options);
         }
 
         if (!localUser) {
@@ -1067,6 +1061,26 @@ export function AppStateProvider({ children }: PropsWithChildren) {
           return { ok: false, message: "Kirjaudu sisään ennen salasanan nollausta." };
         }
 
+        if (supabase) {
+          const response = await fetch("/api/password-reset", {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({}),
+          });
+          const payload = (await response.json().catch(() => null)) as { message?: string; previewUrl?: string } | null;
+          if (!response.ok) {
+            return { ok: false, message: payload?.message ?? "Salasanan nollauspyynnön lähetys epäonnistui." };
+          }
+
+          return {
+            ok: true,
+            message: payload?.message ?? "Salasanan nollauspyyntö lähetettiin.",
+            previewUrl: payload?.previewUrl,
+          };
+        }
+
         if (typeof crypto === "undefined" || !("subtle" in crypto)) {
           return { ok: false, message: "Turvallinen salasanan nollaus ei ole käytettävissä tässä ympäristössä." };
         }
@@ -1106,6 +1120,26 @@ export function AppStateProvider({ children }: PropsWithChildren) {
       async adminSendPasswordResetEmail(userId) {
         if (!currentUser || currentUser.role !== "admin") {
           return { ok: false, message: "Vain admin voi lähettää salasanan nollausviestejä." };
+        }
+
+        if (supabase) {
+          const response = await fetch("/api/password-reset", {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({ userId }),
+          });
+          const payload = (await response.json().catch(() => null)) as { message?: string; previewUrl?: string } | null;
+          if (!response.ok) {
+            return { ok: false, message: payload?.message ?? "Nollausviestin lähetys epäonnistui." };
+          }
+
+          return {
+            ok: true,
+            message: payload?.message ?? "Nollausviesti lähetettiin.",
+            previewUrl: payload?.previewUrl,
+          };
         }
 
         const targetUser = state.users.find((user) => user.id === userId);
@@ -1307,6 +1341,22 @@ export function AppStateProvider({ children }: PropsWithChildren) {
         return { ok: true, message: `Valmentajat päivitettiin: ${coachNames}.` };
       },
       async completePasswordReset(token, nextPassword) {
+        if (supabase) {
+          const response = await fetch(`/api/password-reset/${encodeURIComponent(token)}`, {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({ password: nextPassword }),
+          });
+          const payload = (await response.json().catch(() => null)) as { message?: string } | null;
+          if (!response.ok) {
+            return { ok: false, message: payload?.message ?? "Salasanan nollaus epäonnistui." };
+          }
+
+          return { ok: true };
+        }
+
         const normalizedToken = token.trim();
         if (!normalizedToken) {
           return { ok: false, message: "Nollauslinkki on virheellinen." };
@@ -1438,7 +1488,7 @@ export function AppStateProvider({ children }: PropsWithChildren) {
 
         return { ok: true };
       },
-      createInvite(input) {
+      async createInvite(input) {
         if (!currentUser) {
           return { ok: false, message: "Kirjaudu sisään ennen kutsun luontia." };
         }
@@ -1473,6 +1523,92 @@ export function AppStateProvider({ children }: PropsWithChildren) {
 
         if (duplicatePendingInvite) {
           return { ok: false, message: "Tälle sähköpostille on jo avoin kutsu." };
+        }
+
+        if (supabase) {
+          const response = await fetch("/api/invites", {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify(input),
+          });
+          const payload = (await response.json().catch(() => null)) as {
+            message?: string;
+            invite?: {
+              id: string;
+              token: string;
+              email: string;
+              role: "coach" | "athlete";
+              invitedBy: string;
+              coachId?: string | null;
+              status: "pending" | "accepted";
+              createdAt: string;
+              expiresAt: string;
+            };
+          } | null;
+
+          if (!response.ok || !payload?.invite) {
+            return { ok: false, message: payload?.message ?? "Kutsun lähetys epäonnistui." };
+          }
+
+          const invite = {
+            ...payload.invite,
+            coachId: payload.invite.coachId ?? undefined,
+          };
+          const nextUserId = makeId("user");
+
+          setState((previous) => {
+            const users: UserProfile[] = previous.users.some(
+              (user) => user.email.toLowerCase() === invite.email.toLowerCase(),
+            )
+              ? previous.users
+              : [
+                  ...previous.users,
+                  {
+                    id: nextUserId,
+                    role: invite.role,
+                    fullName: invite.email.split("@")[0] ?? invite.email,
+                    email: invite.email,
+                    status: "invited",
+                    settings: defaultUserSettings(invite.role),
+                    createdAt: invite.createdAt,
+                    updatedAt: invite.createdAt,
+                  },
+                ];
+
+            const assignments =
+              invite.role === "athlete" && invite.coachId
+                ? previous.assignments.some(
+                    (assignment) =>
+                      assignment.coachId === invite.coachId &&
+                      assignment.athleteId ===
+                        (users.find((user) => user.email.toLowerCase() === invite.email.toLowerCase())?.id ?? nextUserId) &&
+                      assignment.active,
+                  )
+                  ? previous.assignments
+                  : [
+                      ...previous.assignments,
+                      {
+                        id: makeId("assignment"),
+                        coachId: invite.coachId,
+                        athleteId:
+                          users.find((user) => user.email.toLowerCase() === invite.email.toLowerCase())?.id ?? nextUserId,
+                        active: true,
+                        createdAt: invite.createdAt,
+                      },
+                    ]
+                : previous.assignments;
+
+            return {
+              ...previous,
+              users,
+              assignments,
+              invites: [invite, ...previous.invites],
+            };
+          });
+
+          return { ok: true };
         }
 
         const invite = domainCreateInvite(input, currentUser.id);
@@ -1529,7 +1665,24 @@ export function AppStateProvider({ children }: PropsWithChildren) {
 
         return { ok: true };
       },
-      acceptInvite(token, fullName, password) {
+      async acceptInvite(token, fullName, password) {
+        if (supabase) {
+          const response = await fetch(`/api/invites/${encodeURIComponent(token)}/accept`, {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({ fullName, password }),
+          });
+          const payload = (await response.json().catch(() => null)) as { message?: string; email?: string } | null;
+
+          if (!response.ok || !payload?.email) {
+            return { ok: false, message: payload?.message ?? "Kutsun aktivointi epäonnistui." };
+          }
+
+          return signInWithSupabasePassword(payload.email, password);
+        }
+
         const invite = state.invites.find((item) => item.token === token && item.status === "pending");
         if (!invite) {
           return { ok: false, message: "Kutsua ei löytynyt tai se on jo käytetty." };
@@ -1972,7 +2125,7 @@ export function AppStateProvider({ children }: PropsWithChildren) {
         return domainGetCoachAthletes(state, coachId);
       },
     };
-  }, [state, authenticatedUser, currentUser, isHydrated, isImpersonating]);
+  }, [state, authenticatedUser, currentUser, isHydrated, isImpersonating, supabase]);
 
   return <AppStateContext.Provider value={value}>{children}</AppStateContext.Provider>;
 }

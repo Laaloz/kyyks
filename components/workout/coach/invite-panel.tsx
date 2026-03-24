@@ -36,8 +36,8 @@ export function CoachInvitePanel() {
         </CardDescription>
         <form
           className="mt-6 space-y-4"
-          onSubmit={form.handleSubmit((values) => {
-            const result = createInvite({
+          onSubmit={form.handleSubmit(async (values) => {
+            const result = await createInvite({
               email: values.email,
               role: "athlete",
               coachId: currentUser?.id,
