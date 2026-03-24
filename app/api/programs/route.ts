@@ -43,6 +43,7 @@ const requestSchema = z.object({
   title: z.string().min(1),
   description: z.string().optional(),
   athleteId: z.string(),
+  athleteEmail: z.string().email().optional(),
   workouts: z.array(workoutSchema),
   startDate: z.string().optional(),
   weekCount: z.number().optional(),

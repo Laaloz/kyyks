@@ -23,6 +23,50 @@ function nowIso() {
 
 const DEFAULT_RPE = 8;
 
+function normalizeComparableEmail(email: string | null | undefined) {
+  return email?.trim().toLowerCase() ?? "";
+}
+
+function isDerivedEmailName(fullName: string, email: string) {
+  return fullName.trim().toLowerCase() === normalizeComparableEmail(email).split("@")[0];
+}
+
+function preferUserCandidate<
+  T extends {
+    status: "active" | "invited";
+    fullName: string;
+    email: string;
+    updatedAt?: string;
+    createdAt: string;
+  },
+>(current: T, candidate: T) {
+  if (candidate.status === "active" && current.status !== "active") {
+    return candidate;
+  }
+
+  if (current.status === "active" && candidate.status !== "active") {
+    return current;
+  }
+
+  const currentHasExplicitName = !isDerivedEmailName(current.fullName, current.email);
+  const candidateHasExplicitName = !isDerivedEmailName(candidate.fullName, candidate.email);
+  if (candidateHasExplicitName && !currentHasExplicitName) {
+    return candidate;
+  }
+
+  if (currentHasExplicitName && !candidateHasExplicitName) {
+    return current;
+  }
+
+  const currentUpdatedAt = Date.parse(current.updatedAt ?? current.createdAt);
+  const candidateUpdatedAt = Date.parse(candidate.updatedAt ?? candidate.createdAt);
+  if (Number.isFinite(candidateUpdatedAt) && Number.isFinite(currentUpdatedAt) && candidateUpdatedAt > currentUpdatedAt) {
+    return candidate;
+  }
+
+  return current;
+}
+
 export function calculateSessionDurationSeconds(
   session: WorkoutSession,
   endAtIso?: string,
@@ -732,13 +776,25 @@ export function completeSession(state: AppState, scheduledWorkoutId: string): Ap
 
 export function getCoachAthletes(state: AppState, coachId: string) {
   const coach = state.users.find((user) => user.id === coachId);
-  if (coach?.role === "admin") {
-    return state.users.filter((user) => user.role === "athlete");
-  }
+  const athleteUsers = (() => {
+    if (coach?.role === "admin") {
+      return state.users.filter((user) => user.role === "athlete");
+    }
 
-  const athleteIds = state.assignments
-    .filter((assignment) => assignment.coachId === coachId && assignment.active)
-    .map((assignment) => assignment.athleteId);
+    const athleteIds = state.assignments
+      .filter((assignment) => assignment.coachId === coachId && assignment.active)
+      .map((assignment) => assignment.athleteId);
 
-  return state.users.filter((user) => athleteIds.includes(user.id));
+    return state.users.filter((user) => athleteIds.includes(user.id));
+  })();
+
+  const preferredAthletesByEmail = new Map<string, (typeof athleteUsers)[number]>();
+  athleteUsers.forEach((user) => {
+    const emailKey = normalizeComparableEmail(user.email) || `id:${user.id}`;
+    const existing = preferredAthletesByEmail.get(emailKey);
+    preferredAthletesByEmail.set(emailKey, existing ? preferUserCandidate(existing, user) : user);
+  });
+
+  const preferredAthleteIds = new Set(Array.from(preferredAthletesByEmail.values()).map((user) => user.id));
+  return athleteUsers.filter((user) => preferredAthleteIds.has(user.id));
 }

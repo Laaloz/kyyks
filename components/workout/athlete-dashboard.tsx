@@ -135,6 +135,7 @@ export function AthleteDashboard({
   onOverviewFocusHandled?: () => void;
 }) {
   const {
+    authenticatedUser,
     currentUser,
     state,
     startWorkout,
@@ -166,6 +167,9 @@ export function AthleteDashboard({
   const [measurementMessage, setMeasurementMessage] = useState("");
   const [measurementMessageTone, setMeasurementMessageTone] = useState<MeasurementMessageTone>("info");
   const [isSavingMeasurements, setIsSavingMeasurements] = useState(false);
+  const isDebugEnabled =
+    typeof window !== "undefined" &&
+    new URLSearchParams(window.location.search).get("debug_state") === "1";
   const didAutoResumeWorkout = useRef(false);
   const historySectionRef = useRef<HTMLDivElement | null>(null);
   const historyMenuRef = useRef<HTMLDivElement | null>(null);
@@ -208,6 +212,12 @@ export function AthleteDashboard({
   const athletePrograms = state.plans.filter(
     (plan) => plan.athleteId === currentUser?.id && Boolean(plan.workouts?.length) && isProgramActive(plan),
   );
+  const athleteProgramsByEmail = currentUser
+    ? state.plans.filter((plan) => {
+        const athlete = state.users.find((user) => user.id === plan.athleteId);
+        return athlete?.email.toLowerCase() === currentUser.email.toLowerCase();
+      })
+    : [];
 
   const workouts = state.scheduledWorkouts
     .filter((item) => item.athleteId === currentUser?.id)
@@ -699,6 +709,29 @@ export function AthleteDashboard({
 
   return (
     <div className="grid gap-6">
+      {isDebugEnabled && currentUser ? (
+        <Card className="border-[var(--danger)] bg-[var(--surface)]">
+          <p className="text-xs font-semibold tracking-[0.04em] text-[var(--danger)]">Debug</p>
+          <div className="mt-3 grid gap-2 text-xs text-[var(--text-muted)]">
+            <p>authenticatedUser.id: {authenticatedUser?.id ?? "-"}</p>
+            <p>currentUser.id: {currentUser.id}</p>
+            <p>currentUser.email: {currentUser.email}</p>
+            <p>athletePrograms.length: {athletePrograms.length}</p>
+            <p>athleteProgramsByEmail.length: {athleteProgramsByEmail.length}</p>
+            <p>
+              athleteProgramIds:{" "}
+              {athletePrograms.length ? athletePrograms.map((plan) => plan.id).join(", ") : "-"}
+            </p>
+            <p>
+              athleteProgramIdsByEmail:{" "}
+              {athleteProgramsByEmail.length
+                ? athleteProgramsByEmail.map((plan) => `${plan.id}:${plan.athleteId}:${plan.status}`).join(", ")
+                : "-"}
+            </p>
+          </div>
+        </Card>
+      ) : null}
+
       {view === "overview" && (
         <Card className="border-[var(--border-strong)]">
           <div className="space-y-4">

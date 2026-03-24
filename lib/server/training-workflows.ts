@@ -223,23 +223,43 @@ function mapTemplateRow(row: TemplateJoinRow, exerciseAppIdByDbId: Map<string, s
   };
 }
 
-async function resolveManageableAthlete(requester: RequesterProfile, athleteId: string) {
+async function resolveProfileByIdOrEmail(
+  admin: NonNullable<ReturnType<typeof createSupabaseAdminClient>>,
+  athleteId: string,
+  athleteEmail?: string,
+) {
+  let { data: athlete } = await admin
+    .from("profiles")
+    .select("id, role, email")
+    .eq("id", athleteId)
+    .maybeSingle<{ id: string; role: Role; email: string }>();
+
+  if (!athlete && athleteEmail) {
+    const profileByEmail = await admin
+      .from("profiles")
+      .select("id, role, email")
+      .ilike("email", athleteEmail)
+      .maybeSingle<{ id: string; role: Role; email: string }>();
+
+    athlete = profileByEmail.data ?? null;
+  }
+
+  return athlete;
+}
+
+async function resolveManageableAthlete(requester: RequesterProfile, athleteId: string, athleteEmail?: string) {
   const admin = createSupabaseAdminClient();
   if (!admin) {
     return { ok: false as const, message: "Supabase admin -yhteys puuttuu. Tarkista service role -avain." };
   }
 
-  const { data: athlete } = await admin
-    .from("profiles")
-    .select("id, role")
-    .eq("id", athleteId)
-    .maybeSingle<{ id: string; role: Role }>();
+  const athlete = await resolveProfileByIdOrEmail(admin, athleteId, athleteEmail);
 
   if (!athlete) {
     return { ok: false as const, message: "Käyttäjää ei löytynyt." };
   }
 
-  if (athleteId === requester.id) {
+  if (athlete.id === requester.id) {
     return { ok: true as const, admin, athlete };
   }
 
@@ -255,7 +275,7 @@ async function resolveManageableAthlete(requester: RequesterProfile, athleteId: 
     .from("coach_athlete_assignments")
     .select("id")
     .eq("coach_id", requester.id)
-    .eq("athlete_id", athleteId)
+    .eq("athlete_id", athlete.id)
     .eq("active", true)
     .maybeSingle();
 
@@ -641,7 +661,7 @@ export async function createProgramOnServer({
     return { ok: false as const, message: "Vain admin tai valmentaja voi luoda treeniohjelman." };
   }
 
-  const targetResult = await resolveManageableAthlete(requester, payload.athleteId);
+  const targetResult = await resolveManageableAthlete(requester, payload.athleteId, payload.athleteEmail);
   if (!targetResult.ok) {
     return targetResult;
   }
@@ -651,13 +671,16 @@ export async function createProgramOnServer({
     return customExerciseResult;
   }
 
-  const createdProgram = domainCreateProgram(payload, requester.id);
+  const createdProgram = domainCreateProgram(
+    { ...payload, athleteId: targetResult.athlete.id },
+    requester.id,
+  );
 
   if ((createdProgram.status ?? "active") === "active") {
     await targetResult.admin
       .from("training_plans")
       .update({ status: "archived", updated_at: createdProgram.updatedAt ?? createdProgram.createdAt })
-      .eq("athlete_id", payload.athleteId)
+      .eq("athlete_id", targetResult.athlete.id)
       .eq("status", "active");
   }
 
@@ -665,7 +688,7 @@ export async function createProgramOnServer({
     .from("training_plans")
     .insert({
       coach_id: requester.id,
-      athlete_id: payload.athleteId,
+      athlete_id: targetResult.athlete.id,
       title: createdProgram.title,
       description: createdProgram.description ?? null,
       status: createdProgram.status ?? "active",
@@ -723,11 +746,14 @@ export async function updateProgramOnServer({
   }
 
   const nextAthleteId = payload.athleteId ?? programRow.athlete_id;
+  let resolvedNextAthleteId = nextAthleteId;
   if (nextAthleteId !== programRow.athlete_id) {
-    const targetResult = await resolveManageableAthlete(requester, nextAthleteId);
+    const targetResult = await resolveManageableAthlete(requester, nextAthleteId, payload.athleteEmail);
     if (!targetResult.ok) {
       return targetResult;
     }
+
+    resolvedNextAthleteId = targetResult.athlete.id;
 
     const { count } = await admin
       .from("scheduled_workouts")
@@ -747,7 +773,10 @@ export async function updateProgramOnServer({
     return customExerciseResult;
   }
 
-  const updatedProgram = domainUpdateProgram(mapPlanRow(programRow), payload);
+  const updatedProgram = domainUpdateProgram(mapPlanRow(programRow), {
+    ...payload,
+    athleteId: resolvedNextAthleteId,
+  });
   const updatedAt = updatedProgram.updatedAt ?? nowIso();
 
   const { error } = await admin

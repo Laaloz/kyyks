@@ -283,6 +283,7 @@ export interface ProgramBuilderInput {
   title: string;
   description?: string;
   athleteId: string;
+  athleteEmail?: string;
   workouts: ProgramWorkoutInput[];
   startDate?: string;
   weekCount?: number;
@@ -317,6 +318,7 @@ export interface ProgramUpdateInput {
   title?: string;
   description?: string;
   athleteId?: string;
+  athleteEmail?: string;
   workouts?: ProgramWorkoutInput[];
 }
 

@@ -43,6 +43,7 @@ const patchSchema = z.object({
   title: z.string().optional(),
   description: z.string().optional(),
   athleteId: z.string().optional(),
+  athleteEmail: z.string().email().optional(),
   workouts: z.array(workoutSchema).optional(),
   customExercises: z.array(customExerciseSchema).optional(),
 });
@@ -94,6 +95,7 @@ export async function PATCH(request: Request, context: { params: Promise<{ progr
       title: parsed.data.title,
       description: parsed.data.description,
       athleteId: parsed.data.athleteId,
+      athleteEmail: parsed.data.athleteEmail,
       workouts: parsed.data.workouts,
     },
     customExercises: parsed.data.customExercises,

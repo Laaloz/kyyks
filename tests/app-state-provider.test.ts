@@ -11,6 +11,7 @@ import {
   canRetargetProgramInState,
   reconcileSupabaseInviteDirectory,
   reconcileSupabaseVisibleState,
+  resolveSelectedUserFromState,
   resolveBlockingWorkoutStart,
   resolveSupabaseUserForState,
   resolvePrimaryCoachIdForAthlete,
@@ -328,6 +329,43 @@ describe("shouldPreserveStoredSessionDuringSupabaseBootstrap", () => {
     expect(nextState.users.some((user) => user.id === "user_placeholder_visible")).toBe(false);
     expect(nextState.users.find((user) => user.email === eliasEmail)?.id).toBe(resolvedUserId);
     expect(nextState.users.find((user) => user.email === eliasEmail)?.status).toBe("active");
+  });
+
+  it("prefers the active server user over an invited placeholder with the same email", () => {
+    const state = cloneDemoState();
+    const eliasEmail = "eliaskautto@gmail.com";
+
+    state.users = [
+      ...state.users,
+      {
+        id: "user_placeholder_visible",
+        role: "athlete",
+        fullName: "eliaskautto",
+        email: eliasEmail,
+        status: "invited",
+        createdAt: "2026-03-24T08:00:00.000Z",
+        updatedAt: "2026-03-24T08:00:00.000Z",
+      },
+      {
+        id: "e3cedd3c-c34a-4748-95a0-56a43f028ff8",
+        role: "athlete",
+        fullName: "Elias Kautto",
+        email: eliasEmail,
+        status: "active",
+        settings: {
+          defaultDashboardView: "athlete-log",
+          emailNotifications: false,
+          themeMode: "light",
+        },
+        createdAt: "2026-03-24T08:30:00.000Z",
+        updatedAt: "2026-03-24T08:30:00.000Z",
+      },
+    ];
+
+    const resolvedUser = resolveSelectedUserFromState(state, "user_placeholder_visible");
+
+    expect(resolvedUser?.id).toBe("e3cedd3c-c34a-4748-95a0-56a43f028ff8");
+    expect(resolvedUser?.status).toBe("active");
   });
 
   it("finds only an in-progress workout as a blocking start condition", () => {

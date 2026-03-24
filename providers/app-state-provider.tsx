@@ -106,16 +106,22 @@ function normalizeUserSettings(role: Role, rawSettings: UserProfile["settings"] 
 }
 
 function canManageProgramTarget(state: AppState, actor: UserProfile, athleteId: string) {
-  if (athleteId === actor.id) {
+  const resolvedAthlete =
+    resolveSelectedUserFromState(state, athleteId) ??
+    state.users.find((user) => user.id === athleteId) ??
+    null;
+  const resolvedAthleteId = resolvedAthlete?.id ?? athleteId;
+
+  if (resolvedAthleteId === actor.id) {
     return true;
   }
 
   if (isAdminRole(actor.role)) {
-    return state.users.some((user) => user.id === athleteId && user.role === "athlete");
+    return state.users.some((user) => user.id === resolvedAthleteId && user.role === "athlete");
   }
 
   if (canActAsCoach(actor.role)) {
-    return canCoachManageAthlete(state, actor.id, athleteId);
+    return canCoachManageAthlete(state, actor.id, resolvedAthleteId);
   }
 
   return false;
@@ -946,6 +952,34 @@ function findUserByIdOrEmail(previous: AppState, userId: string, email?: string)
   );
 }
 
+export function resolveSelectedUserFromState(previous: AppState, userId: string | null) {
+  if (!userId) {
+    return null;
+  }
+
+  const exactUser = previous.users.find((user) => user.id === userId) ?? null;
+  if (!exactUser) {
+    return null;
+  }
+
+  const normalizedEmail = normalizeComparableEmail(exactUser.email);
+  const activeUserWithSameEmail =
+    normalizedEmail && exactUser.status !== "active"
+      ? previous.users.find(
+          (user) =>
+            user.id !== exactUser.id &&
+            user.status === "active" &&
+            normalizeComparableEmail(user.email) === normalizedEmail,
+        ) ?? null
+      : null;
+
+  return activeUserWithSameEmail ?? exactUser;
+}
+
+function resolveProgramTargetFromState(previous: AppState, athleteId: string) {
+  return resolveSelectedUserFromState(previous, athleteId) ?? previous.users.find((user) => user.id === athleteId) ?? null;
+}
+
 function findResolvedSnapshotUserIdForLocalUser(
   previous: AppState,
   snapshot: SupabaseVisibleAppStateSnapshot,
@@ -1444,12 +1478,12 @@ export function AppStateProvider({ children }: PropsWithChildren) {
   }, [isStorageHydrated, supabase]);
 
   const authenticatedUser = useMemo(
-    () => state.users.find((user) => user.id === authenticatedUserId) ?? null,
-    [authenticatedUserId, state.users],
+    () => resolveSelectedUserFromState(state, authenticatedUserId),
+    [authenticatedUserId, state],
   );
   const currentUser = useMemo(
-    () => state.users.find((user) => user.id === (impersonatedUserId ?? authenticatedUserId)) ?? null,
-    [authenticatedUserId, impersonatedUserId, state.users],
+    () => resolveSelectedUserFromState(state, impersonatedUserId ?? authenticatedUserId),
+    [authenticatedUserId, impersonatedUserId, state],
   );
   const isImpersonating = Boolean(impersonatedUserId);
 
@@ -2866,7 +2900,10 @@ function findResolvedUserIdInSnapshot(
           return { ok: false, message: "Vain admin tai valmentaja voi luoda treeniohjelman." };
         }
 
-        if (!canManageProgramTarget(state, currentUser, input.athleteId)) {
+        const resolvedTargetUser = resolveProgramTargetFromState(state, input.athleteId);
+        const nextAthleteId = resolvedTargetUser?.id ?? input.athleteId;
+
+        if (!canManageProgramTarget(state, currentUser, nextAthleteId)) {
           return { ok: false, message: "Voit luoda ohjelman vain itsellesi tai omalle valmennettavallesi." };
         }
 
@@ -2880,6 +2917,8 @@ function findResolvedUserIdInSnapshot(
             },
             body: JSON.stringify({
               ...input,
+              athleteId: nextAthleteId,
+              athleteEmail: resolvedTargetUser?.email,
               workouts: resolved.workouts,
               customExercises: resolved.customExercises,
             }),
@@ -2893,7 +2932,10 @@ function findResolvedUserIdInSnapshot(
           return { ok: true };
         }
 
-        const createdProgram = domainCreateProgram({ ...input, workouts: resolved.workouts }, currentUser.id);
+        const createdProgram = domainCreateProgram(
+          { ...input, athleteId: nextAthleteId, athleteEmail: resolvedTargetUser?.email, workouts: resolved.workouts },
+          currentUser.id,
+        );
 
         setState((previous) =>
           applyProgramStatusUpdate(
@@ -2923,7 +2965,8 @@ function findResolvedUserIdInSnapshot(
           return { ok: false, message: "Voit muokata vain omia ohjelmiasi." };
         }
 
-        const nextAthleteId = patch.athleteId ?? program.athleteId;
+        const resolvedTargetUser = patch.athleteId ? resolveProgramTargetFromState(state, patch.athleteId) : null;
+        const nextAthleteId = resolvedTargetUser?.id ?? patch.athleteId ?? program.athleteId;
         if (nextAthleteId !== program.athleteId) {
           if (!canManageProgramTarget(state, currentUser, nextAthleteId)) {
             return {
@@ -2952,6 +2995,8 @@ function findResolvedUserIdInSnapshot(
             },
             body: JSON.stringify({
               ...patch,
+              athleteId: patch.athleteId ? nextAthleteId : undefined,
+              athleteEmail: resolvedTargetUser?.email,
               workouts: resolvedWorkouts?.workouts,
               customExercises: resolvedWorkouts?.customExercises,
             }),
@@ -2967,6 +3012,8 @@ function findResolvedUserIdInSnapshot(
 
         const updatedProgram = domainUpdateProgram(program, {
           ...patch,
+          athleteId: patch.athleteId ? nextAthleteId : undefined,
+          athleteEmail: resolvedTargetUser?.email,
           workouts: resolvedWorkouts?.workouts,
         });
 

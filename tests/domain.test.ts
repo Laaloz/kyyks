@@ -737,4 +737,36 @@ describe("domain helpers", () => {
       "user_athlete_3",
     ]);
   });
+
+  it("prefers the active athlete profile over an invited placeholder with the same email", () => {
+    const state = cloneDemoState();
+
+    state.users = [
+      {
+        id: "user_placeholder_invite",
+        role: "athlete",
+        fullName: "laaloceesay+testaa",
+        email: "laaloceesay+testaa@gmail.com",
+        status: "invited",
+        createdAt: "2026-03-25T08:00:00.000Z",
+        updatedAt: "2026-03-25T08:00:00.000Z",
+      },
+      {
+        id: "e3cedd3c-c34a-4748-95a0-56a43f028ff8",
+        role: "athlete",
+        fullName: "Laalo",
+        email: "laaloceesay+testaa@gmail.com",
+        status: "active",
+        createdAt: "2026-03-25T08:05:00.000Z",
+        updatedAt: "2026-03-25T08:05:00.000Z",
+      },
+      ...state.users.filter((user) => user.role !== "athlete"),
+    ];
+
+    const athletes = getCoachAthletes(state, "user_admin_1");
+
+    expect(athletes).toHaveLength(1);
+    expect(athletes[0]?.id).toBe("e3cedd3c-c34a-4748-95a0-56a43f028ff8");
+    expect(athletes[0]?.fullName).toBe("Laalo");
+  });
 });
