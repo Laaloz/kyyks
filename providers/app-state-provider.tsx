@@ -1526,19 +1526,22 @@ export function AppStateProvider({ children }: PropsWithChildren) {
         const timestamp = new Date().toISOString();
 
         if (supabase) {
-          const { error: profileError } = await supabase
-            .from("profiles")
-            .update({
-              full_name: fullName,
-              default_dashboard_view: input.defaultDashboardView,
-              email_notifications: input.emailNotifications,
-              theme_mode: input.themeMode,
-              updated_at: timestamp,
-            })
-            .eq("id", currentUser.id);
+          const response = await fetch("/api/settings", {
+            method: "PATCH",
+            headers: {
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({
+              fullName,
+              defaultDashboardView: input.defaultDashboardView,
+              emailNotifications: input.emailNotifications,
+              themeMode: input.themeMode,
+            }),
+          });
 
-          if (profileError) {
-            return { ok: false, message: "Asetusten tallennus epäonnistui." };
+          if (!response.ok) {
+            const payload = (await response.json().catch(() => null)) as { message?: string } | null;
+            return { ok: false, message: payload?.message ?? "Asetusten tallennus epäonnistui." };
           }
         }
 

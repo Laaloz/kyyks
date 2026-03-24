@@ -162,6 +162,7 @@ export function UserSettingsPanel() {
     const result = await updateCurrentUserSettings(values);
     setMessage(result.ok ? "Muutokset tallennettu." : result.message);
   });
+  const isSavingSettings = form.formState.isSubmitting;
 
   return (
     <div className="grid gap-6 lg:grid-cols-[1.05fr_0.95fr]">
@@ -183,6 +184,7 @@ export function UserSettingsPanel() {
               id="settings-full-name"
               aria-invalid={Boolean(form.formState.errors.fullName)}
               aria-describedby={form.formState.errors.fullName ? "settings-full-name-error" : undefined}
+              disabled={isSavingSettings}
               {...form.register("fullName")}
             />
             {form.formState.errors.fullName ? (
@@ -202,7 +204,7 @@ export function UserSettingsPanel() {
 
           <div>
             <Label htmlFor="settings-default-view">Aloitussivu</Label>
-            <Select id="settings-default-view" {...form.register("defaultDashboardView")}>
+            <Select id="settings-default-view" disabled={isSavingSettings} {...form.register("defaultDashboardView")}>
               {allowedViewOptions.map((view) => (
                 <option key={view} value={view}>
                   {dashboardViewLabel[view]}
@@ -213,7 +215,7 @@ export function UserSettingsPanel() {
 
           <div>
             <Label htmlFor="settings-theme-mode">Teema</Label>
-            <Select id="settings-theme-mode" {...form.register("themeMode")}>
+            <Select id="settings-theme-mode" disabled={isSavingSettings} {...form.register("themeMode")}>
               {Object.entries(themeModeLabel).map(([value, label]) => (
                 <option key={value} value={value}>
                   {label}
@@ -240,6 +242,7 @@ export function UserSettingsPanel() {
               <input
                 type="checkbox"
                 className="size-4 accent-[var(--accent)]"
+                disabled={isSavingSettings}
                 {...form.register("emailNotifications")}
               />
               <span className="text-sm text-[var(--text-muted)]">
@@ -251,18 +254,25 @@ export function UserSettingsPanel() {
           <p
             aria-live="polite"
             className={`min-h-5 text-sm ${
-              !message
+              isSavingSettings
+                ? "text-[var(--text-subtle)]"
+                : !message
                 ? "text-[var(--text-subtle)]"
                 : message.includes("tallennettu")
                   ? "text-[var(--success)]"
                   : "text-[var(--danger)]"
             }`}
           >
-            {message}
+            {isSavingSettings ? "Tallennetaan asetuksia..." : message}
           </p>
 
-          <Button type="button" className="w-full sm:w-auto" onClick={() => void submitSettings()}>
-            Tallenna muutokset
+          <Button
+            type="button"
+            className="w-full sm:w-auto"
+            disabled={isSavingSettings}
+            onClick={() => void submitSettings()}
+          >
+            {isSavingSettings ? "Tallennetaan..." : "Tallenna muutokset"}
           </Button>
         </form>
 
