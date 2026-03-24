@@ -11,6 +11,7 @@ import {
   createTemplate,
   deleteScheduledWorkout,
   duplicateTemplate,
+  getCoachAthletes,
   getSessionProgress,
   isInviteExpired,
   saveSessionNote,
@@ -621,7 +622,19 @@ describe("domain helpers", () => {
 
     expect(canCoachManageAthlete(state, "user_coach_1", "user_athlete_1")).toBe(true);
     expect(canCoachManageAthlete(state, "user_coach_1", "user_athlete_3")).toBe(false);
+    expect(canCoachManageAthlete(state, "user_admin_1", "user_athlete_1")).toBe(true);
+    expect(canCoachManageAthlete(state, "user_admin_1", "user_athlete_2")).toBe(true);
     expect(isInviteExpired("2000-01-01T00:00:00.000Z")).toBe(true);
     expect(isInviteExpired("2999-01-01T00:00:00.000Z")).toBe(false);
+  });
+
+  it("returns all athletes for admin coach lookups", () => {
+    const state = cloneDemoState();
+
+    expect(getCoachAthletes(state, "user_admin_1").map((user) => user.id)).toEqual([
+      "user_athlete_1",
+      "user_athlete_2",
+      "user_athlete_3",
+    ]);
   });
 });

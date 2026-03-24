@@ -30,7 +30,8 @@ import {
 import { estimateStrengthCalories, getLatestMeasurement, getMeasurementsForUser, getWeightAtMoment } from "@/lib/body-metrics";
 import { buildWorkoutConversationContextOptions } from "@/lib/workout-conversation-context";
 import { buildWorkoutHistoryTitleMap } from "@/lib/workout-history-title";
-import type { AppState, ConversationEntry, ScheduledWorkoutStatus, WorkoutSession } from "@/lib/types";
+import { isAdminRole } from "@/lib/role-access";
+import type { AppState, ConversationEntry, Role, ScheduledWorkoutStatus, WorkoutSession } from "@/lib/types";
 import { formatDate, formatDateWithWeekday } from "@/lib/utils";
 import { useAppState } from "@/providers/app-state-provider";
 
@@ -99,17 +100,16 @@ export function CoachDashboard({
       return [];
     }
 
-    const managedAthletes = currentUser.role === "coach" ? athletes : [];
     const selfTarget = {
       id: currentUser.id,
       fullName: `${currentUser.fullName} (sinä)`,
       email: currentUser.email,
     };
 
-    return [selfTarget, ...managedAthletes.filter((athlete) => athlete.id !== currentUser.id)];
+    return [selfTarget, ...athletes.filter((athlete) => athlete.id !== currentUser.id)];
   }, [athletes, currentUser]);
   const coachPrograms = state.plans.filter(
-    (plan) => plan.coachId === currentUser?.id && Boolean(plan.workouts?.length),
+    (plan) => Boolean(plan.workouts?.length) && (isAdminRole(currentUser?.role) || plan.coachId === currentUser?.id),
   );
 
   useEffect(() => {
@@ -126,7 +126,7 @@ export function CoachDashboard({
   const exerciseOptions = useMemo(
     () =>
       state.exercises.filter(
-        (exercise) => exercise.scope === "global" || exercise.coachId === currentUser?.id,
+        (exercise) => exercise.scope === "global" || isAdminRole(currentUser?.role) || exercise.coachId === currentUser?.id,
       ).sort((a, b) => a.name.localeCompare(b.name, "fi")),
     [state.exercises, currentUser],
   );
@@ -183,7 +183,7 @@ export function CoachDashboard({
       {view === "overview" ? (
         <CoachAthleteInsights
           athletes={athletes}
-          coachId={currentUser?.id}
+          coachId={undefined}
           selectedAthleteId={selectedAthleteId}
           onSelectAthlete={setSelectedAthleteId}
           state={state}
@@ -194,6 +194,7 @@ export function CoachDashboard({
       {view === "conversation" && currentUser ? (
         <CoachConversationView
           athletes={athletes}
+          currentRole={currentUser.role}
           currentUserId={currentUser.id}
           entries={state.conversationEntries}
           onSend={addConversationComment}
@@ -558,13 +559,13 @@ function CoachAthleteInsights({
   }, [selectedAthleteId]);
 
   const athleteWorkouts = useMemo(() => {
-    if (!coachId || !selectedAthleteId) {
+    if (!selectedAthleteId) {
       return [];
     }
 
     return state.scheduledWorkouts
       .filter(
-        (workout) => workout.coachId === coachId && workout.athleteId === selectedAthleteId,
+        (workout) => workout.athleteId === selectedAthleteId && (!coachId || workout.coachId === coachId),
       )
       .sort(
         (a, b) =>
@@ -1810,6 +1811,7 @@ function truncateText(value: string, length: number) {
 
 function CoachConversationView({
   athletes,
+  currentRole,
   currentUserId,
   entries,
   onSend,
@@ -1821,6 +1823,7 @@ function CoachConversationView({
   users,
 }: {
   athletes: Array<{ id: string; fullName: string; email: string }>;
+  currentRole: Role;
   currentUserId: string;
   entries: AppState["conversationEntries"];
   onSend: (
@@ -1837,14 +1840,16 @@ function CoachConversationView({
   const filteredEntries = useMemo(
     () =>
       entries
-        .filter((entry) => entry.coachId === currentUserId && (!selectedAthleteId || entry.athleteId === selectedAthleteId))
+        .filter(
+          (entry) => !selectedAthleteId || entry.athleteId === selectedAthleteId,
+        )
         .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()),
-    [currentUserId, entries, selectedAthleteId],
+    [entries, selectedAthleteId],
   );
   const contextOptions = useMemo(() => {
-    const selectedAthletePlans = plans.filter((plan) => plan.athleteId === selectedAthleteId && plan.coachId === currentUserId);
+    const selectedAthletePlans = plans.filter((plan) => plan.athleteId === selectedAthleteId);
     const selectedAthleteWorkouts = scheduledWorkouts.filter(
-      (workout) => workout.athleteId === selectedAthleteId && workout.coachId === currentUserId,
+      (workout) => workout.athleteId === selectedAthleteId,
     );
 
     return [
@@ -1862,16 +1867,14 @@ function CoachConversationView({
         contextLabel: plan.title,
       })),
     ];
-  }, [currentUserId, plans, scheduledWorkouts, selectedAthleteId, templates]);
+  }, [plans, scheduledWorkouts, selectedAthleteId, templates]);
   const workoutOccurrenceLabelById = useMemo(() => {
-    const selectedAthleteWorkouts = scheduledWorkouts.filter(
-      (workout) => workout.athleteId === selectedAthleteId && workout.coachId === currentUserId,
-    );
+    const selectedAthleteWorkouts = scheduledWorkouts.filter((workout) => workout.athleteId === selectedAthleteId);
     const titleMap = buildWorkoutHistoryTitleMap(selectedAthleteWorkouts);
     return new Map(
       Array.from(titleMap.entries()).map(([workoutId, info]) => [workoutId, info.occurrenceLabel]),
     );
-  }, [currentUserId, scheduledWorkouts, selectedAthleteId]);
+  }, [scheduledWorkouts, selectedAthleteId]);
 
   if (!athletes.length) {
     return (
@@ -1890,7 +1893,7 @@ function CoachConversationView({
       description="Seuraa yhdestä paikasta treenaajan ja valmentajan viestejä."
       entries={filteredEntries}
       users={users}
-      currentRole="coach"
+      currentRole={currentRole}
       currentUserId={currentUserId}
       emptyMessage="Valitulle treenaajalle ei ole vielä viestejä keskusteluvirrassa."
       contextOptions={contextOptions}

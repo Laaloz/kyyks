@@ -248,6 +248,11 @@ export function isInviteExpired(expiresAt: string) {
 }
 
 export function canCoachManageAthlete(state: AppState, coachId: string, athleteId: string) {
+  const coach = state.users.find((user) => user.id === coachId);
+  if (coach?.role === "admin") {
+    return state.users.some((user) => user.id === athleteId && user.role === "athlete");
+  }
+
   return state.assignments.some(
     (assignment) =>
       assignment.coachId === coachId &&
@@ -669,6 +674,11 @@ export function completeSession(state: AppState, scheduledWorkoutId: string): Ap
 }
 
 export function getCoachAthletes(state: AppState, coachId: string) {
+  const coach = state.users.find((user) => user.id === coachId);
+  if (coach?.role === "admin") {
+    return state.users.filter((user) => user.role === "athlete");
+  }
+
   const athleteIds = state.assignments
     .filter((assignment) => assignment.coachId === coachId && assignment.active)
     .map((assignment) => assignment.athleteId);

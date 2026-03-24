@@ -1,11 +1,10 @@
 "use client";
 
-import { useMemo } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   CartesianGrid,
   Line,
   LineChart,
-  ResponsiveContainer,
   Tooltip,
   XAxis,
   YAxis,
@@ -56,6 +55,8 @@ export function MetricTrendChart({
   decimals = 1,
   useZeroBaseline = false,
 }: MetricTrendChartProps) {
+  const chartFrameRef = useRef<HTMLDivElement | null>(null);
+  const [chartSize, setChartSize] = useState({ width: 0, height: 0 });
   const chartData = useMemo(
     () =>
       points
@@ -101,73 +102,114 @@ export function MetricTrendChart({
     return [Math.max(0, minValue - padding), maxValue + padding];
   }, [chartData, useZeroBaseline]);
 
+  useEffect(() => {
+    const frame = chartFrameRef.current;
+    if (!frame) {
+      return;
+    }
+
+    const updateSize = () => {
+      const nextWidth = frame.clientWidth;
+      const nextHeight = frame.clientHeight;
+
+      setChartSize((current) => {
+        if (current.width === nextWidth && current.height === nextHeight) {
+          return current;
+        }
+
+        return { width: nextWidth, height: nextHeight };
+      });
+    };
+
+    updateSize();
+
+    if (typeof ResizeObserver === "undefined") {
+      window.addEventListener("resize", updateSize);
+      return () => window.removeEventListener("resize", updateSize);
+    }
+
+    const observer = new ResizeObserver(() => {
+      updateSize();
+    });
+
+    observer.observe(frame);
+    return () => observer.disconnect();
+  }, []);
+
   if (chartData.length === 0) {
     return <p className="mt-3 text-sm text-[var(--text-muted)]">{emptyMessage}</p>;
   }
 
   return (
-    <div className="mt-3 min-w-0">
-      <div className="h-60 w-full overflow-hidden rounded-2xl border border-[var(--border)] bg-[var(--surface)] px-2 py-3">
-        <ResponsiveContainer width="100%" height="100%">
-          <LineChart data={chartData} margin={{ top: 8, right: 8, bottom: 12, left: 4 }}>
-            <CartesianGrid stroke="var(--border)" strokeDasharray="3 3" vertical={false} />
-            <XAxis
-              type="number"
-              dataKey="timestamp"
-              domain={xDomain}
-              scale="time"
-              tickFormatter={(value) => monthYearFormatter.format(new Date(value))}
-              tick={{ fill: "var(--text-subtle)", fontSize: 12 }}
-              tickLine={false}
-              axisLine={{ stroke: "var(--border)" }}
-              tickMargin={10}
-              minTickGap={24}
-            />
-            <YAxis
-              orientation="right"
-              domain={yDomain}
-              tickFormatter={(value) => formatMetricValue(value, decimals)}
-              tick={{ fill: "var(--text-subtle)", fontSize: 12 }}
-              tickLine={false}
-              axisLine={false}
-              width={56}
-            />
-            <Tooltip
-              cursor={{ stroke: "var(--border-strong)", strokeDasharray: "4 4" }}
-              content={({ active, payload }) => {
-                if (!active || !payload?.length) {
-                  return null;
-                }
+    <div className="mt-3 min-w-0" role="img" aria-label={ariaLabel}>
+      <div className="h-60 min-h-[15rem] min-w-0 w-full overflow-hidden rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-3">
+        <div ref={chartFrameRef} className="h-full min-w-0 w-full">
+          {chartSize.width > 0 && chartSize.height > 0 ? (
+            <LineChart
+              width={chartSize.width}
+              height={chartSize.height}
+              data={chartData}
+              margin={{ top: 8, right: 8, bottom: 12, left: 4 }}
+            >
+              <CartesianGrid stroke="var(--border)" strokeDasharray="3 3" vertical={false} />
+              <XAxis
+                type="number"
+                dataKey="timestamp"
+                domain={xDomain}
+                scale="time"
+                tickFormatter={(value) => monthYearFormatter.format(new Date(value))}
+                tick={{ fill: "var(--text-subtle)", fontSize: 12 }}
+                tickLine={false}
+                axisLine={{ stroke: "var(--border)" }}
+                tickMargin={10}
+                minTickGap={24}
+              />
+              <YAxis
+                orientation="right"
+                domain={yDomain}
+                tickFormatter={(value) => formatMetricValue(value, decimals)}
+                tick={{ fill: "var(--text-subtle)", fontSize: 12 }}
+                tickLine={false}
+                axisLine={false}
+                width={56}
+              />
+              <Tooltip
+                cursor={{ stroke: "var(--border-strong)", strokeDasharray: "4 4" }}
+                content={({ active, payload }) => {
+                  if (!active || !payload?.length) {
+                    return null;
+                  }
 
-                const current = payload[0]?.payload as
-                  | { date: string; value: number }
-                  | undefined;
-                if (!current) {
-                  return null;
-                }
+                  const current = payload[0]?.payload as
+                    | { date: string; value: number }
+                    | undefined;
+                  if (!current) {
+                    return null;
+                  }
 
-                return (
-                  <div className="rounded-xl border border-[var(--border-strong)] bg-[var(--surface)] px-3 py-2 shadow-[0_10px_30px_-18px_var(--shadow)]">
-                    <p className="text-[11px] font-semibold tracking-[0.04em] text-[var(--text-subtle)]">
-                      {fullDateFormatter.format(new Date(current.date))}
-                    </p>
-                    <p className="mt-1 text-sm font-semibold text-[var(--text)]">
-                      {valueLabel} {formatMetricValue(current.value, decimals)} {unit}
-                    </p>
-                  </div>
-                );
-              }}
-            />
-            <Line
-              type="monotone"
-              dataKey="value"
-              stroke="var(--accent)"
-              strokeWidth={3}
-              dot={{ r: 3, strokeWidth: 2, fill: "var(--surface)" }}
-              activeDot={{ r: 5, strokeWidth: 2, fill: "var(--surface)" }}
-            />
-          </LineChart>
-        </ResponsiveContainer>
+                  return (
+                    <div className="rounded-xl border border-[var(--border-strong)] bg-[var(--surface)] px-3 py-2 shadow-[0_10px_30px_-18px_var(--shadow)]">
+                      <p className="text-[11px] font-semibold tracking-[0.04em] text-[var(--text-subtle)]">
+                        {fullDateFormatter.format(new Date(current.date))}
+                      </p>
+                      <p className="mt-1 text-sm font-semibold text-[var(--text)]">
+                        {valueLabel} {formatMetricValue(current.value, decimals)} {unit}
+                      </p>
+                    </div>
+                  );
+                }}
+              />
+              <Line
+                type="monotone"
+                dataKey="value"
+                stroke="var(--accent)"
+                strokeWidth={3}
+                dot={{ r: 3, strokeWidth: 2, fill: "var(--surface)" }}
+                activeDot={{ r: 5, strokeWidth: 2, fill: "var(--surface)" }}
+              />
+            </LineChart>
+          ) : null}
+        </div>
       </div>
       {helperText ? (
         <p className="mt-2 text-xs text-[var(--text-subtle)]">{helperText}</p>

@@ -12,6 +12,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { isConversationEntryNotifiable } from "@/lib/conversation";
 import { getMeasurementReminderState } from "@/lib/measurement-reminder";
+import { canActAsCoach, getDashboardViewsForRole, getDefaultDashboardView, isAdminRole } from "@/lib/role-access";
 import { useAppState } from "@/providers/app-state-provider";
 
 import { roleLabel, type WorkspaceView } from "@/components/workout/shared";
@@ -20,11 +21,7 @@ type PrimaryWorkspaceView = Exclude<WorkspaceView, "settings">;
 const MEASUREMENT_REMINDER_STORAGE_VERSION = "v2";
 
 function navItemsForRole(role: "admin" | "coach" | "athlete"): PrimaryWorkspaceView[] {
-  return role === "admin"
-    ? ["overview", "templates", "athlete-log", "invites"]
-    : role === "coach"
-      ? ["overview", "templates", "athlete-log", "conversation", "invites"]
-      : ["overview", "athlete-log", "conversation"];
+  return getDashboardViewsForRole(role);
 }
 
 function resolveInitialView(role: "admin" | "coach" | "athlete", preferredView: WorkspaceView | undefined) {
@@ -33,7 +30,7 @@ function resolveInitialView(role: "admin" | "coach" | "athlete", preferredView: 
     return preferredView;
   }
 
-  return role === "athlete" ? "athlete-log" : "overview";
+  return getDefaultDashboardView(role);
 }
 
 export function DashboardShell() {
@@ -87,10 +84,19 @@ export function DashboardShell() {
     if (currentUser.role === "athlete" && entry.athleteId !== currentUser.id) {
       return false;
     }
-    if (currentUser.role === "coach" && entry.coachId !== currentUser.id) {
+    if (
+      !isAdminRole(currentUser.role) &&
+      canActAsCoach(currentUser.role) &&
+      !state.assignments.some(
+        (assignment) =>
+          assignment.coachId === currentUser.id &&
+          assignment.athleteId === entry.athleteId &&
+          assignment.active,
+      )
+    ) {
       return false;
     }
-    if (currentUser.role === "admin") {
+    if (!canActAsCoach(currentUser.role) && currentUser.role !== "athlete") {
       return false;
     }
     return isConversationEntryNotifiable(entry) && !entry.readByUserIds.includes(currentUser.id);
@@ -373,12 +379,10 @@ export function DashboardShell() {
                 view={view}
                 onOpenWorkoutLog={() => setView("athlete-log")}
               />
-            ) : view === "templates" ? (
+            ) : view === "templates" || currentUser.role === "coach" || (view === "conversation" && canActAsCoach(currentUser.role)) ? (
               <CoachDashboard view={view} onOpenConversation={() => setView("conversation")} />
             ) : currentUser.role === "admin" ? (
               <AdminDashboard view={view} />
-            ) : currentUser.role === "coach" ? (
-              <CoachDashboard view={view} onOpenConversation={() => setView("conversation")} />
             ) : (
               <AthleteDashboard
                 view={view}

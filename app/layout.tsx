@@ -1,4 +1,5 @@
 import type { Metadata, Viewport } from "next";
+import Script from "next/script";
 
 import { AppStateProvider } from "@/providers/app-state-provider";
 
@@ -66,7 +67,9 @@ export default function RootLayout({
   return (
     <html lang="fi" suppressHydrationWarning>
       <head>
-        <script dangerouslySetInnerHTML={{ __html: themeInitScript }} />
+        <Script id="theme-init" strategy="beforeInteractive">
+          {themeInitScript}
+        </Script>
       </head>
       <body suppressHydrationWarning>
         <a

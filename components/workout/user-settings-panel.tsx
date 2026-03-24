@@ -12,6 +12,7 @@ import { Card, CardDescription, CardTitle } from "@/components/ui/card";
 import { Input, Label, Select } from "@/components/ui/field";
 import { userSettingsSchema } from "@/components/workout/schemas";
 import { roleLabel } from "@/components/workout/shared";
+import { getAssignableCoachUsers, getDashboardViewsForRole, getDefaultDashboardView } from "@/lib/role-access";
 import type { DashboardHomeView, Role, ThemeMode } from "@/lib/types";
 import { useAppState } from "@/providers/app-state-provider";
 
@@ -23,24 +24,18 @@ const dashboardViewLabel: Record<DashboardHomeView, string> = {
   conversation: "Keskustelu",
 };
 
-const dashboardViewOptionsByRole: Record<Role, DashboardHomeView[]> = {
-  admin: ["overview", "templates", "athlete-log", "invites"],
-  coach: ["overview", "templates", "athlete-log", "conversation", "invites"],
-  athlete: ["overview", "athlete-log", "conversation"],
-};
-
 const themeModeLabel: Record<ThemeMode, string> = {
   light: "Vaalea",
   dark: "Tumma",
 };
 
 function resolveDefaultView(role: Role, value: DashboardHomeView | undefined): DashboardHomeView {
-  const allowed = dashboardViewOptionsByRole[role];
+  const allowed = getDashboardViewsForRole(role);
   if (value && allowed.includes(value)) {
     return value;
   }
 
-  return role === "athlete" ? "athlete-log" : "overview";
+  return getDefaultDashboardView(role);
 }
 
 export function UserSettingsPanel() {
@@ -55,6 +50,7 @@ export function UserSettingsPanel() {
     adminDeleteUser,
     adminSendPasswordResetEmail,
     adminUpdateUserRole,
+    adminAssignAthleteCoaches,
   } = useAppState();
   const [message, setMessage] = useState<string>("");
   const [passwordResetMessage, setPasswordResetMessage] = useState<string>("");
@@ -62,6 +58,7 @@ export function UserSettingsPanel() {
   const [previewResetUrl, setPreviewResetUrl] = useState<string>("");
   const [selectedManagedUserId, setSelectedManagedUserId] = useState<string>("");
   const [selectedManagedRole, setSelectedManagedRole] = useState<Role>("coach");
+  const [selectedManagedCoachIds, setSelectedManagedCoachIds] = useState<string[]>([]);
 
   const form = useForm<z.input<typeof userSettingsSchema>, unknown, z.output<typeof userSettingsSchema>>({
     resolver: zodResolver(userSettingsSchema),
@@ -81,7 +78,7 @@ export function UserSettingsPanel() {
   const allowedViewOptions = useMemo(
     () =>
       currentUser
-        ? dashboardViewOptionsByRole[currentUser.role]
+        ? getDashboardViewsForRole(currentUser.role)
         : (["overview"] as DashboardHomeView[]),
     [currentUser],
   );
@@ -97,6 +94,19 @@ export function UserSettingsPanel() {
   const selectedManagedUser = useMemo(
     () => manageableUsers.find((user) => user.id === selectedManagedUserId) ?? manageableUsers[0],
     [manageableUsers, selectedManagedUserId],
+  );
+  const assignableCoaches = useMemo(
+    () => getAssignableCoachUsers(state.users).sort((a, b) => a.fullName.localeCompare(b.fullName, "fi-FI")),
+    [state.users],
+  );
+  const selectedManagedAthleteCoachIds = useMemo(
+    () =>
+      selectedManagedUser?.role === "athlete"
+        ? state.assignments
+            .filter((assignment) => assignment.athleteId === selectedManagedUser.id && assignment.active)
+            .map((assignment) => assignment.coachId)
+        : [],
+    [selectedManagedUser, state.assignments],
   );
 
   useEffect(() => {
@@ -133,6 +143,10 @@ export function UserSettingsPanel() {
 
     setSelectedManagedRole(selectedManagedUser.role);
   }, [selectedManagedUser]);
+
+  useEffect(() => {
+    setSelectedManagedCoachIds(selectedManagedAthleteCoachIds);
+  }, [selectedManagedAthleteCoachIds]);
 
   if (!currentUser) {
     return null;
@@ -408,6 +422,11 @@ export function UserSettingsPanel() {
                     <div className="flex flex-wrap gap-2">
                       <Badge>{roleLabel(selectedManagedUser.role)}</Badge>
                       <Badge>{selectedManagedUser.status === "active" ? "Aktiivinen" : "Kutsu odottaa"}</Badge>
+                      {selectedManagedUser.role === "athlete" && selectedManagedAthleteCoachIds.length > 0 ? (
+                        <Badge>
+                          Valmentajia: {selectedManagedAthleteCoachIds.length}
+                        </Badge>
+                      ) : null}
                     </div>
 
                     <div className="mt-2 grid gap-3 rounded-xl border border-[var(--border)] bg-[var(--surface)] p-3 md:grid-cols-[1fr_auto] md:items-end">
@@ -443,6 +462,71 @@ export function UserSettingsPanel() {
                         Tallenna rooli
                       </Button>
                     </div>
+
+                    {selectedManagedUser.role === "athlete" ? (
+                      <div className="mt-2 grid gap-3 rounded-xl border border-[var(--border)] bg-[var(--surface)] p-3">
+                        <div>
+                          <Label htmlFor="admin-managed-coaches">Valmentajat</Label>
+                          <div
+                            id="admin-managed-coaches"
+                            className="grid gap-2 rounded-xl border border-[var(--border)] bg-[var(--surface-2)] p-3"
+                          >
+                            {assignableCoaches.map((user) => {
+                              const checked = selectedManagedCoachIds.includes(user.id);
+                              return (
+                                <label
+                                  key={user.id}
+                                  className="flex items-center justify-between gap-3 rounded-xl border border-[var(--border)] bg-[var(--surface)] px-3 py-2"
+                                >
+                                  <span className="min-w-0">
+                                    <span className="block text-sm font-medium text-[var(--text)]">{user.fullName}</span>
+                                    <span className="block text-xs text-[var(--text-subtle)]">{roleLabel(user.role)} · {user.email}</span>
+                                  </span>
+                                  <input
+                                    type="checkbox"
+                                    className="size-4 shrink-0 accent-[var(--accent)]"
+                                    checked={checked}
+                                    onChange={() =>
+                                      setSelectedManagedCoachIds((previous) =>
+                                        checked
+                                          ? previous.filter((coachId) => coachId !== user.id)
+                                          : [...previous, user.id],
+                                      )
+                                    }
+                                  />
+                                </label>
+                              );
+                            })}
+                          </div>
+                          <p className="mt-2 text-xs text-[var(--text-subtle)]">
+                            Voit valita treenaajalle useamman valmentajan. Adminin pääsy on aina globaali, joten adminia ei näytetä tässä listassa.
+                          </p>
+                        </div>
+                        <div className="flex flex-wrap items-center gap-3">
+                          <Button
+                            type="button"
+                            variant="secondary"
+                            className="w-full md:w-auto"
+                            disabled={
+                              selectedManagedCoachIds.length === 0 ||
+                              (selectedManagedCoachIds.length === selectedManagedAthleteCoachIds.length &&
+                                selectedManagedCoachIds.every((coachId) => selectedManagedAthleteCoachIds.includes(coachId)))
+                            }
+                            onClick={() => {
+                              const result = adminAssignAthleteCoaches(selectedManagedUser.id, selectedManagedCoachIds);
+                              setAdminMessage(
+                                "message" in result ? result.message : "Valmentajat tallennettiin.",
+                              );
+                            }}
+                          >
+                            Tallenna valmentajat
+                          </Button>
+                          <p className="text-xs text-[var(--text-subtle)]">
+                            Valittuna {selectedManagedCoachIds.length} / {assignableCoaches.length}
+                          </p>
+                        </div>
+                      </div>
+                    ) : null}
 
                     <div className="mt-2 flex flex-wrap gap-2">
                       <Button
@@ -504,15 +588,13 @@ export function UserSettingsPanel() {
                   className={`mt-4 text-sm ${
                     !adminMessage
                       ? "text-[var(--text-subtle)]"
-                      : adminMessage.includes("lähet")
+                      : adminMessage.includes("lähet") ||
+                          adminMessage.includes("poistettiin") ||
+                          adminMessage.includes("Vaihdoit") ||
+                          adminMessage.includes("päivitettiin") ||
+                          adminMessage.includes("asetettiin")
                         ? "text-[var(--success)]"
-                        : adminMessage.includes("poistettiin")
-                          ? "text-[var(--success)]"
-                          : adminMessage.includes("Vaihdoit")
-                            ? "text-[var(--success)]"
-                            : adminMessage.includes("päivitettiin")
-                              ? "text-[var(--success)]"
-                          : "text-[var(--danger)]"
+                        : "text-[var(--danger)]"
                   }`}
                 >
                   {adminMessage || "Valitse käyttäjä aloittaaksesi hallinnan."}

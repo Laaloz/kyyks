@@ -21,6 +21,7 @@ import {
   updateSessionSet as domainUpdateSessionSet,
 } from "@/lib/domain";
 import { defaultGlobalExercises } from "@/lib/demo-data";
+import { canActAsCoach, getDashboardViewsForRole, getDefaultDashboardView, isAdminRole } from "@/lib/role-access";
 import { createSupabaseBrowserClient } from "@/lib/supabase/client";
 import type {
   AppState,
@@ -57,18 +58,8 @@ type PersistedSession = {
   impersonatedUserId: string | null;
 };
 
-const allowedDashboardViewsByRole: Record<Role, DashboardHomeView[]> = {
-  admin: ["overview", "templates", "athlete-log", "invites"],
-  coach: ["overview", "templates", "athlete-log", "conversation", "invites"],
-  athlete: ["overview", "athlete-log", "conversation"],
-};
-
-function getDefaultDashboardView(role: Role): DashboardHomeView {
-  return role === "athlete" ? "athlete-log" : "overview";
-}
-
 function normalizeDefaultDashboardView(role: Role, value: DashboardHomeView | undefined): DashboardHomeView {
-  if (value && allowedDashboardViewsByRole[role].includes(value)) {
+  if (value && getDashboardViewsForRole(role).includes(value)) {
     return value;
   }
 
@@ -97,11 +88,23 @@ function canManageProgramTarget(state: AppState, actor: UserProfile, athleteId: 
     return true;
   }
 
-  if (actor.role === "coach") {
+  if (isAdminRole(actor.role)) {
+    return state.users.some((user) => user.id === athleteId && user.role === "athlete");
+  }
+
+  if (canActAsCoach(actor.role)) {
     return canCoachManageAthlete(state, actor.id, athleteId);
   }
 
   return false;
+}
+
+function resolvePrimaryCoachIdForAthlete(state: AppState, athleteId: string) {
+  return (
+    state.assignments.find((assignment) => assignment.athleteId === athleteId && assignment.active)?.coachId ??
+    state.scheduledWorkouts.find((workout) => workout.athleteId === athleteId)?.coachId ??
+    state.plans.find((plan) => plan.athleteId === athleteId)?.coachId
+  );
 }
 
 function inferSplitTypeFromTitle(title: string) {
@@ -606,13 +609,17 @@ function getSupabaseLoginErrorMessage(message: string) {
   return `Kirjautuminen epäonnistui: ${message}`;
 }
 
-function isConversationVisibleToUser(entry: ConversationEntry, user: UserProfile) {
+function isConversationVisibleToUser(state: AppState, entry: ConversationEntry, user: UserProfile) {
+  if (isAdminRole(user.role)) {
+    return true;
+  }
+
   if (user.role === "athlete") {
     return entry.athleteId === user.id;
   }
 
-  if (user.role === "coach") {
-    return entry.coachId === user.id;
+  if (canActAsCoach(user.role)) {
+    return canCoachManageAthlete(state, user.id, entry.athleteId);
   }
 
   return false;
@@ -634,6 +641,7 @@ interface AppStateContextValue {
   requestCurrentUserPasswordReset: () => Promise<PasswordResetRequestResult>;
   adminSendPasswordResetEmail: (userId: string) => Promise<PasswordResetRequestResult>;
   adminUpdateUserRole: (userId: string, role: Role) => ActionResult;
+  adminAssignAthleteCoaches: (athleteId: string, coachIds: string[]) => ActionResult;
   completePasswordReset: (token: string, nextPassword: string) => Promise<ActionResult>;
   adminDeleteUser: (userId: string) => ActionResult;
   createInvite: (input: InviteInput) => ActionResult;
@@ -1190,6 +1198,80 @@ export function AppStateProvider({ children }: PropsWithChildren) {
           message: `Rooli päivitettiin: ${targetUser.fullName} on nyt ${role === "admin" ? "admin" : role === "coach" ? "valmentaja" : "treenaaja"}.`,
         };
       },
+      adminAssignAthleteCoaches(athleteId, coachIds) {
+        if (!currentUser || !isAdminRole(currentUser.role)) {
+          return { ok: false, message: "Vain admin voi vaihtaa treenaajan valmentajat." };
+        }
+
+        const athlete = state.users.find((user) => user.id === athleteId);
+        if (!athlete || athlete.role !== "athlete") {
+          return { ok: false, message: "Treenaajaa ei löytynyt." };
+        }
+
+        const uniqueCoachIds = Array.from(new Set(coachIds.filter(Boolean)));
+        if (!uniqueCoachIds.length) {
+          return { ok: false, message: "Valitse vähintään yksi valmentaja." };
+        }
+
+        const selectedCoaches = uniqueCoachIds.map((coachId) =>
+          state.users.find((user) => user.id === coachId && user.role === "coach"),
+        );
+        if (selectedCoaches.some((coach) => !coach)) {
+          return { ok: false, message: "Yksi tai useampi valituista valmentajista ei ole kelvollinen." };
+        }
+
+        const activeAssignments = state.assignments.filter(
+          (assignment) => assignment.athleteId === athleteId && assignment.active,
+        );
+        const activeCoachIds = activeAssignments.map((assignment) => assignment.coachId).sort();
+        const normalizedSelectedCoachIds = [...uniqueCoachIds].sort();
+        if (
+          activeCoachIds.length === normalizedSelectedCoachIds.length &&
+          activeCoachIds.every((coachId, index) => coachId === normalizedSelectedCoachIds[index])
+        ) {
+          return { ok: true, message: "Valmentajat olivat jo valittuna." };
+        }
+
+        const primaryCoachId = uniqueCoachIds[0] ?? "";
+        const createdAt = new Date().toISOString();
+        setState((previous) => ({
+          ...previous,
+          assignments: [
+            ...previous.assignments.filter(
+              (assignment) => !(assignment.athleteId === athleteId && assignment.active),
+            ),
+            ...uniqueCoachIds.map((coachId) => {
+              const existingAssignment = previous.assignments.find(
+                (assignment) =>
+                  assignment.athleteId === athleteId &&
+                  assignment.coachId === coachId &&
+                  assignment.active,
+              );
+
+              return existingAssignment ?? {
+                id: makeId("assignment"),
+                coachId,
+                athleteId,
+                active: true,
+                createdAt,
+              };
+            }),
+          ],
+          invites: previous.invites.map((invite) =>
+            invite.role === "athlete" &&
+            invite.email.toLowerCase() === athlete.email.toLowerCase() &&
+            invite.status === "pending"
+              ? { ...invite, coachId: primaryCoachId }
+              : invite,
+          ),
+        }));
+
+        const coachNames = selectedCoaches
+          .filter((coach): coach is UserProfile => Boolean(coach))
+          .map((coach) => coach.fullName)
+          .join(", ");
+        return { ok: true, message: `Valmentajat päivitettiin: ${coachNames}.` };
+      },
       async completePasswordReset(token, nextPassword) {
         const normalizedToken = token.trim();
         if (!normalizedToken) {
@@ -1344,6 +1426,13 @@ export function AppStateProvider({ children }: PropsWithChildren) {
           return { ok: false, message: "Treenaajalle pitää valita vastuullinen valmentaja." };
         }
 
+        if (input.role === "athlete" && input.coachId) {
+          const assignedCoach = state.users.find((user) => user.id === input.coachId);
+          if (!assignedCoach || assignedCoach.role !== "coach") {
+            return { ok: false, message: "Treenaajalle pitää valita valmentaja-roolinen vastuuhenkilö." };
+          }
+        }
+
         const duplicatePendingInvite = state.invites.find(
           (invite) => invite.email.toLowerCase() === input.email.toLowerCase() && invite.status === "pending",
         );
@@ -1475,8 +1564,8 @@ export function AppStateProvider({ children }: PropsWithChildren) {
         return { ok: true };
       },
       createTemplate(input) {
-        if (!currentUser || currentUser.role !== "coach") {
-          return { ok: false, message: "Vain valmentaja voi luoda treenipohjan." };
+        if (!currentUser || !canActAsCoach(currentUser.role)) {
+          return { ok: false, message: "Vain admin tai valmentaja voi luoda treenipohjan." };
         }
 
         const template = domainCreateTemplate(input, currentUser.id);
@@ -1487,7 +1576,7 @@ export function AppStateProvider({ children }: PropsWithChildren) {
         return { ok: true };
       },
       createProgram(input) {
-        if (!currentUser || (currentUser.role !== "coach" && currentUser.role !== "admin")) {
+        if (!currentUser || !canActAsCoach(currentUser.role)) {
           return { ok: false, message: "Vain admin tai valmentaja voi luoda treeniohjelman." };
         }
 
@@ -1507,7 +1596,7 @@ export function AppStateProvider({ children }: PropsWithChildren) {
         return { ok: true };
       },
       updateProgram(programId, patch) {
-        if (!currentUser || (currentUser.role !== "coach" && currentUser.role !== "admin")) {
+        if (!currentUser || !canActAsCoach(currentUser.role)) {
           return { ok: false, message: "Vain admin tai valmentaja voi muokata treeniohjelmaa." };
         }
 
@@ -1516,7 +1605,7 @@ export function AppStateProvider({ children }: PropsWithChildren) {
           return { ok: false, message: "Treeniohjelmaa ei löytynyt." };
         }
 
-        if (program.coachId !== currentUser.id) {
+        if (!isAdminRole(currentUser.role) && program.coachId !== currentUser.id) {
           return { ok: false, message: "Voit muokata vain omia ohjelmiasi." };
         }
 
@@ -1602,7 +1691,8 @@ export function AppStateProvider({ children }: PropsWithChildren) {
           const canCommentAsAthlete =
             currentUser.role === "athlete" && workout.athleteId === currentUser.id;
           const canCommentAsCoach =
-            currentUser.role === "coach" && workout.coachId === currentUser.id;
+            isAdminRole(currentUser.role) ||
+            (canActAsCoach(currentUser.role) && canCoachManageAthlete(state, currentUser.id, workout.athleteId));
 
           if (!canCommentAsAthlete && !canCommentAsCoach) {
             return { ok: false, message: "Sinulla ei ole oikeutta kommentoida tätä treeniä." };
@@ -1636,7 +1726,8 @@ export function AppStateProvider({ children }: PropsWithChildren) {
           const canCommentAsAthlete =
             currentUser.role === "athlete" && plan.athleteId === currentUser.id;
           const canCommentAsCoach =
-            currentUser.role === "coach" && plan.coachId === currentUser.id;
+            isAdminRole(currentUser.role) ||
+            (canActAsCoach(currentUser.role) && canCoachManageAthlete(state, currentUser.id, plan.athleteId));
 
           if (!canCommentAsAthlete && !canCommentAsCoach) {
             return { ok: false, message: "Sinulla ei ole oikeutta kommentoida tätä ohjelmaa." };
@@ -1686,18 +1777,22 @@ export function AppStateProvider({ children }: PropsWithChildren) {
           return { ok: true };
         }
 
-        if (currentUser.role === "coach" && options?.athleteId) {
+        if (canActAsCoach(currentUser.role) && options?.athleteId) {
           const athleteId = options.athleteId;
-          if (!canCoachManageAthlete(state, currentUser.id, athleteId)) {
+          if (!isAdminRole(currentUser.role) && !canCoachManageAthlete(state, currentUser.id, athleteId)) {
             return { ok: false, message: "Voit keskustella vain omien valmennettaviesi kanssa." };
           }
+
+          const resolvedCoachId = isAdminRole(currentUser.role)
+            ? resolvePrimaryCoachIdForAthlete(state, athleteId) ?? currentUser.id
+            : currentUser.id;
 
           setState((previous) =>
             appendConversationEntry(
               previous,
               buildConversationEntry({
                 athleteId,
-                coachId: currentUser.id,
+                coachId: resolvedCoachId,
                 authorUserId: currentUser.id,
                 authorRole: currentUser.role,
                 type: "comment",
@@ -1719,7 +1814,7 @@ export function AppStateProvider({ children }: PropsWithChildren) {
         setState((previous) => {
           const hasUnread = previous.conversationEntries.some(
             (entry) =>
-              isConversationVisibleToUser(entry, currentUser) &&
+              isConversationVisibleToUser(previous, entry, currentUser) &&
               !entry.readByUserIds.includes(currentUser.id),
           );
 
@@ -1730,7 +1825,7 @@ export function AppStateProvider({ children }: PropsWithChildren) {
           return {
             ...previous,
             conversationEntries: previous.conversationEntries.map((entry) =>
-              isConversationVisibleToUser(entry, currentUser) && !entry.readByUserIds.includes(currentUser.id)
+              isConversationVisibleToUser(previous, entry, currentUser) && !entry.readByUserIds.includes(currentUser.id)
                 ? { ...entry, readByUserIds: [...entry.readByUserIds, currentUser.id] }
                 : entry,
             ),

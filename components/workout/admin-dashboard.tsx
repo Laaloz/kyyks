@@ -1,9 +1,9 @@
 "use client";
 
 import { zodResolver } from "@hookform/resolvers/zod";
-import { CalendarDays, ClipboardPenLine, ShieldCheck, UserRoundPlus } from "lucide-react";
+import { Activity, AlertTriangle, ShieldCheck, UserRoundPlus, UsersRound } from "lucide-react";
 import Link from "next/link";
-import { useId, useState } from "react";
+import { useId, useMemo, useState } from "react";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
 
@@ -11,6 +11,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardDescription, CardTitle } from "@/components/ui/card";
 import { Input, Label, Select } from "@/components/ui/field";
+import { getAssignableCoachUsers } from "@/lib/role-access";
 import { formatDate } from "@/lib/utils";
 import { useAppState } from "@/providers/app-state-provider";
 
@@ -21,9 +22,125 @@ export function AdminDashboard({ view }: { view: WorkspaceView }) {
   const { currentUser, state, createInvite } = useAppState();
   const formId = useId();
   const [inviteMessage, setInviteMessage] = useState<string>("");
-  const coaches = state.users.filter((user) => user.role === "coach");
+  const coaches = getAssignableCoachUsers(state.users);
   const athletes = state.users.filter((user) => user.role === "athlete");
   const pendingInvites = state.invites.filter((invite) => invite.status === "pending");
+  const overview = useMemo(() => {
+    const dayMs = 24 * 60 * 60 * 1000;
+    const now = Date.now();
+    const activeAssignments = state.assignments.filter((assignment) => assignment.active);
+    const athleteAssignmentCount = new Map<string, number>();
+    const coachAssignmentCount = new Map<string, number>();
+    const planCountByAthlete = new Map<string, number>();
+    const athleteLatestActivity = new Map<string, number>();
+
+    activeAssignments.forEach((assignment) => {
+      athleteAssignmentCount.set(assignment.athleteId, (athleteAssignmentCount.get(assignment.athleteId) ?? 0) + 1);
+      coachAssignmentCount.set(assignment.coachId, (coachAssignmentCount.get(assignment.coachId) ?? 0) + 1);
+    });
+
+    state.plans.forEach((plan) => {
+      planCountByAthlete.set(plan.athleteId, (planCountByAthlete.get(plan.athleteId) ?? 0) + 1);
+    });
+
+    state.sessions.forEach((session) => {
+      const activityMoment = Date.parse(session.completedAt ?? session.updatedAt);
+      if (!Number.isFinite(activityMoment)) {
+        return;
+      }
+
+      athleteLatestActivity.set(
+        session.athleteId,
+        Math.max(activityMoment, athleteLatestActivity.get(session.athleteId) ?? 0),
+      );
+    });
+
+    state.scheduledWorkouts.forEach((workout) => {
+      const activityMoment = Date.parse(workout.completedAt ?? workout.updatedAt);
+      if (!Number.isFinite(activityMoment)) {
+        return;
+      }
+
+      athleteLatestActivity.set(
+        workout.athleteId,
+        Math.max(activityMoment, athleteLatestActivity.get(workout.athleteId) ?? 0),
+      );
+    });
+
+    const athletesWithoutCoach = athletes
+      .filter((athlete) => !athleteAssignmentCount.has(athlete.id))
+      .sort((left, right) => left.fullName.localeCompare(right.fullName, "fi"));
+    const athletesWithMultipleCoaches = athletes
+      .filter((athlete) => (athleteAssignmentCount.get(athlete.id) ?? 0) > 1)
+      .sort(
+        (left, right) =>
+          (athleteAssignmentCount.get(right.id) ?? 0) - (athleteAssignmentCount.get(left.id) ?? 0) ||
+          left.fullName.localeCompare(right.fullName, "fi"),
+      );
+    const athletesWithoutProgram = athletes
+      .filter((athlete) => !planCountByAthlete.has(athlete.id))
+      .sort((left, right) => left.fullName.localeCompare(right.fullName, "fi"));
+    const coachesWithoutAthletes = coaches
+      .filter((coach) => !coachAssignmentCount.has(coach.id))
+      .sort((left, right) => left.fullName.localeCompare(right.fullName, "fi"));
+    const staleAthletes = athletes
+      .filter((athlete) => {
+        const latestActivity = athleteLatestActivity.get(athlete.id);
+        return !latestActivity || now - latestActivity > 14 * dayMs;
+      })
+      .sort((left, right) => left.fullName.localeCompare(right.fullName, "fi"));
+    const activePrograms = state.plans.filter((plan) => Boolean(plan.workouts?.length));
+    const workoutsInProgress = state.scheduledWorkouts.filter((workout) => workout.status === "in_progress");
+    const completedWorkoutsLastWeek = state.scheduledWorkouts.filter((workout) => {
+      if (workout.status !== "completed") {
+        return false;
+      }
+
+      const completedMoment = Date.parse(workout.completedAt ?? workout.updatedAt);
+      return Number.isFinite(completedMoment) && now - completedMoment <= 7 * dayMs;
+    });
+    const pendingInvitesExpiringSoon = pendingInvites
+      .filter((invite) => {
+        const expiresAt = Date.parse(invite.expiresAt);
+        return Number.isFinite(expiresAt) && expiresAt >= now && expiresAt - now <= 3 * dayMs;
+      })
+      .sort((left, right) => Date.parse(left.expiresAt) - Date.parse(right.expiresAt));
+    const invitedUsers = state.users.filter((user) => user.status === "invited");
+    const coachLoad = coaches
+      .map((coach) => ({
+        coach,
+        athleteCount: coachAssignmentCount.get(coach.id) ?? 0,
+        programCount: state.plans.filter((plan) => plan.coachId === coach.id).length,
+        pendingInviteCount: pendingInvites.filter((invite) => invite.coachId === coach.id).length,
+      }))
+      .sort(
+        (left, right) =>
+          right.athleteCount - left.athleteCount ||
+          right.programCount - left.programCount ||
+          left.coach.fullName.localeCompare(right.coach.fullName, "fi"),
+      );
+    const attentionCount =
+      athletesWithoutCoach.length +
+      athletesWithoutProgram.length +
+      pendingInvitesExpiringSoon.length +
+      staleAthletes.length;
+
+    return {
+      activeAssignments,
+      activePrograms,
+      athletesWithoutCoach,
+      athletesWithMultipleCoaches,
+      athletesWithoutProgram,
+      coachesWithoutAthletes,
+      workoutsInProgress,
+      completedWorkoutsLastWeek,
+      pendingInvitesExpiringSoon,
+      invitedUsers,
+      staleAthletes,
+      coachLoad,
+      attentionCount,
+    };
+  }, [athletes, coaches, pendingInvites, state.assignments, state.plans, state.scheduledWorkouts, state.sessions, state.users]);
   const form = useForm<z.infer<typeof inviteSchema>>({
     resolver: zodResolver(inviteSchema),
     defaultValues: {
@@ -43,52 +160,280 @@ export function AdminDashboard({ view }: { view: WorkspaceView }) {
             metrics={[
               { label: "Valmentajat", value: coaches.length, icon: ShieldCheck },
               { label: "Treenaajat", value: athletes.length, icon: UserRoundPlus },
-              { label: "Aktiiviset treenit", value: state.scheduledWorkouts.length, icon: CalendarDays },
-              { label: "Avoimet kutsut", value: pendingInvites.length, icon: ClipboardPenLine },
+              { label: "Valmennussuhteet", value: overview.activeAssignments.length, icon: UsersRound },
+              { label: "Vaatii huomiota", value: overview.attentionCount, icon: AlertTriangle },
             ]}
             role={currentUser?.role ?? null}
           />
 
           <Card className="border-[var(--border-strong)]">
-            <div className="grid gap-5 xl:grid-cols-[1.15fr_0.85fr] xl:items-end">
+            <div className="grid gap-5 xl:grid-cols-[1.1fr_0.9fr] xl:items-end">
               <div className="space-y-3">
                 <p className="text-xs font-semibold tracking-[0.04em] text-[var(--text-subtle)]">Hallintanäkymä</p>
-                <CardTitle className="text-2xl">Pidä valmennusverkko hallinnassa yhdestä paikasta</CardTitle>
+                <CardTitle className="text-2xl">Admin näkee nyt yhdellä silmäyksellä mitä verkossa tapahtuu</CardTitle>
                 <CardDescription className="max-w-3xl leading-6">
-                  Yleiskuva näyttää nopeasti verkoston tilan ja valmennuskuormituksen ilman erillistä raportointia.
+                  Yleiskuva nostaa esiin poikkeamat, valmennussuhteet, aktiivisuuden ja onboardingin. Adminilla on globaali pääsy kaikkeen, joten valmentajalistat näyttävät vain varsinaiset valmentajat.
                 </CardDescription>
               </div>
               <div className="grid gap-3 sm:grid-cols-3 xl:grid-cols-1 2xl:grid-cols-3">
                 <div className="rounded-xl border-2 border-[var(--border)] bg-[var(--surface-2)] px-4 py-4">
-                  <p className="text-xs font-semibold tracking-[0.04em] text-[var(--text-subtle)]">1. Tarkista</p>
-                  <p className="mt-2 text-sm font-medium text-[var(--text)]">Kuormitus</p>
+                  <p className="text-xs font-semibold tracking-[0.04em] text-[var(--text-subtle)]">Huomiot nyt</p>
+                  <p className="mt-2 text-2xl font-semibold text-[var(--text)]">{overview.attentionCount}</p>
+                  <p className="mt-1 text-sm text-[var(--text-muted)]">yhteensä avointa poikkeamaa</p>
                 </div>
                 <div className="rounded-xl border-2 border-[var(--border)] bg-[var(--surface-2)] px-4 py-4">
-                  <p className="text-xs font-semibold tracking-[0.04em] text-[var(--text-subtle)]">2. Tunnista</p>
-                  <p className="mt-2 text-sm font-medium text-[var(--text)]">Pullonkaulat</p>
+                  <p className="text-xs font-semibold tracking-[0.04em] text-[var(--text-subtle)]">Monivalmentajat</p>
+                  <p className="mt-2 text-2xl font-semibold text-[var(--text)]">{overview.athletesWithMultipleCoaches.length}</p>
+                  <p className="mt-1 text-sm text-[var(--text-muted)]">treenaajalla on useampi coach</p>
                 </div>
                 <div className="rounded-xl border-2 border-[var(--border)] bg-[var(--surface-2)] px-4 py-4">
-                  <p className="text-xs font-semibold tracking-[0.04em] text-[var(--text-subtle)]">3. Siirry</p>
-                  <p className="mt-2 text-sm font-medium text-[var(--text)]">Kutsuihin</p>
+                  <p className="text-xs font-semibold tracking-[0.04em] text-[var(--text-subtle)]">Vanhenee pian</p>
+                  <p className="mt-2 text-2xl font-semibold text-[var(--text)]">{overview.pendingInvitesExpiringSoon.length}</p>
+                  <p className="mt-1 text-sm text-[var(--text-muted)]">kutsua 72 tunnin sisällä</p>
                 </div>
               </div>
             </div>
           </Card>
 
+          <div className="grid gap-6 xl:grid-cols-[1.05fr_0.95fr]">
+            <Card className="border-[var(--border-strong)]">
+              <p className="text-xs font-semibold tracking-[0.04em] text-[var(--text-subtle)]">Vaatii huomiota</p>
+              <CardTitle className="text-2xl">Poikkeamat joihin kannattaa tarttua ensin</CardTitle>
+              <CardDescription className="mt-2">
+                Nosta kuntoon valmentamattomat treenaajat, ohjelmattomat käyttäjät ja vanhenevat kutsut ennen kuin ne jäävät jumiin.
+              </CardDescription>
+              <div className="mt-6 grid gap-3">
+                <div className="rounded-xl border-2 border-[var(--border)] bg-[var(--surface-2)] p-4">
+                  <div className="flex items-center justify-between gap-4">
+                    <div>
+                      <p className="text-sm font-semibold text-[var(--text)]">Treenaajat ilman valmentajaa</p>
+                      <p className="text-sm text-[var(--text-muted)]">Näille käyttäjille pitää lisätä vähintään yksi valmentaja hallinnasta.</p>
+                    </div>
+                    <Badge>{overview.athletesWithoutCoach.length}</Badge>
+                  </div>
+                  {overview.athletesWithoutCoach.length > 0 ? (
+                    <ul className="mt-3 grid gap-2 text-sm text-[var(--text-muted)]">
+                      {overview.athletesWithoutCoach.slice(0, 4).map((athlete) => (
+                        <li key={athlete.id} className="rounded-lg border border-[var(--border)] px-3 py-2">
+                          {athlete.fullName}
+                        </li>
+                      ))}
+                    </ul>
+                  ) : (
+                    <p className="mt-3 text-sm text-[var(--success)]">Kaikilla treenaajilla on ainakin yksi valmentaja.</p>
+                  )}
+                </div>
+
+                <div className="rounded-xl border-2 border-[var(--border)] bg-[var(--surface-2)] p-4">
+                  <div className="flex items-center justify-between gap-4">
+                    <div>
+                      <p className="text-sm font-semibold text-[var(--text)]">Treenaajat ilman ohjelmaa</p>
+                      <p className="text-sm text-[var(--text-muted)]">Ohjelmaton treenaaja jää helposti ilman seuraavaa selkeää askelta.</p>
+                    </div>
+                    <Badge>{overview.athletesWithoutProgram.length}</Badge>
+                  </div>
+                  {overview.athletesWithoutProgram.length > 0 ? (
+                    <ul className="mt-3 grid gap-2 text-sm text-[var(--text-muted)]">
+                      {overview.athletesWithoutProgram.slice(0, 4).map((athlete) => (
+                        <li key={athlete.id} className="rounded-lg border border-[var(--border)] px-3 py-2">
+                          {athlete.fullName}
+                        </li>
+                      ))}
+                    </ul>
+                  ) : (
+                    <p className="mt-3 text-sm text-[var(--success)]">Jokaisella treenaajalla on vähintään yksi ohjelma.</p>
+                  )}
+                </div>
+
+                <div className="rounded-xl border-2 border-[var(--border)] bg-[var(--surface-2)] p-4">
+                  <div className="flex items-center justify-between gap-4">
+                    <div>
+                      <p className="text-sm font-semibold text-[var(--text)]">Kutsut vanhenevat pian</p>
+                      <p className="text-sm text-[var(--text-muted)]">Tarkista 72 tunnin sisällä vanhenevat kutsut ennen kuin onboarding pysähtyy.</p>
+                    </div>
+                    <Badge>{overview.pendingInvitesExpiringSoon.length}</Badge>
+                  </div>
+                  {overview.pendingInvitesExpiringSoon.length > 0 ? (
+                    <ul className="mt-3 grid gap-2 text-sm text-[var(--text-muted)]">
+                      {overview.pendingInvitesExpiringSoon.slice(0, 4).map((invite) => (
+                        <li key={invite.id} className="rounded-lg border border-[var(--border)] px-3 py-2">
+                          <span className="font-medium text-[var(--text)]">{invite.email}</span>
+                          <span className="block text-xs text-[var(--text-subtle)]">
+                            {roleLabel(invite.role)} · vanhenee {formatDate(invite.expiresAt)}
+                          </span>
+                        </li>
+                      ))}
+                    </ul>
+                  ) : (
+                    <p className="mt-3 text-sm text-[var(--success)]">Yksikään avoin kutsu ei ole vanhenemassa lähiaikoina.</p>
+                  )}
+                </div>
+              </div>
+            </Card>
+
+            <Card className="border-[var(--border-strong)]">
+              <p className="text-xs font-semibold tracking-[0.04em] text-[var(--text-subtle)]">Toiminnan tila</p>
+              <CardTitle className="text-2xl">Miltä verkon arki näyttää juuri nyt</CardTitle>
+              <CardDescription className="mt-2">
+                Tämä näkymä kertoo nopeasti paljonko valmennusta on käynnissä, paljonko valmistuu ja missä aktiivisuus alkaa hiipua.
+              </CardDescription>
+              <div className="mt-6 grid gap-3 sm:grid-cols-2">
+                <div className="rounded-xl border-2 border-[var(--border)] bg-[var(--surface-2)] p-4">
+                  <p className="text-xs font-semibold tracking-[0.03em] text-[var(--text-subtle)]">Aktiiviset ohjelmat</p>
+                  <p className="mt-3 font-[family-name:var(--font-display)] text-3xl font-semibold text-[var(--text)]">
+                    {overview.activePrograms.length}
+                  </p>
+                </div>
+                <div className="rounded-xl border-2 border-[var(--border)] bg-[var(--surface-2)] p-4">
+                  <p className="text-xs font-semibold tracking-[0.03em] text-[var(--text-subtle)]">Treenit käynnissä</p>
+                  <p className="mt-3 font-[family-name:var(--font-display)] text-3xl font-semibold text-[var(--text)]">
+                    {overview.workoutsInProgress.length}
+                  </p>
+                </div>
+                <div className="rounded-xl border-2 border-[var(--border)] bg-[var(--surface-2)] p-4">
+                  <p className="text-xs font-semibold tracking-[0.03em] text-[var(--text-subtle)]">Valmiit 7 päivässä</p>
+                  <p className="mt-3 font-[family-name:var(--font-display)] text-3xl font-semibold text-[var(--text)]">
+                    {overview.completedWorkoutsLastWeek.length}
+                  </p>
+                </div>
+                <div className="rounded-xl border-2 border-[var(--border)] bg-[var(--surface-2)] p-4">
+                  <p className="text-xs font-semibold tracking-[0.03em] text-[var(--text-subtle)]">Aktiivisuus hiipunut</p>
+                  <p className="mt-3 font-[family-name:var(--font-display)] text-3xl font-semibold text-[var(--text)]">
+                    {overview.staleAthletes.length}
+                  </p>
+                </div>
+              </div>
+              <div className="mt-4 rounded-xl border-2 border-[var(--border)] bg-[var(--surface-2)] p-4">
+                <div className="flex items-center gap-3">
+                  <Activity className="size-5 text-[var(--accent)]" />
+                  <div>
+                    <p className="text-sm font-semibold text-[var(--text)]">Tulkinta</p>
+                    <p className="text-sm text-[var(--text-muted)]">
+                      {overview.staleAthletes.length > 0
+                        ? `${overview.staleAthletes.length} treenaajalla ei näy treeni- tai sessioaktiivisuutta 14 päivään.`
+                        : "Aktiivisuudessa ei näy tällä hetkellä selkeää hiljenemistä."}
+                    </p>
+                  </div>
+                </div>
+              </div>
+            </Card>
+          </div>
+
+          <div className="grid gap-6 xl:grid-cols-[1fr_1fr]">
+            <Card>
+              <p className="text-xs font-semibold tracking-[0.04em] text-[var(--text-subtle)]">Valmennussuhteet</p>
+              <CardTitle className="text-2xl">Näe missä coach-jako kaipaa tasapainoa</CardTitle>
+              <CardDescription className="mt-2">
+                Admin pääsee kaikkialle, mutta tästä näet miten varsinaiset valmentajat on jaettu treenaajille.
+              </CardDescription>
+              <div className="mt-6 grid gap-3 md:grid-cols-2">
+                <div className="rounded-xl border-2 border-[var(--border)] bg-[var(--surface-2)] p-4">
+                  <div className="flex items-center justify-between gap-4">
+                    <p className="text-sm font-semibold text-[var(--text)]">Treenaajilla useampi valmentaja</p>
+                    <Badge>{overview.athletesWithMultipleCoaches.length}</Badge>
+                  </div>
+                  {overview.athletesWithMultipleCoaches.length > 0 ? (
+                    <ul className="mt-3 grid gap-2 text-sm text-[var(--text-muted)]">
+                      {overview.athletesWithMultipleCoaches.slice(0, 4).map((athlete) => (
+                        <li key={athlete.id} className="rounded-lg border border-[var(--border)] px-3 py-2">
+                          {athlete.fullName}
+                          <span className="block text-xs text-[var(--text-subtle)]">
+                            {state.assignments.filter((assignment) => assignment.athleteId === athlete.id && assignment.active).length} aktiivista valmentajaa
+                          </span>
+                        </li>
+                      ))}
+                    </ul>
+                  ) : (
+                    <p className="mt-3 text-sm text-[var(--text-muted)]">Monivalmentajasuhteita ei ole vielä käytössä.</p>
+                  )}
+                </div>
+
+                <div className="rounded-xl border-2 border-[var(--border)] bg-[var(--surface-2)] p-4">
+                  <div className="flex items-center justify-between gap-4">
+                    <p className="text-sm font-semibold text-[var(--text)]">Valmentajat ilman treenaajia</p>
+                    <Badge>{overview.coachesWithoutAthletes.length}</Badge>
+                  </div>
+                  {overview.coachesWithoutAthletes.length > 0 ? (
+                    <ul className="mt-3 grid gap-2 text-sm text-[var(--text-muted)]">
+                      {overview.coachesWithoutAthletes.slice(0, 4).map((coach) => (
+                        <li key={coach.id} className="rounded-lg border border-[var(--border)] px-3 py-2">
+                          {coach.fullName}
+                        </li>
+                      ))}
+                    </ul>
+                  ) : (
+                    <p className="mt-3 text-sm text-[var(--text-muted)]">Kaikilla valmentajilla on ainakin yksi treenaaja.</p>
+                  )}
+                </div>
+              </div>
+            </Card>
+
+            <Card>
+              <p className="text-xs font-semibold tracking-[0.04em] text-[var(--text-subtle)]">Kutsut ja onboarding</p>
+              <CardTitle className="text-2xl">Seuraa kuka on tulossa sisään järjestelmään</CardTitle>
+              <CardDescription className="mt-2">
+                Täältä näet paljonko kutsuja on auki, kuinka moni käyttäjä on vielä invited-tilassa ja ketkä tarvitsevat seuraavan stepin.
+              </CardDescription>
+              <div className="mt-6 grid gap-3 sm:grid-cols-3">
+                <div className="rounded-xl border-2 border-[var(--border)] bg-[var(--surface-2)] p-4">
+                  <p className="text-xs font-semibold tracking-[0.03em] text-[var(--text-subtle)]">Avoimet kutsut</p>
+                  <p className="mt-3 text-3xl font-semibold text-[var(--text)]">{pendingInvites.length}</p>
+                </div>
+                <div className="rounded-xl border-2 border-[var(--border)] bg-[var(--surface-2)] p-4">
+                  <p className="text-xs font-semibold tracking-[0.03em] text-[var(--text-subtle)]">Invited-käyttäjät</p>
+                  <p className="mt-3 text-3xl font-semibold text-[var(--text)]">{overview.invitedUsers.length}</p>
+                </div>
+                <div className="rounded-xl border-2 border-[var(--border)] bg-[var(--surface-2)] p-4">
+                  <p className="text-xs font-semibold tracking-[0.03em] text-[var(--text-subtle)]">Uudelleen tarkistettavat</p>
+                  <p className="mt-3 text-3xl font-semibold text-[var(--text)]">{overview.pendingInvitesExpiringSoon.length}</p>
+                </div>
+              </div>
+              <div className="mt-4 grid gap-3">
+                {pendingInvites.length === 0 ? (
+                  <p className="rounded-xl border-2 border-[var(--border)] bg-[var(--surface-2)] px-4 py-3 text-sm text-[var(--text-muted)]">
+                    Onboarding-jono on tällä hetkellä tyhjä.
+                  </p>
+                ) : (
+                  pendingInvites.slice(0, 4).map((invite) => {
+                    const assignedCoach = invite.coachId
+                      ? coaches.find((coach) => coach.id === invite.coachId)
+                      : null;
+
+                    return (
+                      <div key={invite.id} className="rounded-xl border-2 border-[var(--border)] bg-[var(--surface-2)] p-4">
+                        <div className="flex items-start justify-between gap-4">
+                          <div>
+                            <p className="font-medium text-[var(--text)]">{invite.email}</p>
+                            <p className="mt-1 text-sm text-[var(--text-muted)]">
+                              {roleLabel(invite.role)} · vanhenee {formatDate(invite.expiresAt)}
+                            </p>
+                            {assignedCoach ? (
+                              <p className="mt-1 text-xs text-[var(--text-subtle)]">
+                                Vastuuvalmentaja: {assignedCoach.fullName}
+                              </p>
+                            ) : null}
+                          </div>
+                          <Badge>{Date.parse(invite.expiresAt) - Date.now() <= 3 * 24 * 60 * 60 * 1000 ? "Seuraa" : "Auki"}</Badge>
+                        </div>
+                      </div>
+                    );
+                  })
+                )}
+              </div>
+            </Card>
+          </div>
+
           <Card>
-            <p className="text-xs font-semibold tracking-[0.04em] text-[var(--text-subtle)]">Rosteri</p>
-            <CardTitle className="text-2xl">Valmentajien rosterit</CardTitle>
+            <p className="text-xs font-semibold tracking-[0.04em] text-[var(--text-subtle)]">Valmentajien kuormitus</p>
+            <CardTitle className="text-2xl">Varsinaisten valmentajien rosterit ja ohjelmakuorma</CardTitle>
             <CardDescription className="mt-2">
-              Näet nopeasti kunkin valmentajan aktiivisen rosterin koon ja pystyt tunnistamaan kuormituksen.
+              Näet nopeasti kunkin varsinaisen valmentajan rosterin, ohjelmien määrän ja avoimet onboardingit. Adminin pääsy on aina globaali, joten adminia ei näytetä tässä listassa.
             </CardDescription>
             <div className="mt-6 grid gap-4 md:grid-cols-2 2xl:grid-cols-3">
-              {coaches.length === 0 ? (
+              {overview.coachLoad.length === 0 ? (
                 <p className="text-sm text-[var(--text-muted)]">Valmentajia ei ole vielä lisätty.</p>
               ) : (
-                coaches.map((coach) => {
-                  const athleteCount = state.assignments.filter(
-                    (assignment) => assignment.coachId === coach.id && assignment.active,
-                  ).length;
+                overview.coachLoad.map(({ coach, athleteCount, programCount, pendingInviteCount }) => {
                   return (
                     <div key={coach.id} className="rounded-xl border-2 border-[var(--border)] bg-[var(--surface-2)] p-5">
                       <div className="flex items-center justify-between gap-4">
@@ -96,8 +441,20 @@ export function AdminDashboard({ view }: { view: WorkspaceView }) {
                           <p className="font-medium text-[var(--text)]">{coach.fullName}</p>
                           <p className="text-sm text-[var(--text-muted)]">{coach.email}</p>
                         </div>
-                        <Badge>{athleteCount} treenaajaa</Badge>
+                        <Badge>{roleLabel(coach.role)}</Badge>
                       </div>
+                      <div className="mt-4 flex flex-wrap gap-2">
+                        <Badge>{athleteCount} treenaajaa</Badge>
+                        <Badge>{programCount} ohjelmaa</Badge>
+                        <Badge>{pendingInviteCount} avointa kutsua</Badge>
+                      </div>
+                      <p className="mt-4 text-sm text-[var(--text-muted)]">
+                        {athleteCount === 0
+                          ? "Tällä valmentajalla ei ole vielä aktiivisia treenaajia."
+                          : athleteCount === 1
+                            ? "Kuormitus on tällä hetkellä kevyt."
+                            : "Valmentaja on aktiivisesti kiinni rosterissa."}
+                      </p>
                     </div>
                   );
                 })
@@ -113,7 +470,7 @@ export function AdminDashboard({ view }: { view: WorkspaceView }) {
             <p className="text-xs font-semibold tracking-[0.04em] text-[var(--text-subtle)]">Käyttäjähallinta</p>
             <CardTitle className="text-2xl">Lähetä uusi kutsu</CardTitle>
             <CardDescription className="mt-2">
-              Ylläpitäjä voi kutsua uuden valmentajan tai treenaajan. Treenaajalle voi samalla valita vastuuvalmentajan.
+              Ylläpitäjä voi kutsua uuden valmentajan tai treenaajan. Treenaajalle voi samalla valita vastuullisen valmentajan.
             </CardDescription>
             <form
               className="mt-6 space-y-4"
@@ -159,10 +516,10 @@ export function AdminDashboard({ view }: { view: WorkspaceView }) {
                       aria-describedby={form.formState.errors.coachId ? `${formId}-invite-coach-error` : undefined}
                       {...form.register("coachId")}
                     >
-                      <option value="">Valitse valmentaja</option>
+                      <option value="">Valitse vastuuvalmentaja</option>
                       {coaches.map((coach) => (
                         <option key={coach.id} value={coach.id}>
-                          {coach.fullName}
+                          {coach.fullName} ({roleLabel(coach.role)})
                         </option>
                       ))}
                     </Select>
@@ -196,21 +553,32 @@ export function AdminDashboard({ view }: { view: WorkspaceView }) {
               {pendingInvites.length === 0 ? (
                 <p className="text-sm text-[var(--text-muted)]">Avoimia kutsuja ei ole tällä hetkellä.</p>
               ) : (
-                pendingInvites.map((invite) => (
-                  <div key={invite.id} className="rounded-xl border-2 border-[var(--border)] bg-[var(--surface-2)] p-5">
-                    <div className="flex items-start justify-between gap-4">
-                      <div>
-                        <p className="font-medium text-[var(--text)]">{invite.email}</p>
-                        <p className="mt-1 text-sm text-[var(--text-muted)]">
-                          {roleLabel(invite.role)} · vanhenee {formatDate(invite.expiresAt)}
-                        </p>
+                pendingInvites.map((invite) => {
+                  const assignedCoach = invite.coachId
+                    ? coaches.find((coach) => coach.id === invite.coachId)
+                    : null;
+
+                  return (
+                    <div key={invite.id} className="rounded-xl border-2 border-[var(--border)] bg-[var(--surface-2)] p-5">
+                      <div className="flex items-start justify-between gap-4">
+                        <div>
+                          <p className="font-medium text-[var(--text)]">{invite.email}</p>
+                          <p className="mt-1 text-sm text-[var(--text-muted)]">
+                            {roleLabel(invite.role)} · vanhenee {formatDate(invite.expiresAt)}
+                          </p>
+                          {assignedCoach ? (
+                            <p className="mt-1 text-xs text-[var(--text-subtle)]">
+                              Vastuuvalmentaja: {assignedCoach.fullName}
+                            </p>
+                          ) : null}
+                        </div>
+                        <Link className="text-sm font-semibold text-[var(--accent)]" href={`/invite/${invite.token}`}>
+                          Avaa kutsu
+                        </Link>
                       </div>
-                      <Link className="text-sm font-semibold text-[var(--accent)]" href={`/invite/${invite.token}`}>
-                        Avaa kutsu
-                      </Link>
                     </div>
-                  </div>
-                ))
+                  );
+                })
               )}
             </div>
           </Card>
