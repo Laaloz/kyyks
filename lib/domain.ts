@@ -245,7 +245,7 @@ export function createProgram(input: ProgramBuilderInput, coachId: string): Trai
     status: "active",
     workouts,
     startDate: input.startDate ? new Date(`${input.startDate}T08:00:00`).toISOString() : timestamp,
-    weekCount: input.weekCount ?? 0,
+    weekCount: input.weekCount ?? 4,
     createdAt: timestamp,
     updatedAt: timestamp,
   };

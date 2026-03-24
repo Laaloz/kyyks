@@ -581,7 +581,10 @@ export async function createProgramOnServer({
     .single<{ id: string }>();
 
   if (error || !data) {
-    return { ok: false as const, message: "Treeniohjelman luonti epäonnistui." };
+    return {
+      ok: false as const,
+      message: error?.message ? `Treeniohjelman luonti epäonnistui: ${error.message}` : "Treeniohjelman luonti epäonnistui.",
+    };
   }
 
   return { ok: true as const, programId: data.id };

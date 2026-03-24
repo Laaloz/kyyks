@@ -511,6 +511,14 @@ export function shouldSyncSupabaseAuthEvent(event: SupabaseAuthEvent) {
   return event !== "INITIAL_SESSION";
 }
 
+export function shouldRevalidateSupabaseSessionBeforeClearingAuth(
+  source: SupabaseAuthSyncSource,
+  persistedAuthenticatedUserId: string | null,
+  hasResolvedAuthUser = false,
+) {
+  return source === "event" && hasResolvedAuthUser && Boolean(persistedAuthenticatedUserId);
+}
+
 export function shouldCreateFreshInviteOnResendFailure(message: string | undefined) {
   return message === "Kutsua ei löytynyt.";
 }
@@ -1042,6 +1050,16 @@ async function fetchSupabaseProfileWithRetry(
   return null;
 }
 
+async function confirmCurrentSupabaseAuthUser(
+  supabase: NonNullable<ReturnType<typeof createSupabaseBrowserClient>>,
+) {
+  const {
+    data: { session },
+  } = await supabase.auth.getSession();
+
+  return session?.user ?? null;
+}
+
 function getSupabaseLoginErrorMessage(message: string) {
   const normalized = message.toLowerCase();
   if (normalized.includes("invalid login credentials")) {
@@ -1234,8 +1252,9 @@ export function AppStateProvider({ children }: PropsWithChildren) {
         return;
       }
 
+      const persistedSession = parsePersistedSession(window.localStorage.getItem(SESSION_KEY));
+
       if (!authUser?.email) {
-        const persistedSession = parsePersistedSession(window.localStorage.getItem(SESSION_KEY));
         if (
           shouldPreserveStoredSessionDuringSupabaseBootstrap(
             source,
@@ -1245,6 +1264,24 @@ export function AppStateProvider({ children }: PropsWithChildren) {
         ) {
           setIsSupabaseAuthResolved(true);
           return;
+        }
+
+        if (
+          shouldRevalidateSupabaseSessionBeforeClearingAuth(
+            source,
+            persistedSession.authenticatedUserId,
+            hasResolvedAuthUser,
+          )
+        ) {
+          const confirmedAuthUser = await confirmCurrentSupabaseAuthUser(supabase);
+          if (!active) {
+            return;
+          }
+
+          if (confirmedAuthUser?.email) {
+            void syncFromAuthUser(confirmedAuthUser, "bootstrap");
+            return;
+          }
         }
 
         setAuthenticatedUserId(null);
@@ -1266,6 +1303,24 @@ export function AppStateProvider({ children }: PropsWithChildren) {
       });
 
       if (!resolvedUserId) {
+        if (
+          shouldRevalidateSupabaseSessionBeforeClearingAuth(
+            source,
+            persistedSession.authenticatedUserId,
+            hasResolvedAuthUser,
+          )
+        ) {
+          const confirmedAuthUser = await confirmCurrentSupabaseAuthUser(supabase);
+          if (!active) {
+            return;
+          }
+
+          if (confirmedAuthUser?.email) {
+            void syncFromAuthUser(confirmedAuthUser, "bootstrap");
+            return;
+          }
+        }
+
         setAuthenticatedUserId(null);
         setImpersonatedUserId(null);
         setIsSupabaseAuthResolved(true);
@@ -1432,7 +1487,7 @@ export function AppStateProvider({ children }: PropsWithChildren) {
         return { ok: false, message: "Käyttäjätiliä ei voitu tunnistaa kirjautumisen jälkeen." };
       }
 
-      const profile = await fetchSupabaseProfile(supabase, authUser.id);
+      const profile = await fetchSupabaseProfileWithRetry(supabase, authUser.id);
       let resolvedUserId: string | null = null;
       setState((previous) => {
         const resolution = resolveSupabaseUserForState(previous, authUser, profile);

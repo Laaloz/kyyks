@@ -15,6 +15,7 @@ import {
   resolvePrimaryCoachIdForAthlete,
   shouldCreateFreshInviteOnResendFailure,
   shouldPreserveStoredSessionDuringSupabaseBootstrap,
+  shouldRevalidateSupabaseSessionBeforeClearingAuth,
   shouldTreatInviteActivationLoginFailureAsPartialSuccess,
   shouldSyncSupabaseAuthEvent,
 } from "@/providers/app-state-provider";
@@ -45,6 +46,21 @@ describe("shouldPreserveStoredSessionDuringSupabaseBootstrap", () => {
     expect(shouldSyncSupabaseAuthEvent("INITIAL_SESSION")).toBe(false);
     expect(shouldSyncSupabaseAuthEvent("SIGNED_IN")).toBe(true);
     expect(shouldSyncSupabaseAuthEvent("SIGNED_OUT")).toBe(true);
+  });
+
+  it("revalidates an existing session before clearing auth on late null auth events", () => {
+    expect(
+      shouldRevalidateSupabaseSessionBeforeClearingAuth("event", "user_athlete_1", true),
+    ).toBe(true);
+    expect(
+      shouldRevalidateSupabaseSessionBeforeClearingAuth("event", "user_athlete_1", false),
+    ).toBe(false);
+    expect(
+      shouldRevalidateSupabaseSessionBeforeClearingAuth("bootstrap", "user_athlete_1", true),
+    ).toBe(false);
+    expect(
+      shouldRevalidateSupabaseSessionBeforeClearingAuth("event", null, true),
+    ).toBe(false);
   });
 
   it("recreates a fresh server invite when resending a legacy local invite", () => {
