@@ -16,6 +16,7 @@ import { Input, Label, Textarea } from "@/components/ui/field";
 import { InfoTooltip } from "@/components/ui/tooltip";
 import { numberOrUndefined } from "@/components/workout/schemas";
 import { workoutStatusLabel } from "@/components/workout/shared";
+import { calculateSessionDurationSeconds } from "@/lib/domain";
 import type { WorkoutSession } from "@/lib/types";
 import { formatDate } from "@/lib/utils";
 
@@ -171,6 +172,15 @@ function formatExerciseTargetSummary(logs: WorkoutSession["setLogs"]) {
   return parts.join(" · ");
 }
 
+const repsTooltipText =
+  "Kirjaa tähän toteutuneet toistot. Jos teit enemmän tai vähemmän kuin suunnitelmassa, merkitse tähän oikea määrä.";
+
+const loadTooltipText =
+  "Kirjaa tähän sarjassa käytetty kuorma kiloina. Jos teit sarjan ilman lisäpainoa, jätä kenttä arvoon 0 tai tyhjäksi käytäntönne mukaan.";
+
+const rpeTooltipText =
+  "RPE kertoo, miltä sarja tuntui asteikolla 1-10. 10 = et olisi saanut enää yhtään toistoa, 9 = noin 1 toisto olisi vielä mennyt, 8 = noin 2 toistoa olisi vielä mennyt.";
+
 export function AthleteSessionPanel({
   scheduledWorkoutId,
   scheduledWorkoutTitle,
@@ -248,17 +258,17 @@ export function AthleteSessionPanel({
       return;
     }
 
-    const startedAt = new Date(selectedSession.startedAt).getTime();
     const getElapsed = () => {
-      const finishedAt = selectedSession.completedAt
-        ? new Date(selectedSession.completedAt).getTime()
-        : Date.now();
-      return Math.max(0, Math.round((finishedAt - startedAt) / 1000));
+      if (status === "in_progress") {
+        return calculateSessionDurationSeconds(selectedSession, new Date().toISOString());
+      }
+
+      return calculateSessionDurationSeconds(selectedSession);
     };
 
     setElapsedSeconds(getElapsed());
 
-    if (selectedSession.completedAt) {
+    if (status !== "in_progress") {
       return;
     }
 
@@ -267,7 +277,7 @@ export function AthleteSessionPanel({
     }, 1000);
 
     return () => window.clearInterval(interval);
-  }, [selectedSession]);
+  }, [selectedSession, status]);
 
   useEffect(() => {
     if (!restRunning || restSecondsLeft <= 0) {
@@ -553,12 +563,12 @@ export function AthleteSessionPanel({
     const previous = previousExerciseResults.get(logs[0]?.exerciseId ?? "");
     const isExpanded = getIsExpanded(group);
     const cardToneClass = isComplete
-      ? "border-[var(--success)] bg-[var(--surface)] shadow-[0_10px_26px_-20px_var(--success)]"
+      ? "border-[color-mix(in_srgb,var(--success)_30%,var(--border))] bg-[var(--surface)] shadow-[0_10px_24px_-22px_var(--success)]"
       : isStarted
-        ? "border-[var(--accent)] bg-[var(--surface)] shadow-[0_10px_26px_-20px_var(--accent)]"
+        ? "border-[color-mix(in_srgb,var(--accent)_30%,var(--border))] bg-[var(--surface)] shadow-[0_10px_24px_-22px_var(--accent)]"
         : supersetGroup
-          ? "border-[var(--accent)]/60 bg-[var(--surface-2)] shadow-[0_10px_26px_-20px_var(--accent)]"
-          : "border-[var(--border)] bg-[var(--surface-2)]";
+          ? "border-[color-mix(in_srgb,var(--accent)_22%,var(--border))] bg-[var(--surface)]"
+          : "border-[var(--border)] bg-[var(--surface)]";
     const progressBadgeClass = isComplete
       ? "border-[var(--success)] bg-[var(--surface)] text-[var(--success)]"
       : isStarted
@@ -577,134 +587,164 @@ export function AthleteSessionPanel({
     return (
       <div
         key={exerciseKey}
-        className={`rounded-[1.35rem] border p-3.5 md:p-4.5 ${cardToneClass}`}
+        className={`overflow-hidden rounded-[1.35rem] border p-3.5 md:p-4.5 ${cardToneClass}`}
       >
-        <div className="flex items-start gap-2">
-          <Button
-            type="button"
-            variant="ghost"
-            className="group flex min-w-0 flex-1 flex-col items-stretch gap-3 rounded-[1.1rem] border border-[var(--border)] bg-[var(--surface)]/88 px-3.5 py-3 text-left text-inherit shadow-[0_8px_22px_-18px_var(--shadow)] hover:border-[var(--border-strong)] hover:bg-[var(--surface)] sm:flex-row sm:items-start sm:justify-between sm:gap-4"
-            id={disclosureButtonId}
-            aria-expanded={isExpanded}
-            aria-controls={disclosurePanelId}
-            onClick={() => setGroupExpansion(group)}
-          >
-            <span className="min-w-0 sm:flex-1">
-              <span className="flex items-center gap-2">
-                <span className={`size-2.5 rounded-full ${indicatorClass}`} aria-hidden="true" />
-                <span className="text-xs font-semibold tracking-[0.04em] text-[var(--text-subtle)]">
-                  {supersetGroup ? `Superset ${supersetGroup}` : "Liike"}
-                </span>
+        <button
+          type="button"
+          className="group grid min-w-0 w-full grid-cols-[minmax(0,1fr)_auto] gap-x-3 gap-y-2 rounded-[1rem] px-1 py-0 text-left text-inherit transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--background)]"
+          id={disclosureButtonId}
+          aria-expanded={isExpanded}
+          aria-controls={disclosurePanelId}
+          onClick={() => setGroupExpansion(group)}
+        >
+          <span className="min-w-0">
+            <span className="flex items-center gap-2">
+              <span className={`size-2.5 rounded-full ${indicatorClass}`} aria-hidden="true" />
+              <span className="text-xs font-semibold tracking-[0.04em] text-[var(--text-subtle)]">
+                Liike
               </span>
-              <span className="mt-1 block font-[family-name:var(--font-display)] text-base font-semibold leading-tight text-[var(--text)] md:text-[1.05rem]">
-                {exerciseName}
-              </span>
-              <span className="mt-2 inline-flex max-w-full rounded-full border border-[var(--border)] bg-[var(--surface)] px-3 py-1 text-[11px] font-medium text-[var(--text-subtle)]">
+            </span>
+            <span className="mt-1 block font-[family-name:var(--font-display)] text-base font-semibold leading-tight text-[var(--text)] md:text-[1.05rem]">
+              {exerciseName}
+            </span>
+          </span>
+
+          <span className="row-span-2 flex items-center justify-end self-center">
+            <span className={`grid size-9 place-items-center rounded-full border transition ${chevronClass}`}>
+              {isExpanded ? (
+                <ChevronUp className="size-4" aria-hidden="true" />
+              ) : (
+                <ChevronDown className="size-4" aria-hidden="true" />
+              )}
+            </span>
+          </span>
+
+          <span className="col-span-1 flex flex-wrap gap-2 pr-1">
+            <Badge className={`min-w-0 ${progressBadgeClass}`}>{completedInExercise}/{logs.length} tehty</Badge>
+            {targetSummary ? (
+              <span className="inline-flex max-w-full rounded-full border border-[var(--border)] bg-[var(--surface)] px-3 py-1 text-[11px] font-medium text-[var(--text-subtle)]">
                 <span className="truncate">{targetSummary}</span>
               </span>
-              {status === "completed" && previous ? (
-                <span className="mt-1 block text-xs text-[var(--text-subtle)]">
-                  Tehty {previous.timesCompleted} kertaa · viimeksi {formatDate(previous.completedAt)} · {formatPreviousExerciseResult(previous)}
-                </span>
-              ) : null}
+            ) : null}
+          </span>
+          {status === "completed" && previous ? (
+            <span className="col-span-2 text-xs text-[var(--text-subtle)]">
+              Tehty {previous.timesCompleted} kertaa · viimeksi {formatDate(previous.completedAt)} · {formatPreviousExerciseResult(previous)}
             </span>
-
-            <span className="flex min-w-0 items-center justify-between gap-2 sm:ml-3 sm:w-auto sm:shrink-0 sm:justify-end">
-              <Badge className={`min-w-0 ${progressBadgeClass}`}>{completedInExercise}/{logs.length} sarjaa tehty</Badge>
-              <span className={`grid size-9 place-items-center rounded-full border transition ${chevronClass}`}>
-                {isExpanded ? (
-                  <ChevronUp className="size-4" aria-hidden="true" />
-                ) : (
-                  <ChevronDown className="size-4" aria-hidden="true" />
-                )}
-              </span>
-            </span>
-          </Button>
-        </div>
+          ) : null}
+        </button>
         {isExpanded ? (
           <div
             id={disclosurePanelId}
             role="region"
             aria-labelledby={disclosureButtonId}
-            className="mt-2 md:mt-3"
+            className="mt-3 border-t border-[var(--border)] pt-3"
           >
-            <div className="rounded-[1.15rem] border border-[var(--border)] bg-[var(--surface)]">
-              <div className="relative z-10 grid grid-cols-[2.8rem_minmax(0,1fr)_minmax(0,1fr)_minmax(0,0.9fr)_2.8rem] items-center gap-2 rounded-t-[1.15rem] border-b border-[var(--border)] bg-[var(--surface-3)]/75 px-2.5 py-2.5 text-[10px] font-semibold uppercase tracking-[0.05em] text-[var(--text-subtle)] md:grid-cols-[0.82fr_1fr_1fr_0.9fr_auto] md:px-3.5">
+            <div className="rounded-[1rem] bg-[color-mix(in_srgb,var(--surface-2)_68%,var(--surface))]">
+              <div className="relative z-10 hidden items-center gap-2 rounded-t-[1rem] border-b border-[var(--border)] bg-[color-mix(in_srgb,var(--surface-3)_82%,var(--surface))] px-3.5 py-2.5 text-[10px] font-semibold uppercase tracking-[0.05em] text-[var(--text-subtle)] md:grid md:grid-cols-[0.82fr_1fr_1fr_0.9fr_auto]">
                 <span>Sarja</span>
-                <span>Toistot</span>
-                <span>Kuorma</span>
+                <span className="inline-flex items-center gap-1">
+                  Toistot
+                  <InfoTooltip text={repsTooltipText} />
+                </span>
+                <span className="inline-flex items-center gap-1">
+                  Kuorma
+                  <InfoTooltip text={loadTooltipText} />
+                </span>
                 <span className="inline-flex items-center gap-1">
                   RPE
-                  <InfoTooltip text="RPE kertoo, kuinka raskaalta sarja tuntui asteikolla 1-10. Lisätoistot tarkoittavat arviota siitä, montako toistoa olisi vielä ollut varaa tehdä hyvällä tekniikalla (ei tehdä niitä heti). 10 = 0 toistoa varaa, 9 = noin 1 toisto varaa, 8 = noin 2 toistoa varaa." />
+                  <InfoTooltip text={rpeTooltipText} />
                 </span>
                 <span className="inline-flex items-center justify-end gap-1">
                   <span className="hidden md:inline">Tila</span>
                   <InfoTooltip text="Merkitse sarja tehdyksi kun sarja on valmis. Voit myös kumota kuittauksen tarvittaessa." />
                 </span>
               </div>
-              <div className="overflow-hidden rounded-b-[1.15rem] divide-y divide-[var(--border)]">
+              <div className="grid grid-cols-[1.5rem_1fr_1fr_0.9fr_2rem] items-center gap-2 border-b border-[var(--border)] px-3 py-2 text-[10px] font-semibold uppercase tracking-[0.05em] text-[var(--text-subtle)] md:hidden">
+                <span className="text-center">#</span>
+                <span className="inline-flex items-center gap-1">
+                  <span>Toistot</span>
+                  <InfoTooltip text={repsTooltipText} />
+                </span>
+                <span className="inline-flex items-center gap-1">
+                  <span>Kuorma</span>
+                  <InfoTooltip text={loadTooltipText} />
+                </span>
+                <span className="inline-flex items-center gap-1">
+                  <span>RPE</span>
+                  <InfoTooltip text={rpeTooltipText} />
+                </span>
+                <span aria-hidden="true" />
+              </div>
+              <div className="overflow-hidden rounded-b-[1rem] divide-y divide-[var(--border)]">
               {logs.map((log) => {
                   const rowToneClass = log.done
                     ? "bg-[color-mix(in_srgb,var(--success)_10%,var(--surface))]"
-                    : "bg-[var(--surface)]";
+                    : "bg-transparent";
                   const inputToneClass = log.done
                     ? "border-[color-mix(in_srgb,var(--success)_40%,var(--border))] bg-[color-mix(in_srgb,var(--success)_12%,var(--surface))] text-[var(--text)]"
                     : "border-[var(--border)] bg-[var(--surface-2)] text-[var(--text)]";
-                  const setLabelClass = log.done
-                    ? "border-[color-mix(in_srgb,var(--success)_35%,var(--border))] bg-[color-mix(in_srgb,var(--success)_12%,var(--surface))] text-[var(--success)]"
-                    : "border-[var(--border)] bg-[var(--surface-2)] text-[var(--text-muted)]";
+                  const setLabelToneClass = log.done
+                    ? "text-[var(--success)] md:border-[color-mix(in_srgb,var(--success)_35%,var(--border))] md:bg-[color-mix(in_srgb,var(--success)_12%,var(--surface))]"
+                    : "text-[var(--text-subtle)] md:border-[var(--border)] md:bg-[var(--surface-2)]";
 
                   return (
                     <div
                       key={log.id}
-                      className={`grid grid-cols-[2.8rem_minmax(0,1fr)_minmax(0,1fr)_minmax(0,0.9fr)_2.8rem] items-center gap-2 px-2.5 py-2.5 md:grid-cols-[0.82fr_1fr_1fr_0.9fr_auto] md:px-3.5 ${rowToneClass}`}
+                      className={`grid grid-cols-[1.5rem_1fr_1fr_0.9fr_2rem] items-center gap-2 px-3 py-2.5 md:grid-cols-[0.82fr_1fr_1fr_0.9fr_auto] md:px-3.5 ${rowToneClass}`}
                     >
+                      <span
+                        className={`inline-flex h-8 w-8 items-center justify-center justify-self-center text-xs font-semibold tabular-nums md:h-auto md:min-w-[2.15rem] md:w-auto md:rounded-full md:border md:px-2 md:py-1 ${setLabelToneClass}`}
+                      >
+                        {log.setLabel}
+                      </span>
                       <div className="min-w-0">
-                        <span className={`inline-flex min-w-[2.15rem] items-center justify-center rounded-full border px-2 py-1 text-xs font-semibold ${setLabelClass}`}>
-                          #{log.setLabel}
-                        </span>
+                        <Input
+                          className={`h-9 min-w-0 rounded-xl px-2 py-1 text-sm font-medium shadow-[inset_0_1px_0_0_var(--shadow-soft)] md:h-10 md:px-3 ${inputToneClass}`}
+                          id={`${scheduledWorkoutId}-${log.id}-reps`}
+                          type="number"
+                          min={0}
+                          placeholder="0"
+                          aria-label={`${exerciseName} sarja ${log.setLabel} toteutuneet toistot`}
+                          value={log.actualReps ?? ""}
+                          disabled={readOnly}
+                          onChange={(event) => handleLogUpdate(log, { actualReps: numberOrUndefined(event.target.value) })}
+                        />
                       </div>
-                      <Input
-                        className={`h-10 min-w-0 rounded-xl px-2.5 py-1 text-sm font-medium shadow-[inset_0_1px_0_0_var(--shadow-soft)] md:px-3 ${inputToneClass}`}
-                        id={`${scheduledWorkoutId}-${log.id}-reps`}
-                        type="number"
-                        min={0}
-                        placeholder="0"
-                        aria-label={`${exerciseName} sarja ${log.setLabel} toteutuneet toistot`}
-                        value={log.actualReps ?? ""}
-                        disabled={readOnly}
-                        onChange={(event) => handleLogUpdate(log, { actualReps: numberOrUndefined(event.target.value) })}
-                      />
-                      <Input
-                        className={`h-10 min-w-0 rounded-xl px-2.5 py-1 text-sm font-medium shadow-[inset_0_1px_0_0_var(--shadow-soft)] md:px-3 ${inputToneClass}`}
-                        id={`${scheduledWorkoutId}-${log.id}-load`}
-                        type="number"
-                        min={0}
-                        step="0.5"
-                        placeholder="0"
-                        aria-label={`${exerciseName} sarja ${log.setLabel} toteutunut kuorma`}
-                        value={log.actualLoad ?? ""}
-                        disabled={readOnly}
-                        onChange={(event) => handleLogUpdate(log, { actualLoad: numberOrUndefined(event.target.value) })}
-                      />
-                      <Input
-                        className={`h-10 min-w-0 rounded-xl px-2.5 py-1 text-sm font-medium shadow-[inset_0_1px_0_0_var(--shadow-soft)] md:px-3 ${inputToneClass}`}
-                        id={`${scheduledWorkoutId}-${log.id}-rpe`}
-                        type="number"
-                        min={1}
-                        max={10}
-                        step={1}
-                        placeholder="-"
-                        aria-label={`${exerciseName} sarja ${log.setLabel} RPE`}
-                        value={log.rpe ?? ""}
-                        disabled={readOnly}
-                        onChange={(event) => handleLogUpdate(log, { rpe: numberOrUndefined(event.target.value) })}
-                      />
+                      <div className="min-w-0">
+                        <Input
+                          className={`h-9 min-w-0 rounded-xl px-2 py-1 text-sm font-medium shadow-[inset_0_1px_0_0_var(--shadow-soft)] md:h-10 md:px-3 ${inputToneClass}`}
+                          id={`${scheduledWorkoutId}-${log.id}-load`}
+                          type="number"
+                          min={0}
+                          step="0.5"
+                          placeholder="0"
+                          aria-label={`${exerciseName} sarja ${log.setLabel} toteutunut kuorma`}
+                          value={log.actualLoad ?? ""}
+                          disabled={readOnly}
+                          onChange={(event) => handleLogUpdate(log, { actualLoad: numberOrUndefined(event.target.value) })}
+                        />
+                      </div>
+                      <div className="min-w-0">
+                        <Input
+                          className={`h-9 min-w-0 rounded-xl px-2 py-1 text-sm font-medium shadow-[inset_0_1px_0_0_var(--shadow-soft)] md:h-10 md:px-3 ${inputToneClass}`}
+                          id={`${scheduledWorkoutId}-${log.id}-rpe`}
+                          type="number"
+                          min={1}
+                          max={10}
+                          step={1}
+                          placeholder="-"
+                          aria-label={`${exerciseName} sarja ${log.setLabel} RPE`}
+                          value={log.rpe ?? ""}
+                          disabled={readOnly}
+                          onChange={(event) => handleLogUpdate(log, { rpe: numberOrUndefined(event.target.value) })}
+                        />
+                      </div>
                       <div className="flex justify-end">
                         <Button
                           type="button"
                           variant="ghost"
-                          className={`size-9 rounded-full p-0 shadow-[0_6px_18px_-12px_var(--shadow)] ${
+                          className={`size-8 rounded-full p-0 shadow-[0_6px_18px_-12px_var(--shadow)] md:size-9 ${
                             log.done
                               ? "border-[var(--success)] bg-[var(--success)] text-white hover:border-[var(--success)] hover:bg-[var(--success)] hover:text-white"
                               : "border-[var(--border-strong)] bg-[var(--surface)] text-[var(--text-subtle)] hover:border-[var(--border-strong)] hover:bg-[var(--surface)] hover:text-[var(--text-subtle)]"
@@ -715,7 +755,7 @@ export function AthleteSessionPanel({
                           title={log.done ? "Kumoa kuittaus" : "Merkitse tehdyksi"}
                           onClick={() => handleDoneUpdate(log, !log.done)}
                         >
-                          <Check className="size-5" aria-hidden="true" />
+                          <Check className="size-4 md:size-5" aria-hidden="true" />
                         </Button>
                       </div>
                     </div>
@@ -769,7 +809,7 @@ export function AthleteSessionPanel({
         }
 
         return (
-          <div key={block.key} className="rounded-3xl border border-[var(--accent)] bg-[var(--surface-3)]/60 p-4">
+          <div key={block.key} className="rounded-3xl border border-[var(--accent)] bg-[var(--surface-3)]/60 p-3">
             <div className="mb-3 flex items-center justify-between gap-3">
               <div className="inline-flex items-center gap-1.5">
                 <p className="text-sm font-semibold text-[var(--accent)]">
@@ -810,24 +850,8 @@ export function AthleteSessionPanel({
 
       {status !== "completed" && restTotalSeconds > 0 && restExerciseKey ? (
         <div className="sticky bottom-[max(env(safe-area-inset-bottom),0.75rem)] z-30 mt-4 md:fixed md:bottom-3 md:right-6 md:left-auto md:mt-0 md:w-[min(24rem,calc(100vw-3rem))]">
-          <div className="ml-auto w-full max-w-full rounded-2xl border border-[var(--accent)] bg-[var(--surface)] p-4 shadow-[0_14px_30px_-18px_var(--shadow)]">
-            <div className="flex items-center gap-4">
-              <div
-                className="grid size-20 place-items-center rounded-full"
-                style={{
-                  background: `conic-gradient(var(--accent) ${
-                    restTotalSeconds > 0 ? Math.round((restSecondsLeft / restTotalSeconds) * 100) : 0
-                  }%, var(--surface-4) ${
-                    restTotalSeconds > 0 ? Math.round((restSecondsLeft / restTotalSeconds) * 100) : 0
-                  }% 100%)`,
-                }}
-              >
-                <div className="grid size-16 place-items-center rounded-full border border-[var(--border)] bg-[var(--surface)]">
-                  <p className="font-[family-name:var(--font-display)] text-lg font-semibold text-[var(--text)]">
-                    {formatDuration(restSecondsLeft)}
-                  </p>
-                </div>
-              </div>
+          <div className="ml-auto w-full max-w-full rounded-2xl border border-[var(--accent)] bg-[var(--surface)] p-3.5 shadow-[0_14px_30px_-18px_var(--shadow)]">
+            <div className="flex items-start justify-between gap-3">
               <div className="min-w-0 flex-1">
                 <div className="inline-flex items-center gap-1">
                   <p className="text-xs font-semibold tracking-[0.04em] text-[var(--text-subtle)]">
@@ -839,8 +863,22 @@ export function AthleteSessionPanel({
                   />
                 </div>
                 <p className="truncate text-sm font-medium text-[var(--text)]">{restExerciseName ?? "Liike"}</p>
-                <p className="text-xs text-[var(--text-muted)]">Aloitus {formatDuration(restTotalSeconds)}</p>
               </div>
+              <Badge className="border-[var(--accent)] bg-[var(--surface-3)] text-[var(--accent)]">
+                {formatDuration(restSecondsLeft)}
+              </Badge>
+            </div>
+            <div className="mt-3 h-2 overflow-hidden rounded-full bg-[var(--surface-3)]">
+              <div
+                className="h-full rounded-full bg-[var(--accent)] transition-[width]"
+                style={{
+                  width: `${restTotalSeconds > 0 ? Math.round((restSecondsLeft / restTotalSeconds) * 100) : 0}%`,
+                }}
+              />
+            </div>
+            <div className="mt-2 flex items-center justify-between gap-3 text-xs text-[var(--text-muted)]">
+              <span>Aloitus {formatDuration(restTotalSeconds)}</span>
+              <span>{restRunning ? "Lepo käynnissä" : "Tauko päättynyt"}</span>
             </div>
             <div className="mt-3 flex gap-2">
               <Button type="button" variant="ghost" className="flex-1 py-2 text-sm" onClick={skipRestTimer}>
@@ -856,16 +894,22 @@ export function AthleteSessionPanel({
 
       <div className="rounded-none border-0 bg-transparent p-0 shadow-none">
         <div className="flex flex-wrap gap-3 items-center">
-          {showBottomBackToList ? (
-            <Button onClick={onBackToList} type="button" variant="ghost" className="w-full sm:w-auto">
-              Takaisin treenilistaan
-            </Button>
-          ) : null}
           {status !== "completed" ? (
             <>
-              <Button onClick={onComplete} type="button" className="w-full sm:w-auto">
-                Merkitse treeni valmiiksi
-              </Button>
+              {showResumeAction ? (
+                <Button onClick={onStart} type="button" className="w-full sm:w-auto">
+                  Jatka treeniä
+                </Button>
+              ) : (
+                <Button onClick={onComplete} type="button" className="w-full sm:w-auto">
+                  Merkitse treeni valmiiksi
+                </Button>
+              )}
+              {showBottomBackToList ? (
+                <Button onClick={onBackToList} type="button" variant="ghost" className="w-full sm:w-auto">
+                  Takaisin treenilistaan
+                </Button>
+              ) : null}
               {hasSecondaryActions ? (
                 <div className="relative" data-session-actions-menu-root="true">
                   <Button
@@ -944,12 +988,17 @@ export function AthleteSessionPanel({
             </>
           ) : (
             <div className="inline-flex items-center gap-1">
+              {showBottomBackToList ? (
+                <Button onClick={onBackToList} type="button" variant="ghost">
+                  Takaisin treenilistaan
+                </Button>
+              ) : null}
               <Button onClick={() => setCorrectionMode((value) => !value)} type="button" variant={correctionMode ? "secondary" : "ghost"}>
-                {correctionMode ? "Sulje korjaustila" : "Avaa korjaustila"}
+                {correctionMode ? "Sulje muokkaus" : "Avaa muokkaus"}
               </Button>
               <InfoTooltip
                 side="top"
-                text="Korjaustilassa voit muokata valmiin treenin sarjamerkintöjä ja muistiinpanoja."
+                text="Muokkaustilassa voit päivittää valmiin treenin sarjamerkintöjä ja muistiinpanoja."
               />
               {showDeleteAction ? (
                 <div className="relative" data-session-actions-menu-root="true">

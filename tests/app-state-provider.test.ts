@@ -3,9 +3,14 @@ import type { User as SupabaseAuthUser } from "@supabase/supabase-js";
 
 import { cloneDemoState } from "@/lib/domain";
 import {
+  applyProgramDeletion,
+  applyProgramStatusUpdate,
   applyAdminCoachAssignmentUpdate,
   applyAdminRoleUpdate,
+  canDeleteProgramFromState,
+  canRetargetProgramInState,
   reconcileSupabaseInviteDirectory,
+  resolveBlockingWorkoutStart,
   resolveSupabaseUserForState,
   resolvePrimaryCoachIdForAthlete,
   shouldCreateFreshInviteOnResendFailure,
@@ -168,6 +173,104 @@ describe("shouldPreserveStoredSessionDuringSupabaseBootstrap", () => {
     ).toBe("active");
   });
 
+  it("replaces an invited placeholder with the active server profile for the same email", () => {
+    const state = cloneDemoState();
+    const ghostEmail = "eliaskautto@gmail.com";
+
+    state.users = [
+      ...state.users,
+      {
+        id: "user_placeholder_invite",
+        role: "athlete",
+        fullName: "eliaskautto",
+        email: ghostEmail,
+        status: "invited",
+        createdAt: "2026-03-24T08:00:00.000Z",
+        updatedAt: "2026-03-24T08:00:00.000Z",
+      },
+    ];
+
+    const nextState = reconcileSupabaseInviteDirectory(state, {
+      invites: [],
+      activeEmails: [ghostEmail],
+      activeProfiles: [
+        {
+          id: "6fa8486a-c4f8-4210-8b74-f1bd39e1d100",
+          role: "athlete",
+          fullName: "Elias Kautto",
+          email: ghostEmail,
+          status: "active",
+          settings: {
+            defaultDashboardView: "athlete-log",
+            emailNotifications: false,
+            themeMode: "light",
+          },
+          createdAt: "2026-03-24T08:30:00.000Z",
+          updatedAt: "2026-03-24T08:30:00.000Z",
+        },
+      ],
+    });
+
+    expect(nextState.users.some((user) => user.id === "user_placeholder_invite")).toBe(false);
+    expect(nextState.users.find((user) => user.email === ghostEmail)?.fullName).toBe("Elias Kautto");
+    expect(nextState.users.find((user) => user.email === ghostEmail)?.status).toBe("active");
+  });
+
+  it("drops a pending invite even if the server snapshot still contains it for an active email", () => {
+    const state = cloneDemoState();
+    const ghostEmail = "eliaskautto@gmail.com";
+
+    const nextState = reconcileSupabaseInviteDirectory(state, {
+      invites: [
+        {
+          id: "invite_server_ghost",
+          token: "token_server_ghost",
+          email: ghostEmail,
+          role: "athlete",
+          invitedBy: "user_admin",
+          coachId: "user_admin",
+          status: "pending",
+          createdAt: "2026-03-24T08:00:00.000Z",
+          expiresAt: "2026-03-31T08:00:00.000Z",
+        },
+      ],
+      activeEmails: [ghostEmail],
+    });
+
+    expect(nextState.invites.some((invite) => invite.email.toLowerCase() === ghostEmail)).toBe(false);
+  });
+
+  it("finds only an in-progress workout as a blocking start condition", () => {
+    const state = cloneDemoState();
+    const athleteId = "user_athlete_1";
+    const blockingWorkoutId = "workout_blocking";
+    const blockingProgramWorkoutId = "program_workout_blocking";
+
+    state.scheduledWorkouts = [
+      {
+        id: blockingWorkoutId,
+        trainingPlanId: "plan_blocking",
+        programWorkoutId: blockingProgramWorkoutId,
+        athleteId,
+        coachId: "user_admin",
+        title: "Voimapäivä A",
+        scheduledDate: "2026-03-24T08:00:00.000Z",
+        status: "in_progress",
+        createdAt: "2026-03-24T08:00:00.000Z",
+        updatedAt: "2026-03-24T08:10:00.000Z",
+      },
+    ];
+
+    expect(resolveBlockingWorkoutStart(state, athleteId)?.id).toBe(blockingWorkoutId);
+    expect(resolveBlockingWorkoutStart(state, athleteId, blockingProgramWorkoutId)).toBeNull();
+
+    state.scheduledWorkouts = state.scheduledWorkouts.map((workout) =>
+      workout.id === blockingWorkoutId ? { ...workout, status: "cancelled" } : workout,
+    );
+
+    expect(resolveBlockingWorkoutStart(state, athleteId)).toBeNull();
+  });
+
   it("applies a server-backed role change using the resolved Supabase user id", () => {
     const state = cloneDemoState();
     const placeholderId = "user_athlete_1";
@@ -244,5 +347,68 @@ describe("shouldPreserveStoredSessionDuringSupabaseBootstrap", () => {
     expect(
       nextState.assignments.filter((assignment) => assignment.athleteId === resolvedUserId && assignment.active),
     ).toHaveLength(2);
+  });
+
+  it("allows deleting a program only when it has no started workouts linked to it", () => {
+    const state = cloneDemoState();
+
+    expect(canDeleteProgramFromState(state, "plan_1")).toBe(false);
+
+    const removableState = {
+      ...state,
+      scheduledWorkouts: state.scheduledWorkouts.filter((workout) => workout.trainingPlanId !== "plan_1"),
+    };
+
+    expect(canDeleteProgramFromState(removableState, "plan_1")).toBe(true);
+
+    const nextState = applyProgramDeletion(removableState, "plan_1");
+    expect(nextState.plans.some((plan) => plan.id === "plan_1")).toBe(false);
+  });
+
+  it("allows retargeting a program only before workouts have been started from it", () => {
+    const state = cloneDemoState();
+
+    expect(canRetargetProgramInState(state, "plan_1")).toBe(false);
+
+    const retargetableState = {
+      ...state,
+      scheduledWorkouts: state.scheduledWorkouts.filter((workout) => workout.trainingPlanId !== "plan_1"),
+    };
+
+    expect(canRetargetProgramInState(retargetableState, "plan_1")).toBe(true);
+  });
+
+  it("activating a program archives the athlete's other programs", () => {
+    const state = cloneDemoState();
+
+    state.plans = [
+      {
+        id: "plan_a",
+        coachId: "user_admin",
+        athleteId: "user_athlete_1",
+        title: "Ohjelma A",
+        status: "active",
+        workouts: [],
+        startDate: "2026-03-24",
+        weekCount: 4,
+        createdAt: "2026-03-24T08:00:00.000Z",
+      },
+      {
+        id: "plan_b",
+        coachId: "user_admin",
+        athleteId: "user_athlete_1",
+        title: "Ohjelma B",
+        status: "archived",
+        workouts: [],
+        startDate: "2026-03-24",
+        weekCount: 4,
+        createdAt: "2026-03-24T08:10:00.000Z",
+      },
+    ];
+
+    const nextState = applyProgramStatusUpdate(state, "plan_b", "active");
+
+    expect(nextState.plans.find((plan) => plan.id === "plan_a")?.status).toBe("archived");
+    expect(nextState.plans.find((plan) => plan.id === "plan_b")?.status).toBe("active");
   });
 });

@@ -23,6 +23,24 @@ function nowIso() {
 
 const DEFAULT_RPE = 8;
 
+export function calculateSessionDurationSeconds(
+  session: WorkoutSession,
+  endAtIso?: string,
+) {
+  const startedAtMs = new Date(session.startedAt).getTime();
+  const effectiveEndIso = endAtIso ?? session.completedAt ?? session.pausedAt ?? session.updatedAt;
+  const finishedAtMs = new Date(effectiveEndIso).getTime();
+
+  if (!Number.isFinite(startedAtMs) || !Number.isFinite(finishedAtMs) || finishedAtMs < startedAtMs) {
+    return 0;
+  }
+
+  return Math.max(
+    0,
+    Math.round((finishedAtMs - startedAtMs) / 1000) - (session.pausedDurationSeconds ?? 0),
+  );
+}
+
 function defaultWorkoutName(splitType: SplitType, _index: number) {
   if (splitType === "upper") return "Yläkroppa";
   if (splitType === "lower") return "Alakroppa";
@@ -216,12 +234,15 @@ export function splitLabel(splitType: SplitType | undefined) {
 export function createProgram(input: ProgramBuilderInput, coachId: string): TrainingPlan {
   const timestamp = nowIso();
   const workouts = buildProgramWorkouts(input.workouts);
+  const description = input.description?.trim();
 
   return {
     id: makeId("plan"),
     coachId,
     athleteId: input.athleteId,
     title: input.title,
+    description: description || undefined,
+    status: "active",
     workouts,
     startDate: input.startDate ? new Date(`${input.startDate}T08:00:00`).toISOString() : timestamp,
     weekCount: input.weekCount ?? 0,
@@ -232,10 +253,16 @@ export function createProgram(input: ProgramBuilderInput, coachId: string): Trai
 
 export function updateProgram(plan: TrainingPlan, patch: ProgramUpdateInput): TrainingPlan {
   const timestamp = nowIso();
+  const description =
+    patch.description === undefined
+      ? plan.description
+      : (patch.description.trim() || undefined);
 
   return {
     ...plan,
     title: patch.title?.trim() || plan.title,
+    description,
+    athleteId: patch.athleteId ?? plan.athleteId,
     workouts: patch.workouts
       ? buildProgramWorkouts(patch.workouts, plan.workouts ?? [])
       : plan.workouts,
@@ -379,16 +406,38 @@ export function startSession(
     }
 
     const resumedAt = nowIso();
+    const pausedAtMs = existing.pausedAt ? new Date(existing.pausedAt).getTime() : Number.NaN;
+    const resumedAtMs = new Date(resumedAt).getTime();
+    const pausedSeconds =
+      Number.isFinite(pausedAtMs) && Number.isFinite(resumedAtMs) && resumedAtMs >= pausedAtMs
+        ? Math.round((resumedAtMs - pausedAtMs) / 1000)
+        : 0;
+
     return {
       state: {
         ...state,
+        sessions: state.sessions.map((session) =>
+          session.scheduledWorkoutId === scheduledWorkoutId
+            ? {
+                ...session,
+                pausedAt: undefined,
+                pausedDurationSeconds: (session.pausedDurationSeconds ?? 0) + pausedSeconds,
+                updatedAt: resumedAt,
+              }
+            : session,
+        ),
         scheduledWorkouts: state.scheduledWorkouts.map((item) =>
           item.id === scheduledWorkoutId
             ? { ...item, status: "in_progress", updatedAt: resumedAt }
             : item,
         ),
       },
-      session: existing,
+      session: {
+        ...existing,
+        pausedAt: undefined,
+        pausedDurationSeconds: (existing.pausedDurationSeconds ?? 0) + pausedSeconds,
+        updatedAt: resumedAt,
+      },
     };
   }
 
@@ -486,6 +535,7 @@ export function startSession(
     scheduledWorkoutId,
     athleteId: scheduledWorkout.athleteId,
     startedAt: nowIso(),
+    pausedDurationSeconds: 0,
     updatedAt: nowIso(),
     setLogs,
   };
@@ -621,15 +671,22 @@ export function cancelSession(state: AppState, scheduledWorkoutId: string): AppS
     return state;
   }
 
+  const cancelledAt = nowIso();
+
   return {
     ...state,
+    sessions: state.sessions.map((session) =>
+      session.scheduledWorkoutId === scheduledWorkoutId
+        ? { ...session, pausedAt: cancelledAt, updatedAt: cancelledAt }
+        : session,
+    ),
     scheduledWorkouts: state.scheduledWorkouts.map((item) =>
       item.id === scheduledWorkoutId
         ? {
             ...item,
             status: "cancelled",
             completedAt: undefined,
-            updatedAt: nowIso(),
+            updatedAt: cancelledAt,
           }
         : item,
     ),
@@ -662,7 +719,7 @@ export function completeSession(state: AppState, scheduledWorkoutId: string): Ap
     ...state,
     sessions: state.sessions.map((session) =>
       session.scheduledWorkoutId === scheduledWorkoutId
-        ? { ...session, completedAt, updatedAt: completedAt }
+        ? { ...session, completedAt, pausedAt: undefined, updatedAt: completedAt }
         : session,
     ),
     scheduledWorkouts: state.scheduledWorkouts.map((item) =>

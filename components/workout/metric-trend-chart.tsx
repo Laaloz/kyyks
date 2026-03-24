@@ -1,10 +1,11 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useMemo } from "react";
 import {
   CartesianGrid,
   Line,
   LineChart,
+  ResponsiveContainer,
   Tooltip,
   XAxis,
   YAxis,
@@ -55,8 +56,6 @@ export function MetricTrendChart({
   decimals = 1,
   useZeroBaseline = false,
 }: MetricTrendChartProps) {
-  const chartFrameRef = useRef<HTMLDivElement | null>(null);
-  const [chartSize, setChartSize] = useState({ width: 0, height: 0 });
   const chartData = useMemo(
     () =>
       points
@@ -102,40 +101,6 @@ export function MetricTrendChart({
     return [Math.max(0, minValue - padding), maxValue + padding];
   }, [chartData, useZeroBaseline]);
 
-  useEffect(() => {
-    const frame = chartFrameRef.current;
-    if (!frame) {
-      return;
-    }
-
-    const updateSize = () => {
-      const nextWidth = frame.clientWidth;
-      const nextHeight = frame.clientHeight;
-
-      setChartSize((current) => {
-        if (current.width === nextWidth && current.height === nextHeight) {
-          return current;
-        }
-
-        return { width: nextWidth, height: nextHeight };
-      });
-    };
-
-    updateSize();
-
-    if (typeof ResizeObserver === "undefined") {
-      window.addEventListener("resize", updateSize);
-      return () => window.removeEventListener("resize", updateSize);
-    }
-
-    const observer = new ResizeObserver(() => {
-      updateSize();
-    });
-
-    observer.observe(frame);
-    return () => observer.disconnect();
-  }, []);
-
   if (chartData.length === 0) {
     return <p className="mt-3 text-sm text-[var(--text-muted)]">{emptyMessage}</p>;
   }
@@ -143,11 +108,9 @@ export function MetricTrendChart({
   return (
     <div className="mt-3 min-w-0" role="img" aria-label={ariaLabel}>
       <div className="h-60 min-h-[15rem] min-w-0 w-full overflow-hidden rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-3">
-        <div ref={chartFrameRef} className="h-full min-w-0 w-full">
-          {chartSize.width > 0 && chartSize.height > 0 ? (
+        <div className="h-full min-w-0 w-full">
+          <ResponsiveContainer width="100%" height="100%">
             <LineChart
-              width={chartSize.width}
-              height={chartSize.height}
               data={chartData}
               margin={{ top: 8, right: 8, bottom: 12, left: 4 }}
             >
@@ -208,7 +171,7 @@ export function MetricTrendChart({
                 activeDot={{ r: 5, strokeWidth: 2, fill: "var(--surface)" }}
               />
             </LineChart>
-          ) : null}
+          </ResponsiveContainer>
         </div>
       </div>
       {helperText ? (

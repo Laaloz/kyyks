@@ -172,6 +172,7 @@ export const programWorkoutSchema = z.object({
 
 export const programComposerSchema = z.object({
   title: z.string().min(3, "Anna ohjelmalle nimi."),
+  description: z.string().max(600, "Kuvaus voi olla enintään 600 merkkiä."),
   athleteId: z.string().min(1, "Valitse treenaaja."),
   workouts: z.array(programWorkoutSchema).min(1, "Lisää vähintään yksi harjoitus ohjelmaan."),
 });

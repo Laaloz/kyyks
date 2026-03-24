@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  calculateSessionDurationSeconds,
   cancelSession,
   canCoachManageAthlete,
   canCompleteSession,
@@ -171,9 +172,91 @@ describe("domain helpers", () => {
     );
 
     expect(program.workouts).toHaveLength(2);
+    expect(program.status).toBe("active");
     expect(program.workouts?.[0]?.name).toBe("Upper Prime");
     expect(program.workouts?.[0]?.exercises[0]?.exerciseName).toBe("Penkki kisastopilla");
     expect(program.workouts?.[1]?.name).toContain("Harjoitus");
+  });
+
+  it("stores and updates optional program description", () => {
+    const createdProgram = createProgram(
+      {
+        title: "Arjen tuki ohjelma",
+        description: "Pidä treenin lisäksi huoli, että saat viikossa keskimäärin 8000 askelta päivässä.",
+        athleteId: "user_athlete_1",
+        workouts: [
+          {
+            splitType: "full_body",
+            nameOverride: "Koko kroppa",
+            defaultRestSeconds: 90,
+            exercises: [
+              {
+                exerciseId: "ex_split_squat",
+                exerciseName: "Bulgarialainen askelkyykky",
+                instruction: "Pidä liike rauhallisena.",
+                setCount: 3,
+                targetReps: 8,
+                targetLoad: 20,
+                restSeconds: 90,
+              },
+            ],
+          },
+        ],
+      },
+      "user_coach_1",
+    );
+
+    expect(createdProgram.description).toBe(
+      "Pidä treenin lisäksi huoli, että saat viikossa keskimäärin 8000 askelta päivässä.",
+    );
+
+    const updatedProgram = updateProgram(createdProgram, {
+      description: "Muista myös palautumista tukeva iltakävely 2-3 kertaa viikossa.",
+    });
+
+    expect(updatedProgram.description).toBe(
+      "Muista myös palautumista tukeva iltakävely 2-3 kertaa viikossa.",
+    );
+
+    const clearedProgram = updateProgram(updatedProgram, {
+      description: "   ",
+    });
+
+    expect(clearedProgram.description).toBeUndefined();
+  });
+
+  it("updates the program athlete before any workouts have started", () => {
+    const createdProgram = createProgram(
+      {
+        title: "Siirrettava ohjelma",
+        athleteId: "user_athlete_1",
+        workouts: [
+          {
+            splitType: "full_body",
+            nameOverride: "Koko kroppa",
+            defaultRestSeconds: 90,
+            exercises: [
+              {
+                exerciseId: "ex_split_squat",
+                exerciseName: "Bulgarialainen askelkyykky",
+                instruction: "Pidä liike hallittuna.",
+                setCount: 3,
+                targetReps: 8,
+                targetLoad: 20,
+                restSeconds: 90,
+              },
+            ],
+          },
+        ],
+      },
+      "user_coach_1",
+    );
+
+    const updatedProgram = updateProgram(createdProgram, {
+      athleteId: "user_athlete_2",
+    });
+
+    expect(updatedProgram.athleteId).toBe("user_athlete_2");
   });
 
   it("updates program title and starts a program workout with session logs", () => {
@@ -489,6 +572,22 @@ describe("domain helpers", () => {
     expect(resumed.state.scheduledWorkouts.find((item) => item.id === "scheduled_2")?.status).toBe(
       "in_progress",
     );
+  });
+
+  it("excludes paused time from session duration", () => {
+    const pausedSession = {
+      id: "session_test",
+      scheduledWorkoutId: "scheduled_test",
+      athleteId: "user_athlete_1",
+      startedAt: "2026-03-24T10:00:00.000Z",
+      pausedAt: "2026-03-24T10:10:00.000Z",
+      pausedDurationSeconds: 300,
+      updatedAt: "2026-03-24T10:10:00.000Z",
+      setLogs: [],
+    };
+
+    expect(calculateSessionDurationSeconds(pausedSession)).toBe(300);
+    expect(calculateSessionDurationSeconds(pausedSession, "2026-03-24T10:20:00.000Z")).toBe(900);
   });
 
   it("deletes a scheduled workout with linked session and notes", () => {

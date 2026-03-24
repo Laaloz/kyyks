@@ -1,7 +1,7 @@
 "use client";
 
 import { CircleHelp } from "lucide-react";
-import { useEffect, useId, useRef, useState } from "react";
+import { useEffect, useId, useRef, useState, type CSSProperties } from "react";
 
 import { cn } from "@/lib/utils";
 
@@ -16,42 +16,62 @@ export function InfoTooltip({
 }) {
   const tooltipId = useId();
   const [open, setOpen] = useState(false);
-  const [shiftX, setShiftX] = useState(0);
+  const [tooltipStyle, setTooltipStyle] = useState<CSSProperties | null>(null);
   const triggerRef = useRef<HTMLButtonElement | null>(null);
   const tooltipRef = useRef<HTMLSpanElement | null>(null);
 
   useEffect(() => {
     if (!open) {
-      setShiftX(0);
+      setTooltipStyle(null);
       return;
     }
 
-    const updateHorizontalClamp = () => {
+    const updateTooltipPosition = () => {
       if (!triggerRef.current || !tooltipRef.current) {
         return;
       }
 
       const viewportPadding = 8;
       const triggerRect = triggerRef.current.getBoundingClientRect();
-      const tooltipWidth = tooltipRef.current.offsetWidth;
-      const desiredCenter = triggerRect.left + triggerRect.width / 2;
-      const minCenter = viewportPadding + tooltipWidth / 2;
-      const maxCenter = window.innerWidth - viewportPadding - tooltipWidth / 2;
-      const clampedCenter = Math.min(maxCenter, Math.max(minCenter, desiredCenter));
+      const tooltipRect = tooltipRef.current.getBoundingClientRect();
+      const tooltipWidth = tooltipRect.width;
+      const tooltipHeight = tooltipRect.height;
+      const desiredLeft = triggerRect.left + triggerRect.width / 2 - tooltipWidth / 2;
+      const maxLeft = window.innerWidth - tooltipWidth - viewportPadding;
+      const left = Math.max(viewportPadding, Math.min(desiredLeft, maxLeft));
+      const preferredTop =
+        side === "top"
+          ? triggerRect.top - tooltipHeight - 8
+          : triggerRect.bottom + 8;
+      const fallbackTop =
+        side === "top"
+          ? triggerRect.bottom + 8
+          : triggerRect.top - tooltipHeight - 8;
+      const fitsPreferred =
+        side === "top"
+          ? preferredTop >= viewportPadding
+          : preferredTop + tooltipHeight <= window.innerHeight - viewportPadding;
+      const unclampedTop = fitsPreferred ? preferredTop : fallbackTop;
+      const maxTop = window.innerHeight - tooltipHeight - viewportPadding;
+      const top = Math.max(viewportPadding, Math.min(unclampedTop, maxTop));
 
-      setShiftX(clampedCenter - desiredCenter);
+      setTooltipStyle({
+        position: "fixed",
+        top,
+        left,
+      });
     };
 
-    const frame = window.requestAnimationFrame(updateHorizontalClamp);
-    window.addEventListener("resize", updateHorizontalClamp);
-    window.addEventListener("scroll", updateHorizontalClamp, true);
+    const frame = window.requestAnimationFrame(updateTooltipPosition);
+    window.addEventListener("resize", updateTooltipPosition);
+    window.addEventListener("scroll", updateTooltipPosition, true);
 
     return () => {
       window.cancelAnimationFrame(frame);
-      window.removeEventListener("resize", updateHorizontalClamp);
-      window.removeEventListener("scroll", updateHorizontalClamp, true);
+      window.removeEventListener("resize", updateTooltipPosition);
+      window.removeEventListener("scroll", updateTooltipPosition, true);
     };
-  }, [open]);
+  }, [open, side]);
 
   return (
     <span className={cn("relative inline-flex items-center", className)}>
@@ -81,11 +101,10 @@ export function InfoTooltip({
         id={tooltipId}
         role="tooltip"
         className={cn(
-          "pointer-events-none absolute left-1/2 z-40 w-64 max-w-[calc(100vw-16px)] rounded-xl border border-[var(--border-strong)] bg-[var(--surface)] px-3 py-2 text-xs leading-5 text-[var(--text-muted)] shadow-[0_10px_24px_-16px_var(--shadow)] transition",
-          side === "top" ? "bottom-full mb-2" : "top-full mt-2",
+          "pointer-events-none fixed z-50 w-64 max-w-[calc(100vw-16px)] rounded-xl border border-[var(--border-strong)] bg-[var(--surface)] px-3 py-2 text-left text-xs font-normal normal-case tracking-normal leading-5 text-[var(--text-muted)] shadow-[0_10px_24px_-16px_var(--shadow)] transition",
           open ? "opacity-100" : "opacity-0",
         )}
-        style={{ transform: `translateX(calc(-50% + ${shiftX}px))` }}
+        style={tooltipStyle ?? { position: "fixed", left: -9999, top: -9999 }}
       >
         {text}
       </span>

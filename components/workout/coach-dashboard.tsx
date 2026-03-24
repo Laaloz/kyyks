@@ -8,6 +8,7 @@ import {
   CircleCheckBig,
   ClipboardList,
   ClipboardPenLine,
+  MoreHorizontal,
   Plus,
 } from "lucide-react";
 import { useEffect, useId, useMemo, useState } from "react";
@@ -16,7 +17,7 @@ import { type Resolver, useFieldArray, useForm } from "react-hook-form";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardDescription, CardTitle } from "@/components/ui/card";
-import { Input, Label, Select } from "@/components/ui/field";
+import { Input, Label, Select, Textarea } from "@/components/ui/field";
 import { InfoTooltip } from "@/components/ui/tooltip";
 import { ConversationPanel } from "@/components/workout/conversation-panel";
 import { MetricTrendChart } from "@/components/workout/metric-trend-chart";
@@ -28,12 +29,14 @@ import {
   type ProgramComposerValues,
 } from "@/components/workout/coach/program-composer";
 import { estimateStrengthCalories, getLatestMeasurement, getMeasurementsForUser, getWeightAtMoment } from "@/lib/body-metrics";
+import { calculateSessionDurationSeconds } from "@/lib/domain";
 import { buildWorkoutConversationContextOptions } from "@/lib/workout-conversation-context";
 import { buildWorkoutHistoryTitleMap } from "@/lib/workout-history-title";
+import { isProgramActive } from "@/lib/program-status";
 import { isAdminRole } from "@/lib/role-access";
 import type { AppState, ConversationEntry, Role, ScheduledWorkoutStatus, WorkoutSession } from "@/lib/types";
 import { formatDate, formatDateWithWeekday } from "@/lib/utils";
-import { useAppState } from "@/providers/app-state-provider";
+import { canDeleteProgramFromState, useAppState } from "@/providers/app-state-provider";
 
 import {
   CUSTOM_EXERCISE_VALUE,
@@ -86,6 +89,8 @@ export function CoachDashboard({
     state,
     createProgram,
     updateProgram,
+    setProgramStatus,
+    deleteProgram,
     addConversationComment,
     getCoachAthletes,
   } = useAppState();
@@ -108,8 +113,30 @@ export function CoachDashboard({
 
     return [selfTarget, ...athletes.filter((athlete) => athlete.id !== currentUser.id)];
   }, [athletes, currentUser]);
-  const coachPrograms = state.plans.filter(
-    (plan) => Boolean(plan.workouts?.length) && (isAdminRole(currentUser?.role) || plan.coachId === currentUser?.id),
+  const coachPrograms = useMemo(
+    () =>
+      state.plans
+        .filter(
+          (plan) => Boolean(plan.workouts?.length) && (isAdminRole(currentUser?.role) || plan.coachId === currentUser?.id),
+        )
+        .sort((left, right) => {
+          const leftActive = isProgramActive(left) ? 1 : 0;
+          const rightActive = isProgramActive(right) ? 1 : 0;
+          if (leftActive !== rightActive) {
+            return rightActive - leftActive;
+          }
+
+          return left.title.localeCompare(right.title, "fi");
+        }),
+    [currentUser?.id, currentUser?.role, state.plans],
+  );
+  const activeCoachPrograms = useMemo(
+    () => coachPrograms.filter((program) => isProgramActive(program)),
+    [coachPrograms],
+  );
+  const archivedCoachPrograms = useMemo(
+    () => coachPrograms.filter((program) => !isProgramActive(program)),
+    [coachPrograms],
   );
 
   useEffect(() => {
@@ -139,6 +166,7 @@ export function CoachDashboard({
     >,
     defaultValues: {
       title: "",
+      description: "",
       athleteId: programTargets[0]?.id ?? "",
       workouts: [emptyProgramWorkout("custom")],
     },
@@ -164,18 +192,26 @@ export function CoachDashboard({
   });
 
   const isEditingProgram = Boolean(editingProgramId);
+  const canEditProgramAthlete = !editingProgramId
+    || !state.scheduledWorkouts.some((workout) => workout.trainingPlanId === editingProgramId);
   const editorTitle = isEditingProgram ? "Muokkaa treeniohjelmaa" : "Uusi treeniohjelma";
   const editorDescription = isEditingProgram
-    ? "Päivitä ohjelman harjoitukset, liikkeet ja kuormitus. Treenaajaa ei voi vaihtaa muokkaustilassa."
+    ? "Päivitä ohjelman harjoitukset, liikkeet ja kuormitus. Käyttäjän voi vaihtaa vain ennen kuin ohjelmasta on käynnistetty treenejä."
     : "Luo ohjelma itsellesi tai valmennettavalle: lisää harjoitukset ja valitse liikkeet valmiista pankista tai omana liikkeenä.";
 
   const resetComposer = (athleteId: string) => {
     form.reset({
       title: "",
+      description: "",
       athleteId,
       workouts: [emptyProgramWorkout("custom")],
     });
     setEditingProgramId(null);
+  };
+
+  const closeProgramEditing = (message?: string) => {
+    resetComposer(form.getValues("athleteId"));
+    setProgramMessage(message ?? "");
   };
 
   return (
@@ -216,15 +252,17 @@ export function CoachDashboard({
             {isEditingProgram ? (
               <div className="mt-4 flex flex-wrap items-center gap-3 rounded-xl border border-[var(--border)] bg-[var(--surface-2)] p-3">
                 <Badge>Muokkaustila</Badge>
+                <p className="text-sm text-[var(--text-muted)]">
+                  Muokkaat olemassa olevaa ohjelmaa. Sulje muokkaus, jos haluat palata uuden ohjelman luontiin.
+                </p>
                 <Button
                   type="button"
                   variant="secondary"
                   onClick={() => {
-                    resetComposer(form.getValues("athleteId"));
-                    setProgramMessage("Palasit uuden ohjelman luontiin.");
+                    closeProgramEditing("Muokkaustila suljettiin.");
                   }}
                 >
-                  Luo uusi ohjelma
+                  Sulje muokkaus
                 </Button>
               </div>
             ) : null}
@@ -236,10 +274,13 @@ export function CoachDashboard({
                 const result = isEditingProgram && editingProgramId
                   ? updateProgram(editingProgramId, {
                       title: values.title,
+                      description: values.description,
+                      athleteId: values.athleteId,
                       workouts: payloadWorkouts,
                     })
                   : createProgram({
                       title: values.title,
+                      description: values.description,
                       athleteId: values.athleteId,
                       workouts: payloadWorkouts,
                     });
@@ -272,7 +313,7 @@ export function CoachDashboard({
                   </div>
                   <div>
                     <Label htmlFor={`${formId}-athlete`}>Käyttäjä</Label>
-                    <Select id={`${formId}-athlete`} {...form.register("athleteId")} disabled={isEditingProgram}>
+                    <Select id={`${formId}-athlete`} {...form.register("athleteId")} disabled={!canEditProgramAthlete}>
                       <option value="">Valitse käyttäjä</option>
                       {programTargets.map((target) => (
                         <option key={target.id} value={target.id}>
@@ -282,10 +323,24 @@ export function CoachDashboard({
                     </Select>
                     {isEditingProgram ? (
                       <p className="mt-1 text-xs text-[var(--text-subtle)]">
-                        Käyttäjää ei voi vaihtaa olemassa olevalle ohjelmalle.
+                        {canEditProgramAthlete
+                          ? "Voit vielä vaihtaa käyttäjän, koska ohjelmasta ei ole käynnistetty treenejä."
+                          : "Käyttäjää ei voi enää vaihtaa, koska ohjelmasta on jo käynnistetty treenejä tai historiaa."}
                       </p>
                     ) : null}
                   </div>
+                </div>
+                <div>
+                  <Label htmlFor={`${formId}-description`}>Kuvaus ja lisätiedot</Label>
+                  <Textarea
+                    id={`${formId}-description`}
+                    {...form.register("description")}
+                    placeholder="Esim. Pidä treenin lisäksi huoli, että saat viikossa keskimäärin 8000 askelta päivässä."
+                    className="min-h-24"
+                  />
+                  <p className="mt-1 text-xs text-[var(--text-subtle)]">
+                    Tähän voit kirjoittaa ohjelman tavoitteen, arjen muistutukset tai muut lisähuomiot treenaajalle.
+                  </p>
                 </div>
               </fieldset>
 
@@ -362,11 +417,10 @@ export function CoachDashboard({
                     variant="secondary"
                     className="w-full sm:w-auto"
                     onClick={() => {
-                      resetComposer(form.getValues("athleteId"));
-                      setProgramMessage("");
+                      closeProgramEditing("Muokkaustila suljettiin.");
                     }}
                   >
-                    Peru muokkaus
+                    Sulje muokkaus
                   </Button>
                 ) : null}
               </div>
@@ -378,53 +432,292 @@ export function CoachDashboard({
               <p className="text-xs font-semibold text-[var(--text-subtle)]">Ohjelmakirjasto</p>
               <CardTitle className="text-2xl">Luodut ohjelmat</CardTitle>
               <CardDescription className="mt-2">
-                Avaa ohjelma muokattavaksi ja päivitä rakenne yhdestä paikasta.
+                Pidä käytössä oleva ohjelma selvästi esillä ja siirrä aiemmat versiot talteen vertailua varten.
               </CardDescription>
-              <div className="mt-5 grid gap-4">
-                {coachPrograms.map((program) => {
-                  const athleteName =
-                    program.athleteId === currentUser?.id
-                      ? "Sinä"
-                      : (state.users.find((user) => user.id === program.athleteId)?.fullName ?? "Käyttäjä");
-                  const isActiveEditorTarget = editingProgramId === program.id;
-
-                  return (
-                    <div key={program.id} className="rounded-xl border-2 border-[var(--border)] bg-[var(--surface-2)] p-5">
-                      <div className="flex items-center justify-between gap-3">
-                        <div>
-                          <p className="font-medium text-[var(--text)]">{program.title}</p>
-                          <p className="text-sm text-[var(--text-muted)]">{athleteName}</p>
-                        </div>
-                        <Badge>{program.workouts?.length ?? 0} harjoitusta</Badge>
-                      </div>
-
-                      <div className="mt-3 flex flex-wrap gap-2">
-                        {(program.workouts ?? []).map((workout) => (
-                          <Badge key={workout.id}>{workout.name}</Badge>
-                        ))}
-                      </div>
-
-                      <div className="mt-4 flex flex-wrap items-center gap-3">
-                        <Button
-                          type="button"
-                          variant={isActiveEditorTarget ? "secondary" : "ghost"}
-                          onClick={() => {
-                            form.reset(buildProgramComposerValues(program, state.exercises));
-                            setEditingProgramId(program.id);
-                            setProgramMessage("");
-                            window.requestAnimationFrame(() => {
-                              const composer = document.getElementById("coach-program-composer");
-                              composer?.scrollIntoView({ behavior: "smooth", block: "start" });
-                            });
-                          }}
-                        >
-                          {isActiveEditorTarget ? "Muokkaus auki" : "Muokkaa ohjelmaa"}
-                        </Button>
-                        {isActiveEditorTarget ? <Badge>Aktiivinen</Badge> : null}
-                      </div>
+              <div className="mt-5 space-y-6">
+                <section className="space-y-3">
+                  <div className="flex items-center justify-between gap-3">
+                    <div>
+                      <p className="text-sm font-semibold text-[var(--text)]">Käytössä nyt</p>
+                      <p className="mt-1 text-sm text-[var(--text-muted)]">
+                        Nämä näkyvät treenaajalle tällä hetkellä käytössä olevina ohjelmina.
+                      </p>
                     </div>
-                  );
-                })}
+                    <Badge>{activeCoachPrograms.length}</Badge>
+                  </div>
+                  {activeCoachPrograms.length ? (
+                    <div className="grid gap-4">
+                      {activeCoachPrograms.map((program) => {
+                        const athleteName =
+                          program.athleteId === currentUser?.id
+                            ? "Sinä"
+                            : (state.users.find((user) => user.id === program.athleteId)?.fullName ?? "Käyttäjä");
+                        const isActiveEditorTarget = editingProgramId === program.id;
+                        const canDeleteProgram = canDeleteProgramFromState(state, program.id);
+
+                        return (
+                          <div key={program.id} className="rounded-2xl border-2 border-[var(--accent-strong)] bg-[color:color-mix(in_oklab,var(--accent)_10%,var(--surface))] p-5 shadow-[0_1px_0_0_var(--shadow-soft),0_10px_26px_-20px_var(--accent)]">
+                            <div className="flex items-start justify-between gap-3">
+                              <div>
+                                <div className="flex flex-wrap items-center gap-2">
+                                  <p className="text-lg font-semibold text-[var(--text)]">{program.title}</p>
+                                  <Badge className="border-[var(--accent-strong)] bg-[var(--surface)] text-[var(--accent-strong)]">
+                                    Käytössä nyt
+                                  </Badge>
+                                  <Badge>{program.workouts?.length ?? 0} harjoitusta</Badge>
+                                  {isActiveEditorTarget ? <Badge>Aktiivinen muokkaus</Badge> : null}
+                                </div>
+                                <p className="mt-1 text-sm text-[var(--text-muted)]">Treenaaja: {athleteName}</p>
+                                {program.description ? (
+                                  <p className="mt-3 max-w-2xl text-sm leading-6 text-[var(--text-muted)]">{program.description}</p>
+                                ) : null}
+                              </div>
+                            </div>
+
+                            <div className="mt-3 flex flex-wrap gap-2">
+                              {(program.workouts ?? []).map((workout) => (
+                                <Badge key={workout.id}>{workout.name}</Badge>
+                              ))}
+                            </div>
+
+                            <div className="mt-4 flex flex-wrap items-center gap-3">
+                              <Button
+                                type="button"
+                                variant={isActiveEditorTarget ? "secondary" : "secondary"}
+                                onClick={() => {
+                                  if (isActiveEditorTarget) {
+                                    closeProgramEditing("Muokkaustila suljettiin.");
+                                    return;
+                                  }
+                                  form.reset(buildProgramComposerValues(program, state.exercises));
+                                  setEditingProgramId(program.id);
+                                  setProgramMessage("");
+                                  window.requestAnimationFrame(() => {
+                                    const composer = document.getElementById("coach-program-composer");
+                                    composer?.scrollIntoView({ behavior: "smooth", block: "start" });
+                                  });
+                                }}
+                              >
+                                {isActiveEditorTarget ? "Sulje muokkaus" : "Muokkaa ohjelmaa"}
+                              </Button>
+                              <Button
+                                type="button"
+                                variant="ghost"
+                                onClick={() => {
+                                  const result = setProgramStatus(program.id, "archived");
+                                  if (!result.ok) {
+                                    setProgramMessage(result.message);
+                                    return;
+                                  }
+
+                                  setProgramMessage(`Ohjelma "${program.title}" siirrettiin aiempiin ohjelmiin.`);
+                                }}
+                              >
+                                Poista käytöstä
+                              </Button>
+                              <details className="relative">
+                                <summary className="inline-flex list-none items-center justify-center rounded-xl border border-[var(--border)] bg-[var(--surface)] px-3 py-2 text-[var(--text-muted)] transition hover:border-[var(--border-strong)] hover:bg-[var(--surface-2)] hover:text-[var(--text)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--surface)]">
+                                  <MoreHorizontal className="size-4" aria-hidden="true" />
+                                  <span className="sr-only">Avaa ohjelman lisätoiminnot</span>
+                                </summary>
+                                <div className="absolute right-0 top-[calc(100%+0.5rem)] z-10 min-w-48 rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-2 shadow-[0_18px_45px_-24px_var(--shadow)]">
+                                  <button
+                                    type="button"
+                                    disabled={!canDeleteProgram}
+                                    className="flex w-full items-center rounded-xl px-3 py-2 text-left text-sm font-semibold text-[var(--danger)] transition hover:bg-[var(--surface-2)] disabled:cursor-not-allowed disabled:text-[var(--text-subtle)] disabled:hover:bg-transparent"
+                                    onClick={() => {
+                                      if (!canDeleteProgram) {
+                                        return;
+                                      }
+                                      const confirmDelete = window.confirm(
+                                        `Poistetaanko ohjelma "${program.title}"?`,
+                                      );
+                                      if (!confirmDelete) {
+                                        return;
+                                      }
+
+                                      const result = deleteProgram(program.id);
+                                      if (!result.ok) {
+                                        setProgramMessage(result.message);
+                                        return;
+                                      }
+
+                                      if (isActiveEditorTarget) {
+                                        resetComposer(form.getValues("athleteId"));
+                                      }
+                                      setProgramMessage(`Ohjelma "${program.title}" poistettiin.`);
+                                    }}
+                                  >
+                                    Poista ohjelma
+                                  </button>
+                                  {!canDeleteProgram ? (
+                                    <p className="px-3 pb-1 pt-2 text-xs leading-5 text-[var(--text-subtle)]">
+                                      Poisto ei ole enää mahdollinen, koska ohjelmasta on jo käynnistetty treenejä tai historiaa.
+                                    </p>
+                                  ) : null}
+                                </div>
+                              </details>
+                            </div>
+                            <p className="mt-3 text-xs text-[var(--text-subtle)]">
+                              {canDeleteProgram
+                                ? "Voit vielä poistaa ohjelman, koska siitä ei ole käynnistetty treenejä."
+                                : "Ohjelma säilyy lukittuna historiassa, koska siitä on jo käynnistetty treenejä."}
+                            </p>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  ) : (
+                    <div className="rounded-xl border border-dashed border-[var(--border)] bg-[var(--surface-2)] p-4">
+                      <p className="text-sm font-medium text-[var(--text)]">Ei aktiivisia ohjelmia.</p>
+                      <p className="mt-1 text-sm text-[var(--text-muted)]">
+                        Luo uusi ohjelma tai nosta arkistoitu ohjelma takaisin aktiiviseksi.
+                      </p>
+                    </div>
+                  )}
+                </section>
+
+                <section className="space-y-3">
+                  <div className="flex items-center justify-between gap-3">
+                    <div>
+                      <p className="text-sm font-semibold text-[var(--text)]">Aiemmat ohjelmat</p>
+                      <p className="mt-1 text-sm text-[var(--text-muted)]">
+                        Vanhat ohjelmat säilyvät tallessa, mutta eivät näy treenaajalle käytössä olevina.
+                      </p>
+                    </div>
+                    <Badge>{archivedCoachPrograms.length}</Badge>
+                  </div>
+                  {archivedCoachPrograms.length ? (
+                    <div className="grid gap-4">
+                      {archivedCoachPrograms.map((program) => {
+                        const athleteName =
+                          program.athleteId === currentUser?.id
+                            ? "Sinä"
+                            : (state.users.find((user) => user.id === program.athleteId)?.fullName ?? "Käyttäjä");
+                        const isActiveEditorTarget = editingProgramId === program.id;
+                        const canDeleteProgram = canDeleteProgramFromState(state, program.id);
+
+                        return (
+                          <div key={program.id} className="rounded-2xl border-2 border-[var(--border)] bg-[var(--surface-2)] p-5">
+                            <div className="flex items-start justify-between gap-3">
+                              <div>
+                                <div className="flex flex-wrap items-center gap-2">
+                                  <p className="text-lg font-semibold text-[var(--text)]">{program.title}</p>
+                                  <Badge>Aiempi ohjelma</Badge>
+                                  <Badge>{program.workouts?.length ?? 0} harjoitusta</Badge>
+                                  {isActiveEditorTarget ? <Badge>Aktiivinen muokkaus</Badge> : null}
+                                </div>
+                                <p className="mt-1 text-sm text-[var(--text-muted)]">Treenaaja: {athleteName}</p>
+                                {program.description ? (
+                                  <p className="mt-3 max-w-2xl text-sm leading-6 text-[var(--text-muted)]">{program.description}</p>
+                                ) : null}
+                              </div>
+                            </div>
+
+                            <div className="mt-3 flex flex-wrap gap-2">
+                              {(program.workouts ?? []).map((workout) => (
+                                <Badge key={workout.id}>{workout.name}</Badge>
+                              ))}
+                            </div>
+
+                            <div className="mt-4 flex flex-wrap items-center gap-3">
+                              <Button
+                                type="button"
+                                variant="secondary"
+                                onClick={() => {
+                                  const result = setProgramStatus(program.id, "active");
+                                  if (!result.ok) {
+                                    setProgramMessage(result.message);
+                                    return;
+                                  }
+
+                                  setProgramMessage(
+                                    `Ohjelma "${program.title}" aktivoitiin. Muut saman treenaajan ohjelmat arkistoitiin.`,
+                                  );
+                                }}
+                              >
+                                Ota käyttöön
+                              </Button>
+                              <Button
+                                type="button"
+                                variant="ghost"
+                                onClick={() => {
+                                  if (isActiveEditorTarget) {
+                                    closeProgramEditing("Muokkaustila suljettiin.");
+                                    return;
+                                  }
+                                  form.reset(buildProgramComposerValues(program, state.exercises));
+                                  setEditingProgramId(program.id);
+                                  setProgramMessage("");
+                                  window.requestAnimationFrame(() => {
+                                    const composer = document.getElementById("coach-program-composer");
+                                    composer?.scrollIntoView({ behavior: "smooth", block: "start" });
+                                  });
+                                }}
+                              >
+                                {isActiveEditorTarget ? "Sulje muokkaus" : "Muokkaa sisältöä"}
+                              </Button>
+                              <details className="relative">
+                                <summary className="inline-flex list-none items-center justify-center rounded-xl border border-[var(--border)] bg-[var(--surface)] px-3 py-2 text-[var(--text-muted)] transition hover:border-[var(--border-strong)] hover:bg-[var(--surface-2)] hover:text-[var(--text)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--surface)]">
+                                  <MoreHorizontal className="size-4" aria-hidden="true" />
+                                  <span className="sr-only">Avaa ohjelman lisätoiminnot</span>
+                                </summary>
+                                <div className="absolute right-0 top-[calc(100%+0.5rem)] z-10 min-w-48 rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-2 shadow-[0_18px_45px_-24px_var(--shadow)]">
+                                  <button
+                                    type="button"
+                                    disabled={!canDeleteProgram}
+                                    className="flex w-full items-center rounded-xl px-3 py-2 text-left text-sm font-semibold text-[var(--danger)] transition hover:bg-[var(--surface-2)] disabled:cursor-not-allowed disabled:text-[var(--text-subtle)] disabled:hover:bg-transparent"
+                                    onClick={() => {
+                                      if (!canDeleteProgram) {
+                                        return;
+                                      }
+                                      const confirmDelete = window.confirm(
+                                        `Poistetaanko ohjelma "${program.title}"?`,
+                                      );
+                                      if (!confirmDelete) {
+                                        return;
+                                      }
+
+                                      const result = deleteProgram(program.id);
+                                      if (!result.ok) {
+                                        setProgramMessage(result.message);
+                                        return;
+                                      }
+
+                                      if (isActiveEditorTarget) {
+                                        resetComposer(form.getValues("athleteId"));
+                                      }
+                                      setProgramMessage(`Ohjelma "${program.title}" poistettiin.`);
+                                    }}
+                                  >
+                                    Poista ohjelma
+                                  </button>
+                                  {!canDeleteProgram ? (
+                                    <p className="px-3 pb-1 pt-2 text-xs leading-5 text-[var(--text-subtle)]">
+                                      Poisto ei ole enää mahdollinen, koska ohjelmasta on jo käynnistetty treenejä tai historiaa.
+                                    </p>
+                                  ) : null}
+                                </div>
+                              </details>
+                            </div>
+                            <p className="mt-3 text-xs text-[var(--text-subtle)]">
+                              {canDeleteProgram
+                                ? "Arkistoidun ohjelman voi vielä poistaa, jos siitä ei ole käynnistetty treenejä."
+                                : "Arkistoitu ohjelma säilyy historiassa, koska siitä on jo käynnistetty treenejä."}
+                            </p>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  ) : (
+                    <div className="rounded-xl border border-dashed border-[var(--border)] bg-[var(--surface-2)] p-4">
+                      <p className="text-sm font-medium text-[var(--text)]">Ei aiempia ohjelmia.</p>
+                      <p className="mt-1 text-sm text-[var(--text-muted)]">
+                        Kun ohjelma jää pois käytöstä, voit siirtää sen tänne talteen.
+                      </p>
+                    </div>
+                  )}
+                </section>
               </div>
             </Card>
           </div>
@@ -476,6 +769,7 @@ function buildProgramComposerValues(
 
   return {
     title: program.title,
+    description: program.description ?? "",
     athleteId: program.athleteId,
     workouts: (program.workouts ?? []).map((workout) => ({
       splitType: workout.splitType,
@@ -1653,11 +1947,7 @@ function buildCoachWorkoutInsights(
         return sum + reps * load;
       }, 0);
 
-      const startedAtMs = new Date(session.startedAt).getTime();
-      const finishedAtMs = new Date(session.completedAt ?? session.updatedAt).getTime();
-      if (Number.isFinite(startedAtMs) && Number.isFinite(finishedAtMs) && finishedAtMs >= startedAtMs) {
-        insight.durationSeconds = Math.max(0, Math.round((finishedAtMs - startedAtMs) / 1000));
-      }
+      insight.durationSeconds = calculateSessionDurationSeconds(session);
       insight.estimatedCalories = estimateStrengthCalories({
         durationSeconds: insight.durationSeconds,
         completionPercent: insight.completionPercent,
@@ -1847,7 +2137,7 @@ function CoachConversationView({
     [entries, selectedAthleteId],
   );
   const contextOptions = useMemo(() => {
-    const selectedAthletePlans = plans.filter((plan) => plan.athleteId === selectedAthleteId);
+    const selectedAthletePlans = plans.filter((plan) => plan.athleteId === selectedAthleteId && isProgramActive(plan));
     const selectedAthleteWorkouts = scheduledWorkouts.filter(
       (workout) => workout.athleteId === selectedAthleteId,
     );

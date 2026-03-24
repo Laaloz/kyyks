@@ -10,7 +10,7 @@ Coach-first, mobile-first treenisovellus valmentajille ja treenaajille.
 - Roolit: `admin`, `coach`, `athlete`
 - Flowt:
   - login / kutsun hyväksyntä
-  - adminin lähettämät käyttäjäkutsut
+  - adminin lähettämät kutsut
   - valmentajan ohjelmapohjien rakennus
   - templatejen duplikointi
   - ohjelmakokonaisuuksien rakentaminen ja treenin käynnistys ohjelmasta

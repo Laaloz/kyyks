@@ -3,7 +3,7 @@ import "server-only";
 import { addDaysIso, addMinutesIso, createSecureToken, hashToken, INVITE_EXPIRY_DAYS, RESET_TOKEN_EXPIRY_MINUTES } from "@/lib/auth-tokens";
 import { sendTransactionalEmail } from "@/lib/email";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
-import type { Role } from "@/lib/types";
+import type { Role, UserProfile } from "@/lib/types";
 
 type RequesterProfile = {
   id: string;
@@ -49,6 +49,47 @@ function mapStoredInviteRecord(invite: StoredInviteRecord) {
     status: invite.status,
     createdAt: invite.created_at,
     expiresAt: invite.expires_at,
+  };
+}
+
+function mapStoredProfileRecord(profile: {
+  id: string;
+  role: Role;
+  status: "active" | "invited";
+  full_name: string;
+  email: string;
+  default_dashboard_view: string | null;
+  email_notifications: boolean;
+  theme_mode: "light" | "dark";
+  weight_kg: number | null;
+  waist_cm: number | null;
+  created_at: string;
+  updated_at: string;
+}): UserProfile {
+  return {
+    id: profile.id,
+    role: profile.role,
+    fullName: profile.full_name,
+    email: profile.email,
+    status: profile.status,
+    weightKg: profile.weight_kg ?? undefined,
+    waistCm: profile.waist_cm ?? undefined,
+    settings: {
+      defaultDashboardView:
+        profile.default_dashboard_view === "templates" ||
+        profile.default_dashboard_view === "invites" ||
+        profile.default_dashboard_view === "athlete-log" ||
+        profile.default_dashboard_view === "conversation" ||
+        profile.default_dashboard_view === "overview"
+          ? profile.default_dashboard_view
+          : profile.role === "athlete"
+            ? "athlete-log"
+            : "overview",
+      emailNotifications: profile.email_notifications,
+      themeMode: profile.theme_mode,
+    },
+    createdAt: profile.created_at,
+    updatedAt: profile.updated_at,
   };
 }
 
@@ -347,7 +388,9 @@ export async function listVisiblePendingInvites({
 
   const { data: profiles, error: profilesError } = await admin
     .from("profiles")
-    .select("email")
+    .select(
+      "id, role, status, full_name, email, default_dashboard_view, email_notifications, theme_mode, weight_kg, waist_cm, created_at, updated_at",
+    )
     .eq("status", "active")
     .in("email", normalizedEmails);
 
@@ -355,10 +398,16 @@ export async function listVisiblePendingInvites({
     return { ok: false as const, message: "Kutsujen status-synkronointi epäonnistui." };
   }
 
+  const activeEmails = Array.from(new Set((profiles ?? []).map((profile) => profile.email.trim().toLowerCase())));
+  const activeEmailSet = new Set(activeEmails);
+
   return {
     ok: true as const,
-    invites: (invites ?? []).map(mapStoredInviteRecord),
-    activeEmails: Array.from(new Set((profiles ?? []).map((profile) => profile.email.trim().toLowerCase()))),
+    invites: (invites ?? [])
+      .filter((invite) => !activeEmailSet.has(invite.email.trim().toLowerCase()))
+      .map(mapStoredInviteRecord),
+    activeEmails,
+    activeProfiles: (profiles ?? []).map(mapStoredProfileRecord),
   };
 }
 

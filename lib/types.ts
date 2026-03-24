@@ -1,6 +1,7 @@
 export type Role = "admin" | "coach" | "athlete";
 export type UserStatus = "active" | "invited";
 export type TemplateStatus = "draft" | "published";
+export type ProgramStatus = "active" | "archived";
 export type ScheduledWorkoutStatus = "in_progress" | "completed" | "cancelled";
 export type InviteStatus = "pending" | "accepted";
 export type SplitType = "upper" | "lower" | "full_body" | "custom";
@@ -129,6 +130,8 @@ export interface TrainingPlan {
   coachId: string;
   athleteId: string;
   title: string;
+  description?: string;
+  status?: ProgramStatus;
   workouts?: ProgramWorkout[];
   startDate: string;
   weekCount: number;
@@ -179,6 +182,8 @@ export interface WorkoutSession {
   athleteId: string;
   startedAt: string;
   completedAt?: string;
+  pausedAt?: string;
+  pausedDurationSeconds?: number;
   updatedAt: string;
   setLogs: WorkoutSetLog[];
   energyLevel?: number;
@@ -274,6 +279,7 @@ export interface TemplateBuilderInput {
 
 export interface ProgramBuilderInput {
   title: string;
+  description?: string;
   athleteId: string;
   workouts: ProgramWorkoutInput[];
   startDate?: string;
@@ -307,6 +313,8 @@ export interface ProgramWorkoutInput {
 
 export interface ProgramUpdateInput {
   title?: string;
+  description?: string;
+  athleteId?: string;
   workouts?: ProgramWorkoutInput[];
 }
 

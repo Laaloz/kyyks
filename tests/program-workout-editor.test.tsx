@@ -10,6 +10,7 @@ function ProgramWorkoutEditorHarness() {
   const form = useForm<ProgramComposerFormValues, unknown, ProgramComposerValues>({
     defaultValues: {
       title: "Testiohjelma",
+      description: "",
       athleteId: "athlete_1",
       workouts: [emptyProgramWorkout("upper")],
     },

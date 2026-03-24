@@ -13,6 +13,7 @@ import { Card, CardDescription, CardTitle } from "@/components/ui/card";
 import { Input, Label, Select } from "@/components/ui/field";
 import { getAdminCoachingCoverage, getAdminOverviewAthleteGroups } from "@/lib/admin-overview";
 import { getInviteLifecycleLabel, getVisiblePendingInvites } from "@/lib/invite-status";
+import { isProgramActive } from "@/lib/program-status";
 import { canResendInvite, getAssignableCoachUsers } from "@/lib/role-access";
 import { formatDate } from "@/lib/utils";
 import { useAppState } from "@/providers/app-state-provider";
@@ -38,7 +39,7 @@ export function AdminDashboard({ view }: { view: WorkspaceView }) {
     const athleteLatestActivity = new Map<string, number>();
 
     state.plans.forEach((plan) => {
-      if (!activeAthleteIds.has(plan.athleteId)) {
+      if (!activeAthleteIds.has(plan.athleteId) || !isProgramActive(plan)) {
         return;
       }
 
@@ -100,7 +101,9 @@ export function AdminDashboard({ view }: { view: WorkspaceView }) {
         return !latestActivity || now - latestActivity > 14 * dayMs;
       })
       .sort((left, right) => left.fullName.localeCompare(right.fullName, "fi"));
-    const activePrograms = state.plans.filter((plan) => activeAthleteIds.has(plan.athleteId) && Boolean(plan.workouts?.length));
+    const activePrograms = state.plans.filter(
+      (plan) => activeAthleteIds.has(plan.athleteId) && Boolean(plan.workouts?.length) && isProgramActive(plan),
+    );
     const workoutsInProgress = state.scheduledWorkouts.filter((workout) => workout.status === "in_progress");
     const completedWorkoutsLastWeek = state.scheduledWorkouts.filter((workout) => {
       if (workout.status !== "completed") {
@@ -120,7 +123,9 @@ export function AdminDashboard({ view }: { view: WorkspaceView }) {
       .map((coach) => ({
         coach,
         athleteCount: coachingCoverage.coachAthleteCount.get(coach.id) ?? 0,
-        programCount: state.plans.filter((plan) => plan.coachId === coach.id && activeAthleteIds.has(plan.athleteId)).length,
+        programCount: state.plans.filter(
+          (plan) => plan.coachId === coach.id && activeAthleteIds.has(plan.athleteId) && isProgramActive(plan),
+        ).length,
         pendingInviteCount: pendingInvites.filter((invite) => invite.coachId === coach.id).length,
       }))
       .sort(

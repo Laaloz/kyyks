@@ -54,6 +54,7 @@ export async function GET() {
   return NextResponse.json({
     invites: result.invites,
     activeEmails: result.activeEmails,
+    activeProfiles: result.activeProfiles,
   });
 }
 

@@ -1,6 +1,6 @@
 "use client";
 
-import { Bell, BellRing, Dumbbell, Home, LogOut, NotebookPen, Settings, Sparkles, Users, type LucideIcon } from "lucide-react";
+import { Bell, BellRing, Dumbbell, Home, LogOut, MoreHorizontal, NotebookPen, Settings, Sparkles, Users, type LucideIcon } from "lucide-react";
 import { useEffect, useRef, useState, type KeyboardEvent } from "react";
 
 import { AdminDashboard } from "@/components/workout/admin-dashboard";
@@ -50,8 +50,10 @@ export function DashboardShell() {
   );
   const [isMeasurementReminderOpen, setIsMeasurementReminderOpen] = useState(false);
   const [isReminderPreviewMode, setIsReminderPreviewMode] = useState(false);
+  const [isMobileActionsOpen, setIsMobileActionsOpen] = useState(false);
   const didAutoOpenAthleteLog = useRef(false);
   const navButtonRefs = useRef<Record<string, HTMLButtonElement | null>>({});
+  const mobileActionsRef = useRef<HTMLDivElement | null>(null);
 
   if (!currentUser) {
     return null;
@@ -61,8 +63,8 @@ export function DashboardShell() {
   const navLabelByView: Record<WorkspaceView, string> = {
     overview: "Yleiskuva",
     templates: "Ohjelmat",
-    invites: "Käyttäjäkutsut",
-    "athlete-log": "Treeniloki",
+    invites: "Kutsut",
+    "athlete-log": "Harjoitukset",
     conversation: "Keskustelu",
     settings: "Asetukset",
   };
@@ -73,6 +75,7 @@ export function DashboardShell() {
     "athlete-log": NotebookPen,
     conversation: Bell,
   };
+  const mobileNavGridClass = navItems.length > 3 ? "grid-cols-2" : "grid-cols-3";
   const activePrimaryView = view === "settings" ? resolveInitialView(currentUser.role, currentUser.settings?.defaultDashboardView) : view;
   const activeTabId = `workspace-tab-${activePrimaryView}`;
   const activePanelId = `workspace-panel-${activePrimaryView}`;
@@ -135,6 +138,24 @@ export function DashboardShell() {
       markConversationRead();
     }
   }, [markConversationRead, view]);
+
+  useEffect(() => {
+    if (!isMobileActionsOpen) {
+      return;
+    }
+
+    const handlePointerDown = (event: MouseEvent) => {
+      const target = event.target as HTMLElement | null;
+      if (mobileActionsRef.current?.contains(target)) {
+        return;
+      }
+
+      setIsMobileActionsOpen(false);
+    };
+
+    window.addEventListener("mousedown", handlePointerDown);
+    return () => window.removeEventListener("mousedown", handlePointerDown);
+  }, [isMobileActionsOpen]);
 
   useEffect(() => {
     if (typeof window === "undefined") {
@@ -226,29 +247,39 @@ export function DashboardShell() {
       <header
         className="z-20 rounded-3xl border border-[var(--border-strong)] bg-[var(--surface)] px-4 py-4 shadow-[0_1px_0_0_var(--shadow-soft),0_14px_30px_-20px_var(--shadow)] sm:px-5"
       >
-        <div className="flex flex-col gap-4">
+        <div className="flex flex-col gap-3">
           <div className="flex items-start justify-between gap-3">
-            <div className="flex min-w-0 items-center gap-3">
-              <div className="flex size-12 shrink-0 items-center justify-center rounded-2xl border border-[var(--accent-strong)] bg-[var(--accent)] shadow-[0_1px_0_0_var(--accent-strong),0_14px_24px_-18px_var(--accent)]">
+            <div className="grid min-w-0 grid-cols-[auto_minmax(0,1fr)] gap-3">
+              <div className="flex size-11 shrink-0 items-center justify-center rounded-2xl border border-[var(--accent-strong)] bg-[var(--accent)] shadow-[0_1px_0_0_var(--accent-strong),0_14px_24px_-18px_var(--accent)] sm:size-12">
                 <Dumbbell className="size-5 text-white" />
               </div>
-              <div className="min-w-0">
-                <p className="text-[0.68rem] font-semibold uppercase tracking-[0.08em] text-[var(--text-subtle)]">
+              <div className="min-w-0 space-y-1">
+                <p className="hidden text-[0.68rem] font-semibold uppercase tracking-[0.08em] text-[var(--text-subtle)] sm:block">
                   Treenihallinta
                 </p>
-                <h2 className="truncate font-[family-name:var(--font-display)] text-xl font-semibold text-[var(--text)] sm:text-2xl">
+                <h2 className="pr-2 font-[family-name:var(--font-display)] text-[1.2rem] font-semibold leading-[1.08] text-[var(--text)] sm:truncate sm:text-2xl">
                   {currentUser.fullName}
                 </h2>
+                <div className="flex flex-wrap items-center gap-2 pt-0.5">
+                  <Badge className="border-[var(--border-strong)] bg-[var(--surface-3)] text-[var(--text-subtle)]">
+                    {roleLabel(currentUser.role)}
+                  </Badge>
+                  {isImpersonating ? (
+                    <Badge className="border-[var(--accent)] bg-[var(--surface-3)] text-[var(--accent)]">
+                      Admin-vaihto aktiivinen
+                    </Badge>
+                  ) : null}
+                </div>
               </div>
             </div>
 
-            <div className="flex items-center gap-2">
+            <div className="hidden shrink-0 items-center gap-2 rounded-2xl border border-[var(--border)] bg-[var(--surface-2)] px-2 py-2 sm:flex">
               {shouldShowMeasurementReminder ? (
                 <Button
                   onClick={() => setIsMeasurementReminderOpen(true)}
                   type="button"
                   variant="secondary"
-                  className="size-11 !rounded-2xl !px-0 !py-0 !border-[var(--accent)] !bg-[var(--surface-2)] !text-[var(--accent)] shadow-[0_0_0_1px_var(--accent)]"
+                  className="size-10 !rounded-xl !px-0 !py-0 !border-[var(--accent)] !bg-[var(--surface)] !text-[var(--accent)] shadow-[0_0_0_1px_var(--accent)]"
                   aria-label="Avaa kehon seurannan muistutus"
                   title="Päivitä kehon seuranta"
                 >
@@ -260,9 +291,9 @@ export function DashboardShell() {
                 onClick={() => setView("settings")}
                 type="button"
                 variant="secondary"
-                className={`relative size-11 !rounded-2xl !px-0 !py-0 ${
+                className={`relative size-10 !rounded-xl !px-0 !py-0 ${
                   view === "settings"
-                    ? "!border-[var(--accent)] !bg-[var(--surface-2)] !text-[var(--accent)] shadow-[0_0_0_1px_var(--accent)]"
+                    ? "!border-[var(--accent)] !bg-[var(--surface)] !text-[var(--accent)] shadow-[0_0_0_1px_var(--accent)]"
                     : ""
                 }`}
                 aria-label="Asetukset"
@@ -281,7 +312,7 @@ export function DashboardShell() {
                 }}
                 type="button"
                 variant="secondary"
-                className="size-11 !rounded-2xl !px-0 !py-0"
+                className="size-10 !rounded-xl !px-0 !py-0 !bg-[var(--surface)]"
                 aria-label="Kirjaudu ulos"
                 title="Kirjaudu ulos"
               >
@@ -289,17 +320,68 @@ export function DashboardShell() {
                 <span className="sr-only">Kirjaudu ulos</span>
               </Button>
             </div>
-          </div>
 
-          <div className="flex items-center gap-2">
-            <Badge className="border-[var(--border-strong)] bg-[var(--surface-3)] text-[var(--text-subtle)]">
-              {roleLabel(currentUser.role)}
-            </Badge>
-            {isImpersonating ? (
-              <Badge className="border-[var(--accent)] bg-[var(--surface-3)] text-[var(--accent)]">
-                Admin-vaihto aktiivinen
-              </Badge>
-            ) : null}
+            <div className="relative flex shrink-0 items-center gap-2 sm:hidden" ref={mobileActionsRef}>
+              {shouldShowMeasurementReminder ? (
+                <Button
+                  onClick={() => {
+                    setIsMobileActionsOpen(false);
+                    setIsMeasurementReminderOpen(true);
+                  }}
+                  type="button"
+                  variant="secondary"
+                  className="size-10 !rounded-xl !px-0 !py-0 !border-[var(--accent)] !bg-[var(--surface)] !text-[var(--accent)] shadow-[0_0_0_1px_var(--accent)]"
+                  aria-label="Avaa kehon seurannan muistutus"
+                  title="Päivitä kehon seuranta"
+                >
+                  <BellRing className="size-5 text-[var(--accent)]" aria-hidden="true" />
+                  <span className="sr-only">Avaa kehon seurannan muistutus</span>
+                </Button>
+              ) : null}
+              <Button
+                onClick={() => setIsMobileActionsOpen((value) => !value)}
+                type="button"
+                variant="secondary"
+                className="size-10 !rounded-xl !px-0 !py-0 !bg-[var(--surface)]"
+                aria-label="Avaa lisätoiminnot"
+                aria-haspopup="menu"
+                aria-expanded={isMobileActionsOpen}
+              >
+                <MoreHorizontal className="size-5" aria-hidden="true" />
+                <span className="sr-only">Avaa lisätoiminnot</span>
+              </Button>
+              {isMobileActionsOpen ? (
+                <div
+                  role="menu"
+                  className="absolute right-0 top-[calc(100%+0.5rem)] z-30 min-w-44 rounded-2xl border border-[var(--border-strong)] bg-[var(--surface)] p-1.5 shadow-[0_16px_30px_-18px_var(--shadow)]"
+                >
+                  <button
+                    type="button"
+                    role="menuitem"
+                    className="flex w-full items-center gap-2 rounded-xl px-3 py-2.5 text-left text-sm font-medium text-[var(--text)] hover:bg-[var(--surface-2)]"
+                    onClick={() => {
+                      setIsMobileActionsOpen(false);
+                      setView("settings");
+                    }}
+                  >
+                    <Settings className="size-4" aria-hidden="true" />
+                    Asetukset
+                  </button>
+                  <button
+                    type="button"
+                    role="menuitem"
+                    className="flex w-full items-center gap-2 rounded-xl px-3 py-2.5 text-left text-sm font-medium text-[var(--text)] hover:bg-[var(--surface-2)]"
+                    onClick={() => {
+                      setIsMobileActionsOpen(false);
+                      void logout();
+                    }}
+                  >
+                    <LogOut className="size-4" aria-hidden="true" />
+                    Kirjaudu ulos
+                  </button>
+                </div>
+              ) : null}
+            </div>
           </div>
 
           {isImpersonating && authenticatedUser ? (
@@ -328,7 +410,7 @@ export function DashboardShell() {
             <div
               role="tablist"
               aria-label="Työtilan näkymät"
-              className="grid w-full min-w-0 grid-cols-2 gap-1 sm:grid-cols-3"
+              className={`grid w-full min-w-0 ${mobileNavGridClass} gap-1.5 rounded-2xl border border-[var(--border)] bg-[var(--surface-2)] p-1.5 sm:grid-cols-3 sm:gap-1 sm:rounded-none sm:border-0 sm:bg-transparent sm:p-0`}
             >
             {navItems.map((item, index) => {
               const Icon = navIconByView[item];
@@ -348,13 +430,13 @@ export function DashboardShell() {
                   tabIndex={isActive ? 0 : -1}
                   className={
                     isActive
-                      ? "min-w-0 min-h-12 w-full flex-col gap-1 px-2 py-2 text-center text-[13px] leading-tight hover:translate-y-0 hover:brightness-100 sm:h-10 sm:min-h-10 sm:flex-row sm:gap-1.5 sm:px-3 sm:text-sm"
-                      : "min-w-0 min-h-12 w-full flex-col gap-1 px-2 py-2 text-center text-[13px] leading-tight sm:h-10 sm:min-h-10 sm:flex-row sm:gap-1.5 sm:px-3 sm:text-sm"
+                      ? "min-h-10 w-full min-w-0 rounded-xl px-2.5 py-2 text-center text-[0.88rem] leading-tight hover:translate-y-0 hover:brightness-100 sm:min-h-10 sm:flex-row sm:gap-1.5 sm:px-3 sm:text-sm"
+                      : "min-h-10 w-full min-w-0 rounded-xl px-2.5 py-2 text-center text-[0.88rem] leading-tight sm:min-h-10 sm:flex-row sm:gap-1.5 sm:px-3 sm:text-sm"
                   }
                   onKeyDown={(event) => handleNavKeyDown(event, index)}
                   onClick={() => setView(item)}
                 >
-                  <Icon className="size-4" aria-hidden="true" />
+                  <Icon className="hidden size-4 sm:block" aria-hidden="true" />
                   {navLabelByView[item]}
                   {item === "conversation" && unreadConversationCount > 0 ? (
                     <span className="inline-flex min-w-5 items-center justify-center rounded-full bg-[var(--surface)] px-1.5 text-[10px] font-semibold text-[var(--accent)]">

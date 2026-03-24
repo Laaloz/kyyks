@@ -1,7 +1,7 @@
 "use client";
 
 import { zodResolver } from "@hookform/resolvers/zod";
-import { Bell, KeyRound, Mail, MoonStar, ShieldAlert, UserRoundCog } from "lucide-react";
+import { Bell, KeyRound, Mail, MoonStar, MoreHorizontal, ShieldAlert, UserRoundCog } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
@@ -19,8 +19,8 @@ import { useAppState } from "@/providers/app-state-provider";
 const dashboardViewLabel: Record<DashboardHomeView, string> = {
   overview: "Yleiskuva",
   templates: "Ohjelmat",
-  invites: "Käyttäjäkutsut",
-  "athlete-log": "Treeniloki",
+  invites: "Kutsut",
+  "athlete-log": "Harjoitukset",
   conversation: "Keskustelu",
 };
 
@@ -108,6 +108,11 @@ export function UserSettingsPanel() {
         : [],
     [selectedManagedUser, state.assignments],
   );
+  const isRoleDirty = Boolean(selectedManagedUser) && selectedManagedRole !== selectedManagedUser.role;
+  const isCoachSelectionDirty =
+    selectedManagedUser?.role === "athlete" &&
+    (selectedManagedCoachIds.length !== selectedManagedAthleteCoachIds.length ||
+      selectedManagedCoachIds.some((coachId) => !selectedManagedAthleteCoachIds.includes(coachId)));
 
   useEffect(() => {
     if (!currentUser) {
@@ -429,9 +434,32 @@ export function UserSettingsPanel() {
                       ) : null}
                     </div>
 
-                    <div className="mt-2 grid gap-3 rounded-xl border border-[var(--border)] bg-[var(--surface)] p-3 md:grid-cols-[1fr_auto] md:items-end">
+                    <div className="mt-2 grid gap-3 rounded-xl border border-[var(--border)] bg-[var(--surface)] p-3">
+                      <div className="flex flex-wrap items-center justify-between gap-3">
+                        <Label htmlFor="admin-managed-role" className="mb-0">
+                          Rooli
+                        </Label>
+                        {isRoleDirty ? (
+                          <Button
+                            type="button"
+                            variant="secondary"
+                            className="w-full sm:w-auto"
+                            onClick={async () => {
+                              const result = await adminUpdateUserRole(selectedManagedUser.id, selectedManagedRole);
+                              setAdminMessage(
+                                result.ok
+                                  ? `Rooli päivitettiin: ${selectedManagedUser.fullName} on nyt ${roleLabel(selectedManagedRole)}.`
+                                  : result.message,
+                              );
+                            }}
+                          >
+                            Tallenna rooli
+                          </Button>
+                        ) : (
+                          <Badge>Ei muutoksia</Badge>
+                        )}
+                      </div>
                       <div>
-                        <Label htmlFor="admin-managed-role">Rooli</Label>
                         <Select
                           id="admin-managed-role"
                           value={selectedManagedRole}
@@ -445,28 +473,37 @@ export function UserSettingsPanel() {
                           Roolin vaihto siivoaa vain ristiriitaiset valmentaja-treenaaja-suhteet. Muu käyttäjädata säilyy.
                         </p>
                       </div>
-                      <Button
-                        type="button"
-                        variant="secondary"
-                        className="w-full md:w-auto"
-                        disabled={selectedManagedRole === selectedManagedUser.role}
-                        onClick={async () => {
-                          const result = await adminUpdateUserRole(selectedManagedUser.id, selectedManagedRole);
-                          setAdminMessage(
-                            result.ok
-                              ? `Rooli päivitettiin: ${selectedManagedUser.fullName} on nyt ${roleLabel(selectedManagedRole)}.`
-                              : result.message,
-                          );
-                        }}
-                      >
-                        Tallenna rooli
-                      </Button>
                     </div>
 
                     {selectedManagedUser.role === "athlete" ? (
                       <div className="mt-2 grid gap-3 rounded-xl border border-[var(--border)] bg-[var(--surface)] p-3">
+                        <div className="flex flex-wrap items-center justify-between gap-3">
+                          <Label htmlFor="admin-managed-coaches" className="mb-0">
+                            Vastuuhenkilöt
+                          </Label>
+                          {isCoachSelectionDirty ? (
+                            <Button
+                              type="button"
+                              variant="secondary"
+                              className="w-full sm:w-auto"
+                              disabled={selectedManagedCoachIds.length === 0}
+                              onClick={async () => {
+                                const result = await adminAssignAthleteCoaches(
+                                  selectedManagedUser.id,
+                                  selectedManagedCoachIds,
+                                );
+                                setAdminMessage(
+                                  "message" in result ? result.message : "Vastuuhenkilöt tallennettiin.",
+                                );
+                              }}
+                            >
+                              Tallenna vastuuhenkilöt
+                            </Button>
+                          ) : (
+                            <Badge>Ei muutoksia</Badge>
+                          )}
+                        </div>
                         <div>
-                          <Label htmlFor="admin-managed-coaches">Vastuuhenkilöt</Label>
                           <div
                             id="admin-managed-coaches"
                             className="grid gap-2 rounded-xl border border-[var(--border)] bg-[var(--surface-2)] p-3"
@@ -476,7 +513,11 @@ export function UserSettingsPanel() {
                               return (
                                 <label
                                   key={user.id}
-                                  className="flex items-center justify-between gap-3 rounded-xl border border-[var(--border)] bg-[var(--surface)] px-3 py-2"
+                                  className={`flex cursor-pointer items-center justify-between gap-3 rounded-xl border px-3 py-2 transition ${
+                                    checked
+                                      ? "border-[var(--accent-strong)] bg-[color:color-mix(in_oklab,var(--accent)_10%,var(--surface))]"
+                                      : "border-[var(--border)] bg-[var(--surface)] hover:border-[var(--border-strong)]"
+                                  }`}
                                 >
                                   <span className="min-w-0">
                                     <span className="block text-sm font-medium text-[var(--text)]">{user.fullName}</span>
@@ -503,27 +544,6 @@ export function UserSettingsPanel() {
                           </p>
                         </div>
                         <div className="flex flex-wrap items-center gap-3">
-                          <Button
-                            type="button"
-                            variant="secondary"
-                            className="w-full md:w-auto"
-                            disabled={
-                              selectedManagedCoachIds.length === 0 ||
-                              (selectedManagedCoachIds.length === selectedManagedAthleteCoachIds.length &&
-                                selectedManagedCoachIds.every((coachId) => selectedManagedAthleteCoachIds.includes(coachId)))
-                            }
-                            onClick={async () => {
-                              const result = await adminAssignAthleteCoaches(
-                                selectedManagedUser.id,
-                                selectedManagedCoachIds,
-                              );
-                              setAdminMessage(
-                                "message" in result ? result.message : "Vastuuhenkilöt tallennettiin.",
-                              );
-                            }}
-                          >
-                            Tallenna valmentajat
-                          </Button>
                           <p className="text-xs text-[var(--text-subtle)]">
                             Valittuna {selectedManagedCoachIds.length} / {assignableCoaches.length}
                           </p>
@@ -531,7 +551,7 @@ export function UserSettingsPanel() {
                       </div>
                     ) : null}
 
-                    <div className="mt-2 flex flex-wrap gap-2">
+                    <div className="mt-2 flex flex-wrap items-center gap-2">
                       <Button
                         type="button"
                         variant="primary"
@@ -560,28 +580,35 @@ export function UserSettingsPanel() {
                         <Mail className="mr-2 size-4" />
                         Lähetä salasanan nollaus
                       </Button>
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        className="text-[var(--danger)] hover:text-[var(--danger)]"
-                        onClick={async () => {
-                          const confirmed = window.confirm(
-                            `Poistetaanko käyttäjä ${selectedManagedUser.fullName}? Tämä poistaa myös käyttäjään liittyvät kutsut, roolitukset ja treenidatan.`,
-                          );
-                          if (!confirmed) {
-                            return;
-                          }
+                      <details className="relative">
+                        <summary className="inline-flex list-none items-center justify-center rounded-xl border border-[var(--border)] bg-[var(--surface)] px-3 py-2.5 text-[var(--text-muted)] transition hover:border-[var(--border-strong)] hover:bg-[var(--surface-2)] hover:text-[var(--text)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--surface)]">
+                          <MoreHorizontal className="size-4" aria-hidden="true" />
+                          <span className="sr-only">Avaa käyttäjän lisätoiminnot</span>
+                        </summary>
+                        <div className="absolute left-0 top-[calc(100%+0.5rem)] z-10 min-w-52 rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-2 shadow-[0_18px_45px_-24px_var(--shadow)]">
+                          <button
+                            type="button"
+                            className="flex w-full items-center rounded-xl px-3 py-2 text-left text-sm font-semibold text-[var(--danger)] transition hover:bg-[var(--surface-2)]"
+                            onClick={async () => {
+                              const confirmed = window.confirm(
+                                `Poistetaanko käyttäjä ${selectedManagedUser.fullName}? Tämä poistaa myös käyttäjään liittyvät kutsut, roolitukset ja treenidatan.`,
+                              );
+                              if (!confirmed) {
+                                return;
+                              }
 
-                          const result = await adminDeleteUser(selectedManagedUser.id);
-                          setAdminMessage(result.ok ? "Käyttäjä poistettiin turvallisesti." : result.message);
-                          if (result.ok) {
-                            setPreviewResetUrl("");
-                          }
-                        }}
-                      >
-                        <ShieldAlert className="mr-2 size-4" />
-                        Poista käyttäjä
-                      </Button>
+                              const result = await adminDeleteUser(selectedManagedUser.id);
+                              setAdminMessage(result.ok ? "Käyttäjä poistettiin turvallisesti." : result.message);
+                              if (result.ok) {
+                                setPreviewResetUrl("");
+                              }
+                            }}
+                          >
+                            <ShieldAlert className="mr-2 size-4" />
+                            Poista käyttäjä
+                          </button>
+                        </div>
+                      </details>
                     </div>
                   </div>
                 ) : null}
@@ -600,7 +627,10 @@ export function UserSettingsPanel() {
                         : "text-[var(--danger)]"
                   }`}
                 >
-                  {adminMessage || "Valitse käyttäjä aloittaaksesi hallinnan."}
+                  {adminMessage ||
+                    (selectedManagedUser
+                      ? "Päivitä rooli, vastuuhenkilöt tai käytä alapuolen toimintoja."
+                      : "Valitse käyttäjä aloittaaksesi hallinnan.")}
                 </p>
 
                 {isImpersonating && authenticatedUser ? (

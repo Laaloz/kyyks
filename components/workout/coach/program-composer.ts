@@ -31,6 +31,7 @@ export type ProgramComposerWorkoutFormValues = {
 
 export type ProgramComposerFormValues = {
   title: string;
+  description: string;
   athleteId: string;
   workouts: ProgramComposerWorkoutFormValues[];
 };

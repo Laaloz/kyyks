@@ -31,6 +31,7 @@ import {
 } from "@/lib/auth-tokens";
 import { defaultGlobalExercises } from "@/lib/demo-data";
 import { getVisiblePendingInvites } from "@/lib/invite-status";
+import { getProgramStatus, isProgramActive } from "@/lib/program-status";
 import { canActAsCoach, canResendInvite, getDashboardViewsForRole, getDefaultDashboardView, isAdminRole } from "@/lib/role-access";
 import { createSupabaseBrowserClient } from "@/lib/supabase/client";
 import type {
@@ -116,11 +117,67 @@ function canManageProgramTarget(state: AppState, actor: UserProfile, athleteId: 
   return false;
 }
 
+export function canDeleteProgramFromState(state: AppState, programId: string) {
+  return !state.scheduledWorkouts.some((workout) => workout.trainingPlanId === programId);
+}
+
+export function canRetargetProgramInState(state: AppState, programId: string) {
+  return !state.scheduledWorkouts.some((workout) => workout.trainingPlanId === programId);
+}
+
+export function applyProgramStatusUpdate(
+  state: AppState,
+  programId: string,
+  nextStatus: "active" | "archived",
+) {
+  const targetProgram = state.plans.find((plan) => plan.id === programId);
+  if (!targetProgram) {
+    return state;
+  }
+
+  return {
+    ...state,
+    plans: state.plans.map((plan) => {
+      if (plan.id === programId) {
+        return { ...plan, status: nextStatus };
+      }
+
+      if (nextStatus === "active" && plan.athleteId === targetProgram.athleteId) {
+        return { ...plan, status: "archived" as const };
+      }
+
+      return plan;
+    }),
+  };
+}
+
+export function applyProgramDeletion(state: AppState, programId: string) {
+  return {
+    ...state,
+    plans: state.plans.filter((plan) => plan.id !== programId),
+  };
+}
+
 export function resolvePrimaryCoachIdForAthlete(state: AppState, athleteId: string) {
   return (
     state.assignments.find((assignment) => assignment.athleteId === athleteId && assignment.active)?.coachId ??
     state.scheduledWorkouts.find((workout) => workout.athleteId === athleteId)?.coachId ??
     state.plans.find((plan) => plan.athleteId === athleteId)?.coachId
+  );
+}
+
+export function resolveBlockingWorkoutStart(
+  state: AppState,
+  athleteId: string,
+  programWorkoutId?: string,
+) {
+  return (
+    state.scheduledWorkouts.find(
+      (workout) =>
+        workout.athleteId === athleteId &&
+        workout.programWorkoutId !== programWorkoutId &&
+        workout.status === "in_progress",
+    ) ?? null
   );
 }
 
@@ -298,6 +355,7 @@ function normalizeState(raw: AppState): AppState {
     }),
     plans: raw.plans.map((plan) => ({
       ...plan,
+      status: getProgramStatus(plan),
       workouts: plan.workouts?.map((workout, workoutIndex) => ({
         ...workout,
         name: workout.name || `Harjoitus ${workoutIndex + 1}`,
@@ -725,30 +783,48 @@ type SupabaseInviteDirectorySnapshot = {
     expiresAt: string;
   }>;
   activeEmails: string[];
+  activeProfiles?: UserProfile[];
 };
 
 export function reconcileSupabaseInviteDirectory(
   previous: AppState,
   snapshot: SupabaseInviteDirectorySnapshot,
 ) {
+  const nextStateFromProfiles = (snapshot.activeProfiles ?? []).reduce((stateAcc, profile) => {
+    const existingUser =
+      stateAcc.users.find((user) => user.id === profile.id) ??
+      stateAcc.users.find((user) => user.email.trim().toLowerCase() === profile.email.trim().toLowerCase());
+
+    if (existingUser) {
+      return replaceUserIdReferences(stateAcc, existingUser.id, profile.id, profile);
+    }
+
+    return {
+      ...stateAcc,
+      users: [profile, ...stateAcc.users.filter((user) => user.id !== profile.id)],
+    };
+  }, previous);
+
   const activeEmails = new Set(snapshot.activeEmails.map((email) => email.trim().toLowerCase()));
-  const serverInvites = snapshot.invites.map((invite) => ({
-    ...invite,
-    coachId: invite.coachId ?? undefined,
-  }));
+  const serverInvites = snapshot.invites
+    .filter((invite) => !activeEmails.has(invite.email.trim().toLowerCase()))
+    .map((invite) => ({
+      ...invite,
+      coachId: invite.coachId ?? undefined,
+    }));
   const serverInviteIds = new Set(serverInvites.map((invite) => invite.id));
   const serverInviteEmails = new Set(serverInvites.map((invite) => invite.email.trim().toLowerCase()));
 
   return {
-    ...previous,
-    users: previous.users.map((user): UserProfile =>
+    ...nextStateFromProfiles,
+    users: nextStateFromProfiles.users.map((user): UserProfile =>
       activeEmails.has(user.email.trim().toLowerCase()) && user.status !== "active"
         ? { ...user, status: "active" as const }
         : user,
     ),
     invites: [
       ...serverInvites,
-      ...previous.invites.filter((invite) => {
+      ...nextStateFromProfiles.invites.filter((invite) => {
         const normalizedEmail = invite.email.trim().toLowerCase();
         if (serverInviteIds.has(invite.id)) {
           return false;
@@ -943,6 +1019,8 @@ interface AppStateContextValue {
   createTemplate: (input: TemplateBuilderInput) => ActionResult;
   createProgram: (input: ProgramBuilderInput) => ActionResult;
   updateProgram: (programId: string, patch: ProgramUpdateInput) => ActionResult;
+  setProgramStatus: (programId: string, status: "active" | "archived") => ActionResult;
+  deleteProgram: (programId: string) => ActionResult;
   startProgramWorkout: (programId: string, programWorkoutId: string) => ActionResult;
   duplicateTemplate: (templateId: string) => ActionResult;
   addConversationComment: (
@@ -2267,11 +2345,17 @@ export function AppStateProvider({ children }: PropsWithChildren) {
         const resolved = resolveProgramWorkouts(input.workouts, state.exercises, currentUser.id);
         const createdProgram = domainCreateProgram({ ...input, workouts: resolved.workouts }, currentUser.id);
 
-        setState((previous) => ({
-          ...previous,
-          exercises: [...resolved.customExercises, ...previous.exercises],
-          plans: [createdProgram, ...previous.plans],
-        }));
+        setState((previous) =>
+          applyProgramStatusUpdate(
+            {
+              ...previous,
+              exercises: [...resolved.customExercises, ...previous.exercises],
+              plans: [createdProgram, ...previous.plans],
+            },
+            createdProgram.id,
+            "active",
+          ),
+        );
 
         return { ok: true };
       },
@@ -2287,6 +2371,23 @@ export function AppStateProvider({ children }: PropsWithChildren) {
 
         if (!isAdminRole(currentUser.role) && program.coachId !== currentUser.id) {
           return { ok: false, message: "Voit muokata vain omia ohjelmiasi." };
+        }
+
+        const nextAthleteId = patch.athleteId ?? program.athleteId;
+        if (nextAthleteId !== program.athleteId) {
+          if (!canManageProgramTarget(state, currentUser, nextAthleteId)) {
+            return {
+              ok: false,
+              message: "Voit siirtää ohjelman vain itsellesi tai omalle valmennettavallesi.",
+            };
+          }
+
+          if (!canRetargetProgramInState(state, programId)) {
+            return {
+              ok: false,
+              message: "Käyttäjää ei voi vaihtaa, koska ohjelmasta on jo käynnistetty treenejä tai historiaa.",
+            };
+          }
         }
 
         const resolvedWorkouts = patch.workouts
@@ -2308,6 +2409,51 @@ export function AppStateProvider({ children }: PropsWithChildren) {
 
         return { ok: true };
       },
+      setProgramStatus(programId, status) {
+        if (!currentUser || !canActAsCoach(currentUser.role)) {
+          return { ok: false, message: "Vain admin tai valmentaja voi muuttaa ohjelman tilaa." };
+        }
+
+        const program = state.plans.find((item) => item.id === programId);
+        if (!program) {
+          return { ok: false, message: "Treeniohjelmaa ei löytynyt." };
+        }
+
+        if (!isAdminRole(currentUser.role) && program.coachId !== currentUser.id) {
+          return { ok: false, message: "Voit hallita vain omia ohjelmiasi." };
+        }
+
+        if (getProgramStatus(program) === status) {
+          return { ok: true };
+        }
+
+        setState((previous) => applyProgramStatusUpdate(previous, programId, status));
+        return { ok: true };
+      },
+      deleteProgram(programId) {
+        if (!currentUser || !canActAsCoach(currentUser.role)) {
+          return { ok: false, message: "Vain admin tai valmentaja voi poistaa treeniohjelman." };
+        }
+
+        const program = state.plans.find((item) => item.id === programId);
+        if (!program) {
+          return { ok: false, message: "Treeniohjelmaa ei löytynyt." };
+        }
+
+        if (!isAdminRole(currentUser.role) && program.coachId !== currentUser.id) {
+          return { ok: false, message: "Voit poistaa vain omia ohjelmiasi." };
+        }
+
+        if (!canDeleteProgramFromState(state, programId)) {
+          return {
+            ok: false,
+            message: "Ohjelmaa ei voi poistaa, koska siitä on jo käynnistetty treenejä tai historiaa.",
+          };
+        }
+
+        setState((previous) => applyProgramDeletion(previous, programId));
+        return { ok: true };
+      },
       startProgramWorkout(programId, programWorkoutId) {
         if (!currentUser) {
           return { ok: false, message: "Kirjaudu sisään ennen harjoituksen käynnistystä." };
@@ -2318,6 +2464,10 @@ export function AppStateProvider({ children }: PropsWithChildren) {
           return { ok: false, message: "Ohjelmaa ei löytynyt tai se ei kuulu sinulle." };
         }
 
+        if (!isProgramActive(program)) {
+          return { ok: false, message: "Ohjelma on arkistoitu eikä siitä voi käynnistää uutta treeniä." };
+        }
+
         const existingActive = state.scheduledWorkouts.find(
           (item) =>
             item.athleteId === currentUser.id &&
@@ -2326,6 +2476,14 @@ export function AppStateProvider({ children }: PropsWithChildren) {
         );
         if (existingActive) {
           return { ok: true, scheduledWorkoutId: existingActive.id };
+        }
+
+        const blockingWorkout = resolveBlockingWorkoutStart(state, currentUser.id, programWorkoutId);
+        if (blockingWorkout) {
+          return {
+            ok: false,
+            message: `Sinulla on kesken oleva treeni "${displayWorkoutTitle(blockingWorkout.title)}". Jatka se ensin.`,
+          };
         }
 
         try {

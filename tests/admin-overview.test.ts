@@ -69,4 +69,29 @@ describe("getAdminCoachingCoverage", () => {
     expect(coverage.coachAthleteCount.get("admin_1")).toBe(1);
     expect(coverage.relationshipCount).toBe(1);
   });
+
+  it("still counts an archived admin-led plan as coaching coverage for the athlete", () => {
+    const state = {
+      users,
+      assignments: [],
+      plans: [
+        {
+          id: "plan_archived",
+          coachId: "admin_1",
+          athleteId: "athlete_active",
+          title: "Vanha ohjelma",
+          status: "archived" as const,
+          workouts: [],
+          startDate: "2026-03-24",
+          weekCount: 4,
+          createdAt: "2026-03-24T08:00:00.000Z",
+        },
+      ],
+      scheduledWorkouts: [],
+    } satisfies Pick<AppState, "users" | "assignments" | "plans" | "scheduledWorkouts">;
+
+    const coverage = getAdminCoachingCoverage(state);
+
+    expect(coverage.relationshipCount).toBe(1);
+  });
 });

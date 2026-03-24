@@ -20,12 +20,13 @@ import { AthleteSessionPanel } from "@/components/workout/athlete/session-panel"
 import { ConversationPanel } from "@/components/workout/conversation-panel";
 import { MetricTrendChart } from "@/components/workout/metric-trend-chart";
 import { estimateStrengthCalories, getLatestMeasurement, getMeasurementsForUser, getWeightAtMoment } from "@/lib/body-metrics";
-import { getSessionProgress } from "@/lib/domain";
+import { calculateSessionDurationSeconds, getSessionProgress } from "@/lib/domain";
+import { isProgramActive } from "@/lib/program-status";
 import { buildWorkoutConversationContextOptions } from "@/lib/workout-conversation-context";
 import { buildWorkoutHistoryTitleMap, normalizeWorkoutHistoryTitle } from "@/lib/workout-history-title";
 import type { AppState, ConversationEntry, WorkoutSession } from "@/lib/types";
 import { formatDate, formatDateWithWeekday, formatRelativeDate } from "@/lib/utils";
-import { useAppState } from "@/providers/app-state-provider";
+import { resolveBlockingWorkoutStart, useAppState } from "@/providers/app-state-provider";
 
 import { workoutStatusLabel, type WorkspaceView } from "@/components/workout/shared";
 
@@ -163,7 +164,7 @@ export function AthleteDashboard({
     setSelectedHistoryWorkoutByGroup({});
   }, [currentUser?.id]);
   const athletePrograms = state.plans.filter(
-    (plan) => plan.athleteId === currentUser?.id && Boolean(plan.workouts?.length),
+    (plan) => plan.athleteId === currentUser?.id && Boolean(plan.workouts?.length) && isProgramActive(plan),
   );
 
   const workouts = state.scheduledWorkouts
@@ -324,6 +325,10 @@ export function AthleteDashboard({
 
     return activeById;
   }, [scheduledWithSessionIds, workouts]);
+  const blockingWorkout = useMemo(
+    () => (currentUser ? resolveBlockingWorkoutStart(state, currentUser.id) : null),
+    [currentUser, state],
+  );
   const workoutHistory = useMemo(
     () =>
       workouts
@@ -770,20 +775,20 @@ export function AthleteDashboard({
             {activeWorkout
               ? "Jatka aktiivista treeniä"
               : athletePrograms.length
-                ? "Siirry treenilokiin"
+                ? "Siirry harjoituksiin"
                 : "Treeniohjelma puuttuu"}
           </CardTitle>
           <CardDescription className="mt-2">
             {activeWorkout
               ? "Avaa keskeneräinen treeni suoraan siitä kohdasta, johon jäit."
               : athletePrograms.length
-                ? "Treenilokissa valitset harjoituksen, seuraat historiaa ja teet kaikki kirjaukset."
+                ? "Harjoituksissa valitset treenin, seuraat historiaa ja teet kaikki kirjaukset."
                 : "Pyydä valmentajaa lisäämään sinulle ohjelma, niin pääset aloittamaan treenit tästä."}
           </CardDescription>
           <div className="mt-5 grid gap-4 xl:grid-cols-[0.95fr_1.05fr]">
             <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface-2)] p-4">
               <p className="text-xs font-semibold tracking-[0.04em] text-[var(--text-subtle)]">
-                {activeWorkout ? "Nopea toiminto" : "Treeniloki"}
+                {activeWorkout ? "Nopea toiminto" : "Harjoitukset"}
               </p>
               <p className="mt-2 text-lg font-semibold text-[var(--text)]">
                 {activeWorkout ? normalizeWorkoutHistoryTitle(activeWorkout.title) : "Avaa harjoitukset ja historia"}
@@ -817,7 +822,7 @@ export function AthleteDashboard({
                       onOpenWorkoutLog?.();
                     }}
                   >
-                    Avaa Treeniloki
+                    Avaa harjoitukset
                   </Button>
                 )}
               </div>
@@ -831,7 +836,7 @@ export function AthleteDashboard({
               <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface-2)] px-4 py-4">
                 <p className="text-xs font-semibold tracking-[0.04em] text-[var(--text-subtle)]">Toteutukset</p>
                 <p className="mt-2 text-lg font-semibold text-[var(--text)]">{workoutHistory.length}</p>
-                <p className="mt-1 text-sm text-[var(--text-muted)]">Treenilokissa näkyvät toteutukset</p>
+                <p className="mt-1 text-sm text-[var(--text-muted)]">Harjoituksiin tallennetut toteutukset</p>
               </div>
               <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface-2)] px-4 py-4">
                 <p className="text-xs font-semibold tracking-[0.04em] text-[var(--text-subtle)]">Kesken</p>
@@ -997,15 +1002,62 @@ export function AthleteDashboard({
               <p className="text-xs font-semibold tracking-[0.04em] text-[var(--text-subtle)]">Ohjelman harjoitukset</p>
               <CardTitle className="text-2xl">Valitse harjoitus</CardTitle>
               <CardDescription className="mt-2">
-                Käynnistä treeni suoraan ohjelmasta. Historia löytyy omasta osiostaan alempaa.
+                Aloita harjoitus ohjelmastasi. Aiempien treenien tiedot löydät historiasta.
               </CardDescription>
+              {blockingWorkout ? (
+                <p className="mt-4 rounded-2xl border border-[var(--accent)] bg-[color-mix(in_srgb,var(--accent)_8%,white)] px-4 py-3 text-sm text-[var(--text)]">
+                  Kesken oleva treeni lukitsee uuden aloituksen. Jatka ensin treeniä{" "}
+                  <span className="font-semibold">{normalizeWorkoutHistoryTitle(blockingWorkout.title)}</span>.
+                </p>
+              ) : null}
               {athletePrograms.length ? (
                 <div className="mt-5 grid gap-4">
                   {athletePrograms.map((program) => (
                     <div key={program.id} className="rounded-2xl border border-[var(--border)] bg-[var(--surface-2)] p-4">
                       <p className="text-sm font-semibold text-[var(--text)]">{program.title}</p>
+                      {program.description ? (
+                        <p className="mt-2 max-w-3xl text-sm text-[var(--text-muted)]">{program.description}</p>
+                      ) : null}
                       <div className="mt-3 grid gap-3 md:grid-cols-2 lg:grid-cols-3">
-                        {(program.workouts ?? []).map((workout) => {
+                        {[...(program.workouts ?? [])]
+                          .sort((a, b) => {
+                            const aActiveScheduled = activeScheduledByProgramWorkoutId.get(a.id);
+                            const bActiveScheduled = activeScheduledByProgramWorkoutId.get(b.id);
+                            const aStatus = aActiveScheduled ? resolveWorkoutStatus(aActiveScheduled) : undefined;
+                            const bStatus = bActiveScheduled ? resolveWorkoutStatus(bActiveScheduled) : undefined;
+                            const aResumable = Boolean(
+                              aActiveScheduled &&
+                                aStatus === "cancelled" &&
+                                scheduledWithSessionIds.has(aActiveScheduled.id),
+                            );
+                            const bResumable = Boolean(
+                              bActiveScheduled &&
+                                bStatus === "cancelled" &&
+                                scheduledWithSessionIds.has(bActiveScheduled.id),
+                            );
+                            const aInProgress = aStatus === "in_progress";
+                            const bInProgress = bStatus === "in_progress";
+
+                            if (aResumable !== bResumable) {
+                              return aResumable ? -1 : 1;
+                            }
+                            if (aInProgress !== bInProgress) {
+                              return aInProgress ? -1 : 1;
+                            }
+
+                            const aCompletionCount = currentUser
+                              ? countWorkoutCompletions(state, currentUser.id, {
+                                  programWorkoutId: a.id,
+                                })
+                              : 0;
+                            const bCompletionCount = currentUser
+                              ? countWorkoutCompletions(state, currentUser.id, {
+                                  programWorkoutId: b.id,
+                                })
+                              : 0;
+                            return bCompletionCount - aCompletionCount;
+                          })
+                          .map((workout) => {
                           const setCount = workout.exercises.reduce((sum, exercise) => sum + exercise.sets.length, 0);
                           const completionCount =
                             currentUser
@@ -1024,16 +1076,45 @@ export function AthleteDashboard({
                             scheduledWithSessionIds.has(activeScheduled.id)
                               ? activeScheduled.id
                               : undefined;
+                          const latestCompletionDate =
+                            currentUser
+                              ? getLatestWorkoutCompletionDate(state, currentUser.id, {
+                                  programWorkoutId: workout.id,
+                                })
+                              : undefined;
+                          const latestCompletionLabel = latestCompletionDate
+                            ? formatRelativeDate(latestCompletionDate)
+                            : undefined;
+                          const showLatestCompletionBadge =
+                            Boolean(latestCompletionLabel) &&
+                            !resumableScheduledId &&
+                            !activeScheduledId &&
+                            !["Tänään", "Eilen", "Huomenna"].includes(latestCompletionLabel);
+                          const isLockedByAnotherWorkout = Boolean(
+                            blockingWorkout && blockingWorkout.programWorkoutId !== workout.id,
+                          );
+                          const workoutSummary =
+                            resumableScheduledId
+                              ? "Kesken. Voit jatkaa samasta kohdasta."
+                              : activeScheduledId
+                                ? "Treeni on parhaillaan käynnissä."
+                                : isLockedByAnotherWorkout
+                                  ? "Jatka kesken oleva treeni ensin."
+                                : latestCompletionLabel
+                                  ? `Viimeksi ${latestCompletionLabel.toLowerCase()}`
+                                  : "Ei vielä toteutuksia.";
 
                           return (
-                            <div key={workout.id} className="w-full rounded-xl border border-[var(--border)] bg-[var(--surface-3)] p-3">
+                            <div
+                              key={workout.id}
+                              className="flex h-full w-full flex-col rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-4 shadow-[0_1px_0_0_var(--shadow-soft),0_10px_24px_-20px_var(--shadow)]"
+                            >
                               <div className="flex items-start justify-between gap-3">
-                                <div>
-                                  <p className="text-sm font-medium text-[var(--text)]">{workout.name}</p>
-                                  <p className="text-xs text-[var(--text-subtle)]">
+                                <div className="min-w-0">
+                                  <p className="text-base font-semibold text-[var(--text)]">{workout.name}</p>
+                                  <p className="mt-1 text-xs text-[var(--text-subtle)]">
                                     {workout.exercises.length} liikettä · {setCount} sarjaa · oletuslepo {workout.defaultRestSeconds}s
                                   </p>
-                                  <p className="mt-1 text-xs text-[var(--text-subtle)]">Tehty {completionCount} kertaa</p>
                                 </div>
                                 {activeScheduled ? (
                                   <Badge className={statusTone(activeScheduledStatus ?? activeScheduled.status)}>
@@ -1041,25 +1122,44 @@ export function AthleteDashboard({
                                   </Badge>
                                 ) : null}
                               </div>
+                              <p className="mt-3 text-sm text-[var(--text-muted)]">{workoutSummary}</p>
                               <div className="mt-3 flex flex-wrap gap-2">
-                                {!activeWorkout ? (
-                                  <Button
-                                    type="button"
-                                    variant="secondary"
-                                    onClick={() => startWorkoutFromProgram(program.id, workout.id, workout.name)}
-                                  >
-                                    {resumableScheduledId ? "Jatka treeniä" : "Aloita treeni"}
-                                  </Button>
+                                {completionCount > 0 ? (
+                                  <Badge className="border-[var(--border)] bg-[var(--surface-2)] text-[11px] text-[var(--text-subtle)] sm:text-xs">
+                                    {completionCount} toteutusta
+                                  </Badge>
+                                ) : (
+                                  <Badge className="border-[var(--border)] bg-[var(--surface-2)] text-[11px] text-[var(--text-subtle)] sm:text-xs">
+                                    Ensimmäinen kerta
+                                  </Badge>
+                                )}
+                                {showLatestCompletionBadge ? (
+                                  <Badge className="border-[var(--border)] bg-[var(--surface-2)] text-[11px] text-[var(--text-subtle)] sm:text-xs">
+                                    {latestCompletionLabel}
+                                  </Badge>
                                 ) : null}
+                              </div>
+                              <div className="mt-auto flex flex-wrap gap-2 pt-4">
                                 {activeScheduledId ? (
                                   <Button
                                     type="button"
                                     variant="ghost"
+                                    className="w-full justify-center sm:w-auto"
                                     onClick={() => openWorkoutView(activeScheduledId)}
                                   >
                                     Avaa aktiivinen
                                   </Button>
-                                ) : null}
+                                ) : (
+                                  <Button
+                                    type="button"
+                                    variant="secondary"
+                                    className="w-full justify-center sm:w-auto"
+                                    disabled={isLockedByAnotherWorkout}
+                                    onClick={() => startWorkoutFromProgram(program.id, workout.id, workout.name)}
+                                  >
+                                    {resumableScheduledId ? "Jatka treeniä" : "Aloita treeni"}
+                                  </Button>
+                                )}
                               </div>
                             </div>
                           );
@@ -1119,9 +1219,6 @@ export function AthleteDashboard({
                             <div className="flex shrink-0 items-start gap-2">
                               <div className="flex flex-col items-end gap-2">
                                 <Badge className={statusTone(workoutStatus)}>{workoutStatusLabel(workoutStatus)}</Badge>
-                                <Badge className="border-[var(--border)] bg-[var(--surface-3)] text-[var(--text)]">
-                                  Toteuma {insight.completionPercent}%
-                                </Badge>
                               </div>
                               <div className="relative" data-history-menu-root="true">
                                 <Button
@@ -1203,7 +1300,7 @@ export function AthleteDashboard({
                                           setHistoryMenuAnchorRect(null);
                                           setHistoryMenuStyle(null);
                                           const confirmed = window.confirm(
-                                            "Poistetaanko treeni historiasta? Toimintoa ei voi kumota.",
+                                            `Poistetaanko historiasta vain toteutus "${group.title} · ${historyDateLabel} · ${occurrenceLabel}"? Muut saman treenialueen toteutukset säilyvät. Toimintoa ei voi kumota.`,
                                           );
                                           if (!confirmed) {
                                             return;
@@ -1229,32 +1326,57 @@ export function AthleteDashboard({
                             </div>
                           </div>
                           <div className="mt-4">
-                            <Label htmlFor={`athlete-history-group-${group.key}`} className="text-xs">
-                              Näytä toteutus
-                            </Label>
-                            <Select
-                              id={`athlete-history-group-${group.key}`}
-                              value={workout.id}
-                              onChange={(event) =>
-                                setSelectedHistoryWorkoutByGroup((current) => ({
-                                  ...current,
-                                  [group.key]: event.target.value,
-                                }))
-                              }
-                            >
-                              {group.workouts.map((item) => (
-                                <option key={item.workout.id} value={item.workout.id}>
-                                  {formatDateWithWeekday(item.completedAt)} · {item.occurrenceLabel}
-                                </option>
-                              ))}
-                            </Select>
+                            {group.workouts.length === 1 ? (
+                              <div className="rounded-xl border border-[var(--border)] bg-[var(--surface)] px-3 py-2">
+                                <p className="text-[11px] font-semibold tracking-[0.04em] text-[var(--text-subtle)]">
+                                  Toteutus
+                                </p>
+                                <p className="mt-1 text-sm text-[var(--text)]">
+                                  {historyDateLabel} · {occurrenceLabel}
+                                </p>
+                              </div>
+                            ) : (
+                              <div className="rounded-xl border border-[var(--border)] bg-[var(--surface)] px-3 py-3">
+                                <div className="flex items-center justify-between gap-3">
+                                  <Label htmlFor={`athlete-history-group-${group.key}`} className="text-xs">
+                                    Valitse toteutus
+                                  </Label>
+                                  <p className="text-[11px] text-[var(--text-subtle)]">
+                                    {group.workouts.length} toteutusta
+                                  </p>
+                                </div>
+                                <Select
+                                  id={`athlete-history-group-${group.key}`}
+                                  value={workout.id}
+                                  className="mt-2"
+                                  onChange={(event) =>
+                                    setSelectedHistoryWorkoutByGroup((current) => ({
+                                      ...current,
+                                      [group.key]: event.target.value,
+                                    }))
+                                  }
+                                >
+                                  {group.workouts.map((item) => (
+                                    <option key={item.workout.id} value={item.workout.id}>
+                                      {item.historyDateLabel} · {item.occurrenceLabel}
+                                    </option>
+                                  ))}
+                                </Select>
+                              </div>
+                            )}
                           </div>
+                          {notePreview ? (
+                            <div className="mt-3 rounded-xl border border-[var(--border)] bg-[var(--surface)] px-3 py-2">
+                              <p className="text-[11px] font-semibold tracking-[0.04em] text-[var(--text-subtle)]">
+                                Oma muistiinpano
+                              </p>
+                              <p className="mt-1 text-xs leading-5 text-[var(--text-muted)]">{notePreview}</p>
+                            </div>
+                          ) : null}
                           <div className="mt-4 grid grid-cols-2 gap-2">
                             <HistoryMetric label="Kesto" value={formatWorkoutDuration(insight.durationSeconds)} />
                             <HistoryMetric label="Sarjat" value={`${insight.completedSetCount}/${insight.setCount}`} />
-                            <HistoryMetric label="Kuorma yht." value={`${Math.round(insight.totalLoadKg)} kg`} />
                             <HistoryMetric label="Volyymi (kg x toistot)" value={`${Math.round(insight.liftedKg)} kg`} />
-                            <HistoryMetric label="Kalorit (arvio)" value={`${insight.estimatedCalories} kcal`} />
                             <HistoryMetric label="Suoritus" value={`${insight.completionPercent}%`} />
                           </div>
                           <div className="mt-3 rounded-xl border border-[var(--border)] bg-[var(--surface)] px-3 py-2">
@@ -1267,16 +1389,9 @@ export function AthleteDashboard({
                               ))}
                             </div>
                           </div>
-                          {notePreview ? (
-                            <div className="mt-2 rounded-xl border border-[var(--border)] bg-[var(--surface)] px-3 py-2">
-                              <p className="text-[11px] font-semibold tracking-[0.04em] text-[var(--text-subtle)]">
-                                Oma muistiinpano
-                              </p>
-                              <p className="mt-1 text-xs leading-5 text-[var(--text-muted)]">{notePreview}</p>
-                            </div>
-                          ) : (
+                          {!notePreview ? (
                             <p className="mt-2 text-xs text-[var(--text-subtle)]">Ei muistiinpanoa tästä treenistä.</p>
-                          )}
+                          ) : null}
                           <WorkoutMiniProgress workoutId={workout.id} />
                         </div>
                       );
@@ -1354,11 +1469,7 @@ function buildWorkoutInsights(state: AppState) {
         return sum + reps * load;
       }, 0);
 
-      const startedAtMs = new Date(session.startedAt).getTime();
-      const finishedAtMs = new Date(session.completedAt ?? session.updatedAt).getTime();
-      if (Number.isFinite(startedAtMs) && Number.isFinite(finishedAtMs) && finishedAtMs >= startedAtMs) {
-        durationSeconds = Math.max(0, Math.round((finishedAtMs - startedAtMs) / 1000));
-      }
+      durationSeconds = calculateSessionDurationSeconds(session);
       estimatedCalories = estimateStrengthCalories({
         durationSeconds,
         completionPercent,
@@ -1559,6 +1670,29 @@ function countWorkoutCompletions(
         : workout.templateId === workoutRef.templateId) &&
       workout.status === "completed",
   ).length;
+}
+
+function getLatestWorkoutCompletionDate(
+  state: AppState,
+  athleteId: string,
+  workoutRef: { templateId?: string; programWorkoutId?: string },
+) {
+  if (!workoutRef.templateId && !workoutRef.programWorkoutId) {
+    return undefined;
+  }
+
+  const latest = state.scheduledWorkouts
+    .filter(
+      (workout) =>
+        workout.athleteId === athleteId &&
+        (workoutRef.programWorkoutId
+          ? workout.programWorkoutId === workoutRef.programWorkoutId
+          : workout.templateId === workoutRef.templateId) &&
+        workout.status === "completed",
+    )
+    .sort((a, b) => (b.completedAt ?? b.updatedAt).localeCompare(a.completedAt ?? a.updatedAt))[0];
+
+  return latest?.completedAt ?? latest?.updatedAt;
 }
 
 function buildPreviousExerciseResults(
