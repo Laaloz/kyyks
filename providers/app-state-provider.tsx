@@ -1100,6 +1100,7 @@ interface AppStateContextValue {
   state: AppState;
   authenticatedUser: UserProfile | null;
   currentUser: UserProfile | null;
+  hasAuthenticatedSession: boolean;
   currentRole: Role | null;
   isImpersonating: boolean;
   isHydrated: boolean;
@@ -1436,16 +1437,10 @@ export function AppStateProvider({ children }: PropsWithChildren) {
   }, [authenticatedUser, isHydrated, supabase]);
 
   useEffect(() => {
-    if (authenticatedUserId && !authenticatedUser) {
-      setAuthenticatedUserId(null);
-      setImpersonatedUserId(null);
-      return;
-    }
-
     if (impersonatedUserId && !state.users.some((user) => user.id === impersonatedUserId)) {
       setImpersonatedUserId(null);
     }
-  }, [authenticatedUser, authenticatedUserId, impersonatedUserId, state.users]);
+  }, [impersonatedUserId, state.users]);
 
   useEffect(() => {
     if (!isHydrated) {
@@ -1512,6 +1507,7 @@ export function AppStateProvider({ children }: PropsWithChildren) {
       state,
       authenticatedUser,
       currentUser,
+      hasAuthenticatedSession: Boolean(authenticatedUserId),
       currentRole: currentUser?.role ?? null,
       isImpersonating,
       isHydrated,
@@ -3338,7 +3334,7 @@ export function AppStateProvider({ children }: PropsWithChildren) {
         return domainGetCoachAthletes(state, coachId);
       },
     };
-  }, [state, authenticatedUser, currentUser, isHydrated, isImpersonating, supabase]);
+  }, [state, authenticatedUser, authenticatedUserId, currentUser, isHydrated, isImpersonating, supabase]);
 
   return <AppStateContext.Provider value={value}>{children}</AppStateContext.Provider>;
 }
