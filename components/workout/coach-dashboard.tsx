@@ -269,16 +269,16 @@ export function CoachDashboard({
 
             <form
               className="mt-6 space-y-5"
-              onSubmit={form.handleSubmit((values) => {
+              onSubmit={form.handleSubmit(async (values) => {
                 const payloadWorkouts = mapComposerWorkouts(values.workouts);
                 const result = isEditingProgram && editingProgramId
-                  ? updateProgram(editingProgramId, {
+                  ? await updateProgram(editingProgramId, {
                       title: values.title,
                       description: values.description,
                       athleteId: values.athleteId,
                       workouts: payloadWorkouts,
                     })
-                  : createProgram({
+                  : await createProgram({
                       title: values.title,
                       description: values.description,
                       athleteId: values.athleteId,
@@ -503,8 +503,8 @@ export function CoachDashboard({
                               <Button
                                 type="button"
                                 variant="ghost"
-                                onClick={() => {
-                                  const result = setProgramStatus(program.id, "archived");
+                                onClick={async () => {
+                                  const result = await setProgramStatus(program.id, "archived");
                                   if (!result.ok) {
                                     setProgramMessage(result.message);
                                     return;
@@ -525,7 +525,7 @@ export function CoachDashboard({
                                     type="button"
                                     disabled={!canDeleteProgram}
                                     className="flex w-full items-center rounded-xl px-3 py-2 text-left text-sm font-semibold text-[var(--danger)] transition hover:bg-[var(--surface-2)] disabled:cursor-not-allowed disabled:text-[var(--text-subtle)] disabled:hover:bg-transparent"
-                                    onClick={() => {
+                                    onClick={async () => {
                                       if (!canDeleteProgram) {
                                         return;
                                       }
@@ -536,7 +536,7 @@ export function CoachDashboard({
                                         return;
                                       }
 
-                                      const result = deleteProgram(program.id);
+                                      const result = await deleteProgram(program.id);
                                       if (!result.ok) {
                                         setProgramMessage(result.message);
                                         return;
@@ -624,8 +624,8 @@ export function CoachDashboard({
                               <Button
                                 type="button"
                                 variant="secondary"
-                                onClick={() => {
-                                  const result = setProgramStatus(program.id, "active");
+                                onClick={async () => {
+                                  const result = await setProgramStatus(program.id, "active");
                                   if (!result.ok) {
                                     setProgramMessage(result.message);
                                     return;
@@ -667,7 +667,7 @@ export function CoachDashboard({
                                     type="button"
                                     disabled={!canDeleteProgram}
                                     className="flex w-full items-center rounded-xl px-3 py-2 text-left text-sm font-semibold text-[var(--danger)] transition hover:bg-[var(--surface-2)] disabled:cursor-not-allowed disabled:text-[var(--text-subtle)] disabled:hover:bg-transparent"
-                                    onClick={() => {
+                                    onClick={async () => {
                                       if (!canDeleteProgram) {
                                         return;
                                       }
@@ -678,7 +678,7 @@ export function CoachDashboard({
                                         return;
                                       }
 
-                                      const result = deleteProgram(program.id);
+                                      const result = await deleteProgram(program.id);
                                       if (!result.ok) {
                                         setProgramMessage(result.message);
                                         return;

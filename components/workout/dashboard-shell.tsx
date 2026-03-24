@@ -68,6 +68,14 @@ export function DashboardShell() {
     conversation: "Keskustelu",
     settings: "Asetukset",
   };
+  const navMobileLabelByView: Record<WorkspaceView, string> = {
+    overview: "Yleiskuva",
+    templates: "Ohjelmat",
+    invites: "Kutsut",
+    "athlete-log": "Treenit",
+    conversation: "Viestit",
+    settings: "Asetukset",
+  };
   const navIconByView: Record<PrimaryWorkspaceView, LucideIcon> = {
     overview: Home,
     templates: Sparkles,
@@ -428,16 +436,18 @@ export function DashboardShell() {
                   aria-selected={isActive}
                   aria-controls={`workspace-panel-${item}`}
                   tabIndex={isActive ? 0 : -1}
+                  aria-label={navLabelByView[item]}
                   className={
                     isActive
-                      ? "min-h-10 w-full min-w-0 rounded-xl px-2.5 py-2 text-center text-[0.88rem] leading-tight hover:translate-y-0 hover:brightness-100 sm:min-h-10 sm:flex-row sm:gap-1.5 sm:px-3 sm:text-sm"
-                      : "min-h-10 w-full min-w-0 rounded-xl px-2.5 py-2 text-center text-[0.88rem] leading-tight sm:min-h-10 sm:flex-row sm:gap-1.5 sm:px-3 sm:text-sm"
+                      ? "min-h-10 w-full min-w-0 rounded-xl px-2 py-2 text-center text-[0.82rem] leading-tight whitespace-nowrap hover:translate-y-0 hover:brightness-100 sm:min-h-10 sm:flex-row sm:gap-1.5 sm:px-3 sm:text-sm"
+                      : "min-h-10 w-full min-w-0 rounded-xl px-2 py-2 text-center text-[0.82rem] leading-tight whitespace-nowrap sm:min-h-10 sm:flex-row sm:gap-1.5 sm:px-3 sm:text-sm"
                   }
                   onKeyDown={(event) => handleNavKeyDown(event, index)}
                   onClick={() => setView(item)}
                 >
                   <Icon className="hidden size-4 sm:block" aria-hidden="true" />
-                  {navLabelByView[item]}
+                  <span className="sm:hidden">{navMobileLabelByView[item]}</span>
+                  <span className="hidden sm:inline">{navLabelByView[item]}</span>
                   {item === "conversation" && unreadConversationCount > 0 ? (
                     <span className="inline-flex min-w-5 items-center justify-center rounded-full bg-[var(--surface)] px-1.5 text-[10px] font-semibold text-[var(--accent)]">
                       {unreadConversationCount}

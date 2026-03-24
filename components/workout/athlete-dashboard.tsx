@@ -270,10 +270,9 @@ export function AthleteDashboard({
     setHistoryMenuStyle(null);
     setAthleteLogMode("workout");
   };
-  const startWorkoutFromProgram = (programId: string, workoutId: string, workoutName: string) => {
-    const result = startProgramWorkout(programId, workoutId);
+  const startWorkoutFromProgram = async (programId: string, workoutId: string, workoutName: string) => {
+    const result = await startProgramWorkout(programId, workoutId);
     if (result.ok && result.scheduledWorkoutId) {
-      startWorkout(result.scheduledWorkoutId);
       openWorkoutView(result.scheduledWorkoutId);
       setWorkoutMessage(`Harjoitus "${workoutName}" käynnistetty.`);
       onOpenWorkoutLog?.();
@@ -927,17 +926,22 @@ export function AthleteDashboard({
                 selectedSession={selectedSession}
                 scheduledWorkoutId={selectedWorkout.id}
                 scheduledWorkoutTitle={normalizeWorkoutHistoryTitle(selectedWorkout.title)}
-                onStart={() => {
-                  startWorkout(selectedWorkout.id);
+                onStart={async () => {
+                  const result = await startWorkout(selectedWorkout.id);
+                  if (!result.ok) {
+                    setWorkoutMessage(result.message);
+                    return;
+                  }
+
                   setSelectedWorkoutId(selectedWorkout.id);
                   setWorkoutMessage("Treeni käynnistetty. Sarjaloki luotiin automaattisesti.");
                 }}
                 onUpdate={(logId, patch) => startTransition(() => updateWorkoutSet(selectedWorkout.id, logId, patch))}
                 onSaveNote={(body) => saveWorkoutNote(selectedWorkout.id, body)}
-                onComplete={() => {
+                onComplete={async () => {
                   const completedWorkoutId = selectedWorkout.id;
                   const completionPercent = progress?.percent ?? 0;
-                  const result = completeWorkout(completedWorkoutId);
+                  const result = await completeWorkout(completedWorkoutId);
                   if (result.ok) {
                     setWorkoutMessage(
                       completionPercent < 100
@@ -952,7 +956,7 @@ export function AthleteDashboard({
 
                   setWorkoutMessage(result.message);
                 }}
-                onCancel={() => {
+                onCancel={async () => {
                   const confirmed = window.confirm(
                     "Keskeytetäänkö treeni? Voit jatkaa samaa treeniä myöhemmin.",
                   );
@@ -960,14 +964,14 @@ export function AthleteDashboard({
                     return;
                   }
 
-                  const result = cancelWorkout(selectedWorkout.id);
+                  const result = await cancelWorkout(selectedWorkout.id);
                   setWorkoutMessage(
                     result.ok
                       ? "Treeni keskeytettiin. Voit jatkaa treeniä myöhemmin samasta kohdasta."
                       : result.message,
                   );
                 }}
-                onDelete={() => {
+                onDelete={async () => {
                   const confirmed = window.confirm(
                     "Poistetaanko treeni kokonaan? Toimintoa ei voi kumota.",
                   );
@@ -975,7 +979,7 @@ export function AthleteDashboard({
                     return;
                   }
 
-                  const result = deleteWorkout(selectedWorkout.id);
+                  const result = await deleteWorkout(selectedWorkout.id);
                   setWorkoutMessage(result.ok ? "Treeni poistettiin." : result.message);
 
                   if (result.ok) {
@@ -1262,11 +1266,15 @@ export function AthleteDashboard({
                                         type="button"
                                         role="menuitem"
                                         className="w-full rounded-lg px-3 py-2 text-left text-sm text-[var(--accent)] hover:bg-[var(--surface-3)]"
-                                        onClick={() => {
+                                        onClick={async () => {
                                           setOpenHistoryMenuWorkoutId(null);
                                           setHistoryMenuAnchorRect(null);
                                           setHistoryMenuStyle(null);
-                                          startWorkout(workout.id);
+                                          const result = await startWorkout(workout.id);
+                                          if (!result.ok) {
+                                            setWorkoutMessage(result.message);
+                                            return;
+                                          }
                                           openWorkoutView(workout.id);
                                           setWorkoutMessage("Treeniä jatketaan.");
                                           onOpenWorkoutLog?.();
@@ -1280,7 +1288,7 @@ export function AthleteDashboard({
                                         type="button"
                                         role="menuitem"
                                         className="w-full rounded-lg px-3 py-2 text-left text-sm text-[var(--text)] hover:bg-[var(--surface-3)]"
-                                        onClick={() => {
+                                        onClick={async () => {
                                           setOpenHistoryMenuWorkoutId(null);
                                           setHistoryMenuAnchorRect(null);
                                           setHistoryMenuStyle(null);
@@ -1295,7 +1303,7 @@ export function AthleteDashboard({
                                         type="button"
                                         role="menuitem"
                                         className="w-full rounded-lg px-3 py-2 text-left text-sm text-[var(--danger)] hover:bg-[var(--surface-3)]"
-                                        onClick={() => {
+                                        onClick={async () => {
                                           setOpenHistoryMenuWorkoutId(null);
                                           setHistoryMenuAnchorRect(null);
                                           setHistoryMenuStyle(null);
@@ -1306,7 +1314,7 @@ export function AthleteDashboard({
                                             return;
                                           }
 
-                                          const result = deleteWorkout(workout.id);
+                                          const result = await deleteWorkout(workout.id);
                                           setWorkoutMessage(result.ok ? "Treeni poistettiin historiasta." : result.message);
                                           if (result.ok) {
                                             if (selectedWorkoutId === workout.id) {

@@ -205,12 +205,12 @@ export function AthleteSessionPanel({
   selectedSession?: WorkoutSession;
   note: string;
   status: string;
-  onStart: () => void;
+  onStart: () => void | Promise<void>;
   onUpdate: (logId: string, patch: { actualReps?: number; actualLoad?: number; rpe?: number; done?: boolean }) => void;
   onSaveNote: (body: string) => void;
-  onComplete: () => void;
-  onCancel: () => void;
-  onDelete: () => void;
+  onComplete: () => void | Promise<void>;
+  onCancel: () => void | Promise<void>;
+  onDelete: () => void | Promise<void>;
   onBackToList: () => void;
   canDeleteWorkout: boolean;
   initialCorrectionMode: boolean;

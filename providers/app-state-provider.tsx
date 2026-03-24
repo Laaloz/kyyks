@@ -787,6 +787,19 @@ type SupabaseInviteDirectorySnapshot = {
   activeProfiles?: UserProfile[];
 };
 
+type SupabaseVisibleAppStateSnapshot = Pick<
+  AppState,
+  | "users"
+  | "bodyMeasurements"
+  | "assignments"
+  | "exercises"
+  | "templates"
+  | "plans"
+  | "scheduledWorkouts"
+  | "sessions"
+  | "notes"
+>;
+
 export function reconcileSupabaseInviteDirectory(
   previous: AppState,
   snapshot: SupabaseInviteDirectorySnapshot,
@@ -837,6 +850,36 @@ export function reconcileSupabaseInviteDirectory(
       }),
     ],
   };
+}
+
+export function reconcileSupabaseVisibleState(
+  previous: AppState,
+  snapshot: SupabaseVisibleAppStateSnapshot,
+) {
+  const preservedInvitedUsers = previous.users.filter((user) => {
+    if (user.status !== "invited") {
+      return false;
+    }
+
+    return !snapshot.users.some(
+      (serverUser) =>
+        serverUser.id === user.id ||
+        serverUser.email.trim().toLowerCase() === user.email.trim().toLowerCase(),
+    );
+  });
+
+  return normalizeState({
+    ...previous,
+    users: [...snapshot.users, ...preservedInvitedUsers],
+    bodyMeasurements: snapshot.bodyMeasurements,
+    assignments: snapshot.assignments,
+    exercises: snapshot.exercises,
+    templates: snapshot.templates,
+    plans: snapshot.plans,
+    scheduledWorkouts: snapshot.scheduledWorkouts,
+    sessions: snapshot.sessions,
+    notes: snapshot.notes,
+  });
 }
 
 function findUserByIdOrEmail(previous: AppState, userId: string, email?: string) {
@@ -1017,24 +1060,24 @@ interface AppStateContextValue {
   createInvite: (input: InviteInput) => Promise<ActionResult>;
   resendInvite: (inviteId: string) => Promise<ActionResult>;
   acceptInvite: (token: string, fullName: string, password: string, options?: { captchaToken?: string }) => Promise<LoginResult>;
-  createTemplate: (input: TemplateBuilderInput) => ActionResult;
-  createProgram: (input: ProgramBuilderInput) => ActionResult;
-  updateProgram: (programId: string, patch: ProgramUpdateInput) => ActionResult;
-  setProgramStatus: (programId: string, status: "active" | "archived") => ActionResult;
-  deleteProgram: (programId: string) => ActionResult;
-  startProgramWorkout: (programId: string, programWorkoutId: string) => ActionResult;
-  duplicateTemplate: (templateId: string) => ActionResult;
+  createTemplate: (input: TemplateBuilderInput) => Promise<ActionResult>;
+  createProgram: (input: ProgramBuilderInput) => Promise<ActionResult>;
+  updateProgram: (programId: string, patch: ProgramUpdateInput) => Promise<ActionResult>;
+  setProgramStatus: (programId: string, status: "active" | "archived") => Promise<ActionResult>;
+  deleteProgram: (programId: string) => Promise<ActionResult>;
+  startProgramWorkout: (programId: string, programWorkoutId: string) => Promise<ActionResult>;
+  duplicateTemplate: (templateId: string) => Promise<ActionResult>;
   addConversationComment: (
     body: string,
     options?: { scheduledWorkoutId?: string; trainingPlanId?: string; athleteId?: string; contextLabel?: string },
   ) => ActionResult;
   markConversationRead: () => void;
-  startWorkout: (scheduledWorkoutId: string) => void;
+  startWorkout: (scheduledWorkoutId: string) => Promise<ActionResult>;
   updateWorkoutSet: (scheduledWorkoutId: string, logId: string, patch: WorkoutUpdateInput) => void;
   saveWorkoutNote: (scheduledWorkoutId: string, body: string) => void;
-  completeWorkout: (scheduledWorkoutId: string) => ActionResult;
-  cancelWorkout: (scheduledWorkoutId: string) => ActionResult;
-  deleteWorkout: (scheduledWorkoutId: string) => ActionResult;
+  completeWorkout: (scheduledWorkoutId: string) => Promise<ActionResult>;
+  cancelWorkout: (scheduledWorkoutId: string) => Promise<ActionResult>;
+  deleteWorkout: (scheduledWorkoutId: string) => Promise<ActionResult>;
   getCoachAthletes: (coachId: string) => UserProfile[];
 }
 
@@ -1221,6 +1264,50 @@ export function AppStateProvider({ children }: PropsWithChildren) {
     [authenticatedUserId, impersonatedUserId, state.users],
   );
   const isImpersonating = Boolean(impersonatedUserId);
+
+  async function refreshSupabaseVisibleState() {
+    if (!supabase || !authenticatedUserId) {
+      return false;
+    }
+
+    try {
+      const response = await fetch("/api/app-state");
+      const payload = (await response.json().catch(() => null)) as SupabaseVisibleAppStateSnapshot | { message?: string } | null;
+      if (!response.ok || !payload || !("users" in payload)) {
+        return false;
+      }
+
+      setState((previous) => reconcileSupabaseVisibleState(previous, payload));
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+  useEffect(() => {
+    if (!isHydrated || !supabase || !authenticatedUserId) {
+      return;
+    }
+
+    let active = true;
+
+    void fetch("/api/app-state")
+      .then(async (response) => {
+        const payload = (await response.json().catch(() => null)) as SupabaseVisibleAppStateSnapshot | { message?: string } | null;
+        if (!response.ok || !payload || !("users" in payload) || !active) {
+          return;
+        }
+
+        setState((previous) => reconcileSupabaseVisibleState(previous, payload));
+      })
+      .catch(() => {
+        // Keep the current state if server sync fails.
+      });
+
+    return () => {
+      active = false;
+    };
+  }, [authenticatedUserId, isHydrated, supabase]);
 
   useEffect(() => {
     if (!isHydrated || !supabase || !authenticatedUser || !canActAsCoach(authenticatedUser.role)) {
@@ -2364,9 +2451,26 @@ export function AppStateProvider({ children }: PropsWithChildren) {
         setImpersonatedUserId(null);
         return { ok: true };
       },
-      createTemplate(input) {
+      async createTemplate(input) {
         if (!currentUser || !canActAsCoach(currentUser.role)) {
           return { ok: false, message: "Vain admin tai valmentaja voi luoda treenipohjan." };
+        }
+
+        if (supabase) {
+          const response = await fetch("/api/templates", {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify(input),
+          });
+          const payload = (await response.json().catch(() => null)) as { message?: string } | null;
+          if (!response.ok) {
+            return { ok: false, message: payload?.message ?? "Treenipohjan luonti epäonnistui." };
+          }
+
+          await refreshSupabaseVisibleState();
+          return { ok: true };
         }
 
         const template = domainCreateTemplate(input, currentUser.id);
@@ -2376,7 +2480,7 @@ export function AppStateProvider({ children }: PropsWithChildren) {
         }));
         return { ok: true };
       },
-      createProgram(input) {
+      async createProgram(input) {
         if (!currentUser || !canActAsCoach(currentUser.role)) {
           return { ok: false, message: "Vain admin tai valmentaja voi luoda treeniohjelman." };
         }
@@ -2386,6 +2490,28 @@ export function AppStateProvider({ children }: PropsWithChildren) {
         }
 
         const resolved = resolveProgramWorkouts(input.workouts, state.exercises, currentUser.id);
+
+        if (supabase) {
+          const response = await fetch("/api/programs", {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({
+              ...input,
+              workouts: resolved.workouts,
+              customExercises: resolved.customExercises,
+            }),
+          });
+          const payload = (await response.json().catch(() => null)) as { message?: string } | null;
+          if (!response.ok) {
+            return { ok: false, message: payload?.message ?? "Treeniohjelman luonti epäonnistui." };
+          }
+
+          await refreshSupabaseVisibleState();
+          return { ok: true };
+        }
+
         const createdProgram = domainCreateProgram({ ...input, workouts: resolved.workouts }, currentUser.id);
 
         setState((previous) =>
@@ -2402,7 +2528,7 @@ export function AppStateProvider({ children }: PropsWithChildren) {
 
         return { ok: true };
       },
-      updateProgram(programId, patch) {
+      async updateProgram(programId, patch) {
         if (!currentUser || !canActAsCoach(currentUser.role)) {
           return { ok: false, message: "Vain admin tai valmentaja voi muokata treeniohjelmaa." };
         }
@@ -2437,6 +2563,27 @@ export function AppStateProvider({ children }: PropsWithChildren) {
           ? resolveProgramWorkouts(patch.workouts, state.exercises, currentUser.id)
           : null;
 
+        if (supabase) {
+          const response = await fetch(`/api/programs/${encodeURIComponent(programId)}`, {
+            method: "PATCH",
+            headers: {
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({
+              ...patch,
+              workouts: resolvedWorkouts?.workouts,
+              customExercises: resolvedWorkouts?.customExercises,
+            }),
+          });
+          const payload = (await response.json().catch(() => null)) as { message?: string } | null;
+          if (!response.ok) {
+            return { ok: false, message: payload?.message ?? "Treeniohjelman päivitys epäonnistui." };
+          }
+
+          await refreshSupabaseVisibleState();
+          return { ok: true };
+        }
+
         const updatedProgram = domainUpdateProgram(program, {
           ...patch,
           workouts: resolvedWorkouts?.workouts,
@@ -2452,7 +2599,7 @@ export function AppStateProvider({ children }: PropsWithChildren) {
 
         return { ok: true };
       },
-      setProgramStatus(programId, status) {
+      async setProgramStatus(programId, status) {
         if (!currentUser || !canActAsCoach(currentUser.role)) {
           return { ok: false, message: "Vain admin tai valmentaja voi muuttaa ohjelman tilaa." };
         }
@@ -2470,10 +2617,27 @@ export function AppStateProvider({ children }: PropsWithChildren) {
           return { ok: true };
         }
 
+        if (supabase) {
+          const response = await fetch(`/api/programs/${encodeURIComponent(programId)}/status`, {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({ status }),
+          });
+          const payload = (await response.json().catch(() => null)) as { message?: string } | null;
+          if (!response.ok) {
+            return { ok: false, message: payload?.message ?? "Ohjelman tilan päivitys epäonnistui." };
+          }
+
+          await refreshSupabaseVisibleState();
+          return { ok: true };
+        }
+
         setState((previous) => applyProgramStatusUpdate(previous, programId, status));
         return { ok: true };
       },
-      deleteProgram(programId) {
+      async deleteProgram(programId) {
         if (!currentUser || !canActAsCoach(currentUser.role)) {
           return { ok: false, message: "Vain admin tai valmentaja voi poistaa treeniohjelman." };
         }
@@ -2494,10 +2658,23 @@ export function AppStateProvider({ children }: PropsWithChildren) {
           };
         }
 
+        if (supabase) {
+          const response = await fetch(`/api/programs/${encodeURIComponent(programId)}`, {
+            method: "DELETE",
+          });
+          const payload = (await response.json().catch(() => null)) as { message?: string } | null;
+          if (!response.ok) {
+            return { ok: false, message: payload?.message ?? "Treeniohjelman poisto epäonnistui." };
+          }
+
+          await refreshSupabaseVisibleState();
+          return { ok: true };
+        }
+
         setState((previous) => applyProgramDeletion(previous, programId));
         return { ok: true };
       },
-      startProgramWorkout(programId, programWorkoutId) {
+      async startProgramWorkout(programId, programWorkoutId) {
         if (!currentUser) {
           return { ok: false, message: "Kirjaudu sisään ennen harjoituksen käynnistystä." };
         }
@@ -2529,6 +2706,23 @@ export function AppStateProvider({ children }: PropsWithChildren) {
           };
         }
 
+        if (supabase) {
+          const response = await fetch("/api/workouts/start", {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({ programId, programWorkoutId }),
+          });
+          const payload = (await response.json().catch(() => null)) as { message?: string; scheduledWorkoutId?: string } | null;
+          if (!response.ok) {
+            return { ok: false, message: payload?.message ?? "Harjoituksen käynnistys epäonnistui." };
+          }
+
+          await refreshSupabaseVisibleState();
+          return { ok: true, scheduledWorkoutId: payload?.scheduledWorkoutId };
+        }
+
         try {
           const started = domainStartProgramWorkout(state, programId, programWorkoutId, currentUser.id);
           setState(started.state);
@@ -2537,7 +2731,7 @@ export function AppStateProvider({ children }: PropsWithChildren) {
           return { ok: false, message: "Harjoituksen käynnistys epäonnistui." };
         }
       },
-      duplicateTemplate(templateId) {
+      async duplicateTemplate(templateId) {
         if (!currentUser) {
           return { ok: false, message: "Kirjaudu sisään ennen duplikointia." };
         }
@@ -2545,6 +2739,19 @@ export function AppStateProvider({ children }: PropsWithChildren) {
         const template = state.templates.find((item) => item.id === templateId);
         if (!template) {
           return { ok: false, message: "Treenipohjaa ei löytynyt." };
+        }
+
+        if (supabase) {
+          const response = await fetch(`/api/templates/${encodeURIComponent(templateId)}/duplicate`, {
+            method: "POST",
+          });
+          const payload = (await response.json().catch(() => null)) as { message?: string } | null;
+          if (!response.ok) {
+            return { ok: false, message: payload?.message ?? "Treenipohjan kopiointi epäonnistui." };
+          }
+
+          await refreshSupabaseVisibleState();
+          return { ok: true };
         }
 
         setState((previous) => ({
@@ -2711,17 +2918,34 @@ export function AppStateProvider({ children }: PropsWithChildren) {
           };
         });
       },
-      startWorkout(scheduledWorkoutId) {
+      async startWorkout(scheduledWorkoutId) {
         if (!currentUser) {
-          return;
+          return { ok: false, message: "Kirjaudu sisään ennen treenin käynnistystä." };
         }
 
         const workout = state.scheduledWorkouts.find((item) => item.id === scheduledWorkoutId);
-        if (!workout || workout.athleteId !== currentUser.id) {
-          return;
+        if (!workout || (!isAdminRole(currentUser.role) && workout.athleteId !== currentUser.id)) {
+          return { ok: false, message: "Treeniä ei löytynyt." };
         }
 
+        const previousState = state;
         setState((previous) => domainStartSession(previous, scheduledWorkoutId).state);
+
+        if (supabase) {
+          const response = await fetch(`/api/workouts/${encodeURIComponent(scheduledWorkoutId)}/start`, {
+            method: "POST",
+          });
+          const payload = (await response.json().catch(() => null)) as { message?: string } | null;
+          if (!response.ok) {
+            setState(previousState);
+            await refreshSupabaseVisibleState();
+            return { ok: false, message: payload?.message ?? "Treeniä ei voitu käynnistää." };
+          }
+
+          await refreshSupabaseVisibleState();
+        }
+
+        return { ok: true };
       },
       updateWorkoutSet(scheduledWorkoutId, logId, patch) {
         if (!currentUser) {
@@ -2734,6 +2958,23 @@ export function AppStateProvider({ children }: PropsWithChildren) {
         }
 
         setState((previous) => domainUpdateSessionSet(previous, scheduledWorkoutId, logId, patch));
+
+        if (supabase) {
+          void fetch(`/api/workouts/${encodeURIComponent(scheduledWorkoutId)}/sets/${encodeURIComponent(logId)}`, {
+            method: "PATCH",
+            headers: {
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify(patch),
+          })
+            .then((response) => {
+              if (!response.ok) {
+                return refreshSupabaseVisibleState();
+              }
+              return undefined;
+            })
+            .catch(() => refreshSupabaseVisibleState());
+        }
       },
       saveWorkoutNote(scheduledWorkoutId, body) {
         if (!currentUser) {
@@ -2756,8 +2997,25 @@ export function AppStateProvider({ children }: PropsWithChildren) {
         }
 
         setState((previous) => domainSaveSessionNote(previous, scheduledWorkoutId, body));
+
+        if (supabase) {
+          void fetch(`/api/workouts/${encodeURIComponent(scheduledWorkoutId)}/note`, {
+            method: "PUT",
+            headers: {
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({ body }),
+          })
+            .then((response) => {
+              if (!response.ok) {
+                return refreshSupabaseVisibleState();
+              }
+              return undefined;
+            })
+            .catch(() => refreshSupabaseVisibleState());
+        }
       },
-      completeWorkout(scheduledWorkoutId) {
+      async completeWorkout(scheduledWorkoutId) {
         if (!currentUser) {
           return { ok: false, message: "Kirjaudu sisään ennen treenin merkintää valmiiksi." };
         }
@@ -2776,10 +3034,23 @@ export function AppStateProvider({ children }: PropsWithChildren) {
           return { ok: false, message: "Treeniä ei voitu merkitä valmiiksi." };
         }
 
+        if (supabase) {
+          const response = await fetch(`/api/workouts/${encodeURIComponent(scheduledWorkoutId)}/complete`, {
+            method: "POST",
+          });
+          const payload = (await response.json().catch(() => null)) as { message?: string } | null;
+          if (!response.ok) {
+            return { ok: false, message: payload?.message ?? "Treeniä ei voitu merkitä valmiiksi." };
+          }
+
+          await refreshSupabaseVisibleState();
+          return { ok: true };
+        }
+
         setState((previous) => domainCompleteSession(previous, scheduledWorkoutId));
         return { ok: true };
       },
-      cancelWorkout(scheduledWorkoutId) {
+      async cancelWorkout(scheduledWorkoutId) {
         if (!currentUser) {
           return { ok: false, message: "Kirjaudu sisään ennen treenin keskeytystä." };
         }
@@ -2793,10 +3064,23 @@ export function AppStateProvider({ children }: PropsWithChildren) {
           return { ok: false, message: "Valmista treeniä ei voi keskeyttää." };
         }
 
+        if (supabase) {
+          const response = await fetch(`/api/workouts/${encodeURIComponent(scheduledWorkoutId)}/cancel`, {
+            method: "POST",
+          });
+          const payload = (await response.json().catch(() => null)) as { message?: string } | null;
+          if (!response.ok) {
+            return { ok: false, message: payload?.message ?? "Treenin keskeytys epäonnistui." };
+          }
+
+          await refreshSupabaseVisibleState();
+          return { ok: true };
+        }
+
         setState((previous) => domainCancelSession(previous, scheduledWorkoutId));
         return { ok: true };
       },
-      deleteWorkout(scheduledWorkoutId) {
+      async deleteWorkout(scheduledWorkoutId) {
         if (!currentUser) {
           return { ok: false, message: "Kirjaudu sisään ennen treenin poistamista." };
         }
@@ -2808,6 +3092,19 @@ export function AppStateProvider({ children }: PropsWithChildren) {
 
         if (!workout.programWorkoutId) {
           return { ok: false, message: "Vain ohjelmasta käynnistetyn treenin voi poistaa." };
+        }
+
+        if (supabase) {
+          const response = await fetch(`/api/workouts/${encodeURIComponent(scheduledWorkoutId)}`, {
+            method: "DELETE",
+          });
+          const payload = (await response.json().catch(() => null)) as { message?: string } | null;
+          if (!response.ok) {
+            return { ok: false, message: payload?.message ?? "Treenin poisto epäonnistui." };
+          }
+
+          await refreshSupabaseVisibleState();
+          return { ok: true };
         }
 
         setState((previous) => domainDeleteScheduledWorkout(previous, scheduledWorkoutId));

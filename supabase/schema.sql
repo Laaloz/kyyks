@@ -140,6 +140,9 @@ create table if not exists public.training_plans (
   coach_id uuid not null references public.profiles(id) on delete cascade,
   athlete_id uuid not null references public.profiles(id) on delete cascade,
   title text not null,
+  description text,
+  status text not null default 'active'
+    check (status in ('active', 'archived')),
   start_date date not null,
   week_count int not null default 4 check (week_count > 0),
   workouts jsonb not null default '[]'::jsonb,
@@ -188,6 +191,8 @@ create table if not exists public.workout_sessions (
   energy_level int,
   started_at timestamptz not null default now(),
   completed_at timestamptz,
+  paused_at timestamptz,
+  paused_duration_seconds int not null default 0,
   updated_at timestamptz not null default now()
 );
 
