@@ -435,6 +435,7 @@ create or replace function public.current_role()
 returns public.app_role
 language sql
 stable
+security definer
 set search_path = ''
 as $$
   select role
@@ -446,6 +447,7 @@ create or replace function public.is_admin()
 returns boolean
 language sql
 stable
+security definer
 set search_path = ''
 as $$
   select coalesce(public.current_role() = 'admin', false)
@@ -455,6 +457,7 @@ create or replace function public.is_coach_of(target_athlete uuid)
 returns boolean
 language sql
 stable
+security definer
 set search_path = ''
 as $$
   select exists (
@@ -470,6 +473,7 @@ create or replace function public.is_athlete_of(target_coach uuid)
 returns boolean
 language sql
 stable
+security definer
 set search_path = ''
 as $$
   select exists (
