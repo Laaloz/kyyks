@@ -140,6 +140,14 @@ function nowIso() {
   return new Date().toISOString();
 }
 
+function isExercisesExternalKeySchemaError(message: string | undefined) {
+  const normalized = message?.toLowerCase() ?? "";
+  return (
+    normalized.includes("external_key") ||
+    normalized.includes("on conflict specification")
+  );
+}
+
 function displayWorkoutTitle(title: string) {
   return title.trim() || "Harjoitus";
 }
@@ -284,8 +292,62 @@ async function upsertCustomExercises(
     { onConflict: "external_key" },
   );
 
+  if (error && isExercisesExternalKeySchemaError(error.message)) {
+    const { data: existingExercises, error: existingExercisesError } = await admin
+      .from("exercises")
+      .select("name")
+      .eq("coach_id", coachId)
+      .eq("scope", "coach_custom");
+
+    if (existingExercisesError) {
+      return {
+        ok: false as const,
+        message: existingExercisesError.message
+          ? `Custom-liikkeiden tallennus epäonnistui: ${existingExercisesError.message}`
+          : "Custom-liikkeiden tallennus epäonnistui.",
+      };
+    }
+
+    const existingNames = new Set(
+      (existingExercises ?? []).map((exercise) => exercise.name.trim().toLowerCase()),
+    );
+
+    const missingExercises = customExercises.filter(
+      (exercise) => !existingNames.has(exercise.name.trim().toLowerCase()),
+    );
+
+    if (!missingExercises.length) {
+      return { ok: true as const };
+    }
+
+    const { error: fallbackInsertError } = await admin.from("exercises").insert(
+      missingExercises.map((exercise) => ({
+        name: exercise.name,
+        category: exercise.category,
+        equipment: exercise.equipment,
+        cue: exercise.cue,
+        scope: "coach_custom" as const,
+        coach_id: coachId,
+      })),
+    );
+
+    if (fallbackInsertError) {
+      return {
+        ok: false as const,
+        message: fallbackInsertError.message
+          ? `Custom-liikkeiden tallennus epäonnistui: ${fallbackInsertError.message}`
+          : "Custom-liikkeiden tallennus epäonnistui.",
+      };
+    }
+
+    return { ok: true as const };
+  }
+
   if (error) {
-    return { ok: false as const, message: "Custom-liikkeiden tallennus epäonnistui." };
+    return {
+      ok: false as const,
+      message: error.message ? `Custom-liikkeiden tallennus epäonnistui: ${error.message}` : "Custom-liikkeiden tallennus epäonnistui.",
+    };
   }
 
   return { ok: true as const };
@@ -301,8 +363,44 @@ async function resolveExerciseDatabaseRows() {
     .from("exercises")
     .select("id, external_key, name, category, equipment, cue, scope, coach_id");
 
+  if (error && isExercisesExternalKeySchemaError(error.message)) {
+    const { data: fallbackData, error: fallbackError } = await admin
+      .from("exercises")
+      .select("id, name, category, equipment, cue, scope, coach_id");
+
+    if (fallbackError) {
+      return {
+        ok: false as const,
+        message: fallbackError.message
+          ? `Liiketietojen haku epäonnistui: ${fallbackError.message}`
+          : "Liiketietojen haku epäonnistui.",
+      };
+    }
+
+    return {
+      ok: true as const,
+      admin,
+      rows: (fallbackData ?? []).map((row) => ({
+        ...row,
+        external_key: null,
+      })) as Array<{
+        id: string;
+        external_key: string | null;
+        name: string;
+        category: string;
+        equipment: string;
+        cue: string;
+        scope: Exercise["scope"];
+        coach_id: string | null;
+      }>,
+    };
+  }
+
   if (error) {
-    return { ok: false as const, message: "Liiketietojen haku epäonnistui." };
+    return {
+      ok: false as const,
+      message: error.message ? `Liiketietojen haku epäonnistui: ${error.message}` : "Liiketietojen haku epäonnistui.",
+    };
   }
 
   return {
