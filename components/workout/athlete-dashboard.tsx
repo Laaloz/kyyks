@@ -262,6 +262,13 @@ export function AthleteDashboard({
         : new Map<string, PreviousExerciseResult>(),
     [currentUser, selectedWorkout, state],
   );
+  const selectedWorkoutInstructions = useMemo(
+    () =>
+      selectedWorkout
+        ? buildWorkoutExerciseInstructions(state, selectedWorkout)
+        : new Map<string, string>(),
+    [selectedWorkout, state.plans, state.templates],
+  );
   const workoutInsights = useMemo(() => buildWorkoutInsights(state), [state]);
   const sessionByWorkoutId = useMemo(
     () => new Map(state.sessions.map((session) => [session.scheduledWorkoutId, session])),
@@ -1181,6 +1188,7 @@ export function AthleteDashboard({
                 initialCorrectionMode={correctionModeWorkoutId === selectedWorkout.id}
                 progress={progress}
                 previousExerciseResults={previousExerciseResults}
+                exerciseInstructions={selectedWorkoutInstructions}
                 workoutMessage={workoutMessage}
               />
             ) : (
@@ -1953,6 +1961,42 @@ function buildPreviousExerciseResults(
     });
 
   return result;
+}
+
+function buildWorkoutExerciseInstructions(
+  state: AppState,
+  scheduledWorkout: AppState["scheduledWorkouts"][number],
+) {
+  if (scheduledWorkout.templateId) {
+    const template = state.templates.find((item) => item.id === scheduledWorkout.templateId);
+    if (!template) {
+      return new Map<string, string>();
+    }
+
+    return new Map(
+      template.blocks.flatMap((block) =>
+        block.exercises
+          .map((exercise) => [exercise.id, exercise.instruction.trim()] as const)
+          .filter((entry) => entry[1].length > 0),
+      ),
+    );
+  }
+
+  if (scheduledWorkout.trainingPlanId && scheduledWorkout.programWorkoutId) {
+    const plan = state.plans.find((item) => item.id === scheduledWorkout.trainingPlanId);
+    const workout = plan?.workouts?.find((item) => item.id === scheduledWorkout.programWorkoutId);
+    if (!workout) {
+      return new Map<string, string>();
+    }
+
+    return new Map(
+      workout.exercises
+        .map((exercise) => [exercise.id, exercise.instruction.trim()] as const)
+        .filter((entry) => entry[1].length > 0),
+    );
+  }
+
+  return new Map<string, string>();
 }
 
 function formatDuration(seconds: number) {

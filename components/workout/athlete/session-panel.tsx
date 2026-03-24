@@ -1,6 +1,6 @@
 "use client";
 
-import { Check, ChevronDown, ChevronUp, MoreHorizontal } from "lucide-react";
+import { BookOpen, Check, ChevronDown, ChevronUp, MoreHorizontal } from "lucide-react";
 import {
   useEffect,
   useLayoutEffect,
@@ -34,6 +34,63 @@ type ExerciseGroup = {
   supersetGroup?: string;
   logs: WorkoutSession["setLogs"];
 };
+
+function CoachInstructionDialog({
+  exerciseName,
+  instruction,
+  onClose,
+}: {
+  exerciseName: string;
+  instruction: string;
+  onClose: () => void;
+}) {
+  useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        onClose();
+      }
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [onClose]);
+
+  return (
+    <div
+      className="fixed inset-0 z-40 flex items-end justify-center bg-[color:color-mix(in_srgb,var(--background)_54%,transparent)] p-4 sm:items-center"
+      role="presentation"
+      onClick={onClose}
+    >
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="coach-instruction-title"
+        aria-describedby="coach-instruction-description"
+        className="w-full max-w-lg rounded-3xl border border-[var(--border-strong)] bg-[var(--surface)] p-5 shadow-[0_24px_60px_-24px_var(--shadow)]"
+        onClick={(event) => event.stopPropagation()}
+      >
+        <p className="text-[11px] font-semibold tracking-[0.06em] text-[var(--accent)]">Valmentajan ohje</p>
+        <h3
+          id="coach-instruction-title"
+          className="mt-2 font-[family-name:var(--font-display)] text-2xl font-semibold text-[var(--text)]"
+        >
+          {exerciseName}
+        </h3>
+        <p
+          id="coach-instruction-description"
+          className="mt-3 max-h-[60vh] overflow-y-auto text-sm leading-6 text-[var(--text-muted)]"
+        >
+          {instruction}
+        </p>
+        <div className="mt-5 flex justify-end">
+          <Button type="button" variant="ghost" onClick={onClose}>
+            Sulje
+          </Button>
+        </div>
+      </div>
+    </div>
+  );
+}
 
 type AnchorRect = {
   top: number;
@@ -229,6 +286,7 @@ export function AthleteSessionPanel({
   initialCorrectionMode,
   progress,
   previousExerciseResults,
+  exerciseInstructions,
   workoutMessage,
 }: {
   scheduledWorkoutId: string;
@@ -248,6 +306,7 @@ export function AthleteSessionPanel({
   initialCorrectionMode: boolean;
   progress: { totalSets: number; completedSets: number; percent: number; allDone: boolean } | null;
   previousExerciseResults: Map<string, PreviousExerciseResult>;
+  exerciseInstructions: Map<string, string>;
   workoutMessage: string;
 }) {
   const [localNote, setLocalNote] = useState(note);
@@ -259,6 +318,7 @@ export function AthleteSessionPanel({
   const [restExerciseKey, setRestExerciseKey] = useState<string | null>(null);
   const [restExerciseName, setRestExerciseName] = useState<string | null>(null);
   const [expandedExerciseKeys, setExpandedExerciseKeys] = useState<Record<string, boolean>>({});
+  const [openInstruction, setOpenInstruction] = useState<{ exerciseName: string; instruction: string } | null>(null);
   const [isSecondaryActionsOpen, setIsSecondaryActionsOpen] = useState(false);
   const [secondaryActionsAnchorRect, setSecondaryActionsAnchorRect] = useState<AnchorRect | null>(null);
   const [secondaryActionsMenuStyle, setSecondaryActionsMenuStyle] = useState<CSSProperties | null>(null);
@@ -285,6 +345,7 @@ export function AthleteSessionPanel({
     setRestExerciseKey(null);
     setRestExerciseName(null);
     setExpandedExerciseKeys({});
+    setOpenInstruction(null);
     setDurationMessage("");
   }, [scheduledWorkoutId]);
 
@@ -602,6 +663,7 @@ export function AthleteSessionPanel({
     const isStarted = completedInExercise > 0 && !isComplete;
     const targetSummary = formatExerciseTargetSummary(logs);
     const previous = previousExerciseResults.get(logs[0]?.exerciseId ?? "");
+    const instruction = exerciseInstructions.get(exerciseKey)?.trim();
     const isExpanded = getIsExpanded(group);
     const cardToneClass = isComplete
       ? "border-[color-mix(in_srgb,var(--success)_30%,var(--border))] bg-[var(--surface)] shadow-[0_10px_24px_-22px_var(--success)]"
@@ -632,7 +694,7 @@ export function AthleteSessionPanel({
       >
         <button
           type="button"
-          className="group grid min-w-0 w-full grid-cols-[minmax(0,1fr)_auto] gap-x-3 gap-y-2 rounded-[1rem] px-1 py-0 text-left text-inherit transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--background)]"
+          className="group grid min-w-0 w-full grid-cols-[minmax(0,1fr)_auto] items-start gap-3 rounded-[1rem] px-1 py-0 text-left text-inherit transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--background)]"
           id={disclosureButtonId}
           aria-expanded={isExpanded}
           aria-controls={disclosurePanelId}
@@ -650,7 +712,7 @@ export function AthleteSessionPanel({
             </span>
           </span>
 
-          <span className="row-span-2 flex items-center justify-end self-center">
+          <span className="flex items-center justify-end self-center">
             <span className={`grid size-9 place-items-center rounded-full border transition ${chevronClass}`}>
               {isExpanded ? (
                 <ChevronUp className="size-4" aria-hidden="true" />
@@ -659,21 +721,30 @@ export function AthleteSessionPanel({
               )}
             </span>
           </span>
-
-          <span className="col-span-1 flex flex-wrap gap-2 pr-1">
-            <Badge className={`min-w-0 ${progressBadgeClass}`}>{completedInExercise}/{logs.length} tehty</Badge>
-            {targetSummary ? (
-              <span className="inline-flex max-w-full rounded-full border border-[var(--border)] bg-[var(--surface)] px-3 py-1 text-[11px] font-medium text-[var(--text-subtle)]">
-                <span className="truncate">{targetSummary}</span>
-              </span>
-            ) : null}
-          </span>
-          {status === "completed" && previous ? (
-            <span className="col-span-2 text-xs text-[var(--text-subtle)]">
-              Tehty {previous.timesCompleted} kertaa · viimeksi {formatDate(previous.completedAt)} · {formatPreviousExerciseResult(previous)}
+        </button>
+        <div className="mt-3 flex flex-wrap items-center gap-2 px-1">
+          <Badge className={`min-w-0 ${progressBadgeClass}`}>{completedInExercise}/{logs.length} tehty</Badge>
+          {targetSummary ? (
+            <span className="inline-flex max-w-full rounded-full border border-[var(--border)] bg-[var(--surface)] px-3 py-1 text-[11px] font-medium text-[var(--text-subtle)]">
+              <span className="truncate">{targetSummary}</span>
             </span>
           ) : null}
-        </button>
+          {instruction ? (
+            <button
+              type="button"
+              className="inline-flex items-center gap-1 rounded-full border border-[color-mix(in_srgb,var(--accent)_22%,var(--border))] bg-[color-mix(in_srgb,var(--accent)_7%,var(--surface))] px-2.5 py-0.5 text-[10px] font-semibold text-[var(--accent)] shadow-[0_4px_12px_-14px_var(--accent)] transition hover:-translate-y-[1px] hover:border-[color-mix(in_srgb,var(--accent)_36%,var(--border))] hover:bg-[color-mix(in_srgb,var(--accent)_10%,var(--surface))]"
+              onClick={() => setOpenInstruction({ exerciseName, instruction })}
+            >
+              <BookOpen className="size-3.5" aria-hidden="true" />
+              Ohje
+            </button>
+          ) : null}
+        </div>
+        {status === "completed" && previous ? (
+          <p className="mt-2 px-1 text-xs text-[var(--text-subtle)]">
+            Tehty {previous.timesCompleted} kertaa · viimeksi {formatDate(previous.completedAt)} · {formatPreviousExerciseResult(previous)}
+          </p>
+        ) : null}
         {isExpanded ? (
           <div
             id={disclosurePanelId}
@@ -682,8 +753,8 @@ export function AthleteSessionPanel({
             className="mt-3 border-t border-[var(--border)] pt-3"
           >
             <div className="rounded-[1rem] bg-[color-mix(in_srgb,var(--surface-2)_68%,var(--surface))]">
-              <div className="relative z-10 hidden items-center gap-2 rounded-t-[1rem] border-b border-[var(--border)] bg-[color-mix(in_srgb,var(--surface-3)_82%,var(--surface))] px-3.5 py-2.5 text-[10px] font-semibold uppercase tracking-[0.05em] text-[var(--text-subtle)] md:grid md:grid-cols-[0.82fr_1fr_1fr_0.9fr_auto]">
-                <span>Sarja</span>
+              <div className="relative z-10 hidden items-center gap-3 rounded-t-[1rem] border-b border-[var(--border)] bg-[color-mix(in_srgb,var(--surface-3)_82%,var(--surface))] px-3.5 py-2.5 text-[10px] font-semibold uppercase tracking-[0.05em] text-[var(--text-subtle)] md:grid md:grid-cols-[3.25rem_1fr_1fr_0.9fr_auto]">
+                <span className="pl-1">Sarja</span>
                 <span className="inline-flex items-center gap-1">
                   Toistot
                   <InfoTooltip text={repsTooltipText} />
@@ -732,10 +803,10 @@ export function AthleteSessionPanel({
                   return (
                     <div
                       key={log.id}
-                      className={`grid grid-cols-[1.5rem_1fr_1fr_0.9fr_2rem] items-center gap-2 px-3 py-2.5 md:grid-cols-[0.82fr_1fr_1fr_0.9fr_auto] md:px-3.5 ${rowToneClass}`}
+                      className={`grid grid-cols-[1.5rem_1fr_1fr_0.9fr_2rem] items-center gap-2 px-3 py-2.5 md:grid-cols-[3.25rem_1fr_1fr_0.9fr_auto] md:gap-3 md:px-3.5 ${rowToneClass}`}
                     >
                       <span
-                        className={`inline-flex h-8 w-8 items-center justify-center justify-self-center text-xs font-semibold tabular-nums md:h-auto md:min-w-[2.15rem] md:w-auto md:rounded-full md:border md:px-2 md:py-1 ${setLabelToneClass}`}
+                        className={`inline-flex h-8 w-8 items-center justify-center justify-self-center text-xs font-semibold tabular-nums md:h-8 md:w-8 md:justify-self-start md:rounded-full md:border ${setLabelToneClass}`}
                       >
                         {log.setLabel}
                       </span>
@@ -927,6 +998,13 @@ export function AthleteSessionPanel({
           </div>
         );
       })}
+      {openInstruction ? (
+        <CoachInstructionDialog
+          exerciseName={openInstruction.exerciseName}
+          instruction={openInstruction.instruction}
+          onClose={() => setOpenInstruction(null)}
+        />
+      ) : null}
 
       <div>
         <div className="mb-1 flex items-center gap-1">
