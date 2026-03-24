@@ -24,6 +24,17 @@ type RequesterProfile = {
   full_name?: string;
 };
 
+function createPhaseTimer(label: string) {
+  const startedAt = performance.now();
+  return {
+    checkpoint(phase: string) {
+      const durationMs = Number((performance.now() - startedAt).toFixed(1));
+      console.info(`[timing:${label}] ${phase}`, { durationMs });
+      return durationMs;
+    },
+  };
+}
+
 type PlanRow = {
   id: string;
   coach_id: string;
@@ -910,6 +921,7 @@ export async function startProgramWorkoutOnServer({
   programWorkoutId: string;
 }) {
   const admin = createSupabaseAdminClient();
+  const timer = createPhaseTimer(`workouts-start:${programId}`);
   if (!admin) {
     return { ok: false as const, message: "Supabase admin -yhteys puuttuu. Tarkista service role -avain." };
   }
@@ -919,6 +931,7 @@ export async function startProgramWorkoutOnServer({
     .select("id, coach_id, athlete_id, title, description, status, start_date, week_count, workouts, created_at, updated_at")
     .eq("id", programId)
     .maybeSingle<PlanRow>();
+  timer.checkpoint("plan-query");
 
   if (!planRow) {
     return { ok: false as const, message: "Ohjelmaa ei löytynyt tai se ei kuulu sinulle." };
@@ -939,6 +952,7 @@ export async function startProgramWorkoutOnServer({
     .eq("program_workout_id", programWorkoutId)
     .in("status", ["in_progress", "cancelled"])
     .maybeSingle<{ id: string }>();
+  timer.checkpoint("existing-active-query");
 
   if (existingActive.data?.id) {
     return { ok: true as const, scheduledWorkoutId: existingActive.data.id };
@@ -951,6 +965,7 @@ export async function startProgramWorkoutOnServer({
     .eq("status", "in_progress")
     .neq("program_workout_id", programWorkoutId)
     .maybeSingle<{ id: string; title: string }>();
+  timer.checkpoint("blocking-query");
 
   if (blockingWorkout.data) {
     return {
@@ -983,12 +998,14 @@ export async function startProgramWorkoutOnServer({
     })
     .select("id")
     .single<{ id: string }>();
+  timer.checkpoint("scheduled-workout-insert");
 
   if (scheduledWorkoutError || !scheduledWorkout) {
     return { ok: false as const, message: "Harjoituksen käynnistys epäonnistui." };
   }
 
   const setLogs = await buildProgramWorkoutSetLogs(plan, programWorkout.id);
+  timer.checkpoint("set-log-build");
   if (!setLogs) {
     await admin.from("scheduled_workouts").delete().eq("id", scheduledWorkout.id);
     return { ok: false as const, message: "Harjoituksen käynnistys epäonnistui." };
@@ -999,12 +1016,14 @@ export async function startProgramWorkoutOnServer({
     athleteId: plan.athleteId,
     setLogs,
   });
+  timer.checkpoint("session-and-log-insert");
 
   if (!sessionResult.ok) {
     await admin.from("scheduled_workouts").delete().eq("id", scheduledWorkout.id);
     return sessionResult;
   }
 
+  timer.checkpoint("done");
   return { ok: true as const, scheduledWorkoutId: scheduledWorkout.id };
 }
 

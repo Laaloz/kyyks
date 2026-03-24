@@ -17,6 +17,11 @@ import type {
 
 type ServerClient = SupabaseClient<any, "public", any>;
 
+function logSyncPhase(phase: string, startedAt: number) {
+  const durationMs = Number((performance.now() - startedAt).toFixed(1));
+  console.info(`[timing:app-state] ${phase}`, { durationMs });
+}
+
 type ProfileRow = {
   id: string;
   role: UserProfile["role"];
@@ -321,6 +326,7 @@ function throwIfQueryFailed(
 export async function loadVisibleSupabaseAppState(
   supabase: ServerClient,
 ): Promise<SupabaseVisibleAppStateSnapshot> {
+  const queryStartedAt = performance.now();
   const [
     profilesResult,
     bodyMeasurementsResult,
@@ -390,6 +396,7 @@ export async function loadVisibleSupabaseAppState(
       .select("id, session_id, athlete_id, coach_id, body, created_at, updated_at")
       .order("updated_at", { ascending: false }),
   ]);
+  logSyncPhase("all-queries", queryStartedAt);
 
   throwIfQueryFailed("Profiles", profilesResult);
   throwIfQueryFailed("Body measurements", bodyMeasurementsResult);
@@ -404,6 +411,8 @@ export async function loadVisibleSupabaseAppState(
   throwIfQueryFailed("Workout sessions", sessionsResult);
   throwIfQueryFailed("Workout set logs", setLogsResult);
   throwIfQueryFailed("Workout notes", notesResult);
+
+  const mappingStartedAt = performance.now();
 
   const users = (profilesResult.data ?? []).map((entry) => mapProfileRow(entry as ProfileRow));
   const bodyMeasurements = (bodyMeasurementsResult.data ?? []).map((entry) =>
@@ -522,6 +531,8 @@ export async function loadVisibleSupabaseAppState(
   }));
 
   const notes = ((notesResult.data ?? []) as WorkoutNoteRow[]).map((entry) => mapWorkoutNoteRow(entry));
+
+  logSyncPhase("mapping", mappingStartedAt);
 
   return {
     users,
