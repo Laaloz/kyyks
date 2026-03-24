@@ -504,7 +504,7 @@ export function shouldPreserveStoredSessionDuringSupabaseBootstrap(
   persistedAuthenticatedUserId: string | null,
   hasResolvedAuthUser = false,
 ) {
-  return Boolean(persistedAuthenticatedUserId) && (source === "bootstrap" || (source === "event" && !hasResolvedAuthUser));
+  return Boolean(persistedAuthenticatedUserId) && source === "event" && !hasResolvedAuthUser;
 }
 
 export function shouldSyncSupabaseAuthEvent(event: SupabaseAuthEvent) {
@@ -517,6 +517,13 @@ export function shouldRevalidateSupabaseSessionBeforeClearingAuth(
   hasResolvedAuthUser = false,
 ) {
   return source === "event" && hasResolvedAuthUser && Boolean(persistedAuthenticatedUserId);
+}
+
+export function shouldPreserveStoredSessionOnTransientSupabaseNullEvent(
+  source: SupabaseAuthSyncSource,
+  persistedAuthenticatedUserId: string | null,
+) {
+  return source === "event" && Boolean(persistedAuthenticatedUserId);
 }
 
 export function shouldCreateFreshInviteOnResendFailure(message: string | undefined) {
@@ -1257,6 +1264,16 @@ export function AppStateProvider({ children }: PropsWithChildren) {
 
       if (!authUser?.email) {
         if (
+          shouldPreserveStoredSessionOnTransientSupabaseNullEvent(
+            source,
+            persistedSession.authenticatedUserId,
+          )
+        ) {
+          setIsSupabaseAuthResolved(true);
+          return;
+        }
+
+        if (
           shouldPreserveStoredSessionDuringSupabaseBootstrap(
             source,
             persistedSession.authenticatedUserId,
@@ -1304,6 +1321,16 @@ export function AppStateProvider({ children }: PropsWithChildren) {
       });
 
       if (!resolvedUserId) {
+        if (
+          shouldPreserveStoredSessionOnTransientSupabaseNullEvent(
+            source,
+            persistedSession.authenticatedUserId,
+          )
+        ) {
+          setIsSupabaseAuthResolved(true);
+          return;
+        }
+
         if (
           shouldRevalidateSupabaseSessionBeforeClearingAuth(
             source,
@@ -1546,6 +1573,11 @@ export function AppStateProvider({ children }: PropsWithChildren) {
         return { ok: true };
       },
       async logout() {
+        try {
+          window.localStorage.removeItem(SESSION_KEY);
+        } catch {
+          // Ignore storage failures and still continue logging out.
+        }
         if (supabase) {
           await supabase.auth.signOut();
         }

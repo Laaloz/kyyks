@@ -15,16 +15,17 @@ import {
   resolvePrimaryCoachIdForAthlete,
   shouldCreateFreshInviteOnResendFailure,
   shouldPreserveStoredSessionDuringSupabaseBootstrap,
+  shouldPreserveStoredSessionOnTransientSupabaseNullEvent,
   shouldRevalidateSupabaseSessionBeforeClearingAuth,
   shouldTreatInviteActivationLoginFailureAsPartialSuccess,
   shouldSyncSupabaseAuthEvent,
 } from "@/providers/app-state-provider";
 
 describe("shouldPreserveStoredSessionDuringSupabaseBootstrap", () => {
-  it("keeps the locally restored session during bootstrap when Supabase has not resolved a user yet", () => {
+  it("does not preserve a stale local session during bootstrap null-state checks", () => {
     expect(
       shouldPreserveStoredSessionDuringSupabaseBootstrap("bootstrap", "user_athlete_1"),
-    ).toBe(true);
+    ).toBe(false);
   });
 
   it("keeps the locally restored session during early auth events before Supabase has resolved a user", () => {
@@ -60,6 +61,18 @@ describe("shouldPreserveStoredSessionDuringSupabaseBootstrap", () => {
     ).toBe(false);
     expect(
       shouldRevalidateSupabaseSessionBeforeClearingAuth("event", null, true),
+    ).toBe(false);
+  });
+
+  it("preserves the locally restored session during transient null auth events from Supabase", () => {
+    expect(
+      shouldPreserveStoredSessionOnTransientSupabaseNullEvent("event", "user_athlete_1"),
+    ).toBe(true);
+    expect(
+      shouldPreserveStoredSessionOnTransientSupabaseNullEvent("bootstrap", "user_athlete_1"),
+    ).toBe(false);
+    expect(
+      shouldPreserveStoredSessionOnTransientSupabaseNullEvent("event", null),
     ).toBe(false);
   });
 
