@@ -11,6 +11,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardDescription, CardTitle } from "@/components/ui/card";
 import { Input, Label, Select } from "@/components/ui/field";
+import { getInviteLifecycleLabel } from "@/lib/invite-status";
 import { canResendInvite, getAssignableCoachUsers } from "@/lib/role-access";
 import { formatDate } from "@/lib/utils";
 import { useAppState } from "@/providers/app-state-provider";
@@ -415,6 +416,9 @@ export function AdminDashboard({ view }: { view: WorkspaceView }) {
                             <p className="mt-1 text-sm text-[var(--text-muted)]">
                               {roleLabel(invite.role)} · vanhenee {formatDate(invite.expiresAt)}
                             </p>
+                            <p className="mt-1 text-xs font-medium text-[var(--text-subtle)]">
+                              {getInviteLifecycleLabel(invite.status)}
+                            </p>
                             {assignedCoach ? (
                               <p className="mt-1 text-xs text-[var(--text-subtle)]">
                                 Vastuuvalmentaja: {assignedCoach.fullName}
@@ -598,6 +602,9 @@ export function AdminDashboard({ view }: { view: WorkspaceView }) {
                           <p className="font-medium text-[var(--text)]">{invite.email}</p>
                           <p className="mt-1 text-sm text-[var(--text-muted)]">
                             {roleLabel(invite.role)} · vanhenee {formatDate(invite.expiresAt)}
+                          </p>
+                          <p className="mt-1 text-xs font-medium text-[var(--text-subtle)]">
+                            {getInviteLifecycleLabel(invite.status)}
                           </p>
                           {assignedCoach ? (
                             <p className="mt-1 text-xs text-[var(--text-subtle)]">

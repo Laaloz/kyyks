@@ -10,6 +10,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardDescription, CardTitle } from "@/components/ui/card";
 import { Input, Label } from "@/components/ui/field";
+import { getInviteLifecycleLabel } from "@/lib/invite-status";
 import { useAppState } from "@/providers/app-state-provider";
 
 import { inviteSchema } from "@/components/workout/schemas";
@@ -98,6 +99,9 @@ export function CoachInvitePanel() {
                     <div>
                       <p className="font-medium text-[var(--text)]">{invite.email}</p>
                       <p className="mt-1 text-sm text-[var(--text-muted)]">Treenaajakutsu on avoinna.</p>
+                      <p className="mt-1 text-xs font-medium text-[var(--text-subtle)]">
+                        {getInviteLifecycleLabel(invite.status)}
+                      </p>
                     </div>
                     <div className="flex flex-wrap gap-2">
                       <Link

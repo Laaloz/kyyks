@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  shouldCreateFreshInviteOnResendFailure,
   shouldPreserveStoredSessionDuringSupabaseBootstrap,
   shouldSyncSupabaseAuthEvent,
 } from "@/providers/app-state-provider";
@@ -25,5 +26,10 @@ describe("shouldPreserveStoredSessionDuringSupabaseBootstrap", () => {
     expect(shouldSyncSupabaseAuthEvent("INITIAL_SESSION")).toBe(false);
     expect(shouldSyncSupabaseAuthEvent("SIGNED_IN")).toBe(true);
     expect(shouldSyncSupabaseAuthEvent("SIGNED_OUT")).toBe(true);
+  });
+
+  it("recreates a fresh server invite when resending a legacy local invite", () => {
+    expect(shouldCreateFreshInviteOnResendFailure("Kutsua ei löytynyt.")).toBe(true);
+    expect(shouldCreateFreshInviteOnResendFailure("Kutsun uudelleenlähetys epäonnistui.")).toBe(false);
   });
 });

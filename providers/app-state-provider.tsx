@@ -370,6 +370,10 @@ export function shouldSyncSupabaseAuthEvent(event: SupabaseAuthEvent) {
   return event !== "INITIAL_SESSION";
 }
 
+export function shouldCreateFreshInviteOnResendFailure(message: string | undefined) {
+  return message === "Kutsua ei löytynyt.";
+}
+
 function resolveProgramWorkouts(
   workouts: ProgramBuilderInput["workouts"],
   exercises: Exercise[],
@@ -1700,6 +1704,50 @@ export function AppStateProvider({ children }: PropsWithChildren) {
               expiresAt: string;
             };
           } | null;
+
+          if ((!response.ok || !payload?.invite) && shouldCreateFreshInviteOnResendFailure(payload?.message)) {
+            const recreateResponse = await fetch("/api/invites", {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/json",
+              },
+              body: JSON.stringify({
+                email: invite.email,
+                role: invite.role,
+                coachId: invite.coachId,
+              }),
+            });
+            const recreatePayload = (await recreateResponse.json().catch(() => null)) as {
+              message?: string;
+              invite?: {
+                id: string;
+                token: string;
+                email: string;
+                role: "coach" | "athlete";
+                invitedBy: string;
+                coachId?: string | null;
+                status: "pending" | "accepted";
+                createdAt: string;
+                expiresAt: string;
+              };
+            } | null;
+
+            if (!recreateResponse.ok || !recreatePayload?.invite) {
+              return { ok: false, message: recreatePayload?.message ?? "Kutsun uudelleenlähetys epäonnistui." };
+            }
+
+            const recreatedInvite = {
+              ...recreatePayload.invite,
+              coachId: recreatePayload.invite.coachId ?? undefined,
+            };
+
+            setState((previous) => ({
+              ...previous,
+              invites: [recreatedInvite, ...previous.invites.filter((item) => item.id !== inviteId)],
+            }));
+
+            return { ok: true };
+          }
 
           if (!response.ok || !payload?.invite) {
             return { ok: false, message: payload?.message ?? "Kutsun uudelleenlähetys epäonnistui." };
