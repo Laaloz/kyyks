@@ -16,9 +16,11 @@ export async function PATCH(request: Request) {
     return NextResponse.json({ message: "Supabase ei ole käytössä tässä ympäristössä." }, { status: 503 });
   }
 
+  const authorization = request.headers.get("authorization");
+  const accessToken = authorization?.startsWith("Bearer ") ? authorization.slice(7) : undefined;
   const {
     data: { user },
-  } = await supabase.auth.getUser();
+  } = accessToken ? await supabase.auth.getUser(accessToken) : await supabase.auth.getUser();
 
   if (!user) {
     return NextResponse.json({ message: "Kirjaudu sisään ennen asetusten tallennusta." }, { status: 401 });

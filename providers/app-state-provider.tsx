@@ -1526,10 +1526,19 @@ export function AppStateProvider({ children }: PropsWithChildren) {
         const timestamp = new Date().toISOString();
 
         if (supabase) {
+          const {
+            data: { session },
+          } = await supabase.auth.getSession();
+
           const response = await fetch("/api/settings", {
             method: "PATCH",
             headers: {
               "Content-Type": "application/json",
+              ...(session?.access_token
+                ? {
+                    Authorization: `Bearer ${session.access_token}`,
+                  }
+                : {}),
             },
             body: JSON.stringify({
               fullName,
