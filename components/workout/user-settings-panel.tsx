@@ -59,6 +59,8 @@ export function UserSettingsPanel() {
   const [selectedManagedUserId, setSelectedManagedUserId] = useState<string>("");
   const [selectedManagedRole, setSelectedManagedRole] = useState<Role>("coach");
   const [selectedManagedCoachIds, setSelectedManagedCoachIds] = useState<string[]>([]);
+  const [isSavingRole, setIsSavingRole] = useState(false);
+  const [isSavingCoaches, setIsSavingCoaches] = useState(false);
 
   const form = useForm<z.input<typeof userSettingsSchema>, unknown, z.output<typeof userSettingsSchema>>({
     resolver: zodResolver(userSettingsSchema),
@@ -269,7 +271,8 @@ export function UserSettingsPanel() {
           <Button
             type="button"
             className="w-full sm:w-auto"
-            disabled={isSavingSettings}
+            loading={isSavingSettings}
+            loadingText="Tallennetaan asetuksia..."
             onClick={() => void submitSettings()}
           >
             {isSavingSettings ? "Tallennetaan..." : "Tallenna muutokset"}
@@ -407,13 +410,20 @@ export function UserSettingsPanel() {
                             type="button"
                             variant="secondary"
                             className="w-full sm:w-auto"
+                            loading={isSavingRole}
+                            loadingText="Tallennetaan roolia..."
                             onClick={async () => {
-                              const result = await adminUpdateUserRole(selectedManagedUser.id, selectedManagedRole);
-                              setAdminMessage(
-                                result.ok
-                                  ? `Rooli päivitettiin: ${selectedManagedUser.fullName} on nyt ${roleLabel(selectedManagedRole)}.`
-                                  : result.message,
-                              );
+                              setIsSavingRole(true);
+                              try {
+                                const result = await adminUpdateUserRole(selectedManagedUser.id, selectedManagedRole);
+                                setAdminMessage(
+                                  result.ok
+                                    ? `Rooli päivitettiin: ${selectedManagedUser.fullName} on nyt ${roleLabel(selectedManagedRole)}.`
+                                    : result.message,
+                                );
+                              } finally {
+                                setIsSavingRole(false);
+                              }
                             }}
                           >
                             Tallenna rooli
@@ -450,14 +460,21 @@ export function UserSettingsPanel() {
                               variant="secondary"
                               className="w-full sm:w-auto"
                               disabled={selectedManagedCoachIds.length === 0}
+                              loading={isSavingCoaches}
+                              loadingText="Tallennetaan vastuuhenkilöitä..."
                               onClick={async () => {
-                                const result = await adminAssignAthleteCoaches(
-                                  selectedManagedUser.id,
-                                  selectedManagedCoachIds,
-                                );
-                                setAdminMessage(
-                                  "message" in result ? result.message : "Vastuuhenkilöt tallennettiin.",
-                                );
+                                setIsSavingCoaches(true);
+                                try {
+                                  const result = await adminAssignAthleteCoaches(
+                                    selectedManagedUser.id,
+                                    selectedManagedCoachIds,
+                                  );
+                                  setAdminMessage(
+                                    "message" in result ? result.message : "Vastuuhenkilöt tallennettiin.",
+                                  );
+                                } finally {
+                                  setIsSavingCoaches(false);
+                                }
                               }}
                             >
                               Tallenna vastuuhenkilöt

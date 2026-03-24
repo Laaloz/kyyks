@@ -54,6 +54,7 @@ type WorkoutInsight = {
 
 type AthleteLogMode = "library" | "workout";
 type AthleteOverviewFocusTarget = "measurements";
+type MeasurementMessageTone = "info" | "success" | "error";
 
 type HistoryMuscleGroupKey = "shoulders" | "arms" | "chest" | "abs" | "back" | "legs" | "other";
 
@@ -163,6 +164,8 @@ export function AthleteDashboard({
     waistCm: "",
   });
   const [measurementMessage, setMeasurementMessage] = useState("");
+  const [measurementMessageTone, setMeasurementMessageTone] = useState<MeasurementMessageTone>("info");
+  const [isSavingMeasurements, setIsSavingMeasurements] = useState(false);
   const didAutoResumeWorkout = useRef(false);
   const historySectionRef = useRef<HTMLDivElement | null>(null);
   const historyMenuRef = useRef<HTMLDivElement | null>(null);
@@ -187,6 +190,7 @@ export function AthleteDashboard({
   }, [currentUser?.id, currentUser?.heightCm, currentUser?.weightKg, currentUser?.waistCm]);
   useEffect(() => {
     setMeasurementMessage("");
+    setMeasurementMessageTone("info");
   }, [currentUser?.id]);
   useEffect(() => {
     if (view !== "overview" || overviewFocusTarget !== "measurements") {
@@ -809,13 +813,13 @@ export function AthleteDashboard({
               <div>
                 <p className="text-sm font-semibold text-[var(--text)]">Päivitä tämänhetkiset mitat</p>
                 <p className="text-sm text-[var(--text-muted)]">
-                  Pituus muuttuu harvoin, mutta painon ja vyötärön voit päivittää tähän vaikka kerran viikossa.
+                  Kaikki kentät ovat valinnaisia. Pituus muuttuu harvoin, mutta painon ja vyötärön voit päivittää tähän vaikka kerran viikossa.
                 </p>
               </div>
             </div>
             <div className="mt-4 grid gap-3 md:grid-cols-3">
               <div>
-                <Label htmlFor="overview-height-cm">Pituus (cm)</Label>
+                <Label htmlFor="overview-height-cm">Pituus (cm, valinnainen)</Label>
                 <Input
                   id="overview-height-cm"
                   type="number"
@@ -828,11 +832,12 @@ export function AthleteDashboard({
                   onChange={(event) => {
                     setMeasurementDraft((previous) => ({ ...previous, heightCm: event.target.value }));
                     setMeasurementMessage("");
+                    setMeasurementMessageTone("info");
                   }}
                 />
               </div>
               <div>
-                <Label htmlFor="overview-weight-kg">Paino (kg)</Label>
+                <Label htmlFor="overview-weight-kg">Paino (kg, valinnainen)</Label>
                 <Input
                   id="overview-weight-kg"
                   type="number"
@@ -845,11 +850,12 @@ export function AthleteDashboard({
                   onChange={(event) => {
                     setMeasurementDraft((previous) => ({ ...previous, weightKg: event.target.value }));
                     setMeasurementMessage("");
+                    setMeasurementMessageTone("info");
                   }}
                 />
               </div>
               <div>
-                <Label htmlFor="overview-waist-cm">Vyötärö (cm)</Label>
+                <Label htmlFor="overview-waist-cm">Vyötärö (cm, valinnainen)</Label>
                 <Input
                   id="overview-waist-cm"
                   type="number"
@@ -862,6 +868,7 @@ export function AthleteDashboard({
                   onChange={(event) => {
                     setMeasurementDraft((previous) => ({ ...previous, waistCm: event.target.value }));
                     setMeasurementMessage("");
+                    setMeasurementMessageTone("info");
                   }}
                 />
               </div>
@@ -872,30 +879,41 @@ export function AthleteDashboard({
                 className={`min-h-5 text-sm ${
                   !measurementMessage
                     ? "text-[var(--text-subtle)]"
-                    : measurementMessage.includes("tallenn")
+                    : measurementMessageTone === "success"
                       ? "text-[var(--success)]"
-                      : "text-[var(--danger)]"
+                      : measurementMessageTone === "error"
+                        ? "text-[var(--danger)]"
+                        : "text-[var(--text-subtle)]"
                 }`}
               >
                 {measurementMessage ||
                   (isMeasurementDirty
                     ? "Tallennus päivittää viimeisimmän mittauksen ja trendikaaviot."
-                    : "Muuta jotakin arvoa, kun haluat tallentaa uuden mittauksen.")}
+                    : "Muuta jotakin valinnaista kenttää, kun haluat tallentaa uuden mittauksen.")}
               </p>
               <Button
                 type="button"
                 variant={isMeasurementDirty ? "primary" : "secondary"}
                 disabled={!isMeasurementDirty}
+                loading={isSavingMeasurements}
+                loadingText="Tallennetaan mittatietoja..."
                 className="w-full sm:w-auto"
                 onClick={async () => {
                   const parsed = bodyMeasurementSchema.safeParse(measurementDraft);
                   if (!parsed.success) {
                     setMeasurementMessage(parsed.error.issues[0]?.message ?? "Tarkista mittatiedot ja yritä uudelleen.");
+                    setMeasurementMessageTone("error");
                     return;
                   }
 
-                  const result = await updateCurrentUserMeasurements(parsed.data);
-                  setMeasurementMessage(result.ok ? "Mittatiedot tallennettu." : result.message);
+                  setIsSavingMeasurements(true);
+                  try {
+                    const result = await updateCurrentUserMeasurements(parsed.data);
+                    setMeasurementMessage(result.ok ? "Mittatiedot tallennettu." : result.message);
+                    setMeasurementMessageTone(result.ok ? "success" : "error");
+                  } finally {
+                    setIsSavingMeasurements(false);
+                  }
                 }}
               >
                 Tallenna mittatiedot

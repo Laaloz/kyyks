@@ -17,21 +17,37 @@ const variantStyles: Record<Variant, string> = {
 
 export interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
   variant?: Variant;
+  loading?: boolean;
+  loadingText?: string;
 }
 
 export const Button = forwardRef<HTMLButtonElement, ButtonProps>(function Button(
-  { className, variant = "primary", ...props },
+  { children, className, disabled, loading = false, loadingText, variant = "primary", ...props },
   ref,
 ) {
   return (
     <button
       ref={ref}
+      disabled={disabled || loading}
+      aria-busy={loading || undefined}
       className={cn(
         "inline-flex items-center justify-center rounded-xl px-4 py-2.5 text-base font-semibold tracking-[0.01em] transition duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--background)] disabled:cursor-not-allowed disabled:opacity-45 disabled:shadow-none disabled:hover:translate-y-0 disabled:hover:brightness-100 disabled:hover:bg-[var(--surface-3)]",
         variantStyles[variant],
         className,
       )}
       {...props}
-    />
+    >
+      {loading ? (
+        <span className="inline-flex items-center gap-2">
+          <span
+            aria-hidden="true"
+            className="size-4 animate-spin rounded-full border-2 border-current border-r-transparent"
+          />
+          <span>{loadingText ?? children}</span>
+        </span>
+      ) : (
+        children
+      )}
+    </button>
   );
 });

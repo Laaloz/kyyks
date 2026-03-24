@@ -192,6 +192,7 @@ export function CoachDashboard({
   });
 
   const isEditingProgram = Boolean(editingProgramId);
+  const isSavingProgram = form.formState.isSubmitting;
   const canEditProgramAthlete = !editingProgramId
     || !state.scheduledWorkouts.some((workout) => workout.trainingPlanId === editingProgramId);
   const editorTitle = isEditingProgram ? "Muokkaa treeniohjelmaa" : "Uusi treeniohjelma";
@@ -408,7 +409,12 @@ export function CoachDashboard({
                 {programMessage}
               </p>
               <div className="flex flex-wrap gap-3">
-                <Button type="submit" className="w-full sm:w-auto">
+                <Button
+                  type="submit"
+                  className="w-full sm:w-auto"
+                  loading={isSavingProgram}
+                  loadingText={isEditingProgram ? "Tallennetaan muutoksia..." : "Tallennetaan ohjelmaa..."}
+                >
                   {isEditingProgram ? "Tallenna muutokset" : "Tallenna ohjelma"}
                 </Button>
                 {isEditingProgram ? (

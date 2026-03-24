@@ -264,6 +264,7 @@ export function AthleteSessionPanel({
   const [secondaryActionsMenuStyle, setSecondaryActionsMenuStyle] = useState<CSSProperties | null>(null);
   const [durationDraft, setDurationDraft] = useState("");
   const [durationMessage, setDurationMessage] = useState("");
+  const [isSavingDuration, setIsSavingDuration] = useState(false);
   const secondaryActionsMenuRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
@@ -863,6 +864,8 @@ export function AthleteSessionPanel({
               type="button"
               variant={isDurationDirty ? "secondary" : "ghost"}
               disabled={!isDurationDirty}
+              loading={isSavingDuration}
+              loadingText="Tallennetaan kestoa..."
               className="w-full sm:w-auto"
               onClick={async () => {
                 const parsedDuration = parseDurationInput(durationDraft);
@@ -871,8 +874,13 @@ export function AthleteSessionPanel({
                   return;
                 }
 
-                const result = await onUpdateDuration(parsedDuration);
-                setDurationMessage(result.ok ? "Kesto päivitetty." : result.message ?? "Keston paivitys epaonnistui.");
+                setIsSavingDuration(true);
+                try {
+                  const result = await onUpdateDuration(parsedDuration);
+                  setDurationMessage(result.ok ? "Kesto päivitetty." : result.message ?? "Keston paivitys epaonnistui.");
+                } finally {
+                  setIsSavingDuration(false);
+                }
               }}
             >
               Tallenna kesto
