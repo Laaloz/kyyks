@@ -484,8 +484,9 @@ function parsePersistedSession(rawSession: string | null): PersistedSession {
 export function shouldPreserveStoredSessionDuringSupabaseBootstrap(
   source: SupabaseAuthSyncSource,
   persistedAuthenticatedUserId: string | null,
+  hasResolvedAuthUser = false,
 ) {
-  return source === "bootstrap" && Boolean(persistedAuthenticatedUserId);
+  return Boolean(persistedAuthenticatedUserId) && (source === "bootstrap" || (source === "event" && !hasResolvedAuthUser));
 }
 
 export function shouldSyncSupabaseAuthEvent(event: SupabaseAuthEvent) {
@@ -1006,7 +1007,7 @@ interface AppStateContextValue {
   loginAsDemoUser: (userId: string) => void;
   startAdminImpersonation: (userId: string) => ActionResult;
   stopAdminImpersonation: () => ActionResult;
-  updateCurrentUserSettings: (input: UserSettingsInput) => ActionResult;
+  updateCurrentUserSettings: (input: UserSettingsInput) => Promise<ActionResult>;
   requestCurrentUserPasswordReset: () => Promise<PasswordResetRequestResult>;
   adminSendPasswordResetEmail: (userId: string) => Promise<PasswordResetRequestResult>;
   adminUpdateUserRole: (userId: string, role: Role) => Promise<ActionResult>;
@@ -1141,6 +1142,7 @@ export function AppStateProvider({ children }: PropsWithChildren) {
     }
 
     let active = true;
+    let hasResolvedAuthUser = false;
 
     const syncFromAuthUser = async (authUser: SupabaseAuthUser | null, source: SupabaseAuthSyncSource) => {
       if (!active) {
@@ -1153,6 +1155,7 @@ export function AppStateProvider({ children }: PropsWithChildren) {
           shouldPreserveStoredSessionDuringSupabaseBootstrap(
             source,
             persistedSession.authenticatedUserId,
+            hasResolvedAuthUser,
           )
         ) {
           setIsSupabaseAuthResolved(true);
@@ -1184,6 +1187,7 @@ export function AppStateProvider({ children }: PropsWithChildren) {
         return;
       }
 
+      hasResolvedAuthUser = true;
       setAuthenticatedUserId(resolvedUserId);
       setImpersonatedUserId(null);
       setIsSupabaseAuthResolved(true);
@@ -1400,7 +1404,7 @@ export function AppStateProvider({ children }: PropsWithChildren) {
         setImpersonatedUserId(null);
         return { ok: true };
       },
-      updateCurrentUserSettings(input) {
+      async updateCurrentUserSettings(input) {
         if (!currentUser) {
           return { ok: false, message: "Kirjaudu sisään ennen asetusten muokkausta." };
         }
@@ -1415,6 +1419,45 @@ export function AppStateProvider({ children }: PropsWithChildren) {
         const waistCm = typeof input.waistCm === "number" ? input.waistCm : undefined;
         const hasMeasurementChange =
           currentUser.weightKg !== weightKg || currentUser.waistCm !== waistCm;
+
+        if (supabase) {
+          const { error: profileError } = await supabase
+            .from("profiles")
+            .update({
+              full_name: fullName,
+              default_dashboard_view: input.defaultDashboardView,
+              email_notifications: input.emailNotifications,
+              theme_mode: input.themeMode,
+              weight_kg: weightKg ?? null,
+              waist_cm: waistCm ?? null,
+              updated_at: timestamp,
+            })
+            .eq("id", currentUser.id);
+
+          if (profileError) {
+            return { ok: false, message: "Asetusten tallennus epäonnistui." };
+          }
+
+          if (
+            currentUser.role === "athlete" &&
+            hasMeasurementChange &&
+            (weightKg !== undefined || waistCm !== undefined)
+          ) {
+            const { error: measurementError } = await supabase
+              .from("body_measurements")
+              .insert({
+                user_id: currentUser.id,
+                weight_kg: weightKg ?? null,
+                waist_cm: waistCm ?? null,
+                measured_at: timestamp,
+                created_at: timestamp,
+              });
+
+            if (measurementError) {
+              return { ok: false, message: "Asetukset tallentuivat, mutta mittahistoriaa ei voitu päivittää." };
+            }
+          }
+        }
 
         setState((previous) => ({
           ...previous,

@@ -168,13 +168,13 @@ export function UserSettingsPanel() {
 
         <form
           className="mt-6 space-y-4"
-          onSubmit={form.handleSubmit((values) => {
+          onSubmit={form.handleSubmit(async (values) => {
             if (!allowedViewOptions.includes(values.defaultDashboardView)) {
               setMessage("Valittu aloitussivu ei ole sallittu roolillesi.");
               return;
             }
 
-            const result = updateCurrentUserSettings(values);
+            const result = await updateCurrentUserSettings(values);
             setMessage(result.ok ? "Muutokset tallennettu." : result.message);
           })}
         >

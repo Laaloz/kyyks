@@ -26,9 +26,15 @@ describe("shouldPreserveStoredSessionDuringSupabaseBootstrap", () => {
     ).toBe(true);
   });
 
-  it("does not preserve the session after auth events or without a stored user id", () => {
+  it("keeps the locally restored session during early auth events before Supabase has resolved a user", () => {
     expect(
       shouldPreserveStoredSessionDuringSupabaseBootstrap("event", "user_athlete_1"),
+    ).toBe(true);
+  });
+
+  it("does not preserve the session after auth has resolved or without a stored user id", () => {
+    expect(
+      shouldPreserveStoredSessionDuringSupabaseBootstrap("event", "user_athlete_1", true),
     ).toBe(false);
     expect(
       shouldPreserveStoredSessionDuringSupabaseBootstrap("bootstrap", null),
