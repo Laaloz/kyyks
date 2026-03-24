@@ -1,4 +1,4 @@
-import type { DashboardHomeView, Role, UserProfile } from "@/lib/types";
+import type { DashboardHomeView, Invite, Role, UserProfile } from "@/lib/types";
 
 const coachWorkspaceViews: DashboardHomeView[] = [
   "overview",
@@ -32,4 +32,12 @@ export function getCoachCapableUsers(users: UserProfile[]) {
 
 export function getAssignableCoachUsers(users: UserProfile[]) {
   return users.filter((user) => canActAsCoach(user.role));
+}
+
+export function canResendInvite(user: Pick<UserProfile, "id" | "role"> | null | undefined, invite: Pick<Invite, "status" | "invitedBy">) {
+  if (!user || invite.status !== "pending") {
+    return false;
+  }
+
+  return user.role === "admin" || (user.role === "coach" && invite.invitedBy === user.id);
 }

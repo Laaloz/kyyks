@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  canResendInvite,
   getAssignableCoachUsers,
   getCoachCapableUsers,
   getDashboardViewsForRole,
@@ -57,5 +58,42 @@ describe("role access helpers", () => {
 
   it("shows admin and coach users in assignable coach lists", () => {
     expect(getAssignableCoachUsers(users).map((user) => user.id)).toEqual(["admin_1", "coach_1"]);
+  });
+
+  it("allows admins and the owning coach to resend pending invites", () => {
+    expect(
+      canResendInvite(users[0], {
+        status: "pending",
+        invitedBy: "coach_1",
+      }),
+    ).toBe(true);
+
+    expect(
+      canResendInvite(users[1], {
+        status: "pending",
+        invitedBy: "coach_1",
+      }),
+    ).toBe(true);
+
+    expect(
+      canResendInvite(users[1], {
+        status: "pending",
+        invitedBy: "coach_2",
+      }),
+    ).toBe(false);
+
+    expect(
+      canResendInvite(users[2], {
+        status: "pending",
+        invitedBy: "coach_1",
+      }),
+    ).toBe(false);
+
+    expect(
+      canResendInvite(users[0], {
+        status: "accepted",
+        invitedBy: "coach_1",
+      }),
+    ).toBe(false);
   });
 });

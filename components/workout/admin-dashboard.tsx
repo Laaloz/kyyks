@@ -11,7 +11,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardDescription, CardTitle } from "@/components/ui/card";
 import { Input, Label, Select } from "@/components/ui/field";
-import { getAssignableCoachUsers } from "@/lib/role-access";
+import { canResendInvite, getAssignableCoachUsers } from "@/lib/role-access";
 import { formatDate } from "@/lib/utils";
 import { useAppState } from "@/providers/app-state-provider";
 
@@ -19,9 +19,11 @@ import { inviteSchema } from "@/components/workout/schemas";
 import { MetricGrid, roleLabel, type WorkspaceView } from "@/components/workout/shared";
 
 export function AdminDashboard({ view }: { view: WorkspaceView }) {
-  const { currentUser, state, createInvite } = useAppState();
+  const { currentUser, state, createInvite, resendInvite } = useAppState();
   const formId = useId();
   const [inviteMessage, setInviteMessage] = useState<string>("");
+  const [resendMessage, setResendMessage] = useState<string>("");
+  const [resendingInviteId, setResendingInviteId] = useState<string | null>(null);
   const coaches = getAssignableCoachUsers(state.users);
   const athletes = state.users.filter((user) => user.role === "athlete");
   const pendingInvites = state.invites.filter((invite) => invite.status === "pending");
@@ -389,6 +391,12 @@ export function AdminDashboard({ view }: { view: WorkspaceView }) {
                 </div>
               </div>
               <div className="mt-4 grid gap-3">
+                <p
+                  aria-live="polite"
+                  className={`min-h-5 text-sm ${resendMessage.includes("lähetettiin") ? "text-[var(--success)]" : "text-[var(--danger)]"}`}
+                >
+                  {resendMessage}
+                </p>
                 {pendingInvites.length === 0 ? (
                   <p className="rounded-xl border-2 border-[var(--border)] bg-[var(--surface-2)] px-4 py-3 text-sm text-[var(--text-muted)]">
                     Onboarding-jono on tällä hetkellä tyhjä.
@@ -413,7 +421,25 @@ export function AdminDashboard({ view }: { view: WorkspaceView }) {
                               </p>
                             ) : null}
                           </div>
-                          <Badge>{Date.parse(invite.expiresAt) - Date.now() <= 3 * 24 * 60 * 60 * 1000 ? "Seuraa" : "Auki"}</Badge>
+                          <div className="flex flex-col items-end gap-2">
+                            <Badge>{Date.parse(invite.expiresAt) - Date.now() <= 3 * 24 * 60 * 60 * 1000 ? "Seuraa" : "Auki"}</Badge>
+                            {canResendInvite(currentUser, invite) ? (
+                              <Button
+                                type="button"
+                                variant="secondary"
+                                className="px-3 py-2 text-sm"
+                                disabled={resendingInviteId === invite.id}
+                                onClick={async () => {
+                                  setResendingInviteId(invite.id);
+                                  const result = await resendInvite(invite.id);
+                                  setResendMessage(result.ok ? `Kutsu lähetettiin uudelleen osoitteeseen ${invite.email}.` : result.message);
+                                  setResendingInviteId(null);
+                                }}
+                              >
+                                {resendingInviteId === invite.id ? "Lähetetään..." : "Lähetä uudelleen"}
+                              </Button>
+                            ) : null}
+                          </div>
                         </div>
                       </div>
                     );
@@ -477,6 +503,7 @@ export function AdminDashboard({ view }: { view: WorkspaceView }) {
               onSubmit={form.handleSubmit(async (values) => {
                 const result = await createInvite(values);
                 setInviteMessage(result.ok ? `Kutsu lähetetty osoitteeseen ${values.email}.` : result.message);
+                setResendMessage("");
                 if (result.ok) {
                   form.reset({ email: "", role: values.role, coachId: values.coachId });
                 }
@@ -549,6 +576,12 @@ export function AdminDashboard({ view }: { view: WorkspaceView }) {
             <CardDescription className="mt-2">
               Seuraa, mikä kutsu on avoinna, ja avaa liittymislinkki tarvittaessa uudelleen.
             </CardDescription>
+            <p
+              aria-live="polite"
+              className={`mt-4 min-h-5 text-sm ${resendMessage.includes("lähetettiin") ? "text-[var(--success)]" : "text-[var(--danger)]"}`}
+            >
+              {resendMessage}
+            </p>
             <div className="mt-4 grid gap-3">
               {pendingInvites.length === 0 ? (
                 <p className="text-sm text-[var(--text-muted)]">Avoimia kutsuja ei ole tällä hetkellä.</p>
@@ -572,9 +605,27 @@ export function AdminDashboard({ view }: { view: WorkspaceView }) {
                             </p>
                           ) : null}
                         </div>
-                        <Link className="text-sm font-semibold text-[var(--accent)]" href={`/invite/${invite.token}`}>
-                          Avaa kutsu
-                        </Link>
+                        <div className="flex flex-col items-end gap-2">
+                          <Link className="text-sm font-semibold text-[var(--accent)]" href={`/invite/${invite.token}`}>
+                            Avaa kutsu
+                          </Link>
+                          {canResendInvite(currentUser, invite) ? (
+                            <Button
+                              type="button"
+                              variant="secondary"
+                              className="px-3 py-2 text-sm"
+                              disabled={resendingInviteId === invite.id}
+                              onClick={async () => {
+                                setResendingInviteId(invite.id);
+                                const result = await resendInvite(invite.id);
+                                setResendMessage(result.ok ? `Kutsu lähetettiin uudelleen osoitteeseen ${invite.email}.` : result.message);
+                                setResendingInviteId(null);
+                              }}
+                            >
+                              {resendingInviteId === invite.id ? "Lähetetään..." : "Lähetä uudelleen"}
+                            </Button>
+                          ) : null}
+                        </div>
                       </div>
                     </div>
                   );

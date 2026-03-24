@@ -26,6 +26,64 @@ type PublicInviteRecord = {
   status: "pending" | "accepted";
 };
 
+type StoredInviteRecord = {
+  id: string;
+  token: string;
+  email: string;
+  role: "coach" | "athlete";
+  invited_by: string;
+  coach_id: string | null;
+  status: "pending" | "accepted";
+  created_at: string;
+  expires_at: string;
+};
+
+function mapStoredInviteRecord(invite: StoredInviteRecord) {
+  return {
+    id: invite.id,
+    token: invite.token,
+    email: invite.email,
+    role: invite.role,
+    invitedBy: invite.invited_by,
+    coachId: invite.coach_id,
+    status: invite.status,
+    createdAt: invite.created_at,
+    expiresAt: invite.expires_at,
+  };
+}
+
+async function sendInviteEmail({
+  email,
+  role,
+  token,
+  origin,
+}: {
+  email: string;
+  role: "coach" | "athlete";
+  token: string;
+  origin: string;
+}) {
+  const inviteUrl = `${origin}/invite/${token}`;
+
+  return sendTransactionalEmail({
+    to: email,
+    subject: "Sinut on kutsuttu rooki.fit-palveluun",
+    text:
+      role === "coach"
+        ? `Sinut on kutsuttu valmentajaksi rooki.fit-palveluun. Avaa kutsu: ${inviteUrl}`
+        : `Sinut on kutsuttu treenaajaksi rooki.fit-palveluun. Avaa kutsu: ${inviteUrl}`,
+    html: `
+      <div style="font-family:Arial,sans-serif;line-height:1.6;color:#0f172a">
+        <h1 style="font-size:22px;margin-bottom:12px">Kutsu rooki.fit-palveluun</h1>
+        <p>Sinulle on luotu ${role === "coach" ? "valmentajan" : "treenaajan"} kutsu rooki.fit-palveluun.</p>
+        <p><a href="${inviteUrl}" style="display:inline-block;background:#09111d;color:#ffefae;padding:12px 18px;border-radius:12px;text-decoration:none;font-weight:700">Avaa kutsu</a></p>
+        <p>Jos painike ei toimi, avaa tämä linkki selaimessa:</p>
+        <p><a href="${inviteUrl}">${inviteUrl}</a></p>
+      </div>
+    `,
+  });
+}
+
 export async function getPublicInviteByToken(token: string): Promise<PublicInviteRecord | null> {
   const admin = createSupabaseAdminClient();
   if (!admin) {
@@ -136,29 +194,17 @@ export async function createInviteAndSendEmail({
       expires_at: expiresAt,
     })
     .select("id, token, email, role, invited_by, coach_id, status, created_at, expires_at")
-    .single();
+    .single<StoredInviteRecord>();
 
   if (inviteError || !invite) {
     return { ok: false as const, message: "Kutsun luonti epäonnistui." };
   }
 
-  const inviteUrl = `${origin}/invite/${token}`;
-  const mailResult = await sendTransactionalEmail({
-    to: normalizedEmail,
-    subject: `Sinut on kutsuttu rooki.fit-palveluun`,
-    text:
-      payload.role === "coach"
-        ? `Sinut on kutsuttu valmentajaksi rooki.fit-palveluun. Avaa kutsu: ${inviteUrl}`
-        : `Sinut on kutsuttu treenaajaksi rooki.fit-palveluun. Avaa kutsu: ${inviteUrl}`,
-    html: `
-      <div style="font-family:Arial,sans-serif;line-height:1.6;color:#0f172a">
-        <h1 style="font-size:22px;margin-bottom:12px">Kutsu rooki.fit-palveluun</h1>
-        <p>Sinulle on luotu ${payload.role === "coach" ? "valmentajan" : "treenaajan"} kutsu rooki.fit-palveluun.</p>
-        <p><a href="${inviteUrl}" style="display:inline-block;background:#09111d;color:#ffefae;padding:12px 18px;border-radius:12px;text-decoration:none;font-weight:700">Avaa kutsu</a></p>
-        <p>Jos painike ei toimi, avaa tämä linkki selaimessa:</p>
-        <p><a href="${inviteUrl}">${inviteUrl}</a></p>
-      </div>
-    `,
+  const mailResult = await sendInviteEmail({
+    email: normalizedEmail,
+    role: payload.role,
+    token,
+    origin,
   });
 
   if (!mailResult.ok) {
@@ -168,17 +214,94 @@ export async function createInviteAndSendEmail({
 
   return {
     ok: true as const,
-    invite: {
-      id: invite.id,
-      token: invite.token,
-      email: invite.email,
-      role: invite.role,
-      invitedBy: invite.invited_by,
-      coachId: invite.coach_id,
-      status: invite.status,
-      createdAt: invite.created_at,
-      expiresAt: invite.expires_at,
-    },
+    invite: mapStoredInviteRecord(invite),
+  };
+}
+
+export async function resendInviteEmail({
+  requester,
+  inviteId,
+  origin,
+}: {
+  requester: RequesterProfile;
+  inviteId: string;
+  origin: string;
+}) {
+  const admin = createSupabaseAdminClient();
+  if (!admin) {
+    return { ok: false as const, message: "Supabase admin -yhteys puuttuu. Tarkista service role -avain." };
+  }
+
+  if (requester.role !== "admin" && requester.role !== "coach") {
+    return { ok: false as const, message: "Vain admin tai valmentaja voi lähettää kutsun uudelleen." };
+  }
+
+  const { data: invite, error: inviteError } = await admin
+    .from("invites")
+    .select("id, token, email, role, invited_by, coach_id, status, created_at, expires_at")
+    .eq("id", inviteId)
+    .maybeSingle<StoredInviteRecord>();
+
+  if (inviteError || !invite) {
+    return { ok: false as const, message: "Kutsua ei löytynyt." };
+  }
+
+  if (invite.status !== "pending") {
+    return { ok: false as const, message: "Vain avoimen kutsun voi lähettää uudelleen." };
+  }
+
+  if (requester.role === "coach" && invite.invited_by !== requester.id) {
+    return { ok: false as const, message: "Valmentaja voi lähettää uudelleen vain omat kutsunsa." };
+  }
+
+  const { data: existingProfile } = await admin
+    .from("profiles")
+    .select("id, status")
+    .ilike("email", invite.email)
+    .maybeSingle();
+
+  if (existingProfile?.status === "active") {
+    return { ok: false as const, message: "Tällä sähköpostilla on jo aktiivinen käyttäjätili." };
+  }
+
+  const nextToken = createSecureToken();
+  const nextExpiresAt = addDaysIso(new Date().toISOString(), INVITE_EXPIRY_DAYS);
+
+  const { data: updatedInvite, error: updateError } = await admin
+    .from("invites")
+    .update({
+      token: nextToken,
+      expires_at: nextExpiresAt,
+    })
+    .eq("id", invite.id)
+    .select("id, token, email, role, invited_by, coach_id, status, created_at, expires_at")
+    .single<StoredInviteRecord>();
+
+  if (updateError || !updatedInvite) {
+    return { ok: false as const, message: "Kutsun uudelleenlähetys epäonnistui." };
+  }
+
+  const mailResult = await sendInviteEmail({
+    email: updatedInvite.email,
+    role: updatedInvite.role,
+    token: updatedInvite.token,
+    origin,
+  });
+
+  if (!mailResult.ok) {
+    await admin
+      .from("invites")
+      .update({
+        token: invite.token,
+        expires_at: invite.expires_at,
+      })
+      .eq("id", invite.id);
+    return { ok: false as const, message: mailResult.message };
+  }
+
+  return {
+    ok: true as const,
+    invite: mapStoredInviteRecord(updatedInvite),
   };
 }
 

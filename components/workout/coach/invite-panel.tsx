@@ -1,6 +1,7 @@
 "use client";
 
 import { zodResolver } from "@hookform/resolvers/zod";
+import Link from "next/link";
 import { useId, useState } from "react";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
@@ -14,10 +15,13 @@ import { useAppState } from "@/providers/app-state-provider";
 import { inviteSchema } from "@/components/workout/schemas";
 
 export function CoachInvitePanel() {
-  const { currentUser, createInvite, getCoachAthletes, state } = useAppState();
+  const { currentUser, createInvite, getCoachAthletes, resendInvite, state } = useAppState();
   const formId = useId();
   const [inviteMessage, setInviteMessage] = useState<string>("");
+  const [resendMessage, setResendMessage] = useState<string>("");
+  const [resendingInviteId, setResendingInviteId] = useState<string | null>(null);
   const athletes = currentUser ? getCoachAthletes(currentUser.id) : [];
+  const pendingInvites = state.invites.filter((invite) => invite.status === "pending" && invite.invitedBy === currentUser?.id);
   const form = useForm<z.infer<typeof inviteSchema>>({
     resolver: zodResolver(inviteSchema),
     defaultValues: {
@@ -43,6 +47,7 @@ export function CoachInvitePanel() {
               coachId: currentUser?.id,
             });
             setInviteMessage(result.ok ? `Kutsu lähetettiin osoitteeseen ${values.email}.` : result.message);
+            setResendMessage("");
             if (result.ok) {
               form.reset({ email: "", role: "athlete", coachId: currentUser?.id });
             }
@@ -69,32 +74,87 @@ export function CoachInvitePanel() {
         </form>
       </Card>
 
-      <Card>
-        <CardTitle>Oma rosteri</CardTitle>
-        <div className="mt-5 grid gap-3">
-          {athletes.map((athlete) => (
-            <div key={athlete.id} className="rounded-xl border-2 border-[var(--border)] bg-[var(--surface-2)] p-5">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="font-medium text-[var(--text)]">{athlete.fullName}</p>
-                  <p className="text-sm text-[var(--text-muted)]">{athlete.email}</p>
+      <div className="grid gap-6">
+        <Card>
+          <CardTitle>Avoimet kutsut</CardTitle>
+          <CardDescription className="mt-2">
+            Jos kutsu luotiin jo aiemmin, voit lähettää sen tästä uudelleen samaan osoitteeseen.
+          </CardDescription>
+          <p
+            aria-live="polite"
+            className={`mt-4 min-h-5 text-sm ${resendMessage.includes("lähetettiin") ? "text-[var(--success)]" : "text-[var(--danger)]"}`}
+          >
+            {resendMessage}
+          </p>
+          <div className="mt-4 grid gap-3">
+            {pendingInvites.length === 0 ? (
+              <p className="rounded-xl border-2 border-[var(--border)] bg-[var(--surface-2)] px-4 py-3 text-sm text-[var(--text-muted)]">
+                Avoimia kutsuja ei ole tällä hetkellä.
+              </p>
+            ) : (
+              pendingInvites.map((invite) => (
+                <div key={invite.id} className="rounded-xl border-2 border-[var(--border)] bg-[var(--surface-2)] p-5">
+                  <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+                    <div>
+                      <p className="font-medium text-[var(--text)]">{invite.email}</p>
+                      <p className="mt-1 text-sm text-[var(--text-muted)]">Treenaajakutsu on avoinna.</p>
+                    </div>
+                    <div className="flex flex-wrap gap-2">
+                      <Link
+                        className="inline-flex items-center rounded-xl border border-[var(--border)] px-4 py-2.5 text-sm font-semibold text-[var(--text-muted)] transition hover:border-[var(--border-strong)] hover:bg-[var(--surface)] hover:text-[var(--text)]"
+                        href={`/invite/${invite.token}`}
+                      >
+                        Avaa kutsu
+                      </Link>
+                      <Button
+                        type="button"
+                        variant="secondary"
+                        className="text-sm"
+                        disabled={resendingInviteId === invite.id}
+                        onClick={async () => {
+                          setResendingInviteId(invite.id);
+                          const result = await resendInvite(invite.id);
+                          setResendMessage(result.ok ? `Kutsu lähetettiin uudelleen osoitteeseen ${invite.email}.` : result.message);
+                          setResendingInviteId(null);
+                        }}
+                      >
+                        {resendingInviteId === invite.id ? "Lähetetään..." : "Lähetä uudelleen"}
+                      </Button>
+                    </div>
+                  </div>
                 </div>
-                <Badge>
-                  {
-                    state.scheduledWorkouts.filter(
-                      (workout) =>
-                        workout.coachId === currentUser?.id &&
-                        workout.athleteId === athlete.id &&
-                        workout.status !== "completed",
-                    ).length
-                  }{" "}
-                  avointa
-                </Badge>
+              ))
+            )}
+          </div>
+        </Card>
+
+        <Card>
+          <CardTitle>Oma rosteri</CardTitle>
+          <div className="mt-5 grid gap-3">
+            {athletes.map((athlete) => (
+              <div key={athlete.id} className="rounded-xl border-2 border-[var(--border)] bg-[var(--surface-2)] p-5">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="font-medium text-[var(--text)]">{athlete.fullName}</p>
+                    <p className="text-sm text-[var(--text-muted)]">{athlete.email}</p>
+                  </div>
+                  <Badge>
+                    {
+                      state.scheduledWorkouts.filter(
+                        (workout) =>
+                          workout.coachId === currentUser?.id &&
+                          workout.athleteId === athlete.id &&
+                          workout.status !== "completed",
+                      ).length
+                    }{" "}
+                    avointa
+                  </Badge>
+                </div>
               </div>
-            </div>
-          ))}
-        </div>
-      </Card>
+            ))}
+          </div>
+        </Card>
+      </div>
     </div>
   );
 }

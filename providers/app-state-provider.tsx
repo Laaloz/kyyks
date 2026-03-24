@@ -21,14 +21,16 @@ import {
   updateSessionSet as domainUpdateSessionSet,
 } from "@/lib/domain";
 import {
+  addDaysIso,
   addMinutesIso,
   createSecureToken,
   hashToken,
+  INVITE_EXPIRY_DAYS,
   isTimestampExpired,
   RESET_TOKEN_EXPIRY_MINUTES,
 } from "@/lib/auth-tokens";
 import { defaultGlobalExercises } from "@/lib/demo-data";
-import { canActAsCoach, getDashboardViewsForRole, getDefaultDashboardView, isAdminRole } from "@/lib/role-access";
+import { canActAsCoach, canResendInvite, getDashboardViewsForRole, getDefaultDashboardView, isAdminRole } from "@/lib/role-access";
 import { createSupabaseBrowserClient } from "@/lib/supabase/client";
 import type {
   AppState,
@@ -647,6 +649,7 @@ interface AppStateContextValue {
   completePasswordReset: (token: string, nextPassword: string) => Promise<ActionResult>;
   adminDeleteUser: (userId: string) => ActionResult;
   createInvite: (input: InviteInput) => Promise<ActionResult>;
+  resendInvite: (inviteId: string) => Promise<ActionResult>;
   acceptInvite: (token: string, fullName: string, password: string) => Promise<LoginResult>;
   createTemplate: (input: TemplateBuilderInput) => ActionResult;
   createProgram: (input: ProgramBuilderInput) => ActionResult;
@@ -1662,6 +1665,75 @@ export function AppStateProvider({ children }: PropsWithChildren) {
             invites: [invite, ...previous.invites],
           };
         });
+
+        return { ok: true };
+      },
+      async resendInvite(inviteId) {
+        if (!currentUser) {
+          return { ok: false, message: "Kirjaudu sisään ennen kutsun uudelleenlähetystä." };
+        }
+
+        const invite = state.invites.find((item) => item.id === inviteId);
+        if (!invite) {
+          return { ok: false, message: "Kutsua ei löytynyt." };
+        }
+
+        if (!canResendInvite(currentUser, invite)) {
+          return { ok: false, message: "Sinulla ei ole oikeutta lähettää tätä kutsua uudelleen." };
+        }
+
+        if (supabase) {
+          const response = await fetch(`/api/invites/${encodeURIComponent(inviteId)}/resend`, {
+            method: "POST",
+          });
+          const payload = (await response.json().catch(() => null)) as {
+            message?: string;
+            invite?: {
+              id: string;
+              token: string;
+              email: string;
+              role: "coach" | "athlete";
+              invitedBy: string;
+              coachId?: string | null;
+              status: "pending" | "accepted";
+              createdAt: string;
+              expiresAt: string;
+            };
+          } | null;
+
+          if (!response.ok || !payload?.invite) {
+            return { ok: false, message: payload?.message ?? "Kutsun uudelleenlähetys epäonnistui." };
+          }
+
+          const refreshedInvite = {
+            ...payload.invite,
+            coachId: payload.invite.coachId ?? undefined,
+          };
+
+          setState((previous) => ({
+            ...previous,
+            invites: previous.invites.map((item) => (item.id === refreshedInvite.id ? refreshedInvite : item)),
+          }));
+
+          return { ok: true };
+        }
+
+        const now = new Date().toISOString();
+        const nextToken = createSecureToken();
+        const nextExpiresAt = addDaysIso(now, INVITE_EXPIRY_DAYS);
+
+        setState((previous) => ({
+          ...previous,
+          invites: previous.invites.map((item) =>
+            item.id === inviteId
+              ? {
+                  ...item,
+                  token: nextToken,
+                  expiresAt: nextExpiresAt,
+                }
+              : item,
+          ),
+        }));
 
         return { ok: true };
       },
