@@ -26,5 +26,5 @@ export async function POST(request: Request, context: { params: Promise<{ token:
     return NextResponse.json({ message: result.message }, { status: 400 });
   }
 
-  return NextResponse.json({ email: result.email });
+  return NextResponse.json({ email: result.email, message: "message" in result ? result.message : undefined });
 }

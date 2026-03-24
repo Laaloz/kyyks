@@ -61,6 +61,9 @@ export function UserSettingsPanel() {
   const [selectedManagedCoachIds, setSelectedManagedCoachIds] = useState<string[]>([]);
   const [isSavingRole, setIsSavingRole] = useState(false);
   const [isSavingCoaches, setIsSavingCoaches] = useState(false);
+  const [isSendingOwnPasswordReset, setIsSendingOwnPasswordReset] = useState(false);
+  const [isSendingManagedPasswordReset, setIsSendingManagedPasswordReset] = useState(false);
+  const [isDeletingManagedUser, setIsDeletingManagedUser] = useState(false);
 
   const form = useForm<z.input<typeof userSettingsSchema>, unknown, z.output<typeof userSettingsSchema>>({
     resolver: zodResolver(userSettingsSchema),
@@ -288,9 +291,16 @@ export function UserSettingsPanel() {
             <Button
               type="button"
               variant="secondary"
+              loading={isSendingOwnPasswordReset}
+              loadingText="Lähetetään nollauslinkkiä..."
               onClick={async () => {
-                const result = await requestCurrentUserPasswordReset();
-                setPasswordResetMessage(result.message);
+                setIsSendingOwnPasswordReset(true);
+                try {
+                  const result = await requestCurrentUserPasswordReset();
+                  setPasswordResetMessage(result.message);
+                } finally {
+                  setIsSendingOwnPasswordReset(false);
+                }
               }}
             >
               <KeyRound className="mr-2 size-4" />
@@ -551,10 +561,17 @@ export function UserSettingsPanel() {
                         type="button"
                         variant="secondary"
                         disabled={selectedManagedUser.status !== "active"}
+                        loading={isSendingManagedPasswordReset}
+                        loadingText="Lähetetään nollauslinkkiä..."
                         onClick={async () => {
-                          const result = await adminSendPasswordResetEmail(selectedManagedUser.id);
-                          setAdminMessage(result.message);
-                          setPreviewResetUrl(result.ok ? (result.previewUrl ?? "") : "");
+                          setIsSendingManagedPasswordReset(true);
+                          try {
+                            const result = await adminSendPasswordResetEmail(selectedManagedUser.id);
+                            setAdminMessage(result.message);
+                            setPreviewResetUrl(result.ok ? (result.previewUrl ?? "") : "");
+                          } finally {
+                            setIsSendingManagedPasswordReset(false);
+                          }
                         }}
                       >
                         <Mail className="mr-2 size-4" />
@@ -568,6 +585,7 @@ export function UserSettingsPanel() {
                         <div className="absolute left-0 top-[calc(100%+0.5rem)] z-10 min-w-52 rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-2 shadow-[0_18px_45px_-24px_var(--shadow)]">
                           <button
                             type="button"
+                            disabled={isDeletingManagedUser}
                             className="flex w-full items-center rounded-xl px-3 py-2 text-left text-sm font-semibold text-[var(--danger)] transition hover:bg-[var(--surface-2)]"
                             onClick={async () => {
                               const confirmed = window.confirm(
@@ -577,15 +595,32 @@ export function UserSettingsPanel() {
                                 return;
                               }
 
-                              const result = await adminDeleteUser(selectedManagedUser.id);
-                              setAdminMessage(result.ok ? "Käyttäjä poistettiin turvallisesti." : result.message);
-                              if (result.ok) {
-                                setPreviewResetUrl("");
+                              setIsDeletingManagedUser(true);
+                              try {
+                                const result = await adminDeleteUser(selectedManagedUser.id);
+                                setAdminMessage(result.ok ? "Käyttäjä poistettiin turvallisesti." : result.message);
+                                if (result.ok) {
+                                  setPreviewResetUrl("");
+                                }
+                              } finally {
+                                setIsDeletingManagedUser(false);
                               }
                             }}
                           >
-                            <ShieldAlert className="mr-2 size-4" />
-                            Poista käyttäjä
+                            {isDeletingManagedUser ? (
+                              <>
+                                <span
+                                  aria-hidden="true"
+                                  className="mr-2 size-4 animate-spin rounded-full border-2 border-current border-r-transparent"
+                                />
+                                Poistetaan käyttäjää...
+                              </>
+                            ) : (
+                              <>
+                                <ShieldAlert className="mr-2 size-4" />
+                                Poista käyttäjä
+                              </>
+                            )}
                           </button>
                         </div>
                       </details>

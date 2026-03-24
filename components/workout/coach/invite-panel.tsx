@@ -33,6 +33,7 @@ export function CoachInvitePanel() {
       coachId: currentUser?.id ?? "",
     },
   });
+  const isSendingInvite = form.formState.isSubmitting;
 
   return (
     <div className="grid gap-6 xl:grid-cols-[0.92fr_1.08fr]">
@@ -71,7 +72,12 @@ export function CoachInvitePanel() {
           >
             {inviteMessage}
           </p>
-          <Button type="submit" className="w-full">
+          <Button
+            type="submit"
+            className="w-full"
+            loading={isSendingInvite}
+            loadingText="Lähetetään kutsua..."
+          >
             Lähetä kutsu treenaajalle
           </Button>
         </form>
@@ -116,15 +122,19 @@ export function CoachInvitePanel() {
                         type="button"
                         variant="secondary"
                         className="text-sm"
-                        disabled={resendingInviteId === invite.id}
+                        loading={resendingInviteId === invite.id}
+                        loadingText="Lähetetään..."
                         onClick={async () => {
                           setResendingInviteId(invite.id);
-                          const result = await resendInvite(invite.id);
-                          setResendMessage(result.ok ? `Kutsu lähetettiin uudelleen osoitteeseen ${invite.email}.` : result.message);
-                          setResendingInviteId(null);
+                          try {
+                            const result = await resendInvite(invite.id);
+                            setResendMessage(result.ok ? `Kutsu lähetettiin uudelleen osoitteeseen ${invite.email}.` : result.message);
+                          } finally {
+                            setResendingInviteId(null);
+                          }
                         }}
                       >
-                        {resendingInviteId === invite.id ? "Lähetetään..." : "Lähetä uudelleen"}
+                        Lähetä uudelleen
                       </Button>
                     </div>
                   </div>

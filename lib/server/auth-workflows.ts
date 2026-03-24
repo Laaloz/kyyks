@@ -559,7 +559,43 @@ export async function acceptInviteOnServer({
     .maybeSingle();
 
   if (existingProfile?.status === "active") {
-    return { ok: false as const, message: "Tällä sähköpostilla on jo aktiivinen käyttäjätili." };
+    const now = new Date().toISOString();
+
+    if (invite.role === "athlete" && invite.coach_id) {
+      const { data: existingAssignment } = await admin
+        .from("coach_athlete_assignments")
+        .select("id")
+        .eq("coach_id", invite.coach_id)
+        .eq("athlete_id", existingProfile.id)
+        .eq("active", true)
+        .maybeSingle();
+
+      if (!existingAssignment) {
+        const { error: assignmentError } = await admin
+          .from("coach_athlete_assignments")
+          .insert({
+            coach_id: invite.coach_id,
+            athlete_id: existingProfile.id,
+            active: true,
+            created_at: now,
+          });
+
+        if (assignmentError) {
+          return { ok: false as const, message: "Käyttäjätili löytyi, mutta valmentajasuhdetta ei voitu viimeistellä." };
+        }
+      }
+    }
+
+    await admin
+      .from("invites")
+      .update({ status: "accepted" })
+      .eq("id", invite.id);
+
+    return {
+      ok: true as const,
+      email: invite.email,
+      message: "Tili oli jo aktivoitu. Kirjaudu sisään samalla sähköpostilla ja salasanalla.",
+    };
   }
 
   const { data: createdUser, error: createUserError } = await admin.auth.admin.createUser({
@@ -625,6 +661,7 @@ export async function acceptInviteOnServer({
   return {
     ok: true as const,
     email: invite.email,
+    message: "Tunnus aktivoitiin.",
   };
 }
 

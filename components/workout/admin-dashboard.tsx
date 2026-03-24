@@ -165,6 +165,7 @@ export function AdminDashboard({ view }: { view: WorkspaceView }) {
       coachId: coaches[0]?.id ?? "",
     },
   });
+  const isSendingInvite = form.formState.isSubmitting;
 
   const selectedRole = form.watch("role");
 
@@ -445,15 +446,19 @@ export function AdminDashboard({ view }: { view: WorkspaceView }) {
                                 type="button"
                                 variant="secondary"
                                 className="px-3 py-2 text-sm"
-                                disabled={resendingInviteId === invite.id}
+                                loading={resendingInviteId === invite.id}
+                                loadingText="Lähetetään..."
                                 onClick={async () => {
                                   setResendingInviteId(invite.id);
-                                  const result = await resendInvite(invite.id);
-                                  setResendMessage(result.ok ? `Kutsu lähetettiin uudelleen osoitteeseen ${invite.email}.` : result.message);
-                                  setResendingInviteId(null);
+                                  try {
+                                    const result = await resendInvite(invite.id);
+                                    setResendMessage(result.ok ? `Kutsu lähetettiin uudelleen osoitteeseen ${invite.email}.` : result.message);
+                                  } finally {
+                                    setResendingInviteId(null);
+                                  }
                                 }}
                               >
-                                {resendingInviteId === invite.id ? "Lähetetään..." : "Lähetä uudelleen"}
+                                Lähetä uudelleen
                               </Button>
                             ) : null}
                           </div>
@@ -581,7 +586,12 @@ export function AdminDashboard({ view }: { view: WorkspaceView }) {
               >
                 {inviteMessage}
               </p>
-              <Button type="submit" className="w-full">
+              <Button
+                type="submit"
+                className="w-full"
+                loading={isSendingInvite}
+                loadingText="Lähetetään kutsua..."
+              >
                 Lähetä kutsu
               </Button>
             </form>
@@ -634,15 +644,19 @@ export function AdminDashboard({ view }: { view: WorkspaceView }) {
                               type="button"
                               variant="secondary"
                               className="px-3 py-2 text-sm"
-                              disabled={resendingInviteId === invite.id}
+                              loading={resendingInviteId === invite.id}
+                              loadingText="Lähetetään..."
                               onClick={async () => {
                                 setResendingInviteId(invite.id);
-                                const result = await resendInvite(invite.id);
-                                setResendMessage(result.ok ? `Kutsu lähetettiin uudelleen osoitteeseen ${invite.email}.` : result.message);
-                                setResendingInviteId(null);
+                                try {
+                                  const result = await resendInvite(invite.id);
+                                  setResendMessage(result.ok ? `Kutsu lähetettiin uudelleen osoitteeseen ${invite.email}.` : result.message);
+                                } finally {
+                                  setResendingInviteId(null);
+                                }
                               }}
                             >
-                              {resendingInviteId === invite.id ? "Lähetetään..." : "Lähetä uudelleen"}
+                              Lähetä uudelleen
                             </Button>
                           ) : null}
                         </div>

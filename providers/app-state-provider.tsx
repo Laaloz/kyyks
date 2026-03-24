@@ -1022,6 +1022,26 @@ async function fetchSupabaseProfile(supabase: NonNullable<ReturnType<typeof crea
   return data as SupabaseProfileRecord | null;
 }
 
+async function fetchSupabaseProfileWithRetry(
+  supabase: NonNullable<ReturnType<typeof createSupabaseBrowserClient>>,
+  userId: string,
+  attempts = 3,
+  delayMs = 250,
+) {
+  for (let attempt = 0; attempt < attempts; attempt += 1) {
+    const profile = await fetchSupabaseProfile(supabase, userId);
+    if (profile) {
+      return profile;
+    }
+
+    if (attempt < attempts - 1) {
+      await new Promise((resolve) => window.setTimeout(resolve, delayMs));
+    }
+  }
+
+  return null;
+}
+
 function getSupabaseLoginErrorMessage(message: string) {
   const normalized = message.toLowerCase();
   if (normalized.includes("invalid login credentials")) {
@@ -1233,7 +1253,7 @@ export function AppStateProvider({ children }: PropsWithChildren) {
         return;
       }
 
-      const profile = await fetchSupabaseProfile(supabase, authUser.id);
+      const profile = await fetchSupabaseProfileWithRetry(supabase, authUser.id);
       if (!active) {
         return;
       }
@@ -2443,14 +2463,27 @@ export function AppStateProvider({ children }: PropsWithChildren) {
 
           const loginResult = await signInWithSupabasePassword(acceptedEmail, password, options);
           if (loginResult.ok) {
-            return loginResult;
+            return {
+              ok: true,
+              message: payload?.message ?? loginResult.message,
+            };
           }
 
           if (shouldTreatInviteActivationLoginFailureAsPartialSuccess(loginResult.message)) {
             return {
               ok: true,
               message:
+                payload?.message ??
                 "Tunnus aktivoitiin, mutta automaattinen kirjautuminen pysähtyi captcha-tarkistukseen. Kirjaudu etusivulla sisään samalla sähköpostilla ja salasanalla.",
+            };
+          }
+
+          if (loginResult.message === "Käyttäjälle ei löytynyt profiilia tai käyttöoikeutta tähän sovellukseen.") {
+            return {
+              ok: true,
+              message:
+                payload?.message ??
+                "Tili aktivoitiin, mutta työtila ei auennut heti. Kirjaudu etusivulla sisään samalla sähköpostilla ja salasanalla.",
             };
           }
 
