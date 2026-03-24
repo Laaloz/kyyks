@@ -6,6 +6,7 @@ import { createSupabaseServerClient } from "@/lib/supabase/server";
 
 const requestSchema = z.object({
   userId: z.string().optional(),
+  email: z.string().email().optional(),
 });
 
 export async function POST(request: Request) {
@@ -49,6 +50,7 @@ export async function POST(request: Request) {
   const result = await createPasswordResetRequestAndSendEmail({
     requester,
     targetUserId,
+    targetEmail: parsed.data.email,
     origin,
     mode,
   });

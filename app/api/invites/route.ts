@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 
-import { createInviteAndSendEmail } from "@/lib/server/auth-workflows";
+import { createInviteAndSendEmail, listVisiblePendingInvites } from "@/lib/server/auth-workflows";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 
 const requestSchema = z.object({
@@ -10,16 +10,10 @@ const requestSchema = z.object({
   coachId: z.string().optional(),
 });
 
-export async function POST(request: Request) {
+async function getRequesterProfile() {
   const supabase = await createSupabaseServerClient();
   if (!supabase) {
-    return NextResponse.json({ message: "Supabase ei ole käytössä tässä ympäristössä." }, { status: 503 });
-  }
-
-  const body = await request.json().catch(() => null);
-  const parsed = requestSchema.safeParse(body);
-  if (!parsed.success) {
-    return NextResponse.json({ message: "Virheellinen kutsupyyntö." }, { status: 400 });
+    return { error: NextResponse.json({ message: "Supabase ei ole käytössä tässä ympäristössä." }, { status: 503 }) };
   }
 
   const {
@@ -27,7 +21,7 @@ export async function POST(request: Request) {
   } = await supabase.auth.getUser();
 
   if (!user) {
-    return NextResponse.json({ message: "Kirjaudu sisään ennen kutsun luontia." }, { status: 401 });
+    return { error: NextResponse.json({ message: "Kirjaudu sisään ennen kutsujen käyttöä." }, { status: 401 }) };
   }
 
   const { data: requester } = await supabase
@@ -37,12 +31,47 @@ export async function POST(request: Request) {
     .maybeSingle();
 
   if (!requester) {
-    return NextResponse.json({ message: "Käyttäjäprofiilia ei löytynyt." }, { status: 403 });
+    return { error: NextResponse.json({ message: "Käyttäjäprofiilia ei löytynyt." }, { status: 403 }) };
+  }
+
+  return { requester };
+}
+
+export async function GET() {
+  const requesterResult = await getRequesterProfile();
+  if ("error" in requesterResult) {
+    return requesterResult.error;
+  }
+
+  const result = await listVisiblePendingInvites({
+    requester: requesterResult.requester,
+  });
+
+  if (!result.ok) {
+    return NextResponse.json({ message: result.message }, { status: 400 });
+  }
+
+  return NextResponse.json({
+    invites: result.invites,
+    activeEmails: result.activeEmails,
+  });
+}
+
+export async function POST(request: Request) {
+  const requesterResult = await getRequesterProfile();
+  if ("error" in requesterResult) {
+    return requesterResult.error;
+  }
+
+  const body = await request.json().catch(() => null);
+  const parsed = requestSchema.safeParse(body);
+  if (!parsed.success) {
+    return NextResponse.json({ message: "Virheellinen kutsupyyntö." }, { status: 400 });
   }
 
   const origin = new URL(request.url).origin;
   const result = await createInviteAndSendEmail({
-    requester,
+    requester: requesterResult.requester,
     payload: parsed.data,
     origin,
   });

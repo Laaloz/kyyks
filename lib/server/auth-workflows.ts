@@ -305,14 +305,73 @@ export async function resendInviteEmail({
   };
 }
 
+export async function listVisiblePendingInvites({
+  requester,
+}: {
+  requester: RequesterProfile;
+}) {
+  const admin = createSupabaseAdminClient();
+  if (!admin) {
+    return { ok: false as const, message: "Supabase admin -yhteys puuttuu. Tarkista service role -avain." };
+  }
+
+  if (requester.role !== "admin" && requester.role !== "coach") {
+    return { ok: false as const, message: "Vain admin tai valmentaja voi tarkastella kutsuja." };
+  }
+
+  let query = admin
+    .from("invites")
+    .select("id, token, email, role, invited_by, coach_id, status, created_at, expires_at")
+    .eq("status", "pending")
+    .order("created_at", { ascending: false });
+
+  if (requester.role === "coach") {
+    query = query.eq("invited_by", requester.id);
+  }
+
+  const { data: invites, error: invitesError } = await query.returns<StoredInviteRecord[]>();
+
+  if (invitesError) {
+    return { ok: false as const, message: "Kutsujen lataus epäonnistui." };
+  }
+
+  const normalizedEmails = Array.from(new Set((invites ?? []).map((invite) => invite.email.trim().toLowerCase())));
+
+  if (normalizedEmails.length === 0) {
+    return {
+      ok: true as const,
+      invites: [] as Array<ReturnType<typeof mapStoredInviteRecord>>,
+      activeEmails: [] as string[],
+    };
+  }
+
+  const { data: profiles, error: profilesError } = await admin
+    .from("profiles")
+    .select("email")
+    .eq("status", "active")
+    .in("email", normalizedEmails);
+
+  if (profilesError) {
+    return { ok: false as const, message: "Kutsujen status-synkronointi epäonnistui." };
+  }
+
+  return {
+    ok: true as const,
+    invites: (invites ?? []).map(mapStoredInviteRecord),
+    activeEmails: Array.from(new Set((profiles ?? []).map((profile) => profile.email.trim().toLowerCase()))),
+  };
+}
+
 export async function createPasswordResetRequestAndSendEmail({
   requester,
   targetUserId,
+  targetEmail,
   origin,
   mode,
 }: {
   requester: RequesterProfile;
   targetUserId: string;
+  targetEmail?: string;
   origin: string;
   mode: "self_service" | "admin";
 }) {
@@ -321,11 +380,22 @@ export async function createPasswordResetRequestAndSendEmail({
     return { ok: false as const, message: "Supabase admin -yhteys puuttuu. Tarkista service role -avain." };
   }
 
-  const { data: targetUser, error: targetError } = await admin
+  let { data: targetUser, error: targetError } = await admin
     .from("profiles")
     .select("id, email, status")
     .eq("id", targetUserId)
     .maybeSingle();
+
+  if ((!targetUser || targetError) && targetEmail) {
+    const lookupByEmail = await admin
+      .from("profiles")
+      .select("id, email, status")
+      .ilike("email", targetEmail)
+      .maybeSingle();
+
+    targetUser = lookupByEmail.data ?? null;
+    targetError = lookupByEmail.error ?? null;
+  }
 
   if (targetError || !targetUser) {
     return { ok: false as const, message: "Käyttäjää ei löytynyt." };

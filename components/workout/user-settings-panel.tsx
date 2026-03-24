@@ -450,8 +450,8 @@ export function UserSettingsPanel() {
                         variant="secondary"
                         className="w-full md:w-auto"
                         disabled={selectedManagedRole === selectedManagedUser.role}
-                        onClick={() => {
-                          const result = adminUpdateUserRole(selectedManagedUser.id, selectedManagedRole);
+                        onClick={async () => {
+                          const result = await adminUpdateUserRole(selectedManagedUser.id, selectedManagedRole);
                           setAdminMessage(
                             result.ok
                               ? `Rooli päivitettiin: ${selectedManagedUser.fullName} on nyt ${roleLabel(selectedManagedRole)}.`
@@ -512,8 +512,11 @@ export function UserSettingsPanel() {
                               (selectedManagedCoachIds.length === selectedManagedAthleteCoachIds.length &&
                                 selectedManagedCoachIds.every((coachId) => selectedManagedAthleteCoachIds.includes(coachId)))
                             }
-                            onClick={() => {
-                              const result = adminAssignAthleteCoaches(selectedManagedUser.id, selectedManagedCoachIds);
+                            onClick={async () => {
+                              const result = await adminAssignAthleteCoaches(
+                                selectedManagedUser.id,
+                                selectedManagedCoachIds,
+                              );
                               setAdminMessage(
                                 "message" in result ? result.message : "Vastuuhenkilöt tallennettiin.",
                               );

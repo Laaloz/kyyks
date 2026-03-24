@@ -587,7 +587,91 @@ function mapSupabaseProfileToUser(profile: SupabaseProfileRecord): UserProfile {
   };
 }
 
-function resolveSupabaseUserForState(
+function replaceUserIdReferences(previous: AppState, sourceUserId: string, targetUserId: string, nextUser: UserProfile) {
+  if (sourceUserId === targetUserId) {
+    return {
+      ...previous,
+      users: previous.users.map((user) =>
+        user.id === sourceUserId
+          ? {
+              ...user,
+              ...nextUser,
+              settings: normalizeUserSettings(nextUser.role, nextUser.settings),
+            }
+          : user,
+      ),
+    };
+  }
+
+  return {
+    ...previous,
+    users: [
+      ...previous.users
+        .filter((user) => user.id !== sourceUserId && user.id !== targetUserId),
+      {
+        ...previous.users.find((user) => user.id === sourceUserId),
+        ...nextUser,
+        id: targetUserId,
+        settings: normalizeUserSettings(nextUser.role, nextUser.settings),
+      },
+    ],
+    bodyMeasurements: previous.bodyMeasurements.map((measurement) =>
+      measurement.userId === sourceUserId ? { ...measurement, userId: targetUserId } : measurement,
+    ),
+    assignments: previous.assignments.map((assignment) => ({
+      ...assignment,
+      coachId: assignment.coachId === sourceUserId ? targetUserId : assignment.coachId,
+      athleteId: assignment.athleteId === sourceUserId ? targetUserId : assignment.athleteId,
+    })),
+    exercises: previous.exercises.map((exercise) =>
+      exercise.coachId === sourceUserId ? { ...exercise, coachId: targetUserId } : exercise,
+    ),
+    templates: previous.templates.map((template) => ({
+      ...template,
+      coachId: template.coachId === sourceUserId ? targetUserId : template.coachId,
+      createdBy: template.createdBy === sourceUserId ? targetUserId : template.createdBy,
+      updatedBy: template.updatedBy === sourceUserId ? targetUserId : template.updatedBy,
+    })),
+    plans: previous.plans.map((plan) => ({
+      ...plan,
+      coachId: plan.coachId === sourceUserId ? targetUserId : plan.coachId,
+      athleteId: plan.athleteId === sourceUserId ? targetUserId : plan.athleteId,
+    })),
+    scheduledWorkouts: previous.scheduledWorkouts.map((workout) => ({
+      ...workout,
+      coachId: workout.coachId === sourceUserId ? targetUserId : workout.coachId,
+      athleteId: workout.athleteId === sourceUserId ? targetUserId : workout.athleteId,
+    })),
+    sessions: previous.sessions.map((session) =>
+      session.athleteId === sourceUserId ? { ...session, athleteId: targetUserId } : session,
+    ),
+    notes: previous.notes.map((note) => ({
+      ...note,
+      athleteId: note.athleteId === sourceUserId ? targetUserId : note.athleteId,
+      coachId: note.coachId === sourceUserId ? targetUserId : note.coachId,
+    })),
+    conversationEntries: previous.conversationEntries.map((entry) => ({
+      ...entry,
+      athleteId: entry.athleteId === sourceUserId ? targetUserId : entry.athleteId,
+      coachId: entry.coachId === sourceUserId ? targetUserId : entry.coachId,
+      authorUserId: entry.authorUserId === sourceUserId ? targetUserId : entry.authorUserId,
+      readByUserIds: entry.readByUserIds.map((userId) => (userId === sourceUserId ? targetUserId : userId)),
+    })),
+    invites: previous.invites.map((invite) => ({
+      ...invite,
+      invitedBy: invite.invitedBy === sourceUserId ? targetUserId : invite.invitedBy,
+      coachId: invite.coachId === sourceUserId ? targetUserId : invite.coachId,
+    })),
+    passwordResetRequests: previous.passwordResetRequests.map((request) => ({
+      ...request,
+      userId: request.userId === sourceUserId ? targetUserId : request.userId,
+      requestedByUserId:
+        request.requestedByUserId === sourceUserId ? targetUserId : request.requestedByUserId,
+    })),
+  };
+}
+
+export function resolveSupabaseUserForState(
   previous: AppState,
   authUser: SupabaseAuthUser,
   profile: SupabaseProfileRecord | null,
@@ -601,25 +685,8 @@ function resolveSupabaseUserForState(
     const mappedUser = mapSupabaseProfileToUser(profile);
     if (existingUser) {
       return {
-        nextState: {
-          ...previous,
-          users: previous.users.map((user) =>
-            user.id === existingUser.id
-              ? {
-                  ...user,
-                  role: mappedUser.role,
-                  fullName: mappedUser.fullName,
-                  email: mappedUser.email,
-                  status: mappedUser.status,
-                  weightKg: mappedUser.weightKg,
-                  waistCm: mappedUser.waistCm,
-                  settings: normalizeUserSettings(mappedUser.role, mappedUser.settings),
-                  updatedAt: mappedUser.updatedAt,
-                }
-              : user,
-          ),
-        },
-        resolvedUserId: existingUser.id,
+        nextState: replaceUserIdReferences(previous, existingUser.id, mappedUser.id, mappedUser),
+        resolvedUserId: mappedUser.id,
       };
     }
 
@@ -642,6 +709,156 @@ function resolveSupabaseUserForState(
   return {
     nextState: previous,
     resolvedUserId: null,
+  };
+}
+
+type SupabaseInviteDirectorySnapshot = {
+  invites: Array<{
+    id: string;
+    token: string;
+    email: string;
+    role: "coach" | "athlete";
+    invitedBy: string;
+    coachId?: string | null;
+    status: "pending" | "accepted";
+    createdAt: string;
+    expiresAt: string;
+  }>;
+  activeEmails: string[];
+};
+
+export function reconcileSupabaseInviteDirectory(
+  previous: AppState,
+  snapshot: SupabaseInviteDirectorySnapshot,
+) {
+  const activeEmails = new Set(snapshot.activeEmails.map((email) => email.trim().toLowerCase()));
+  const serverInvites = snapshot.invites.map((invite) => ({
+    ...invite,
+    coachId: invite.coachId ?? undefined,
+  }));
+  const serverInviteIds = new Set(serverInvites.map((invite) => invite.id));
+  const serverInviteEmails = new Set(serverInvites.map((invite) => invite.email.trim().toLowerCase()));
+
+  return {
+    ...previous,
+    users: previous.users.map((user): UserProfile =>
+      activeEmails.has(user.email.trim().toLowerCase()) && user.status !== "active"
+        ? { ...user, status: "active" as const }
+        : user,
+    ),
+    invites: [
+      ...serverInvites,
+      ...previous.invites.filter((invite) => {
+        const normalizedEmail = invite.email.trim().toLowerCase();
+        if (serverInviteIds.has(invite.id)) {
+          return false;
+        }
+        if (invite.status === "pending" && (activeEmails.has(normalizedEmail) || serverInviteEmails.has(normalizedEmail))) {
+          return false;
+        }
+        return true;
+      }),
+    ],
+  };
+}
+
+function findUserByIdOrEmail(previous: AppState, userId: string, email?: string) {
+  return (
+    previous.users.find((user) => user.id === userId) ??
+    (email ? previous.users.find((user) => user.email.trim().toLowerCase() === email.trim().toLowerCase()) : undefined) ??
+    null
+  );
+}
+
+function applyResolvedUserId(previous: AppState, userId: string, resolvedUserId: string, email?: string) {
+  const targetUser = findUserByIdOrEmail(previous, userId, email);
+  if (!targetUser) {
+    return previous;
+  }
+
+  return replaceUserIdReferences(previous, targetUser.id, resolvedUserId, {
+    ...targetUser,
+    id: resolvedUserId,
+    settings: normalizeUserSettings(targetUser.role, targetUser.settings),
+  });
+}
+
+export function applyAdminRoleUpdate(
+  previous: AppState,
+  userId: string,
+  resolvedUserId: string,
+  email: string | undefined,
+  role: Role,
+  updatedAt: string,
+) {
+  const withResolvedId = applyResolvedUserId(previous, userId, resolvedUserId, email);
+  const targetUser = findUserByIdOrEmail(withResolvedId, resolvedUserId, email);
+  if (!targetUser) {
+    return withResolvedId;
+  }
+
+  return {
+    ...withResolvedId,
+    users: withResolvedId.users.map((user) =>
+      user.id === targetUser.id
+        ? {
+            ...user,
+            role,
+            updatedAt,
+            settings: normalizeUserSettings(role, user.settings),
+          }
+        : user,
+    ),
+    assignments: withResolvedId.assignments.filter((assignment) => {
+      if (role === "admin") {
+        return assignment.coachId !== targetUser.id && assignment.athleteId !== targetUser.id;
+      }
+
+      if (role === "coach") {
+        return assignment.athleteId !== targetUser.id;
+      }
+
+      return assignment.coachId !== targetUser.id;
+    }),
+  };
+}
+
+export function applyAdminCoachAssignmentUpdate(
+  previous: AppState,
+  athleteId: string,
+  resolvedAthleteId: string,
+  athleteEmail: string | undefined,
+  coachIds: string[],
+  createdAt: string,
+  updatedInviteCoachId?: string,
+) {
+  const withResolvedId = applyResolvedUserId(previous, athleteId, resolvedAthleteId, athleteEmail);
+  const athlete = findUserByIdOrEmail(withResolvedId, resolvedAthleteId, athleteEmail);
+  if (!athlete) {
+    return withResolvedId;
+  }
+
+  return {
+    ...withResolvedId,
+    assignments: [
+      ...withResolvedId.assignments.filter(
+        (assignment) => !(assignment.athleteId === athlete.id && assignment.active),
+      ),
+      ...coachIds.map((coachId) => ({
+        id: makeId("assignment"),
+        coachId,
+        athleteId: athlete.id,
+        active: true,
+        createdAt,
+      })),
+    ],
+    invites: withResolvedId.invites.map((invite) =>
+      invite.role === "athlete" &&
+      invite.email.toLowerCase() === athlete.email.toLowerCase() &&
+      invite.status === "pending"
+        ? { ...invite, coachId: updatedInviteCoachId ?? coachIds[0] }
+        : invite,
+    ),
   };
 }
 
@@ -716,8 +933,8 @@ interface AppStateContextValue {
   updateCurrentUserSettings: (input: UserSettingsInput) => ActionResult;
   requestCurrentUserPasswordReset: () => Promise<PasswordResetRequestResult>;
   adminSendPasswordResetEmail: (userId: string) => Promise<PasswordResetRequestResult>;
-  adminUpdateUserRole: (userId: string, role: Role) => ActionResult;
-  adminAssignAthleteCoaches: (athleteId: string, coachIds: string[]) => ActionResult;
+  adminUpdateUserRole: (userId: string, role: Role) => Promise<ActionResult>;
+  adminAssignAthleteCoaches: (athleteId: string, coachIds: string[]) => Promise<ActionResult>;
   completePasswordReset: (token: string, nextPassword: string) => Promise<ActionResult>;
   adminDeleteUser: (userId: string) => Promise<ActionResult>;
   createInvite: (input: InviteInput) => Promise<ActionResult>;
@@ -922,6 +1139,35 @@ export function AppStateProvider({ children }: PropsWithChildren) {
     [authenticatedUserId, impersonatedUserId, state.users],
   );
   const isImpersonating = Boolean(impersonatedUserId);
+
+  useEffect(() => {
+    if (!isHydrated || !supabase || !authenticatedUser || !canActAsCoach(authenticatedUser.role)) {
+      return;
+    }
+
+    let active = true;
+
+    void fetch("/api/invites")
+      .then(async (response) => {
+        const payload = (await response.json().catch(() => null)) as SupabaseInviteDirectorySnapshot | { message?: string } | null;
+        if (!response.ok || !payload || !("invites" in payload) || !("activeEmails" in payload)) {
+          return;
+        }
+
+        if (!active) {
+          return;
+        }
+
+        setState((previous) => reconcileSupabaseInviteDirectory(previous, payload));
+      })
+      .catch(() => {
+        // Keep local state as-is if invite sync fails.
+      });
+
+    return () => {
+      active = false;
+    };
+  }, [authenticatedUser, isHydrated, supabase]);
 
   useEffect(() => {
     if (authenticatedUserId && !authenticatedUser) {
@@ -1197,13 +1443,15 @@ export function AppStateProvider({ children }: PropsWithChildren) {
           return { ok: false, message: "Vain admin voi lähettää salasanan nollausviestejä." };
         }
 
+        const targetUser = state.users.find((user) => user.id === userId);
+
         if (supabase) {
           const response = await fetch("/api/password-reset", {
             method: "POST",
             headers: {
               "Content-Type": "application/json",
             },
-            body: JSON.stringify({ userId }),
+            body: JSON.stringify({ userId, email: targetUser?.email }),
           });
           const payload = (await response.json().catch(() => null)) as { message?: string; previewUrl?: string } | null;
           if (!response.ok) {
@@ -1217,7 +1465,6 @@ export function AppStateProvider({ children }: PropsWithChildren) {
           };
         }
 
-        const targetUser = state.users.find((user) => user.id === userId);
         if (!targetUser) {
           return { ok: false, message: "Käyttäjää ei löytynyt." };
         }
@@ -1265,7 +1512,7 @@ export function AppStateProvider({ children }: PropsWithChildren) {
           previewUrl,
         };
       },
-      adminUpdateUserRole(userId, role) {
+      async adminUpdateUserRole(userId, role) {
         if (!currentUser || currentUser.role !== "admin") {
           return { ok: false, message: "Vain admin voi vaihtaa käyttäjän roolia." };
         }
@@ -1281,6 +1528,40 @@ export function AppStateProvider({ children }: PropsWithChildren) {
 
         if (targetUser.role === role) {
           return { ok: true, message: "Rooli oli jo valittuna." };
+        }
+
+        if (supabase) {
+          const response = await fetch(`/api/users/${encodeURIComponent(userId)}`, {
+            method: "PATCH",
+            headers: {
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({
+              email: targetUser.email,
+              role,
+            }),
+          });
+          const payload = (await response.json().catch(() => null)) as {
+            message?: string;
+            resolvedUserId?: string;
+            updatedAt?: string;
+          } | null;
+          if (!response.ok) {
+            return { ok: false, message: payload?.message ?? "Roolin päivitys epäonnistui." };
+          }
+
+          const updatedAt = payload?.updatedAt ?? new Date().toISOString();
+          const resolvedUserId = payload?.resolvedUserId ?? userId;
+          setState((previous) =>
+            applyAdminRoleUpdate(previous, userId, resolvedUserId, targetUser.email, role, updatedAt),
+          );
+
+          return {
+            ok: true,
+            message:
+              payload?.message ??
+              `Rooli päivitettiin: ${targetUser.fullName} on nyt ${role === "admin" ? "admin" : role === "coach" ? "valmentaja" : "treenaaja"}.`,
+          };
         }
 
         if (targetUser.role === "admin" && role !== "admin") {
@@ -1341,7 +1622,7 @@ export function AppStateProvider({ children }: PropsWithChildren) {
           message: `Rooli päivitettiin: ${targetUser.fullName} on nyt ${role === "admin" ? "admin" : role === "coach" ? "valmentaja" : "treenaaja"}.`,
         };
       },
-      adminAssignAthleteCoaches(athleteId, coachIds) {
+      async adminAssignAthleteCoaches(athleteId, coachIds) {
         if (!currentUser || !isAdminRole(currentUser.role)) {
           return { ok: false, message: "Vain admin voi vaihtaa treenaajan valmentajat." };
         }
@@ -1361,6 +1642,50 @@ export function AppStateProvider({ children }: PropsWithChildren) {
         );
         if (selectedCoaches.some((coach) => !coach)) {
           return { ok: false, message: "Yksi tai useampi valituista valmentajista ei ole kelvollinen." };
+        }
+
+        if (supabase) {
+          const response = await fetch(`/api/users/${encodeURIComponent(athleteId)}/coaches`, {
+            method: "PUT",
+            headers: {
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({
+              email: athlete.email,
+              coachIds: uniqueCoachIds,
+            }),
+          });
+          const payload = (await response.json().catch(() => null)) as {
+            message?: string;
+            resolvedAthleteId?: string;
+            coachIds?: string[];
+            updatedInviteCoachId?: string;
+            createdAt?: string;
+          } | null;
+          if (!response.ok) {
+            return { ok: false, message: payload?.message ?? "Vastuuhenkilöiden päivitys epäonnistui." };
+          }
+
+          const createdAt = payload?.createdAt ?? new Date().toISOString();
+          const resolvedAthleteId = payload?.resolvedAthleteId ?? athleteId;
+          const nextCoachIds = payload?.coachIds ?? uniqueCoachIds;
+          setState((previous) =>
+            applyAdminCoachAssignmentUpdate(
+              previous,
+              athleteId,
+              resolvedAthleteId,
+              athlete.email,
+              nextCoachIds,
+              createdAt,
+              payload?.updatedInviteCoachId,
+            ),
+          );
+
+          const coachNames = selectedCoaches
+            .filter((coach): coach is UserProfile => Boolean(coach))
+            .map((coach) => coach.fullName)
+            .join(", ");
+          return { ok: true, message: payload?.message ?? `Valmentajat päivitettiin: ${coachNames}.` };
         }
 
         const activeAssignments = state.assignments.filter(
