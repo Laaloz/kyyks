@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 
+import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 
 const settingsSchema = z.object({
@@ -34,8 +35,11 @@ export async function PATCH(request: Request) {
   }
 
   const timestamp = new Date().toISOString();
+  const adminSupabase = createSupabaseAdminClient();
 
-  const { error } = await supabase
+  const clientForUpdate = adminSupabase ?? supabase;
+
+  const { error } = await clientForUpdate
     .from("profiles")
     .update({
       full_name: parsed.data.fullName,
@@ -47,7 +51,10 @@ export async function PATCH(request: Request) {
     .eq("id", user.id);
 
   if (error) {
-    return NextResponse.json({ message: "Asetusten tallennus epäonnistui." }, { status: 400 });
+    return NextResponse.json(
+      { message: error.message || "Asetusten tallennus epäonnistui." },
+      { status: 400 },
+    );
   }
 
   return NextResponse.json({ ok: true });
