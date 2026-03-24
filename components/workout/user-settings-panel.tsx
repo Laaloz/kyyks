@@ -466,7 +466,7 @@ export function UserSettingsPanel() {
                     {selectedManagedUser.role === "athlete" ? (
                       <div className="mt-2 grid gap-3 rounded-xl border border-[var(--border)] bg-[var(--surface)] p-3">
                         <div>
-                          <Label htmlFor="admin-managed-coaches">Valmentajat</Label>
+                          <Label htmlFor="admin-managed-coaches">Vastuuhenkilöt</Label>
                           <div
                             id="admin-managed-coaches"
                             className="grid gap-2 rounded-xl border border-[var(--border)] bg-[var(--surface-2)] p-3"
@@ -499,7 +499,7 @@ export function UserSettingsPanel() {
                             })}
                           </div>
                           <p className="mt-2 text-xs text-[var(--text-subtle)]">
-                            Voit valita treenaajalle useamman valmentajan. Adminin pääsy on aina globaali, joten adminia ei näytetä tässä listassa.
+                            Voit valita treenaajalle useamman valmennuskelpoisen vastuuhenkilön. Myös admin voidaan liittää tähän listaan.
                           </p>
                         </div>
                         <div className="flex flex-wrap items-center gap-3">
@@ -515,7 +515,7 @@ export function UserSettingsPanel() {
                             onClick={() => {
                               const result = adminAssignAthleteCoaches(selectedManagedUser.id, selectedManagedCoachIds);
                               setAdminMessage(
-                                "message" in result ? result.message : "Valmentajat tallennettiin.",
+                                "message" in result ? result.message : "Vastuuhenkilöt tallennettiin.",
                               );
                             }}
                           >

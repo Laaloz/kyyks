@@ -11,8 +11,8 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardDescription, CardTitle } from "@/components/ui/card";
 import { Input, Label, Select } from "@/components/ui/field";
-import { getAdminOverviewAthleteGroups } from "@/lib/admin-overview";
-import { getInviteLifecycleLabel } from "@/lib/invite-status";
+import { getAdminCoachingCoverage, getAdminOverviewAthleteGroups } from "@/lib/admin-overview";
+import { getInviteLifecycleLabel, getVisiblePendingInvites } from "@/lib/invite-status";
 import { canResendInvite, getAssignableCoachUsers } from "@/lib/role-access";
 import { formatDate } from "@/lib/utils";
 import { useAppState } from "@/providers/app-state-provider";
@@ -28,23 +28,14 @@ export function AdminDashboard({ view }: { view: WorkspaceView }) {
   const [resendingInviteId, setResendingInviteId] = useState<string | null>(null);
   const coaches = getAssignableCoachUsers(state.users);
   const { activeAthletes, invitedAthletes } = getAdminOverviewAthleteGroups(state.users);
-  const pendingInvites = state.invites.filter((invite) => invite.status === "pending");
+  const pendingInvites = getVisiblePendingInvites(state.invites, state.users);
   const overview = useMemo(() => {
     const dayMs = 24 * 60 * 60 * 1000;
     const now = Date.now();
     const activeAthleteIds = new Set(activeAthletes.map((athlete) => athlete.id));
-    const activeAssignments = state.assignments.filter(
-      (assignment) => assignment.active && activeAthleteIds.has(assignment.athleteId),
-    );
-    const athleteAssignmentCount = new Map<string, number>();
-    const coachAssignmentCount = new Map<string, number>();
+    const coachingCoverage = getAdminCoachingCoverage(state);
     const planCountByAthlete = new Map<string, number>();
     const athleteLatestActivity = new Map<string, number>();
-
-    activeAssignments.forEach((assignment) => {
-      athleteAssignmentCount.set(assignment.athleteId, (athleteAssignmentCount.get(assignment.athleteId) ?? 0) + 1);
-      coachAssignmentCount.set(assignment.coachId, (coachAssignmentCount.get(assignment.coachId) ?? 0) + 1);
-    });
 
     state.plans.forEach((plan) => {
       if (!activeAthleteIds.has(plan.athleteId)) {
@@ -87,20 +78,21 @@ export function AdminDashboard({ view }: { view: WorkspaceView }) {
     });
 
     const athletesWithoutCoach = activeAthletes
-      .filter((athlete) => !athleteAssignmentCount.has(athlete.id))
+      .filter((athlete) => !coachingCoverage.athleteCoachCount.has(athlete.id))
       .sort((left, right) => left.fullName.localeCompare(right.fullName, "fi"));
     const athletesWithMultipleCoaches = activeAthletes
-      .filter((athlete) => (athleteAssignmentCount.get(athlete.id) ?? 0) > 1)
+      .filter((athlete) => (coachingCoverage.athleteCoachCount.get(athlete.id) ?? 0) > 1)
       .sort(
         (left, right) =>
-          (athleteAssignmentCount.get(right.id) ?? 0) - (athleteAssignmentCount.get(left.id) ?? 0) ||
+          (coachingCoverage.athleteCoachCount.get(right.id) ?? 0) -
+            (coachingCoverage.athleteCoachCount.get(left.id) ?? 0) ||
           left.fullName.localeCompare(right.fullName, "fi"),
       );
     const athletesWithoutProgram = activeAthletes
       .filter((athlete) => !planCountByAthlete.has(athlete.id))
       .sort((left, right) => left.fullName.localeCompare(right.fullName, "fi"));
     const coachesWithoutAthletes = coaches
-      .filter((coach) => !coachAssignmentCount.has(coach.id))
+      .filter((coach) => !coachingCoverage.coachAthleteCount.has(coach.id))
       .sort((left, right) => left.fullName.localeCompare(right.fullName, "fi"));
     const staleAthletes = activeAthletes
       .filter((athlete) => {
@@ -127,7 +119,7 @@ export function AdminDashboard({ view }: { view: WorkspaceView }) {
     const coachLoad = coaches
       .map((coach) => ({
         coach,
-        athleteCount: coachAssignmentCount.get(coach.id) ?? 0,
+        athleteCount: coachingCoverage.coachAthleteCount.get(coach.id) ?? 0,
         programCount: state.plans.filter((plan) => plan.coachId === coach.id && activeAthleteIds.has(plan.athleteId)).length,
         pendingInviteCount: pendingInvites.filter((invite) => invite.coachId === coach.id).length,
       }))
@@ -144,7 +136,8 @@ export function AdminDashboard({ view }: { view: WorkspaceView }) {
       staleAthletes.length;
 
     return {
-      activeAssignments,
+      relationshipCount: coachingCoverage.relationshipCount,
+      athleteCoachCount: coachingCoverage.athleteCoachCount,
       activePrograms,
       athletesWithoutCoach,
       athletesWithMultipleCoaches,
@@ -158,7 +151,7 @@ export function AdminDashboard({ view }: { view: WorkspaceView }) {
       coachLoad,
       attentionCount,
     };
-  }, [activeAthletes, coaches, invitedAthletes, pendingInvites, state.assignments, state.plans, state.scheduledWorkouts, state.sessions]);
+  }, [activeAthletes, coaches, invitedAthletes, pendingInvites, state.assignments, state.plans, state.scheduledWorkouts, state.sessions, state.users]);
   const form = useForm<z.infer<typeof inviteSchema>>({
     resolver: zodResolver(inviteSchema),
     defaultValues: {
@@ -176,9 +169,9 @@ export function AdminDashboard({ view }: { view: WorkspaceView }) {
         <>
           <MetricGrid
             metrics={[
-              { label: "Valmentajat", value: coaches.length, icon: ShieldCheck },
+              { label: "Vastuuhenkilöt", value: coaches.length, icon: ShieldCheck },
               { label: "Treenaajat", value: activeAthletes.length, icon: UserRoundPlus },
-              { label: "Valmennussuhteet", value: overview.activeAssignments.length, icon: UsersRound },
+              { label: "Valmennussuhteet", value: overview.relationshipCount, icon: UsersRound },
               { label: "Vaatii huomiota", value: overview.attentionCount, icon: AlertTriangle },
             ]}
             role={currentUser?.role ?? null}
@@ -190,7 +183,7 @@ export function AdminDashboard({ view }: { view: WorkspaceView }) {
                 <p className="text-xs font-semibold tracking-[0.04em] text-[var(--text-subtle)]">Hallintanäkymä</p>
                 <CardTitle className="text-2xl">Admin näkee nyt yhdellä silmäyksellä mitä verkossa tapahtuu</CardTitle>
                 <CardDescription className="max-w-3xl leading-6">
-                  Yleiskuva nostaa esiin poikkeamat, valmennussuhteet, aktiivisuuden ja onboardingin. Adminilla on globaali pääsy kaikkeen, joten valmentajalistat näyttävät vain varsinaiset valmentajat.
+                  Yleiskuva nostaa esiin poikkeamat, valmennussuhteet, aktiivisuuden ja onboardingin. Mukana näkyvät kaikki valmennuskelpoiset vastuuhenkilöt, myös adminit.
                 </CardDescription>
               </div>
               <div className="grid gap-3 sm:grid-cols-3 xl:grid-cols-1 2xl:grid-cols-3">
@@ -340,14 +333,14 @@ export function AdminDashboard({ view }: { view: WorkspaceView }) {
           <div className="grid gap-6 xl:grid-cols-[1fr_1fr]">
             <Card>
               <p className="text-xs font-semibold tracking-[0.04em] text-[var(--text-subtle)]">Valmennussuhteet</p>
-              <CardTitle className="text-2xl">Näe missä coach-jako kaipaa tasapainoa</CardTitle>
+              <CardTitle className="text-2xl">Näe missä vastuujako kaipaa tasapainoa</CardTitle>
               <CardDescription className="mt-2">
-                Admin pääsee kaikkialle, mutta tästä näet miten varsinaiset valmentajat on jaettu treenaajille.
+                Tästä näet, miten valmennuskelpoiset vastuuhenkilöt on jaettu treenaajille.
               </CardDescription>
               <div className="mt-6 grid gap-3 md:grid-cols-2">
                 <div className="rounded-xl border-2 border-[var(--border)] bg-[var(--surface-2)] p-4">
                   <div className="flex items-center justify-between gap-4">
-                    <p className="text-sm font-semibold text-[var(--text)]">Treenaajilla useampi valmentaja</p>
+                    <p className="text-sm font-semibold text-[var(--text)]">Treenaajilla useampi vastuuhenkilö</p>
                     <Badge>{overview.athletesWithMultipleCoaches.length}</Badge>
                   </div>
                   {overview.athletesWithMultipleCoaches.length > 0 ? (
@@ -356,19 +349,19 @@ export function AdminDashboard({ view }: { view: WorkspaceView }) {
                         <li key={athlete.id} className="rounded-lg border border-[var(--border)] px-3 py-2">
                           {athlete.fullName}
                           <span className="block text-xs text-[var(--text-subtle)]">
-                            {state.assignments.filter((assignment) => assignment.athleteId === athlete.id && assignment.active).length} aktiivista valmentajaa
+                            {overview.athleteCoachCount.get(athlete.id) ?? 0} aktiivista vastuuhenkilöä
                           </span>
                         </li>
                       ))}
                     </ul>
                   ) : (
-                    <p className="mt-3 text-sm text-[var(--text-muted)]">Monivalmentajasuhteita ei ole vielä käytössä.</p>
+                    <p className="mt-3 text-sm text-[var(--text-muted)]">Usean vastuuhenkilön suhteita ei ole vielä käytössä.</p>
                   )}
                 </div>
 
                 <div className="rounded-xl border-2 border-[var(--border)] bg-[var(--surface-2)] p-4">
                   <div className="flex items-center justify-between gap-4">
-                    <p className="text-sm font-semibold text-[var(--text)]">Valmentajat ilman treenaajia</p>
+                    <p className="text-sm font-semibold text-[var(--text)]">Vastuuhenkilöt ilman treenaajia</p>
                     <Badge>{overview.coachesWithoutAthletes.length}</Badge>
                   </div>
                   {overview.coachesWithoutAthletes.length > 0 ? (
@@ -380,7 +373,7 @@ export function AdminDashboard({ view }: { view: WorkspaceView }) {
                       ))}
                     </ul>
                   ) : (
-                    <p className="mt-3 text-sm text-[var(--text-muted)]">Kaikilla valmentajilla on ainakin yksi treenaaja.</p>
+                    <p className="mt-3 text-sm text-[var(--text-muted)]">Kaikilla vastuuhenkilöillä on ainakin yksi treenaaja.</p>
                   )}
                 </div>
               </div>
@@ -436,7 +429,7 @@ export function AdminDashboard({ view }: { view: WorkspaceView }) {
                             </p>
                             {assignedCoach ? (
                               <p className="mt-1 text-xs text-[var(--text-subtle)]">
-                                Vastuuvalmentaja: {assignedCoach.fullName}
+                                Vastuuhenkilö: {assignedCoach.fullName}
                               </p>
                             ) : null}
                           </div>
@@ -470,13 +463,13 @@ export function AdminDashboard({ view }: { view: WorkspaceView }) {
 
           <Card>
             <p className="text-xs font-semibold tracking-[0.04em] text-[var(--text-subtle)]">Valmentajien kuormitus</p>
-            <CardTitle className="text-2xl">Varsinaisten valmentajien rosterit ja ohjelmakuorma</CardTitle>
+            <CardTitle className="text-2xl">Vastuuhenkilöiden rosterit ja ohjelmakuorma</CardTitle>
             <CardDescription className="mt-2">
-              Näet nopeasti kunkin varsinaisen valmentajan rosterin, ohjelmien määrän ja avoimet onboardingit. Adminin pääsy on aina globaali, joten adminia ei näytetä tässä listassa.
+              Näet nopeasti kunkin valmennuskelpoisen vastuuhenkilön rosterin, ohjelmien määrän ja avoimet onboardingit.
             </CardDescription>
             <div className="mt-6 grid gap-4 md:grid-cols-2 2xl:grid-cols-3">
               {overview.coachLoad.length === 0 ? (
-                <p className="text-sm text-[var(--text-muted)]">Valmentajia ei ole vielä lisätty.</p>
+                <p className="text-sm text-[var(--text-muted)]">Vastuuhenkilöitä ei ole vielä lisätty.</p>
               ) : (
                 overview.coachLoad.map(({ coach, athleteCount, programCount, pendingInviteCount }) => {
                   return (
@@ -495,10 +488,10 @@ export function AdminDashboard({ view }: { view: WorkspaceView }) {
                       </div>
                       <p className="mt-4 text-sm text-[var(--text-muted)]">
                         {athleteCount === 0
-                          ? "Tällä valmentajalla ei ole vielä aktiivisia treenaajia."
+                          ? "Tällä vastuuhenkilöllä ei ole vielä aktiivisia treenaajia."
                           : athleteCount === 1
                             ? "Kuormitus on tällä hetkellä kevyt."
-                            : "Valmentaja on aktiivisesti kiinni rosterissa."}
+                            : "Vastuuhenkilö on aktiivisesti kiinni rosterissa."}
                       </p>
                     </div>
                   );
@@ -555,14 +548,14 @@ export function AdminDashboard({ view }: { view: WorkspaceView }) {
                 </div>
                 {selectedRole === "athlete" ? (
                   <div>
-                    <Label htmlFor={`${formId}-invite-coach`}>Vastuuvalmentaja</Label>
+                    <Label htmlFor={`${formId}-invite-coach`}>Vastuuhenkilö</Label>
                     <Select
                       id={`${formId}-invite-coach`}
                       aria-invalid={Boolean(form.formState.errors.coachId)}
                       aria-describedby={form.formState.errors.coachId ? `${formId}-invite-coach-error` : undefined}
                       {...form.register("coachId")}
                     >
-                      <option value="">Valitse vastuuvalmentaja</option>
+                      <option value="">Valitse vastuuhenkilö</option>
                       {coaches.map((coach) => (
                         <option key={coach.id} value={coach.id}>
                           {coach.fullName} ({roleLabel(coach.role)})
@@ -623,7 +616,7 @@ export function AdminDashboard({ view }: { view: WorkspaceView }) {
                           </p>
                           {assignedCoach ? (
                             <p className="mt-1 text-xs text-[var(--text-subtle)]">
-                              Vastuuvalmentaja: {assignedCoach.fullName}
+                              Vastuuhenkilö: {assignedCoach.fullName}
                             </p>
                           ) : null}
                         </div>

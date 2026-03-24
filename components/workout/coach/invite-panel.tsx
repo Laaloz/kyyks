@@ -10,7 +10,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardDescription, CardTitle } from "@/components/ui/card";
 import { Input, Label } from "@/components/ui/field";
-import { getInviteLifecycleLabel } from "@/lib/invite-status";
+import { getInviteLifecycleLabel, getVisiblePendingInvites } from "@/lib/invite-status";
 import { useAppState } from "@/providers/app-state-provider";
 
 import { inviteSchema } from "@/components/workout/schemas";
@@ -22,7 +22,9 @@ export function CoachInvitePanel() {
   const [resendMessage, setResendMessage] = useState<string>("");
   const [resendingInviteId, setResendingInviteId] = useState<string | null>(null);
   const athletes = currentUser ? getCoachAthletes(currentUser.id) : [];
-  const pendingInvites = state.invites.filter((invite) => invite.status === "pending" && invite.invitedBy === currentUser?.id);
+  const pendingInvites = getVisiblePendingInvites(state.invites, state.users).filter(
+    (invite) => invite.invitedBy === currentUser?.id,
+  );
   const form = useForm<z.infer<typeof inviteSchema>>({
     resolver: zodResolver(inviteSchema),
     defaultValues: {

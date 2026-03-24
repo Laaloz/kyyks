@@ -30,6 +30,7 @@ import {
   RESET_TOKEN_EXPIRY_MINUTES,
 } from "@/lib/auth-tokens";
 import { defaultGlobalExercises } from "@/lib/demo-data";
+import { getVisiblePendingInvites } from "@/lib/invite-status";
 import { canActAsCoach, canResendInvite, getDashboardViewsForRole, getDefaultDashboardView, isAdminRole } from "@/lib/role-access";
 import { createSupabaseBrowserClient } from "@/lib/supabase/client";
 import type {
@@ -115,7 +116,7 @@ function canManageProgramTarget(state: AppState, actor: UserProfile, athleteId: 
   return false;
 }
 
-function resolvePrimaryCoachIdForAthlete(state: AppState, athleteId: string) {
+export function resolvePrimaryCoachIdForAthlete(state: AppState, athleteId: string) {
   return (
     state.assignments.find((assignment) => assignment.athleteId === athleteId && assignment.active)?.coachId ??
     state.scheduledWorkouts.find((workout) => workout.athleteId === athleteId)?.coachId ??
@@ -1547,8 +1548,8 @@ export function AppStateProvider({ children }: PropsWithChildren) {
           }
         }
 
-        const duplicatePendingInvite = state.invites.find(
-          (invite) => invite.email.toLowerCase() === input.email.toLowerCase() && invite.status === "pending",
+        const duplicatePendingInvite = getVisiblePendingInvites(state.invites, state.users).find(
+          (invite) => invite.email.toLowerCase() === input.email.toLowerCase(),
         );
 
         if (duplicatePendingInvite) {
@@ -1823,14 +1824,18 @@ export function AppStateProvider({ children }: PropsWithChildren) {
             return { ok: false, message: payload?.message ?? "Kutsun aktivointi epäonnistui." };
           }
 
+          const acceptedEmail = payload.email;
+
           setState((previous) => ({
             ...previous,
             invites: previous.invites.map((item) =>
-              item.token === token ? { ...item, status: "accepted" } : item,
+              item.token === token || item.email.toLowerCase() === acceptedEmail.toLowerCase()
+                ? { ...item, status: "accepted" }
+                : item,
             ),
           }));
 
-          const loginResult = await signInWithSupabasePassword(payload.email, password, options);
+          const loginResult = await signInWithSupabasePassword(acceptedEmail, password, options);
           if (loginResult.ok) {
             return loginResult;
           }
@@ -2103,9 +2108,7 @@ export function AppStateProvider({ children }: PropsWithChildren) {
         }
 
         if (currentUser.role === "athlete") {
-          const latestCoachId =
-            state.scheduledWorkouts.find((workout) => workout.athleteId === currentUser.id)?.coachId ??
-            state.assignments.find((assignment) => assignment.athleteId === currentUser.id && assignment.active)?.coachId;
+          const latestCoachId = resolvePrimaryCoachIdForAthlete(state, currentUser.id);
           if (!latestCoachId) {
             return { ok: false, message: "Keskustelu tarvitsee ensin aktiivisen valmentajasuhteen." };
           }

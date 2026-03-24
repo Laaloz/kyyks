@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 
+import { cloneDemoState } from "@/lib/domain";
 import {
+  resolvePrimaryCoachIdForAthlete,
   shouldCreateFreshInviteOnResendFailure,
   shouldPreserveStoredSessionDuringSupabaseBootstrap,
   shouldTreatInviteActivationLoginFailureAsPartialSuccess,
@@ -43,5 +45,26 @@ describe("shouldPreserveStoredSessionDuringSupabaseBootstrap", () => {
     expect(
       shouldTreatInviteActivationLoginFailureAsPartialSuccess("Väärä sähköposti tai salasana."),
     ).toBe(false);
+  });
+
+  it("resolves the athlete conversation coach from the training plan when admin is the responsible coach", () => {
+    const state = cloneDemoState();
+
+    state.assignments = state.assignments.filter((assignment) => assignment.athleteId !== "user_athlete_1");
+    state.scheduledWorkouts = state.scheduledWorkouts.filter((workout) => workout.athleteId !== "user_athlete_1");
+    state.plans = [
+      {
+        id: "plan_admin_only",
+        coachId: "user_admin",
+        athleteId: "user_athlete_1",
+        title: "Admin ohjelma",
+        workouts: [],
+        startDate: "2026-03-24",
+        weekCount: 4,
+        createdAt: "2026-03-24T08:00:00.000Z",
+      },
+    ];
+
+    expect(resolvePrimaryCoachIdForAthlete(state, "user_athlete_1")).toBe("user_admin");
   });
 });
