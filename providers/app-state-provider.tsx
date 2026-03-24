@@ -58,6 +58,8 @@ type PersistedSession = {
   impersonatedUserId: string | null;
 };
 
+type SupabaseAuthSyncSource = "bootstrap" | "event";
+
 function normalizeDefaultDashboardView(role: Role, value: DashboardHomeView | undefined): DashboardHomeView {
   if (value && getDashboardViewsForRole(role).includes(value)) {
     return value;
@@ -364,6 +366,13 @@ function parsePersistedSession(rawSession: string | null): PersistedSession {
   }
 
   return { authenticatedUserId: rawSession, impersonatedUserId: null };
+}
+
+export function shouldPreserveStoredSessionDuringSupabaseBootstrap(
+  source: SupabaseAuthSyncSource,
+  persistedAuthenticatedUserId: string | null,
+) {
+  return source === "bootstrap" && Boolean(persistedAuthenticatedUserId);
 }
 
 function resolveProgramWorkouts(
@@ -770,12 +779,23 @@ export function AppStateProvider({ children }: PropsWithChildren) {
 
     let active = true;
 
-    const syncFromAuthUser = async (authUser: SupabaseAuthUser | null) => {
+    const syncFromAuthUser = async (authUser: SupabaseAuthUser | null, source: SupabaseAuthSyncSource) => {
       if (!active) {
         return;
       }
 
       if (!authUser?.email) {
+        const persistedSession = parsePersistedSession(window.localStorage.getItem(SESSION_KEY));
+        if (
+          shouldPreserveStoredSessionDuringSupabaseBootstrap(
+            source,
+            persistedSession.authenticatedUserId,
+          )
+        ) {
+          setIsSupabaseAuthResolved(true);
+          return;
+        }
+
         setAuthenticatedUserId(null);
         setImpersonatedUserId(null);
         setIsSupabaseAuthResolved(true);
@@ -808,12 +828,12 @@ export function AppStateProvider({ children }: PropsWithChildren) {
 
     setIsSupabaseAuthResolved(false);
 
-    void supabase.auth.getUser().then(({ data }) => syncFromAuthUser(data.user ?? null));
+    void supabase.auth.getSession().then(({ data }) => syncFromAuthUser(data.session?.user ?? null, "bootstrap"));
 
     const {
       data: { subscription },
     } = supabase.auth.onAuthStateChange((_event, session) => {
-      void syncFromAuthUser(session?.user ?? null);
+      void syncFromAuthUser(session?.user ?? null, "event");
     });
 
     return () => {
