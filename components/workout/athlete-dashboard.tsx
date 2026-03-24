@@ -1086,7 +1086,7 @@ export function AthleteDashboard({
                             ? formatRelativeDate(latestCompletionDate)
                             : undefined;
                           const showLatestCompletionBadge =
-                            Boolean(latestCompletionLabel) &&
+                            latestCompletionLabel !== undefined &&
                             !resumableScheduledId &&
                             !activeScheduledId &&
                             !["Tänään", "Eilen", "Huomenna"].includes(latestCompletionLabel);
