@@ -7,8 +7,8 @@ import "./globals.css";
 
 const themeInitScript = `
 (() => {
-  const stateKey = "rookiapp-state-v3";
-  const sessionKey = "rookiapp-session-v2";
+  const stateKey = "rooki-fit-state-v1";
+  const sessionKey = "rooki-fit-session-v1";
   const applyTheme = (themeMode) => {
     const theme = themeMode === "dark" ? "dark" : "light";
     document.documentElement.dataset.theme = theme;
@@ -50,9 +50,14 @@ const themeInitScript = `
 `;
 
 export const metadata: Metadata = {
-  title: "Rookiapp",
+  title: "rooki.fit",
   description: "Coach-first training platform for building workout plans and tracking execution.",
-  applicationName: "Rookiapp",
+  applicationName: "rooki.fit",
+  icons: {
+    icon: "/icon.svg",
+    shortcut: "/icon.svg",
+    apple: "/icon.svg",
+  },
 };
 
 export const viewport: Viewport = {

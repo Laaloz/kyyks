@@ -53,7 +53,7 @@ export function LoginScreen() {
     <div className="mx-auto grid min-h-screen max-w-5xl gap-6 px-4 py-10 lg:grid-cols-[0.95fr_1.05fr] lg:items-center">
       <section className="space-y-6">
         <div className="space-y-4">
-          <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[var(--accent)]">Rookiapp</p>
+          <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[var(--accent)]">rooki.fit</p>
           <h1 className="max-w-2xl font-[family-name:var(--font-display)] text-4xl font-semibold leading-tight text-[var(--text)] md:text-5xl">
             Kirjaudu omaan treenityötilaasi.
           </h1>

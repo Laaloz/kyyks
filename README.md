@@ -1,4 +1,4 @@
-# Rookiapp
+# rooki.fit
 
 Coach-first, mobile-first treenisovellus valmentajille ja treenaajille.
 
@@ -17,10 +17,10 @@ Coach-first, mobile-first treenisovellus valmentajille ja treenaajille.
   - treenaajan setti-, kuorma-, RPE- ja muistiinpanologgaus
 
 ## Demo-käyttäjät
-- `admin@rookiapp.fi` / `demo123`
-- `coach@rookiapp.fi` / `demo123`
-- `sara@rookiapp.fi` / `demo123`
-- `elias@rookiapp.fi` / `demo123`
+- `admin@rooki.fit` / `demo123`
+- `coach@rooki.fit` / `demo123`
+- `sara@rooki.fit` / `demo123`
+- `elias@rooki.fit` / `demo123`
 
 ## Käynnistys
 1. `source ~/.nvm/nvm.sh`

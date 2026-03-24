@@ -55,7 +55,7 @@ describe("role access helpers", () => {
     expect(getCoachCapableUsers(users).map((user) => user.id)).toEqual(["admin_1", "coach_1"]);
   });
 
-  it("shows only coach-role users in assignable coach lists", () => {
-    expect(getAssignableCoachUsers(users).map((user) => user.id)).toEqual(["coach_1"]);
+  it("shows admin and coach users in assignable coach lists", () => {
+    expect(getAssignableCoachUsers(users).map((user) => user.id)).toEqual(["admin_1", "coach_1"]);
   });
 });

@@ -34,14 +34,19 @@ export function buildWorkoutConversationContextOptions({
   >();
 
   workouts.forEach((workout) => {
+    if (workout.status === "cancelled") {
+      return;
+    }
+
     const splitType = resolveWorkoutSplitType(workout, plansById, templatesById);
-    const contextLabel = splitLabel(splitType);
-    const existingOption = groupedOptions.get(splitType);
+    const contextLabel = resolveWorkoutContextLabel(workout, splitType, plansById, templatesById);
+    const groupKey = splitType === "custom" ? `custom:${contextLabel.toLowerCase()}` : splitType;
+    const existingOption = groupedOptions.get(groupKey);
     const sortTime = resolveWorkoutSortTime(workout);
 
     if (!existingOption || sortTime > existingOption.sortTime) {
-      groupedOptions.set(splitType, {
-        id: `workout-group-${splitType}`,
+      groupedOptions.set(groupKey, {
+        id: `workout-group-${groupKey}`,
         label: `Treenialue: ${contextLabel}`,
         contextType: "workout",
         contextId: workout.id,
@@ -89,6 +94,35 @@ function resolveWorkoutSplitType(
   }
 
   return inferSplitTypeFromTitle(workout.title);
+}
+
+function resolveWorkoutContextLabel(
+  workout: ScheduledWorkout,
+  splitType: SplitType,
+  plansById: Map<string, TrainingPlan>,
+  templatesById: Map<string, WorkoutTemplate>,
+) {
+  if (splitType !== "custom") {
+    return splitLabel(splitType);
+  }
+
+  if (workout.trainingPlanId && workout.programWorkoutId) {
+    const programWorkout = plansById
+      .get(workout.trainingPlanId)
+      ?.workouts?.find((item) => item.id === workout.programWorkoutId);
+    if (programWorkout?.name) {
+      return normalizeWorkoutHistoryTitle(programWorkout.name);
+    }
+  }
+
+  if (workout.templateId) {
+    const template = templatesById.get(workout.templateId);
+    if (template?.title) {
+      return normalizeWorkoutHistoryTitle(template.title);
+    }
+  }
+
+  return normalizeWorkoutHistoryTitle(workout.title);
 }
 
 function inferSplitTypeFromTitle(title: string): SplitType {

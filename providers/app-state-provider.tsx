@@ -49,8 +49,8 @@ import {
   type PropsWithChildren,
 } from "react";
 
-const STATE_KEY = "rookiapp-state-v3";
-const SESSION_KEY = "rookiapp-session-v2";
+const STATE_KEY = "rooki-fit-state-v1";
+const SESSION_KEY = "rooki-fit-session-v1";
 const RESET_TOKEN_EXPIRY_MINUTES = 30;
 
 type PersistedSession = {
@@ -1214,7 +1214,7 @@ export function AppStateProvider({ children }: PropsWithChildren) {
         }
 
         const selectedCoaches = uniqueCoachIds.map((coachId) =>
-          state.users.find((user) => user.id === coachId && user.role === "coach"),
+          state.users.find((user) => user.id === coachId && canActAsCoach(user.role)),
         );
         if (selectedCoaches.some((coach) => !coach)) {
           return { ok: false, message: "Yksi tai useampi valituista valmentajista ei ole kelvollinen." };
@@ -1428,8 +1428,8 @@ export function AppStateProvider({ children }: PropsWithChildren) {
 
         if (input.role === "athlete" && input.coachId) {
           const assignedCoach = state.users.find((user) => user.id === input.coachId);
-          if (!assignedCoach || assignedCoach.role !== "coach") {
-            return { ok: false, message: "Treenaajalle pitää valita valmentaja-roolinen vastuuhenkilö." };
+          if (!assignedCoach || !canActAsCoach(assignedCoach.role)) {
+            return { ok: false, message: "Treenaajalle pitää valita valmennuskelpoinen vastuuhenkilö." };
           }
         }
 

@@ -209,7 +209,7 @@ export function splitLabel(splitType: SplitType | undefined) {
     case "full_body":
       return "Koko kroppa";
     default:
-      return "Custom";
+      return "Muu";
   }
 }
 

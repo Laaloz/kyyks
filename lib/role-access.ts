@@ -31,5 +31,5 @@ export function getCoachCapableUsers(users: UserProfile[]) {
 }
 
 export function getAssignableCoachUsers(users: UserProfile[]) {
-  return users.filter((user) => user.role === "coach");
+  return users.filter((user) => canActAsCoach(user.role));
 }

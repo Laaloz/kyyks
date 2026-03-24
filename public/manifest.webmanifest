@@ -1,6 +1,6 @@
 {
-  "name": "Rookiapp",
-  "short_name": "Rookiapp",
+  "name": "rooki.fit",
+  "short_name": "rooki.fit",
   "description": "Coach-first training planner and workout tracker.",
   "start_url": "/",
   "display": "standalone",

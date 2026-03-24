@@ -803,6 +803,9 @@ export function AthleteSessionPanel({
           }}
           placeholder="Kirjaa treenin fiilis, mahdollinen kipu tai muu huomio. Jos treeni jäi kesken, kerro syy lyhyesti."
         />
+        <p aria-live="polite" className="mt-2 text-xs text-[var(--text-subtle)]">
+          Muistiinpano tallentuu automaattisesti.
+        </p>
       </div>
 
       {status !== "completed" && restTotalSeconds > 0 && restExerciseKey ? (

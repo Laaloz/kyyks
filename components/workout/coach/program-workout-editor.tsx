@@ -46,6 +46,7 @@ export function ProgramWorkoutEditor({
     name: `workouts.${index}.exercises` as const,
   });
   const defaultRestSeconds = watch(`workouts.${index}.defaultRestSeconds` as const);
+  const selectedSplitType = watch(`workouts.${index}.splitType` as const);
 
   return (
     <fieldset
@@ -59,7 +60,7 @@ export function ProgramWorkoutEditor({
 
       <div className="grid gap-4 [grid-template-columns:repeat(auto-fit,minmax(15rem,1fr))]">
         <div>
-          <Label htmlFor={`workout-${index}-split`}>Jako</Label>
+          <Label htmlFor={`workout-${index}-split`}>Treenialue</Label>
           <Select id={`workout-${index}-split`} {...register(`workouts.${index}.splitType` as const)}>
             <option value="upper">Yläkroppa</option>
             <option value="lower">Alakroppa</option>
@@ -67,6 +68,16 @@ export function ProgramWorkoutEditor({
             <option value="custom">Muu</option>
           </Select>
         </div>
+        {selectedSplitType === "custom" ? (
+          <div>
+            <Label htmlFor={`workout-${index}-name`}>Harjoituksen nimi</Label>
+            <Input
+              id={`workout-${index}-name`}
+              {...register(`workouts.${index}.nameOverride` as const)}
+              placeholder="Esim. Penkki + yläselkä"
+            />
+          </div>
+        ) : null}
         <div>
           <div className="mb-1 flex items-center gap-1">
             <Label className="mb-0" htmlFor={`workout-${index}-default-rest`}>Oletuslepo (s)</Label>
@@ -307,7 +318,7 @@ export function ProgramWorkoutEditor({
       </div>
 
       <p className="text-xs text-[var(--text-subtle)]">
-        Oletusjako: {splitLabel(watch(`workouts.${index}.splitType` as const))}
+        Valittu treenialue: {splitLabel(watch(`workouts.${index}.splitType` as const))}
       </p>
     </fieldset>
   );

@@ -117,7 +117,7 @@ describe("domain helpers", () => {
   it("creates pending invites for onboarding", () => {
     const invite = createInvite(
       {
-        email: "uusi@rookiapp.fi",
+        email: "uusi@rooki.fit",
         role: "athlete",
         coachId: "user_coach_1",
       },
