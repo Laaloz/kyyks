@@ -307,6 +307,17 @@ function mapWorkoutNoteRow(entry: WorkoutNoteRow): WorkoutNote {
   };
 }
 
+function throwIfQueryFailed(
+  label: string,
+  result: {
+    error: { message?: string | null } | null;
+  },
+) {
+  if (result.error) {
+    throw new Error(`${label} sync failed: ${result.error.message ?? "Unknown Supabase error."}`);
+  }
+}
+
 export async function loadVisibleSupabaseAppState(
   supabase: ServerClient,
 ): Promise<SupabaseVisibleAppStateSnapshot> {
@@ -380,9 +391,19 @@ export async function loadVisibleSupabaseAppState(
       .order("updated_at", { ascending: false }),
   ]);
 
-  if (profilesResult.error) {
-    throw profilesResult.error;
-  }
+  throwIfQueryFailed("Profiles", profilesResult);
+  throwIfQueryFailed("Body measurements", bodyMeasurementsResult);
+  throwIfQueryFailed("Assignments", assignmentsResult);
+  throwIfQueryFailed("Exercises", exercisesResult);
+  throwIfQueryFailed("Templates", templatesResult);
+  throwIfQueryFailed("Template blocks", templateBlocksResult);
+  throwIfQueryFailed("Template exercises", templateExercisesResult);
+  throwIfQueryFailed("Template sets", templateSetsResult);
+  throwIfQueryFailed("Training plans", plansResult);
+  throwIfQueryFailed("Scheduled workouts", scheduledWorkoutsResult);
+  throwIfQueryFailed("Workout sessions", sessionsResult);
+  throwIfQueryFailed("Workout set logs", setLogsResult);
+  throwIfQueryFailed("Workout notes", notesResult);
 
   const users = (profilesResult.data ?? []).map((entry) => mapProfileRow(entry as ProfileRow));
   const bodyMeasurements = (bodyMeasurementsResult.data ?? []).map((entry) =>

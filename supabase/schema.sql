@@ -481,6 +481,11 @@ as $$
   )
 $$;
 
+grant execute on function public.current_role() to authenticated;
+grant execute on function public.is_admin() to authenticated;
+grant execute on function public.is_coach_of(uuid) to authenticated;
+grant execute on function public.is_athlete_of(uuid) to authenticated;
+
 alter table public.profiles enable row level security;
 alter table public.body_measurements enable row level security;
 alter table public.coach_athlete_assignments enable row level security;

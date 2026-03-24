@@ -32,7 +32,12 @@ export async function GET() {
 
     const snapshot = await loadVisibleSupabaseAppState(supabase);
     return NextResponse.json(snapshot);
-  } catch {
-    return NextResponse.json({ message: "Sovellustilan haku epäonnistui." }, { status: 500 });
+  } catch (error) {
+    const message = error instanceof Error && error.message ? error.message : "Sovellustilan haku epäonnistui.";
+    console.error("[app-state] failed to load visible state", {
+      message,
+      userId: user.id,
+    });
+    return NextResponse.json({ message }, { status: 500 });
   }
 }
