@@ -84,6 +84,10 @@ function normalizeDefaultDashboardView(role: Role, value: DashboardHomeView | un
   return getDefaultDashboardView(role);
 }
 
+function normalizeComparableEmail(email: string | null | undefined) {
+  return email?.trim().toLowerCase() ?? "";
+}
+
 function defaultUserSettings(role: Role) {
   return {
     defaultDashboardView: getDefaultDashboardView(role),
@@ -891,16 +895,33 @@ export function reconcileSupabaseVisibleState(
   previous: AppState,
   snapshot: SupabaseVisibleAppStateSnapshot,
 ) {
+  const activeServerEmails = new Set(
+    snapshot.users
+      .filter((user) => user.status === "active")
+      .map((user) => normalizeComparableEmail(user.email)),
+  );
+  const preservedInvitedEmails = new Set<string>();
   const preservedInvitedUsers = previous.users.filter((user) => {
     if (user.status !== "invited") {
       return false;
     }
 
-    return !snapshot.users.some(
+    const normalizedEmail = normalizeComparableEmail(user.email);
+    if (activeServerEmails.has(normalizedEmail) || preservedInvitedEmails.has(normalizedEmail)) {
+      return false;
+    }
+
+    const shouldPreserve = !snapshot.users.some(
       (serverUser) =>
         serverUser.id === user.id ||
-        serverUser.email.trim().toLowerCase() === user.email.trim().toLowerCase(),
+        normalizeComparableEmail(serverUser.email) === normalizedEmail,
     );
+
+    if (shouldPreserve) {
+      preservedInvitedEmails.add(normalizedEmail);
+    }
+
+    return shouldPreserve;
   });
 
   return normalizeState({
@@ -920,7 +941,29 @@ export function reconcileSupabaseVisibleState(
 function findUserByIdOrEmail(previous: AppState, userId: string, email?: string) {
   return (
     previous.users.find((user) => user.id === userId) ??
-    (email ? previous.users.find((user) => user.email.trim().toLowerCase() === email.trim().toLowerCase()) : undefined) ??
+    (email ? previous.users.find((user) => normalizeComparableEmail(user.email) === normalizeComparableEmail(email)) : undefined) ??
+    null
+  );
+}
+
+function findResolvedSnapshotUserIdForLocalUser(
+  previous: AppState,
+  snapshot: SupabaseVisibleAppStateSnapshot,
+  localUserId: string | null,
+) {
+  if (!localUserId) {
+    return null;
+  }
+
+  const localUser = previous.users.find((user) => user.id === localUserId) ?? null;
+  if (!localUser) {
+    return snapshot.users.find((user) => user.id === localUserId)?.id ?? null;
+  }
+
+  const normalizedEmail = normalizeComparableEmail(localUser.email);
+  return (
+    snapshot.users.find((user) => user.id === localUserId)?.id ??
+    snapshot.users.find((user) => normalizeComparableEmail(user.email) === normalizedEmail)?.id ??
     null
   );
 }
@@ -1428,16 +1471,41 @@ export function AppStateProvider({ children }: PropsWithChildren) {
     }
   }
 
-  function findResolvedUserIdInSnapshot(
-    snapshot: SupabaseVisibleAppStateSnapshot,
-    authUser: SupabaseAuthUser,
-  ) {
+function findResolvedUserIdInSnapshot(
+  snapshot: SupabaseVisibleAppStateSnapshot,
+  authUser: SupabaseAuthUser,
+) {
     const authEmail = authUser.email?.trim().toLowerCase();
     return (
       snapshot.users.find((user) => user.id === authUser.id)?.id ??
       snapshot.users.find((user) => authEmail && user.email.trim().toLowerCase() === authEmail)?.id ??
       null
     );
+  }
+
+  function resolveSessionIdsFromSnapshot(
+    previous: AppState,
+    snapshot: SupabaseVisibleAppStateSnapshot,
+    authUser: SupabaseAuthUser | null,
+    previousAuthenticatedUserId: string | null,
+    previousImpersonatedUserId: string | null,
+  ) {
+    const resolvedAuthenticatedUserId = authUser
+      ? findResolvedUserIdInSnapshot(snapshot, authUser) ??
+        findResolvedSnapshotUserIdForLocalUser(previous, snapshot, previousAuthenticatedUserId) ??
+        previousAuthenticatedUserId
+      : findResolvedSnapshotUserIdForLocalUser(previous, snapshot, previousAuthenticatedUserId) ??
+        previousAuthenticatedUserId;
+    const resolvedImpersonatedUserId = findResolvedSnapshotUserIdForLocalUser(
+      previous,
+      snapshot,
+      previousImpersonatedUserId,
+    );
+
+    return {
+      authenticatedUserId: resolvedAuthenticatedUserId,
+      impersonatedUserId: resolvedImpersonatedUserId,
+    };
   }
 
   async function refreshSupabaseVisibleState() {
@@ -1452,6 +1520,20 @@ export function AppStateProvider({ children }: PropsWithChildren) {
 
     try {
       setState((previous) => reconcileSupabaseVisibleState(previous, payload));
+      const authUser = await confirmCurrentSupabaseAuthUser(supabase);
+      const resolvedSession = resolveSessionIdsFromSnapshot(
+        state,
+        payload,
+        authUser,
+        authenticatedUserId,
+        impersonatedUserId,
+      );
+      if (resolvedSession.authenticatedUserId !== authenticatedUserId) {
+        setAuthenticatedUserId(resolvedSession.authenticatedUserId);
+      }
+      if (resolvedSession.impersonatedUserId !== impersonatedUserId) {
+        setImpersonatedUserId(resolvedSession.impersonatedUserId);
+      }
       return true;
     } catch {
       return false;
@@ -1473,6 +1555,24 @@ export function AppStateProvider({ children }: PropsWithChildren) {
         }
 
         setState((previous) => reconcileSupabaseVisibleState(previous, payload));
+        const authUser = await confirmCurrentSupabaseAuthUser(supabase);
+        if (!active) {
+          return;
+        }
+
+        const resolvedSession = resolveSessionIdsFromSnapshot(
+          state,
+          payload,
+          authUser,
+          authenticatedUserId,
+          impersonatedUserId,
+        );
+        if (resolvedSession.authenticatedUserId !== authenticatedUserId) {
+          setAuthenticatedUserId(resolvedSession.authenticatedUserId);
+        }
+        if (resolvedSession.impersonatedUserId !== impersonatedUserId) {
+          setImpersonatedUserId(resolvedSession.impersonatedUserId);
+        }
       })
       .catch(() => {
         // Keep the current state if server sync fails.

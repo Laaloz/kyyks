@@ -10,6 +10,7 @@ import {
   canDeleteProgramFromState,
   canRetargetProgramInState,
   reconcileSupabaseInviteDirectory,
+  reconcileSupabaseVisibleState,
   resolveBlockingWorkoutStart,
   resolveSupabaseUserForState,
   resolvePrimaryCoachIdForAthlete,
@@ -277,6 +278,56 @@ describe("shouldPreserveStoredSessionDuringSupabaseBootstrap", () => {
     });
 
     expect(nextState.invites.some((invite) => invite.email.toLowerCase() === ghostEmail)).toBe(false);
+  });
+
+  it("drops invited placeholders from visible state when the server already has an active user for the same email", () => {
+    const state = cloneDemoState();
+    const eliasEmail = "eliaskautto@gmail.com";
+    const resolvedUserId = "e3cedd3c-c34a-4748-95a0-56a43f028ff8";
+
+    state.users = [
+      ...state.users,
+      {
+        id: "user_placeholder_visible",
+        role: "athlete",
+        fullName: "eliaskautto",
+        email: eliasEmail,
+        status: "invited",
+        createdAt: "2026-03-24T08:00:00.000Z",
+        updatedAt: "2026-03-24T08:00:00.000Z",
+      },
+    ];
+
+    const nextState = reconcileSupabaseVisibleState(state, {
+      users: [
+        {
+          id: resolvedUserId,
+          role: "athlete",
+          fullName: "Elias Kautto",
+          email: eliasEmail,
+          status: "active",
+          settings: {
+            defaultDashboardView: "athlete-log",
+            emailNotifications: false,
+            themeMode: "light",
+          },
+          createdAt: "2026-03-24T08:30:00.000Z",
+          updatedAt: "2026-03-24T08:30:00.000Z",
+        },
+      ],
+      bodyMeasurements: [],
+      assignments: [],
+      exercises: [],
+      templates: [],
+      plans: [],
+      scheduledWorkouts: [],
+      sessions: [],
+      notes: [],
+    });
+
+    expect(nextState.users.some((user) => user.id === "user_placeholder_visible")).toBe(false);
+    expect(nextState.users.find((user) => user.email === eliasEmail)?.id).toBe(resolvedUserId);
+    expect(nextState.users.find((user) => user.email === eliasEmail)?.status).toBe("active");
   });
 
   it("finds only an in-progress workout as a blocking start condition", () => {
