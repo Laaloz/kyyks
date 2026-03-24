@@ -29,7 +29,6 @@ type InviteLookup = {
 export function InviteAcceptView({ token, initialInvite }: { token: string; initialInvite?: InviteLookup | null }) {
   const { state, acceptInvite } = useAppState();
   const invite =
-    state.invites.find((item) => item.token === token) ??
     (initialInvite
       ? {
           token,
@@ -39,7 +38,8 @@ export function InviteAcceptView({ token, initialInvite }: { token: string; init
           expiresAt: initialInvite.expiresAt,
           status: initialInvite.status,
         }
-      : null);
+      : state.invites.find((item) => item.token === token)) ??
+    null;
   const [message, setMessage] = useState<string | null>(null);
   const [messageTone, setMessageTone] = useState<"success" | "danger">("success");
   const [isSubmitting, setIsSubmitting] = useState(false);
