@@ -1294,6 +1294,71 @@ export async function deleteWorkoutOnServer({
   return { ok: true as const };
 }
 
+export async function updateWorkoutDurationOnServer({
+  requester,
+  scheduledWorkoutId,
+  durationSeconds,
+}: {
+  requester: RequesterProfile;
+  scheduledWorkoutId: string;
+  durationSeconds: number;
+}) {
+  if (!Number.isFinite(durationSeconds) || durationSeconds < 60) {
+    return { ok: false as const, message: "Anna treeniajalle vähintään 1 minuutti." };
+  }
+
+  const admin = createSupabaseAdminClient();
+  if (!admin) {
+    return { ok: false as const, message: "Supabase admin -yhteys puuttuu. Tarkista service role -avain." };
+  }
+
+  const { data: workout } = await admin
+    .from("scheduled_workouts")
+    .select("id, athlete_id, status")
+    .eq("id", scheduledWorkoutId)
+    .maybeSingle<{ id: string; athlete_id: string; status: ScheduledWorkout["status"] }>();
+
+  if (!workout || (!isAdminRole(requester.role) && workout.athlete_id !== requester.id)) {
+    return { ok: false as const, message: "Treeniä ei löytynyt." };
+  }
+
+  if (workout.status !== "completed") {
+    return { ok: false as const, message: "Treeniaikaa voi muokata vain valmiilta treeniltä." };
+  }
+
+  const { data: session } = await admin
+    .from("workout_sessions")
+    .select("id, completed_at, paused_duration_seconds")
+    .eq("scheduled_workout_id", scheduledWorkoutId)
+    .maybeSingle<{ id: string; completed_at: string | null; paused_duration_seconds: number | null }>();
+
+  if (!session?.completed_at) {
+    return { ok: false as const, message: "Valmiin treenin aikaa ei löytynyt muokattavaksi." };
+  }
+
+  const completedAtMs = new Date(session.completed_at).getTime();
+  if (!Number.isFinite(completedAtMs)) {
+    return { ok: false as const, message: "Treeniaikaa ei voitu päivittää." };
+  }
+
+  const startedAt = new Date(
+    completedAtMs - (durationSeconds + (session.paused_duration_seconds ?? 0)) * 1000,
+  ).toISOString();
+
+  const { error } = await admin
+    .from("workout_sessions")
+    .update({
+      started_at: startedAt,
+    })
+    .eq("scheduled_workout_id", scheduledWorkoutId);
+
+  if (error) {
+    return { ok: false as const, message: "Treeniaikaa ei voitu päivittää." };
+  }
+
+  return { ok: true as const };
+}
+
 export async function createTemplateOnServer({
   requester,
   payload,

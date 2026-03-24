@@ -1210,10 +1210,18 @@ function CoachAthleteInsights({
               <div className="max-w-2xl">
                 <p className="text-sm font-semibold text-[var(--text)]">Kehon seuranta</p>
                 <p className="mt-1 text-xs text-[var(--text-subtle)]">
-                  Paino ja vyötärö auttavat hahmottamaan, mihin suuntaan treenaajan arki ja palautuminen liikkuvat.
+                  Pituus, paino ja vyötärö auttavat hahmottamaan, mihin suuntaan treenaajan arki ja palautuminen liikkuvat.
                 </p>
               </div>
-              <div className="grid gap-3 sm:grid-cols-3 xl:min-w-[28rem]">
+              <div className="grid gap-3 sm:grid-cols-2 xl:min-w-[36rem] xl:grid-cols-4">
+                <div className="rounded-xl border border-[var(--border)] bg-[var(--surface)] px-4 py-3">
+                  <p className="text-[11px] font-semibold tracking-[0.04em] text-[var(--text-subtle)]">Pituus</p>
+                  <p className="mt-1 text-sm font-semibold text-[var(--text)]">
+                    {selectedAthleteProfile?.heightCm !== undefined
+                      ? `${formatTrendNumber(selectedAthleteProfile.heightCm)} cm`
+                      : "Ei asetettu"}
+                  </p>
+                </div>
                 <div className="rounded-xl border border-[var(--border)] bg-[var(--surface)] px-4 py-3">
                   <p className="text-[11px] font-semibold tracking-[0.04em] text-[var(--text-subtle)]">Paino</p>
                   <p className="mt-1 text-sm font-semibold text-[var(--text)]">

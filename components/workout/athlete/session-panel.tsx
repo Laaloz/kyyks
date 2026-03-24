@@ -125,6 +125,36 @@ function formatWorkoutDuration(seconds: number) {
   return `${String(hours).padStart(2, "0")}:${String(minutes).padStart(2, "0")}:${String(remainder).padStart(2, "0")}`;
 }
 
+function parseDurationInput(value: string) {
+  const trimmed = value.trim();
+  if (!trimmed) {
+    return null;
+  }
+
+  const parts = trimmed.split(":").map((part) => part.trim());
+  if (parts.some((part) => part === "" || !/^\d+$/.test(part))) {
+    return null;
+  }
+
+  if (parts.length === 2) {
+    const [minutes, seconds] = parts.map(Number);
+    if (seconds > 59) {
+      return null;
+    }
+    return minutes * 60 + seconds;
+  }
+
+  if (parts.length === 3) {
+    const [hours, minutes, seconds] = parts.map(Number);
+    if (minutes > 59 || seconds > 59) {
+      return null;
+    }
+    return hours * 3600 + minutes * 60 + seconds;
+  }
+
+  return null;
+}
+
 function formatTargetReps(log: WorkoutSession["setLogs"][number]) {
   if (
     log.targetRepsMin !== undefined &&
@@ -189,6 +219,7 @@ export function AthleteSessionPanel({
   status,
   onStart,
   onUpdate,
+  onUpdateDuration,
   onSaveNote,
   onComplete,
   onCancel,
@@ -207,6 +238,7 @@ export function AthleteSessionPanel({
   status: string;
   onStart: () => void | Promise<void>;
   onUpdate: (logId: string, patch: { actualReps?: number; actualLoad?: number; rpe?: number; done?: boolean }) => void;
+  onUpdateDuration: (durationSeconds: number) => Promise<{ ok: boolean; message?: string }>;
   onSaveNote: (body: string) => void;
   onComplete: () => void | Promise<void>;
   onCancel: () => void | Promise<void>;
@@ -230,6 +262,8 @@ export function AthleteSessionPanel({
   const [isSecondaryActionsOpen, setIsSecondaryActionsOpen] = useState(false);
   const [secondaryActionsAnchorRect, setSecondaryActionsAnchorRect] = useState<AnchorRect | null>(null);
   const [secondaryActionsMenuStyle, setSecondaryActionsMenuStyle] = useState<CSSProperties | null>(null);
+  const [durationDraft, setDurationDraft] = useState("");
+  const [durationMessage, setDurationMessage] = useState("");
   const secondaryActionsMenuRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
@@ -250,6 +284,7 @@ export function AthleteSessionPanel({
     setRestExerciseKey(null);
     setRestExerciseName(null);
     setExpandedExerciseKeys({});
+    setDurationMessage("");
   }, [scheduledWorkoutId]);
 
   useEffect(() => {
@@ -278,6 +313,10 @@ export function AthleteSessionPanel({
 
     return () => window.clearInterval(interval);
   }, [selectedSession, status]);
+
+  useEffect(() => {
+    setDurationDraft(formatWorkoutDuration(elapsedSeconds));
+  }, [elapsedSeconds, scheduledWorkoutId, correctionMode]);
 
   useEffect(() => {
     if (!restRunning || restSecondsLeft <= 0) {
@@ -536,6 +575,7 @@ export function AthleteSessionPanel({
   const showDeleteAction = canDeleteWorkout;
   const showBottomBackToList = status !== "in_progress";
   const hasSecondaryActions = showResumeAction || showCancelAction || showDeleteAction;
+  const isDurationDirty = durationDraft.trim() !== formatWorkoutDuration(elapsedSeconds);
   const toggleSecondaryActionsMenu = (anchor: HTMLButtonElement) => {
     if (isSecondaryActionsOpen) {
       setIsSecondaryActionsOpen(false);
@@ -800,6 +840,58 @@ export function AthleteSessionPanel({
         </Badge>
         {readOnly ? <Badge className="border-[var(--accent-secondary)] bg-[var(--surface-3)] text-[var(--accent-secondary)]">Lukittu</Badge> : null}
       </div>
+      {status === "completed" && correctionMode ? (
+        <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface-2)] p-4">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+            <div className="w-full sm:max-w-[16rem]">
+              <Label htmlFor={`${scheduledWorkoutId}-duration`}>Kesto</Label>
+              <Input
+                id={`${scheduledWorkoutId}-duration`}
+                inputMode="numeric"
+                placeholder="Esim. 45:00 tai 01:15:00"
+                value={durationDraft}
+                onChange={(event) => {
+                  setDurationDraft(event.target.value);
+                  setDurationMessage("");
+                }}
+              />
+              <p className="mt-2 text-xs text-[var(--text-subtle)]">
+                Hyvaksyy muodot `mm:ss` ja `hh:mm:ss`.
+              </p>
+            </div>
+            <Button
+              type="button"
+              variant={isDurationDirty ? "secondary" : "ghost"}
+              disabled={!isDurationDirty}
+              className="w-full sm:w-auto"
+              onClick={async () => {
+                const parsedDuration = parseDurationInput(durationDraft);
+                if (parsedDuration === null) {
+                  setDurationMessage("Anna kesto muodossa mm:ss tai hh:mm:ss.");
+                  return;
+                }
+
+                const result = await onUpdateDuration(parsedDuration);
+                setDurationMessage(result.ok ? "Kesto päivitetty." : result.message ?? "Keston paivitys epaonnistui.");
+              }}
+            >
+              Tallenna kesto
+            </Button>
+          </div>
+          <p
+            aria-live="polite"
+            className={`mt-3 text-sm ${
+              !durationMessage
+                ? "text-[var(--text-subtle)]"
+                : durationMessage.includes("päivitetty") || durationMessage.includes("paivitetty")
+                  ? "text-[var(--success)]"
+                  : "text-[var(--danger)]"
+            }`}
+          >
+            {durationMessage || "Muokkaa treenin kokonaiskestoa, jos ajastin jäi liian pitkäksi tai lyhyeksi."}
+          </p>
+        </div>
+      ) : null}
       <p aria-live="polite" className="sr-only">
         {workoutMessage}
       </p>
@@ -998,7 +1090,7 @@ export function AthleteSessionPanel({
               </Button>
               <InfoTooltip
                 side="top"
-                text="Muokkaustilassa voit päivittää valmiin treenin sarjamerkintöjä ja muistiinpanoja."
+                text="Muokkaustilassa voit päivittää valmiin treenin sarjamerkintöjä, muistiinpanoja ja kokonaiskestoa."
               />
               {showDeleteAction ? (
                 <div className="relative" data-session-actions-menu-root="true">

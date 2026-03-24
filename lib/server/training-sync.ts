@@ -26,6 +26,7 @@ type ProfileRow = {
   default_dashboard_view: UserProfile["settings"] extends infer _ ? string | null : string | null;
   email_notifications: boolean;
   theme_mode: "light" | "dark";
+  height_cm: number | string | null;
   weight_kg: number | string | null;
   waist_cm: number | string | null;
   created_at: string;
@@ -35,6 +36,7 @@ type ProfileRow = {
 type BodyMeasurementRow = {
   id: string;
   user_id: string;
+  height_cm: number | string | null;
   weight_kg: number | string | null;
   waist_cm: number | string | null;
   measured_at: string;
@@ -204,6 +206,7 @@ function mapProfileRow(profile: ProfileRow): UserProfile {
     fullName: profile.full_name,
     email: profile.email,
     status: profile.status,
+    heightCm: toNumberOrUndefined(profile.height_cm),
     weightKg: toNumberOrUndefined(profile.weight_kg),
     waistCm: toNumberOrUndefined(profile.waist_cm),
     settings: {
@@ -229,6 +232,7 @@ function mapBodyMeasurementRow(entry: BodyMeasurementRow): BodyMeasurement {
   return {
     id: entry.id,
     userId: entry.user_id,
+    heightCm: toNumberOrUndefined(entry.height_cm),
     weightKg: toNumberOrUndefined(entry.weight_kg),
     waistCm: toNumberOrUndefined(entry.waist_cm),
     measuredAt: entry.measured_at,
@@ -324,12 +328,12 @@ export async function loadVisibleSupabaseAppState(
     supabase
       .from("profiles")
       .select(
-        "id, role, status, full_name, email, default_dashboard_view, email_notifications, theme_mode, weight_kg, waist_cm, created_at, updated_at",
+        "id, role, status, full_name, email, default_dashboard_view, email_notifications, theme_mode, height_cm, weight_kg, waist_cm, created_at, updated_at",
       )
       .order("created_at", { ascending: false }),
     supabase
       .from("body_measurements")
-      .select("id, user_id, weight_kg, waist_cm, measured_at, created_at")
+      .select("id, user_id, height_cm, weight_kg, waist_cm, measured_at, created_at")
       .order("measured_at", { ascending: false }),
     supabase
       .from("coach_athlete_assignments")

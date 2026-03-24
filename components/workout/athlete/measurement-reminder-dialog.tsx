@@ -6,12 +6,12 @@ export function MeasurementReminderDialog({
   weightDue,
   waistDue,
   onClose,
-  onOpenSettings,
+  onOpenOverview,
 }: {
   weightDue: boolean;
   waistDue: boolean;
   onClose: () => void;
-  onOpenSettings: () => void;
+  onOpenOverview: () => void;
 }) {
   return (
     <div
@@ -30,11 +30,11 @@ export function MeasurementReminderDialog({
           id="measurement-reminder-title"
           className="mt-2 font-[family-name:var(--font-display)] text-2xl font-semibold text-[var(--text)]"
         >
-          Päivitä kehon seuranta tämän viikonlopun aikana
+          Päivitä kehon seuranta viikonlopun aikana
         </h3>
         <p id="measurement-reminder-description" className="mt-2 text-sm leading-6 text-[var(--text-muted)]">
           Kirjaa paino ja vyötärö kerran viikossa. Kun tiedot ovat ajan tasalla,
-          kehitysgraafit ja kaloriarvio pysyvät hyödyllisinä.
+          kehon seuranta, kehitysgraafit ja kaloriarvio pysyvät hyödyllisinä.
         </p>
         <div className="mt-4 grid gap-3 sm:grid-cols-2">
           <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface-2)] px-4 py-3">
@@ -60,8 +60,8 @@ export function MeasurementReminderDialog({
           <Button type="button" variant="ghost" onClick={onClose}>
             Sulje
           </Button>
-          <Button type="button" onClick={onOpenSettings}>
-            Avaa profiili
+          <Button type="button" onClick={onOpenOverview}>
+            Avaa kehon seuranta
           </Button>
         </div>
       </div>

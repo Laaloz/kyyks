@@ -24,6 +24,7 @@ export interface UserProfile {
   email: string;
   status: UserStatus;
   demoPassword?: string;
+  heightCm?: number;
   weightKg?: number;
   waistCm?: number;
   settings?: UserSettings;
@@ -34,6 +35,7 @@ export interface UserProfile {
 export interface BodyMeasurement {
   id: string;
   userId: string;
+  heightCm?: number;
   weightKg?: number;
   waistCm?: number;
   measuredAt: string;

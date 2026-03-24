@@ -20,7 +20,7 @@ const dashboardViewLabel: Record<DashboardHomeView, string> = {
   overview: "Yleiskuva",
   templates: "Ohjelmat",
   invites: "Kutsut",
-  "athlete-log": "Harjoitukset",
+  "athlete-log": "Treenit",
   conversation: "Keskustelu",
 };
 
@@ -70,8 +70,6 @@ export function UserSettingsPanel() {
       ),
       emailNotifications: currentUser?.settings?.emailNotifications ?? false,
       themeMode: currentUser?.settings?.themeMode ?? "light",
-      weightKg: currentUser?.weightKg,
-      waistCm: currentUser?.waistCm,
     },
   });
 
@@ -124,8 +122,6 @@ export function UserSettingsPanel() {
       defaultDashboardView: resolveDefaultView(currentUser.role, currentUser.settings?.defaultDashboardView),
       emailNotifications: currentUser.settings?.emailNotifications ?? false,
       themeMode: currentUser.settings?.themeMode ?? "light",
-      weightKg: currentUser.weightKg,
-      waistCm: currentUser.waistCm,
     });
   }, [currentUser, form]);
 
@@ -157,6 +153,16 @@ export function UserSettingsPanel() {
     return null;
   }
 
+  const submitSettings = form.handleSubmit(async (values) => {
+    if (!allowedViewOptions.includes(values.defaultDashboardView)) {
+      setMessage("Valittu aloitussivu ei ole sallittu roolillesi.");
+      return;
+    }
+
+    const result = await updateCurrentUserSettings(values);
+    setMessage(result.ok ? "Muutokset tallennettu." : result.message);
+  });
+
   return (
     <div className="grid gap-6 lg:grid-cols-[1.05fr_0.95fr]">
       <Card className="border-[var(--border-strong)]">
@@ -168,15 +174,8 @@ export function UserSettingsPanel() {
 
         <form
           className="mt-6 space-y-4"
-          onSubmit={form.handleSubmit(async (values) => {
-            if (!allowedViewOptions.includes(values.defaultDashboardView)) {
-              setMessage("Valittu aloitussivu ei ole sallittu roolillesi.");
-              return;
-            }
-
-            const result = await updateCurrentUserSettings(values);
-            setMessage(result.ok ? "Muutokset tallennettu." : result.message);
-          })}
+          noValidate
+          onSubmit={submitSettings}
         >
           <div>
             <Label htmlFor="settings-full-name">Koko nimi</Label>
@@ -249,40 +248,6 @@ export function UserSettingsPanel() {
             </label>
           </div>
 
-          {currentUser.role === "athlete" ? (
-            <div className="grid gap-4 rounded-xl border-2 border-[var(--border)] bg-[var(--surface-2)] p-4 md:grid-cols-2">
-              <div>
-                <Label htmlFor="settings-weight-kg">Paino (kg)</Label>
-                <Input
-                  id="settings-weight-kg"
-                  type="number"
-                  inputMode="decimal"
-                  min={20}
-                  max={350}
-                  step="0.1"
-                  placeholder="Esim. 72.4"
-                  {...form.register("weightKg")}
-                />
-              </div>
-              <div>
-                <Label htmlFor="settings-waist-cm">Vyötärö (cm)</Label>
-                <Input
-                  id="settings-waist-cm"
-                  type="number"
-                  inputMode="decimal"
-                  min={30}
-                  max={250}
-                  step="0.5"
-                  placeholder="Esim. 81"
-                  {...form.register("waistCm")}
-                />
-              </div>
-              <p className="text-xs text-[var(--text-subtle)] md:col-span-2">
-                Merkitse paino ja vyötärö kerran viikossa. Kun päivität arvot, profiiliin tallentuu viimeisin mittaus ja kehitystrendi päivittyy automaattisesti.
-              </p>
-            </div>
-          ) : null}
-
           <p
             aria-live="polite"
             className={`min-h-5 text-sm ${
@@ -296,7 +261,7 @@ export function UserSettingsPanel() {
             {message}
           </p>
 
-          <Button type="submit" className="w-full sm:w-auto">
+          <Button type="button" className="w-full sm:w-auto" onClick={() => void submitSettings()}>
             Tallenna muutokset
           </Button>
         </form>
@@ -338,11 +303,11 @@ export function UserSettingsPanel() {
         <Card>
           <p className="text-xs font-semibold tracking-[0.04em] text-[var(--text-subtle)]">Yhteenveto</p>
           <CardTitle className="text-2xl">Profiilin yhteenveto</CardTitle>
-          <CardDescription className="mt-2">
-            {currentUser.role === "athlete"
-              ? "Näet tässä roolin, teeman, ilmoitustilan, aloitussivun sekä viimeisimmät kehon mittaustiedot."
-              : "Näet tässä roolin, teeman, ilmoitustilan ja valitun aloitussivun."}
-          </CardDescription>
+        <CardDescription className="mt-2">
+          {currentUser.role === "athlete"
+            ? "Näet tässä roolin, teeman, ilmoitustilan ja valitun aloitussivun."
+            : "Näet tässä roolin, teeman, ilmoitustilan ja valitun aloitussivun."}
+        </CardDescription>
           <div className="mt-6 grid gap-3">
             <div className="flex items-center justify-between rounded-xl border-2 border-[var(--border)] bg-[var(--surface-2)] px-4 py-3">
               <span className="text-sm text-[var(--text-muted)]">Rooli</span>
@@ -369,18 +334,6 @@ export function UserSettingsPanel() {
               </span>
               <Badge>{currentUser.settings?.emailNotifications ? "Päällä" : "Pois"}</Badge>
             </div>
-            {currentUser.role === "athlete" ? (
-              <>
-                <div className="flex items-center justify-between rounded-xl border-2 border-[var(--border)] bg-[var(--surface-2)] px-4 py-3">
-                  <span className="text-sm text-[var(--text-muted)]">Paino</span>
-                  <Badge>{currentUser.weightKg !== undefined ? `${currentUser.weightKg} kg` : "Ei asetettu"}</Badge>
-                </div>
-                <div className="flex items-center justify-between rounded-xl border-2 border-[var(--border)] bg-[var(--surface-2)] px-4 py-3">
-                  <span className="text-sm text-[var(--text-muted)]">Vyötärö</span>
-                  <Badge>{currentUser.waistCm !== undefined ? `${currentUser.waistCm} cm` : "Ei asetettu"}</Badge>
-                </div>
-              </>
-            ) : null}
           </div>
         </Card>
 

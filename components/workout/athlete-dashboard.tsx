@@ -15,6 +15,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardDescription, CardTitle } from "@/components/ui/card";
 import { Input, Label, Select, Textarea } from "@/components/ui/field";
+import { bodyMeasurementSchema } from "@/components/workout/schemas";
 import { InfoTooltip } from "@/components/ui/tooltip";
 import { AthleteSessionPanel } from "@/components/workout/athlete/session-panel";
 import { ConversationPanel } from "@/components/workout/conversation-panel";
@@ -52,6 +53,7 @@ type WorkoutInsight = {
 };
 
 type AthleteLogMode = "library" | "workout";
+type AthleteOverviewFocusTarget = "measurements";
 
 type HistoryMuscleGroupKey = "shoulders" | "arms" | "chest" | "abs" | "back" | "legs" | "other";
 
@@ -123,15 +125,21 @@ function getFloatingMenuStyle(anchor: AnchorRect, menuElement: HTMLElement): CSS
 export function AthleteDashboard({
   view,
   onOpenWorkoutLog,
+  overviewFocusTarget,
+  onOverviewFocusHandled,
 }: {
   view: WorkspaceView;
   onOpenWorkoutLog?: () => void;
+  overviewFocusTarget?: AthleteOverviewFocusTarget | null;
+  onOverviewFocusHandled?: () => void;
 }) {
   const {
     currentUser,
     state,
     startWorkout,
     startProgramWorkout,
+    updateCurrentUserMeasurements,
+    updateWorkoutDuration,
     updateWorkoutSet,
     saveWorkoutNote,
     addConversationComment,
@@ -149,9 +157,16 @@ export function AthleteDashboard({
   const [historyMenuStyle, setHistoryMenuStyle] = useState<CSSProperties | null>(null);
   const [isHistoryExpanded, setIsHistoryExpanded] = useState(false);
   const [selectedHistoryWorkoutByGroup, setSelectedHistoryWorkoutByGroup] = useState<Record<string, string>>({});
+  const [measurementDraft, setMeasurementDraft] = useState({
+    heightCm: "",
+    weightKg: "",
+    waistCm: "",
+  });
+  const [measurementMessage, setMeasurementMessage] = useState("");
   const didAutoResumeWorkout = useRef(false);
   const historySectionRef = useRef<HTMLDivElement | null>(null);
   const historyMenuRef = useRef<HTMLDivElement | null>(null);
+  const measurementsSectionRef = useRef<HTMLDivElement | null>(null);
   const closeWorkoutView = () => {
     setHistoryFocusWorkoutId(null);
     setCorrectionModeWorkoutId(null);
@@ -163,6 +178,29 @@ export function AthleteDashboard({
   useEffect(() => {
     setSelectedHistoryWorkoutByGroup({});
   }, [currentUser?.id]);
+  useEffect(() => {
+    setMeasurementDraft({
+      heightCm: currentUser?.heightCm !== undefined ? String(currentUser.heightCm) : "",
+      weightKg: currentUser?.weightKg !== undefined ? String(currentUser.weightKg) : "",
+      waistCm: currentUser?.waistCm !== undefined ? String(currentUser.waistCm) : "",
+    });
+  }, [currentUser?.id, currentUser?.heightCm, currentUser?.weightKg, currentUser?.waistCm]);
+  useEffect(() => {
+    setMeasurementMessage("");
+  }, [currentUser?.id]);
+  useEffect(() => {
+    if (view !== "overview" || overviewFocusTarget !== "measurements") {
+      return;
+    }
+
+    const node = measurementsSectionRef.current;
+    if (!node) {
+      return;
+    }
+
+    node.scrollIntoView({ behavior: "smooth", block: "start" });
+    onOverviewFocusHandled?.();
+  }, [view, overviewFocusTarget, onOverviewFocusHandled]);
   const athletePrograms = state.plans.filter(
     (plan) => plan.athleteId === currentUser?.id && Boolean(plan.workouts?.length) && isProgramActive(plan),
   );
@@ -233,6 +271,22 @@ export function AthleteDashboard({
   const selectedWorkoutStatus = selectedWorkout ? resolveWorkoutStatus(selectedWorkout) : undefined;
   const selectedWorkoutInsight = selectedWorkout ? workoutInsights.get(selectedWorkout.id) : undefined;
   const latestBodyMeasurement = currentUser ? getLatestMeasurement(state, currentUser.id) : undefined;
+  const parseMeasurementField = (value: string) => {
+    if (!value.trim()) {
+      return undefined;
+    }
+
+    const nextValue = Number(value.replace(",", "."));
+    return Number.isFinite(nextValue) ? nextValue : undefined;
+  };
+  const nextHeightCm = parseMeasurementField(measurementDraft.heightCm);
+  const nextWeightKg = parseMeasurementField(measurementDraft.weightKg);
+  const nextWaistCm = parseMeasurementField(measurementDraft.waistCm);
+  const isMeasurementDirty =
+    currentUser?.role === "athlete" &&
+    (currentUser.heightCm !== nextHeightCm ||
+      currentUser.weightKg !== nextWeightKg ||
+      currentUser.waistCm !== nextWaistCm);
   const weightTrendPoints = useMemo(
     () =>
       currentUser
@@ -664,7 +718,7 @@ export function AthleteDashboard({
                   <p className="text-xs font-semibold tracking-[0.04em] text-[var(--text-subtle)]">Nostettu tällä viikolla</p>
                   <InfoTooltip text="Luku lasketaan valmiista sarjoista kaavalla kuorma x toistot." />
                 </div>
-                <p className="mt-2 text-lg font-semibold text-[var(--text)]">{Math.round(weeklyInsights.weeklyVolume)} kg</p>
+                <p className="mt-2 text-lg font-semibold text-[var(--text)]">{formatLiftedKgValue(weeklyInsights.weeklyVolume)}</p>
                 <p className="mt-1 text-sm text-[var(--text-muted)]">
                   Jokainen valmis sarja kasvattaa kokonaistyömäärää ja rakentaa progressiota.
                 </p>
@@ -697,7 +751,7 @@ export function AthleteDashboard({
                 </p>
                 <p className="mt-1 text-sm text-[var(--text-muted)]">
                   {weeklyInsights.latestCompleted
-                    ? `${formatDateWithWeekday(weeklyInsights.latestCompleted.completedAt ?? weeklyInsights.latestCompleted.updatedAt)} · ${Math.round(weeklyInsights.latestCompletedVolume)} kg`
+                    ? `${formatDateWithWeekday(weeklyInsights.latestCompleted.completedAt ?? weeklyInsights.latestCompleted.updatedAt)} · ${formatLiftedKgValue(weeklyInsights.latestCompletedVolume)}`
                     : "Ensimmäinen valmis treeni näkyy tässä automaattisesti."}
                 </p>
               </div>
@@ -710,16 +764,26 @@ export function AthleteDashboard({
       )}
 
       {view === "overview" && currentUser?.role === "athlete" ? (
-        <Card className="border-[var(--border-strong)]">
-          <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
-            <div>
-              <p className="text-xs font-semibold tracking-[0.04em] text-[var(--text-subtle)]">Kehon seuranta</p>
-              <CardTitle className="mt-2 text-2xl">Painon kehitys</CardTitle>
-              <CardDescription className="mt-2 max-w-3xl">
-                Merkitse paino ja vyötärö kerran viikossa. Kaloriarvio käyttää uusinta painotietoasi suuntaa-antavana kertoimena.
+        <div
+          ref={measurementsSectionRef}
+          id="overview-measurements"
+        >
+          <Card className="scroll-mt-24 border-[var(--border-strong)]">
+            <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
+              <div>
+                <p className="text-xs font-semibold tracking-[0.04em] text-[var(--text-subtle)]">Kehon seuranta</p>
+                <CardTitle className="mt-2 text-2xl">Mitat ja kehitys</CardTitle>
+                <CardDescription className="mt-2 max-w-3xl">
+                  Päivitä pituus, paino ja vyötärö tähän samaan paikkaan. Paino- ja vyötärötrendit päivittyvät automaattisesti viimeisimmän mittauksen mukaan.
               </CardDescription>
             </div>
-            <div className="grid w-full gap-3 sm:grid-cols-2 xl:w-auto xl:min-w-[28rem] xl:grid-cols-3">
+            <div className="grid w-full gap-3 sm:grid-cols-2 xl:w-auto xl:min-w-[38rem] xl:grid-cols-4">
+              <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface-2)] px-4 py-4">
+                <p className="text-xs font-semibold tracking-[0.04em] text-[var(--text-subtle)]">Pituus</p>
+                <p className="mt-2 text-lg font-semibold text-[var(--text)]">
+                  {currentUser.heightCm !== undefined ? `${currentUser.heightCm} cm` : "Ei asetettu"}
+                </p>
+              </div>
               <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface-2)] px-4 py-4">
                 <p className="text-xs font-semibold tracking-[0.04em] text-[var(--text-subtle)]">Paino</p>
                 <p className="mt-2 text-lg font-semibold text-[var(--text)]">
@@ -740,13 +804,111 @@ export function AthleteDashboard({
               </div>
             </div>
           </div>
+          <div className="mt-5 rounded-2xl border border-[var(--border)] bg-[var(--surface-2)] p-4">
+            <div className="flex flex-col gap-2">
+              <div>
+                <p className="text-sm font-semibold text-[var(--text)]">Päivitä tämänhetkiset mitat</p>
+                <p className="text-sm text-[var(--text-muted)]">
+                  Pituus muuttuu harvoin, mutta painon ja vyötärön voit päivittää tähän vaikka kerran viikossa.
+                </p>
+              </div>
+            </div>
+            <div className="mt-4 grid gap-3 md:grid-cols-3">
+              <div>
+                <Label htmlFor="overview-height-cm">Pituus (cm)</Label>
+                <Input
+                  id="overview-height-cm"
+                  type="number"
+                  inputMode="decimal"
+                  min={80}
+                  max={250}
+                  step="0.5"
+                  placeholder="Esim. 178"
+                  value={measurementDraft.heightCm}
+                  onChange={(event) => {
+                    setMeasurementDraft((previous) => ({ ...previous, heightCm: event.target.value }));
+                    setMeasurementMessage("");
+                  }}
+                />
+              </div>
+              <div>
+                <Label htmlFor="overview-weight-kg">Paino (kg)</Label>
+                <Input
+                  id="overview-weight-kg"
+                  type="number"
+                  inputMode="decimal"
+                  min={20}
+                  max={350}
+                  step="0.1"
+                  placeholder="Esim. 72.4"
+                  value={measurementDraft.weightKg}
+                  onChange={(event) => {
+                    setMeasurementDraft((previous) => ({ ...previous, weightKg: event.target.value }));
+                    setMeasurementMessage("");
+                  }}
+                />
+              </div>
+              <div>
+                <Label htmlFor="overview-waist-cm">Vyötärö (cm)</Label>
+                <Input
+                  id="overview-waist-cm"
+                  type="number"
+                  inputMode="decimal"
+                  min={30}
+                  max={250}
+                  step="0.5"
+                  placeholder="Esim. 81"
+                  value={measurementDraft.waistCm}
+                  onChange={(event) => {
+                    setMeasurementDraft((previous) => ({ ...previous, waistCm: event.target.value }));
+                    setMeasurementMessage("");
+                  }}
+                />
+              </div>
+            </div>
+            <div className="mt-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+              <p
+                aria-live="polite"
+                className={`min-h-5 text-sm ${
+                  !measurementMessage
+                    ? "text-[var(--text-subtle)]"
+                    : measurementMessage.includes("tallenn")
+                      ? "text-[var(--success)]"
+                      : "text-[var(--danger)]"
+                }`}
+              >
+                {measurementMessage ||
+                  (isMeasurementDirty
+                    ? "Tallennus päivittää viimeisimmän mittauksen ja trendikaaviot."
+                    : "Muuta jotakin arvoa, kun haluat tallentaa uuden mittauksen.")}
+              </p>
+              <Button
+                type="button"
+                variant={isMeasurementDirty ? "primary" : "secondary"}
+                disabled={!isMeasurementDirty}
+                className="w-full sm:w-auto"
+                onClick={async () => {
+                  const parsed = bodyMeasurementSchema.safeParse(measurementDraft);
+                  if (!parsed.success) {
+                    setMeasurementMessage(parsed.error.issues[0]?.message ?? "Tarkista mittatiedot ja yritä uudelleen.");
+                    return;
+                  }
+
+                  const result = await updateCurrentUserMeasurements(parsed.data);
+                  setMeasurementMessage(result.ok ? "Mittatiedot tallennettu." : result.message);
+                }}
+              >
+                Tallenna mittatiedot
+              </Button>
+            </div>
+          </div>
           <div className="mt-5 grid gap-4 xl:grid-cols-2">
             <div>
               <p className="text-xs font-semibold tracking-[0.04em] text-[var(--text-subtle)]">Painotrendi</p>
               <MetricTrendChart
                 points={weightTrendPoints}
                 ariaLabel="Painon kehitystrendi"
-                emptyMessage="Lisää paino profiiliin, niin kehitystrendi alkaa piirtyä tähän."
+                emptyMessage="Lisää paino viimeisimpään mittaukseen, niin kehitystrendi alkaa piirtyä tähän."
                 helperText="Alarivillä näkyy kuukausi ja vuosi, oikealla painon asteikko."
                 valueLabel="Paino"
                 unit="kg"
@@ -757,14 +919,15 @@ export function AthleteDashboard({
               <MetricTrendChart
                 points={waistTrendPoints}
                 ariaLabel="Vyötärön kehitystrendi"
-                emptyMessage="Lisää vyötärö profiiliin, niin kehitystrendi alkaa piirtyä tähän."
+                emptyMessage="Lisää vyötärö viimeisimpään mittaukseen, niin kehitystrendi alkaa piirtyä tähän."
                 helperText="Alarivillä näkyy kuukausi ja vuosi, oikealla vyötärön asteikko."
                 valueLabel="Vyötärö"
                 unit="cm"
               />
             </div>
-          </div>
-        </Card>
+            </div>
+          </Card>
+        </div>
       ) : null}
 
       {view === "overview" && (
@@ -774,23 +937,23 @@ export function AthleteDashboard({
             {activeWorkout
               ? "Jatka aktiivista treeniä"
               : athletePrograms.length
-                ? "Siirry harjoituksiin"
+                ? "Siirry treeneihin"
                 : "Treeniohjelma puuttuu"}
           </CardTitle>
           <CardDescription className="mt-2">
             {activeWorkout
               ? "Avaa keskeneräinen treeni suoraan siitä kohdasta, johon jäit."
               : athletePrograms.length
-                ? "Harjoituksissa valitset treenin, seuraat historiaa ja teet kaikki kirjaukset."
+                ? "Treeneissä valitset treenin, seuraat historiaa ja teet kaikki kirjaukset."
                 : "Pyydä valmentajaa lisäämään sinulle ohjelma, niin pääset aloittamaan treenit tästä."}
           </CardDescription>
           <div className="mt-5 grid gap-4 xl:grid-cols-[0.95fr_1.05fr]">
             <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface-2)] p-4">
               <p className="text-xs font-semibold tracking-[0.04em] text-[var(--text-subtle)]">
-                {activeWorkout ? "Nopea toiminto" : "Harjoitukset"}
+                {activeWorkout ? "Nopea toiminto" : "Treenit"}
               </p>
               <p className="mt-2 text-lg font-semibold text-[var(--text)]">
-                {activeWorkout ? normalizeWorkoutHistoryTitle(activeWorkout.title) : "Avaa harjoitukset ja historia"}
+                {activeWorkout ? normalizeWorkoutHistoryTitle(activeWorkout.title) : "Avaa treenit ja historia"}
               </p>
               <p className="mt-1 text-sm text-[var(--text-muted)]">
                 {activeWorkout
@@ -821,7 +984,7 @@ export function AthleteDashboard({
                       onOpenWorkoutLog?.();
                     }}
                   >
-                    Avaa harjoitukset
+                    Avaa treenit
                   </Button>
                 )}
               </div>
@@ -907,7 +1070,8 @@ export function AthleteDashboard({
                 </div>
                 {selectedWorkout?.status === "completed" ? (
                   <p className="mt-2 text-xs text-[var(--text-subtle)]">
-                    Tässä treenissä nostettu yhteensä {Math.round(selectedWorkoutInsight?.liftedKg ?? 0)} kg.
+                    Nostettu yhteensä {formatLiftedKgValue(selectedWorkoutInsight?.liftedKg ?? 0)} ·{" "}
+                    arvioitu kulutus {formatEstimatedCaloriesValue(selectedWorkoutInsight?.estimatedCalories ?? 0)}.
                   </p>
                 ) : (
                   <p className="mt-2 text-xs text-[var(--text-subtle)]">
@@ -937,6 +1101,11 @@ export function AthleteDashboard({
                   setWorkoutMessage("Treeni käynnistetty. Sarjaloki luotiin automaattisesti.");
                 }}
                 onUpdate={(logId, patch) => startTransition(() => updateWorkoutSet(selectedWorkout.id, logId, patch))}
+                onUpdateDuration={async (durationSeconds) => {
+                  const result = await updateWorkoutDuration(selectedWorkout.id, durationSeconds);
+                  setWorkoutMessage(result.ok ? "Treeniaika päivitetty." : result.message);
+                  return result;
+                }}
                 onSaveNote={(body) => saveWorkoutNote(selectedWorkout.id, body)}
                 onComplete={async () => {
                   const completedWorkoutId = selectedWorkout.id;
@@ -1384,7 +1553,8 @@ export function AthleteDashboard({
                           <div className="mt-4 grid grid-cols-2 gap-2">
                             <HistoryMetric label="Kesto" value={formatWorkoutDuration(insight.durationSeconds)} />
                             <HistoryMetric label="Sarjat" value={`${insight.completedSetCount}/${insight.setCount}`} />
-                            <HistoryMetric label="Volyymi (kg x toistot)" value={`${Math.round(insight.liftedKg)} kg`} />
+                            <HistoryMetric label="Nostettu yhteensä" value={formatLiftedKgValue(insight.liftedKg)} />
+                            <HistoryMetric label="Kalorit" value={formatEstimatedCaloriesValue(insight.estimatedCalories)} />
                             <HistoryMetric label="Suoritus" value={`${insight.completionPercent}%`} />
                           </div>
                           <div className="mt-3 rounded-xl border border-[var(--border)] bg-[var(--surface)] px-3 py-2">
@@ -1392,7 +1562,7 @@ export function AthleteDashboard({
                             <div className="mt-2 grid grid-cols-2 gap-1.5 sm:grid-cols-3">
                               {historyMuscleGroups.map((group) => (
                                 <p key={group.key} className="text-[11px] text-[var(--text-muted)]">
-                                  {group.label}: {Math.round(insight.muscleGroupLiftedKg[group.key])} kg
+                                  {group.label}: {formatLiftedKgValue(insight.muscleGroupLiftedKg[group.key])}
                                 </p>
                               ))}
                             </div>
@@ -1796,6 +1966,14 @@ function createNotePreview(note?: string, maxLength = 160) {
   }
 
   return `${note.slice(0, maxLength - 1).trimEnd()}…`;
+}
+
+function formatLiftedKgValue(value: number) {
+  return `${Math.round(value)} kg`;
+}
+
+function formatEstimatedCaloriesValue(value: number) {
+  return `${Math.round(value)} kcal`;
 }
 
 function statusTone(status: string) {

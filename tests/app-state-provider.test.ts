@@ -120,6 +120,7 @@ describe("shouldPreserveStoredSessionDuringSupabaseBootstrap", () => {
         default_dashboard_view: "athlete-log",
         email_notifications: false,
         theme_mode: "light",
+        height_cm: 181,
         weight_kg: null,
         waist_cm: null,
         created_at: "2026-03-24T08:00:00.000Z",
@@ -132,6 +133,9 @@ describe("shouldPreserveStoredSessionDuringSupabaseBootstrap", () => {
     expect(
       resolution.nextState.users.find((user) => user.id === supabaseUserId)?.status,
     ).toBe("active");
+    expect(
+      resolution.nextState.users.find((user) => user.id === supabaseUserId)?.heightCm,
+    ).toBe(181);
     expect(
       resolution.nextState.assignments.some((assignment) => assignment.athleteId === supabaseUserId),
     ).toBe(true);

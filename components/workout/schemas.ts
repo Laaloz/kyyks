@@ -20,6 +20,10 @@ export const userSettingsSchema = z.object({
   defaultDashboardView: z.enum(["overview", "templates", "invites", "athlete-log", "conversation"]),
   emailNotifications: z.boolean(),
   themeMode: z.enum(["light", "dark"]),
+});
+
+export const bodyMeasurementSchema = z.object({
+  heightCm: optionalNumberField(z.number().min(80).max(250)),
   weightKg: optionalNumberField(z.number().min(20).max(350)),
   waistCm: optionalNumberField(z.number().min(30).max(250)),
 });

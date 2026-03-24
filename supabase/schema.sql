@@ -21,6 +21,7 @@ create table if not exists public.profiles (
   default_dashboard_view text,
   email_notifications boolean not null default false,
   theme_mode public.theme_mode not null default 'light',
+  height_cm numeric(5,2),
   weight_kg numeric(5,2),
   waist_cm numeric(5,2),
   created_at timestamptz not null default now(),
@@ -33,12 +34,13 @@ on public.profiles (lower(email));
 create table if not exists public.body_measurements (
   id uuid primary key default gen_random_uuid(),
   user_id uuid not null references public.profiles(id) on delete cascade,
+  height_cm numeric(5,2),
   weight_kg numeric(5,2),
   waist_cm numeric(5,2),
   measured_at timestamptz not null default now(),
   created_at timestamptz not null default now(),
   constraint body_measurements_value_check
-    check (weight_kg is not null or waist_cm is not null)
+    check (height_cm is not null or weight_kg is not null or waist_cm is not null)
 );
 
 create index if not exists body_measurements_user_idx

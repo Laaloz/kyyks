@@ -18,7 +18,9 @@ import { useAppState } from "@/providers/app-state-provider";
 import { roleLabel, type WorkspaceView } from "@/components/workout/shared";
 
 type PrimaryWorkspaceView = Exclude<WorkspaceView, "settings">;
+type AthleteOverviewFocusTarget = "measurements";
 const MEASUREMENT_REMINDER_STORAGE_VERSION = "v2";
+const WORKSPACE_VIEW_STORAGE_VERSION = "v1";
 
 function navItemsForRole(role: "admin" | "coach" | "athlete"): PrimaryWorkspaceView[] {
   return getDashboardViewsForRole(role);
@@ -31,6 +33,37 @@ function resolveInitialView(role: "admin" | "coach" | "athlete", preferredView: 
   }
 
   return getDefaultDashboardView(role);
+}
+
+function getWorkspaceViewStorageKey(userId: string) {
+  return `workspace-view:${WORKSPACE_VIEW_STORAGE_VERSION}:${userId}`;
+}
+
+function resolvePersistedWorkspaceView(
+  userId: string,
+  role: "admin" | "coach" | "athlete",
+  preferredView: WorkspaceView | undefined,
+) {
+  const fallbackView = resolveInitialView(role, preferredView);
+  if (typeof window === "undefined") {
+    return fallbackView;
+  }
+
+  try {
+    const persistedView = window.sessionStorage.getItem(getWorkspaceViewStorageKey(userId)) as WorkspaceView | null;
+    if (persistedView === "settings") {
+      return persistedView;
+    }
+
+    const roleNavItems = navItemsForRole(role);
+    if (persistedView && roleNavItems.includes(persistedView as PrimaryWorkspaceView)) {
+      return persistedView;
+    }
+  } catch {
+    // Ignore storage failures and fall back to the user's default view.
+  }
+
+  return fallbackView;
 }
 
 export function DashboardShell() {
@@ -51,7 +84,9 @@ export function DashboardShell() {
   const [isMeasurementReminderOpen, setIsMeasurementReminderOpen] = useState(false);
   const [isReminderPreviewMode, setIsReminderPreviewMode] = useState(false);
   const [isMobileActionsOpen, setIsMobileActionsOpen] = useState(false);
+  const [athleteOverviewFocusTarget, setAthleteOverviewFocusTarget] = useState<AthleteOverviewFocusTarget | null>(null);
   const didAutoOpenAthleteLog = useRef(false);
+  const previousUserIdRef = useRef<string | null>(null);
   const navButtonRefs = useRef<Record<string, HTMLButtonElement | null>>({});
   const mobileActionsRef = useRef<HTMLDivElement | null>(null);
 
@@ -64,7 +99,7 @@ export function DashboardShell() {
     overview: "Yleiskuva",
     templates: "Ohjelmat",
     invites: "Kutsut",
-    "athlete-log": "Harjoitukset",
+    "athlete-log": "Treenit",
     conversation: "Keskustelu",
     settings: "Asetukset",
   };
@@ -112,6 +147,51 @@ export function DashboardShell() {
     }
     return isConversationEntryNotifiable(entry) && !entry.readByUserIds.includes(currentUser.id);
   }).length;
+
+  const handleLogout = async () => {
+    try {
+      window.sessionStorage.removeItem(getWorkspaceViewStorageKey(currentUser.id));
+    } catch {
+      // Ignore storage failures and continue logging out.
+    }
+
+    await logout();
+  };
+
+  useEffect(() => {
+    const nextView = resolvePersistedWorkspaceView(
+      currentUser.id,
+      currentUser.role,
+      currentUser.settings?.defaultDashboardView,
+    );
+
+    setView((current) => {
+      if (previousUserIdRef.current !== currentUser.id) {
+        return nextView;
+      }
+
+      if (current === "settings") {
+        return current;
+      }
+
+      const roleNavItems = navItemsForRole(currentUser.role);
+      if (roleNavItems.includes(current as PrimaryWorkspaceView)) {
+        return current;
+      }
+
+      return nextView;
+    });
+
+    previousUserIdRef.current = currentUser.id;
+  }, [currentUser.id, currentUser.role, currentUser.settings?.defaultDashboardView]);
+
+  useEffect(() => {
+    try {
+      window.sessionStorage.setItem(getWorkspaceViewStorageKey(currentUser.id), view);
+    } catch {
+      // Ignore storage failures and keep the in-memory view state.
+    }
+  }, [currentUser.id, view]);
 
   useEffect(() => {
     if (didAutoOpenAthleteLog.current || !navItemsForRole(currentUser.role).includes("athlete-log")) {
@@ -245,9 +325,10 @@ export function DashboardShell() {
           weightDue={weightReminderDue}
           waistDue={waistReminderDue}
           onClose={() => setIsMeasurementReminderOpen(false)}
-          onOpenSettings={() => {
+          onOpenOverview={() => {
             setIsMeasurementReminderOpen(false);
-            setView("settings");
+            setAthleteOverviewFocusTarget("measurements");
+            setView("overview");
           }}
         />
       ) : null}
@@ -316,7 +397,7 @@ export function DashboardShell() {
               </Button>
               <Button
                 onClick={() => {
-                  void logout();
+                  void handleLogout();
                 }}
                 type="button"
                 variant="secondary"
@@ -381,7 +462,7 @@ export function DashboardShell() {
                     className="flex w-full items-center gap-2 rounded-xl px-3 py-2.5 text-left text-sm font-medium text-[var(--text)] hover:bg-[var(--surface-2)]"
                     onClick={() => {
                       setIsMobileActionsOpen(false);
-                      void logout();
+                      void handleLogout();
                     }}
                   >
                     <LogOut className="size-4" aria-hidden="true" />
@@ -470,6 +551,8 @@ export function DashboardShell() {
               <AthleteDashboard
                 view={view}
                 onOpenWorkoutLog={() => setView("athlete-log")}
+                overviewFocusTarget={athleteOverviewFocusTarget}
+                onOverviewFocusHandled={() => setAthleteOverviewFocusTarget(null)}
               />
             ) : view === "templates" || currentUser.role === "coach" || (view === "conversation" && canActAsCoach(currentUser.role)) ? (
               <CoachDashboard view={view} onOpenConversation={() => setView("conversation")} />
@@ -479,6 +562,8 @@ export function DashboardShell() {
               <AthleteDashboard
                 view={view}
                 onOpenWorkoutLog={() => setView("athlete-log")}
+                overviewFocusTarget={athleteOverviewFocusTarget}
+                onOverviewFocusHandled={() => setAthleteOverviewFocusTarget(null)}
               />
             )}
           </div>

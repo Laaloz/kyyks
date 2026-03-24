@@ -61,6 +61,7 @@ function mapStoredProfileRecord(profile: {
   default_dashboard_view: string | null;
   email_notifications: boolean;
   theme_mode: "light" | "dark";
+  height_cm: number | null;
   weight_kg: number | null;
   waist_cm: number | null;
   created_at: string;
@@ -72,6 +73,7 @@ function mapStoredProfileRecord(profile: {
     fullName: profile.full_name,
     email: profile.email,
     status: profile.status,
+    heightCm: profile.height_cm ?? undefined,
     weightKg: profile.weight_kg ?? undefined,
     waistCm: profile.waist_cm ?? undefined,
     settings: {
@@ -389,7 +391,7 @@ export async function listVisiblePendingInvites({
   const { data: profiles, error: profilesError } = await admin
     .from("profiles")
     .select(
-      "id, role, status, full_name, email, default_dashboard_view, email_notifications, theme_mode, weight_kg, waist_cm, created_at, updated_at",
+      "id, role, status, full_name, email, default_dashboard_view, email_notifications, theme_mode, height_cm, weight_kg, waist_cm, created_at, updated_at",
     )
     .eq("status", "active")
     .in("email", normalizedEmails);

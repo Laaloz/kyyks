@@ -299,27 +299,41 @@ function normalizeState(raw: AppState): AppState {
       Boolean(entry.userId) &&
       Boolean(entry.measuredAt) &&
       Boolean(entry.createdAt) &&
-      (typeof entry.weightKg === "number" || typeof entry.waistCm === "number"),
+      (typeof entry.heightCm === "number" ||
+        typeof entry.weightKg === "number" ||
+        typeof entry.waistCm === "number"),
   );
-  const latestMeasurementByUserId = new Map<string, (typeof normalizedBodyMeasurements)[number]>();
+  const latestHeightByUserId = new Map<string, number>();
+  const latestWeightByUserId = new Map<string, number>();
+  const latestWaistByUserId = new Map<string, number>();
   normalizedBodyMeasurements
     .slice()
     .sort((a, b) => new Date(b.measuredAt).getTime() - new Date(a.measuredAt).getTime())
     .forEach((entry) => {
-      if (!latestMeasurementByUserId.has(entry.userId)) {
-        latestMeasurementByUserId.set(entry.userId, entry);
+      if (typeof entry.heightCm === "number" && !latestHeightByUserId.has(entry.userId)) {
+        latestHeightByUserId.set(entry.userId, entry.heightCm);
+      }
+      if (typeof entry.weightKg === "number" && !latestWeightByUserId.has(entry.userId)) {
+        latestWeightByUserId.set(entry.userId, entry.weightKg);
+      }
+      if (typeof entry.waistCm === "number" && !latestWaistByUserId.has(entry.userId)) {
+        latestWaistByUserId.set(entry.userId, entry.waistCm);
       }
     });
   const normalizedUsers = raw.users.map((user) => ({
     ...user,
+    heightCm:
+      typeof user.heightCm === "number"
+        ? user.heightCm
+        : latestHeightByUserId.get(user.id),
     weightKg:
       typeof user.weightKg === "number"
         ? user.weightKg
-        : latestMeasurementByUserId.get(user.id)?.weightKg,
+        : latestWeightByUserId.get(user.id),
     waistCm:
       typeof user.waistCm === "number"
         ? user.waistCm
-        : latestMeasurementByUserId.get(user.id)?.waistCm,
+        : latestWaistByUserId.get(user.id),
     settings: normalizeUserSettings(user.role, user.settings),
   }));
   const normalizedExercises = raw.exercises.map((exercise) => ({
@@ -391,6 +405,10 @@ type UserSettingsInput = {
   defaultDashboardView: DashboardHomeView;
   emailNotifications: boolean;
   themeMode: "light" | "dark";
+};
+
+type UserMeasurementInput = {
+  heightCm?: number;
   weightKg?: number;
   waistCm?: number;
 };
@@ -586,6 +604,7 @@ type SupabaseProfileRecord = {
   default_dashboard_view: DashboardHomeView | null;
   email_notifications: boolean;
   theme_mode: "light" | "dark";
+  height_cm: number | null;
   weight_kg: number | null;
   waist_cm: number | null;
   created_at: string;
@@ -634,6 +653,7 @@ function mapSupabaseProfileToUser(profile: SupabaseProfileRecord): UserProfile {
     fullName: profile.full_name,
     email: profile.email,
     status: profile.status,
+    heightCm: profile.height_cm ?? undefined,
     weightKg: profile.weight_kg ?? undefined,
     waistCm: profile.waist_cm ?? undefined,
     settings: {
@@ -990,7 +1010,7 @@ async function fetchSupabaseProfile(supabase: NonNullable<ReturnType<typeof crea
   const { data, error } = await supabase
     .from("profiles")
     .select(
-      "id, role, status, full_name, email, default_dashboard_view, email_notifications, theme_mode, weight_kg, waist_cm, created_at, updated_at",
+      "id, role, status, full_name, email, default_dashboard_view, email_notifications, theme_mode, height_cm, weight_kg, waist_cm, created_at, updated_at",
     )
     .eq("id", userId)
     .maybeSingle();
@@ -1051,6 +1071,7 @@ interface AppStateContextValue {
   startAdminImpersonation: (userId: string) => ActionResult;
   stopAdminImpersonation: () => ActionResult;
   updateCurrentUserSettings: (input: UserSettingsInput) => Promise<ActionResult>;
+  updateCurrentUserMeasurements: (input: UserMeasurementInput) => Promise<ActionResult>;
   requestCurrentUserPasswordReset: () => Promise<PasswordResetRequestResult>;
   adminSendPasswordResetEmail: (userId: string) => Promise<PasswordResetRequestResult>;
   adminUpdateUserRole: (userId: string, role: Role) => Promise<ActionResult>;
@@ -1073,6 +1094,7 @@ interface AppStateContextValue {
   ) => ActionResult;
   markConversationRead: () => void;
   startWorkout: (scheduledWorkoutId: string) => Promise<ActionResult>;
+  updateWorkoutDuration: (scheduledWorkoutId: string, durationSeconds: number) => Promise<ActionResult>;
   updateWorkoutSet: (scheduledWorkoutId: string, logId: string, patch: WorkoutUpdateInput) => void;
   saveWorkoutNote: (scheduledWorkoutId: string, body: string) => void;
   completeWorkout: (scheduledWorkoutId: string) => Promise<ActionResult>;
@@ -1502,10 +1524,6 @@ export function AppStateProvider({ children }: PropsWithChildren) {
         }
 
         const timestamp = new Date().toISOString();
-        const weightKg = typeof input.weightKg === "number" ? input.weightKg : undefined;
-        const waistCm = typeof input.waistCm === "number" ? input.waistCm : undefined;
-        const hasMeasurementChange =
-          currentUser.weightKg !== weightKg || currentUser.waistCm !== waistCm;
 
         if (supabase) {
           const { error: profileError } = await supabase
@@ -1515,8 +1533,6 @@ export function AppStateProvider({ children }: PropsWithChildren) {
               default_dashboard_view: input.defaultDashboardView,
               email_notifications: input.emailNotifications,
               theme_mode: input.themeMode,
-              weight_kg: weightKg ?? null,
-              waist_cm: waistCm ?? null,
               updated_at: timestamp,
             })
             .eq("id", currentUser.id);
@@ -1524,53 +1540,15 @@ export function AppStateProvider({ children }: PropsWithChildren) {
           if (profileError) {
             return { ok: false, message: "Asetusten tallennus epäonnistui." };
           }
-
-          if (
-            currentUser.role === "athlete" &&
-            hasMeasurementChange &&
-            (weightKg !== undefined || waistCm !== undefined)
-          ) {
-            const { error: measurementError } = await supabase
-              .from("body_measurements")
-              .insert({
-                user_id: currentUser.id,
-                weight_kg: weightKg ?? null,
-                waist_cm: waistCm ?? null,
-                measured_at: timestamp,
-                created_at: timestamp,
-              });
-
-            if (measurementError) {
-              return { ok: false, message: "Asetukset tallentuivat, mutta mittahistoriaa ei voitu päivittää." };
-            }
-          }
         }
 
         setState((previous) => ({
           ...previous,
-          bodyMeasurements:
-            currentUser.role === "athlete" &&
-            hasMeasurementChange &&
-            (weightKg !== undefined || waistCm !== undefined)
-              ? [
-                  {
-                    id: makeId("measurement"),
-                    userId: currentUser.id,
-                    weightKg,
-                    waistCm,
-                    measuredAt: timestamp,
-                    createdAt: timestamp,
-                  },
-                  ...previous.bodyMeasurements,
-                ]
-              : previous.bodyMeasurements,
           users: previous.users.map((user) =>
             user.id === currentUser.id
               ? {
                   ...user,
                   fullName,
-                  weightKg,
-                  waistCm,
                   updatedAt: timestamp,
                   settings: normalizeUserSettings(user.role, {
                     ...user.settings,
@@ -1578,6 +1556,89 @@ export function AppStateProvider({ children }: PropsWithChildren) {
                     emailNotifications: input.emailNotifications,
                     themeMode: input.themeMode,
                   }),
+                }
+              : user,
+          ),
+        }));
+
+        return { ok: true };
+      },
+      async updateCurrentUserMeasurements(input) {
+        if (!currentUser || currentUser.role !== "athlete") {
+          return { ok: false, message: "Mittatietoja voi päivittää vain treenaajan profiilille." };
+        }
+
+        const timestamp = new Date().toISOString();
+        const heightCm = typeof input.heightCm === "number" ? input.heightCm : undefined;
+        const weightKg = typeof input.weightKg === "number" ? input.weightKg : undefined;
+        const waistCm = typeof input.waistCm === "number" ? input.waistCm : undefined;
+        const hasRecordedMetric = heightCm !== undefined || weightKg !== undefined || waistCm !== undefined;
+        const hasMeasurementChange =
+          currentUser.heightCm !== heightCm ||
+          currentUser.weightKg !== weightKg ||
+          currentUser.waistCm !== waistCm;
+
+        if (!hasMeasurementChange) {
+          return { ok: true };
+        }
+
+        if (supabase) {
+          const { error: profileError } = await supabase
+            .from("profiles")
+            .update({
+              height_cm: heightCm ?? null,
+              weight_kg: weightKg ?? null,
+              waist_cm: waistCm ?? null,
+              updated_at: timestamp,
+            })
+            .eq("id", currentUser.id);
+
+          if (profileError) {
+            return { ok: false, message: "Mittatietojen tallennus epäonnistui." };
+          }
+
+          if (hasRecordedMetric) {
+            const { error: measurementError } = await supabase
+              .from("body_measurements")
+              .insert({
+                user_id: currentUser.id,
+                height_cm: heightCm ?? null,
+                weight_kg: weightKg ?? null,
+                waist_cm: waistCm ?? null,
+                measured_at: timestamp,
+                created_at: timestamp,
+              });
+
+            if (measurementError) {
+              return { ok: false, message: "Mittatiedot tallentuivat profiiliin, mutta mittahistoriaa ei voitu päivittää." };
+            }
+          }
+        }
+
+        setState((previous) => ({
+          ...previous,
+          bodyMeasurements: hasRecordedMetric
+            ? [
+                {
+                  id: makeId("measurement"),
+                  userId: currentUser.id,
+                  heightCm,
+                  weightKg,
+                  waistCm,
+                  measuredAt: timestamp,
+                  createdAt: timestamp,
+                },
+                ...previous.bodyMeasurements,
+              ]
+            : previous.bodyMeasurements,
+          users: previous.users.map((user) =>
+            user.id === currentUser.id
+              ? {
+                  ...user,
+                  heightCm,
+                  weightKg,
+                  waistCm,
+                  updatedAt: timestamp,
                 }
               : user,
           ),
@@ -2944,6 +3005,69 @@ export function AppStateProvider({ children }: PropsWithChildren) {
 
           await refreshSupabaseVisibleState();
         }
+
+        return { ok: true };
+      },
+      async updateWorkoutDuration(scheduledWorkoutId, durationSeconds) {
+        if (!currentUser) {
+          return { ok: false, message: "Kirjaudu sisään ennen treeniajan muokkausta." };
+        }
+
+        if (durationSeconds < 60) {
+          return { ok: false, message: "Anna treeniajalle vähintään 1 minuutti." };
+        }
+
+        const workout = state.scheduledWorkouts.find((item) => item.id === scheduledWorkoutId);
+        if (!workout || (!isAdminRole(currentUser.role) && workout.athleteId !== currentUser.id)) {
+          return { ok: false, message: "Treeniä ei löytynyt." };
+        }
+
+        if (workout.status !== "completed") {
+          return { ok: false, message: "Treeniaikaa voi muokata vain valmiilta treeniltä." };
+        }
+
+        const session = state.sessions.find((item) => item.scheduledWorkoutId === scheduledWorkoutId);
+        if (!session || !session.completedAt) {
+          return { ok: false, message: "Valmiin treenin aikaa ei löytynyt muokattavaksi." };
+        }
+
+        const completedAtMs = new Date(session.completedAt).getTime();
+        if (!Number.isFinite(completedAtMs)) {
+          return { ok: false, message: "Treeniaikaa ei voitu päivittää." };
+        }
+
+        const nextStartedAt = new Date(
+          completedAtMs - (durationSeconds + (session.pausedDurationSeconds ?? 0)) * 1000,
+        ).toISOString();
+
+        if (supabase) {
+          const response = await fetch(`/api/workouts/${encodeURIComponent(scheduledWorkoutId)}`, {
+            method: "PATCH",
+            headers: {
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({ durationSeconds }),
+          });
+          const payload = (await response.json().catch(() => null)) as { message?: string } | null;
+          if (!response.ok) {
+            return { ok: false, message: payload?.message ?? "Treeniajan päivitys epäonnistui." };
+          }
+
+          await refreshSupabaseVisibleState();
+          return { ok: true };
+        }
+
+        setState((previous) => ({
+          ...previous,
+          sessions: previous.sessions.map((item) =>
+            item.scheduledWorkoutId === scheduledWorkoutId
+              ? {
+                  ...item,
+                  startedAt: nextStartedAt,
+                }
+              : item,
+          ),
+        }));
 
         return { ok: true };
       },
