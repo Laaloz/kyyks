@@ -5,6 +5,8 @@ import { sendTransactionalEmail } from "@/lib/email";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import type { Role, UserProfile } from "@/lib/types";
 
+type AdminClient = NonNullable<ReturnType<typeof createSupabaseAdminClient>>;
+
 type RequesterProfile = {
   id: string;
   role: Role;
@@ -37,6 +39,11 @@ type StoredInviteRecord = {
   created_at: string;
   expires_at: string;
 };
+
+type ActivationInviteRecord = Pick<StoredInviteRecord, "id" | "email" | "role" | "coach_id" | "status">;
+
+const PROFILE_WRITE_ATTEMPTS = 4;
+const PROFILE_WRITE_DELAY_MS = 150;
 
 function mapStoredInviteRecord(invite: StoredInviteRecord) {
   return {
@@ -95,6 +102,216 @@ function mapStoredProfileRecord(profile: {
   };
 }
 
+function normalizeEmail(email: string) {
+  return email.trim().toLowerCase();
+}
+
+function resolveProfileFullName(fullName: string | null | undefined, email: string) {
+  const trimmedName = fullName?.trim();
+  if (trimmedName) {
+    return trimmedName;
+  }
+
+  return normalizeEmail(email).split("@")[0] || normalizeEmail(email);
+}
+
+async function waitFor(delayMs: number) {
+  await new Promise((resolve) => setTimeout(resolve, delayMs));
+}
+
+async function upsertActiveProfileFromInvite({
+  admin,
+  authUserId,
+  email,
+  fullName,
+  invite,
+}: {
+  admin: AdminClient;
+  authUserId: string;
+  email: string;
+  fullName?: string | null;
+  invite: ActivationInviteRecord;
+}) {
+  const normalizedEmail = normalizeEmail(email);
+  const resolvedFullName = resolveProfileFullName(fullName, normalizedEmail);
+  const createdAt = new Date().toISOString();
+
+  for (let attempt = 0; attempt < PROFILE_WRITE_ATTEMPTS; attempt += 1) {
+    const { error: profileError } = await admin.from("profiles").upsert({
+      id: authUserId,
+      role: invite.role,
+      full_name: resolvedFullName,
+      email: normalizedEmail,
+      status: "active",
+      default_dashboard_view: invite.role === "athlete" ? "athlete-log" : "overview",
+      email_notifications: false,
+      theme_mode: "light",
+      created_at: createdAt,
+      updated_at: createdAt,
+    });
+
+    if (!profileError) {
+      return { ok: true as const, createdAt };
+    }
+
+    const { data: profileById } = await admin
+      .from("profiles")
+      .select("id")
+      .eq("id", authUserId)
+      .maybeSingle<{ id: string }>();
+
+    if (profileById) {
+      return { ok: true as const, createdAt };
+    }
+
+    const { data: profileByEmail } = await admin
+      .from("profiles")
+      .select("id")
+      .ilike("email", normalizedEmail)
+      .maybeSingle<{ id: string }>();
+
+    if (profileByEmail?.id === authUserId) {
+      return { ok: true as const, createdAt };
+    }
+
+    if (profileByEmail && profileByEmail.id !== authUserId) {
+      return {
+        ok: false as const,
+        message: "Sähköpostille löytyi ristiriitainen profiilirivi. Korjaa profiili ennen aktivointia.",
+      };
+    }
+
+    if (attempt < PROFILE_WRITE_ATTEMPTS - 1) {
+      await waitFor(PROFILE_WRITE_DELAY_MS * (attempt + 1));
+      continue;
+    }
+  }
+
+  return { ok: false as const, message: "Käyttäjäprofiilin luonti epäonnistui." };
+}
+
+async function ensureCoachAssignmentForInvite({
+  admin,
+  authUserId,
+  invite,
+  createdAt,
+}: {
+  admin: AdminClient;
+  authUserId: string;
+  invite: ActivationInviteRecord;
+  createdAt: string;
+}) {
+  if (invite.role !== "athlete" || !invite.coach_id) {
+    return { ok: true as const };
+  }
+
+  const { data: existingAssignment } = await admin
+    .from("coach_athlete_assignments")
+    .select("id")
+    .eq("coach_id", invite.coach_id)
+    .eq("athlete_id", authUserId)
+    .eq("active", true)
+    .maybeSingle<{ id: string }>();
+
+  if (existingAssignment) {
+    return { ok: true as const };
+  }
+
+  const { error: assignmentError } = await admin
+    .from("coach_athlete_assignments")
+    .insert({
+      coach_id: invite.coach_id,
+      athlete_id: authUserId,
+      active: true,
+      created_at: createdAt,
+    });
+
+  if (assignmentError) {
+    return { ok: false as const, message: "Valmentajasuhteen luonti epäonnistui." };
+  }
+
+  return { ok: true as const };
+}
+
+async function markInviteAccepted(admin: AdminClient, invite: ActivationInviteRecord) {
+  if (invite.status === "accepted") {
+    return { ok: true as const };
+  }
+
+  const { error: inviteUpdateError } = await admin
+    .from("invites")
+    .update({ status: "accepted" })
+    .eq("id", invite.id);
+
+  if (inviteUpdateError) {
+    return { ok: false as const, message: "Kutsun viimeistely epäonnistui." };
+  }
+
+  return { ok: true as const };
+}
+
+async function finalizeInviteProfileActivation({
+  admin,
+  authUserId,
+  email,
+  fullName,
+  invite,
+}: {
+  admin: AdminClient;
+  authUserId: string;
+  email: string;
+  fullName?: string | null;
+  invite: ActivationInviteRecord;
+}) {
+  const profileResult = await upsertActiveProfileFromInvite({
+    admin,
+    authUserId,
+    email,
+    fullName,
+    invite,
+  });
+
+  if (!profileResult.ok) {
+    return profileResult;
+  }
+
+  const assignmentResult = await ensureCoachAssignmentForInvite({
+    admin,
+    authUserId,
+    invite,
+    createdAt: profileResult.createdAt,
+  });
+
+  if (!assignmentResult.ok) {
+    return assignmentResult;
+  }
+
+  return markInviteAccepted(admin, invite);
+}
+
+async function findAuthUserByEmail(admin: AdminClient, email: string) {
+  const normalizedEmail = normalizeEmail(email);
+  let page = 1;
+
+  while (true) {
+    const { data, error } = await admin.auth.admin.listUsers({ page, perPage: 200 });
+    if (error) {
+      return null;
+    }
+
+    const matchingUser = data.users.find((user) => normalizeEmail(user.email ?? "") === normalizedEmail);
+    if (matchingUser) {
+      return matchingUser;
+    }
+
+    if (!data.nextPage || data.nextPage === page || data.users.length === 0) {
+      return null;
+    }
+
+    page = data.nextPage;
+  }
+}
+
 export async function ensureProfileForAuthenticatedUserOnServer({
   authUserId,
   email,
@@ -113,7 +330,7 @@ export async function ensureProfileForAuthenticatedUserOnServer({
     return { ok: false as const, message: "Kirjautuneelta käyttäjältä puuttuu sähköposti." };
   }
 
-  const normalizedEmail = email.trim().toLowerCase();
+  const normalizedEmail = normalizeEmail(email);
 
   const { data: existingProfile } = await admin
     .from("profiles")
@@ -127,66 +344,26 @@ export async function ensureProfileForAuthenticatedUserOnServer({
 
   const { data: invite } = await admin
     .from("invites")
-    .select("id, role, coach_id, status")
+    .select("id, email, role, coach_id, status")
     .ilike("email", normalizedEmail)
     .order("created_at", { ascending: false })
     .limit(1)
-    .maybeSingle<{ id: string; role: "coach" | "athlete"; coach_id: string | null; status: "pending" | "accepted" }>();
+    .maybeSingle<{ id: string; email: string; role: "coach" | "athlete"; coach_id: string | null; status: "pending" | "accepted" }>();
 
   if (!invite) {
     return { ok: false as const, message: "Käyttäjäprofiilia ei löytynyt eikä sähköpostille löytynyt kutsua." };
   }
 
-  const now = new Date().toISOString();
-  const resolvedFullName = fullName?.trim() || normalizedEmail.split("@")[0] || normalizedEmail;
-
-  const { error: profileError } = await admin.from("profiles").upsert({
-    id: authUserId,
-    role: invite.role,
-    full_name: resolvedFullName,
+  const finalizeResult = await finalizeInviteProfileActivation({
+    admin,
+    authUserId,
     email: normalizedEmail,
-    status: "active",
-    default_dashboard_view: invite.role === "athlete" ? "athlete-log" : "overview",
-    email_notifications: false,
-    theme_mode: "light",
-    created_at: now,
-    updated_at: now,
+    fullName,
+    invite,
   });
 
-  if (profileError) {
+  if (!finalizeResult.ok) {
     return { ok: false as const, message: "Puuttuvan käyttäjäprofiilin korjaus epäonnistui." };
-  }
-
-  if (invite.role === "athlete" && invite.coach_id) {
-    const { data: existingAssignment } = await admin
-      .from("coach_athlete_assignments")
-      .select("id")
-      .eq("coach_id", invite.coach_id)
-      .eq("athlete_id", authUserId)
-      .eq("active", true)
-      .maybeSingle<{ id: string }>();
-
-    if (!existingAssignment) {
-      const { error: assignmentError } = await admin
-        .from("coach_athlete_assignments")
-        .insert({
-          coach_id: invite.coach_id,
-          athlete_id: authUserId,
-          active: true,
-          created_at: now,
-        });
-
-      if (assignmentError) {
-        return { ok: false as const, message: "Puuttuvan valmentajasuhteen korjaus epäonnistui." };
-      }
-    }
-  }
-
-  if (invite.status !== "accepted") {
-    await admin
-      .from("invites")
-      .update({ status: "accepted" })
-      .eq("id", invite.id);
   }
 
   return { ok: true as const, repaired: true };
@@ -649,54 +826,70 @@ export async function acceptInviteOnServer({
     return { ok: false as const, message: "Kutsu on vanhentunut. Pyydä uusi kutsu." };
   }
 
+  const normalizedInviteEmail = normalizeEmail(invite.email);
+
   const { data: existingProfile } = await admin
     .from("profiles")
     .select("id, status")
-    .ilike("email", invite.email)
+    .ilike("email", normalizedInviteEmail)
     .maybeSingle();
 
   if (existingProfile?.status === "active") {
-    const now = new Date().toISOString();
+    const finalizeResult = await finalizeInviteProfileActivation({
+      admin,
+      authUserId: existingProfile.id,
+      email: normalizedInviteEmail,
+      fullName: trimmedName,
+      invite,
+    });
 
-    if (invite.role === "athlete" && invite.coach_id) {
-      const { data: existingAssignment } = await admin
-        .from("coach_athlete_assignments")
-        .select("id")
-        .eq("coach_id", invite.coach_id)
-        .eq("athlete_id", existingProfile.id)
-        .eq("active", true)
-        .maybeSingle();
-
-      if (!existingAssignment) {
-        const { error: assignmentError } = await admin
-          .from("coach_athlete_assignments")
-          .insert({
-            coach_id: invite.coach_id,
-            athlete_id: existingProfile.id,
-            active: true,
-            created_at: now,
-          });
-
-        if (assignmentError) {
-          return { ok: false as const, message: "Käyttäjätili löytyi, mutta valmentajasuhdetta ei voitu viimeistellä." };
-        }
-      }
+    if (!finalizeResult.ok) {
+      return { ok: false as const, message: "Käyttäjätili löytyi, mutta aktivointia ei voitu viimeistellä." };
     }
-
-    await admin
-      .from("invites")
-      .update({ status: "accepted" })
-      .eq("id", invite.id);
 
     return {
       ok: true as const,
-      email: invite.email,
+      email: normalizedInviteEmail,
       message: "Tili oli jo aktivoitu. Kirjaudu sisään samalla sähköpostilla ja salasanalla.",
     };
   }
 
+  const existingAuthUser = await findAuthUserByEmail(admin, normalizedInviteEmail);
+  if (existingAuthUser) {
+    const { error: existingAuthUserUpdateError } = await admin.auth.admin.updateUserById(existingAuthUser.id, {
+      password,
+      email_confirm: true,
+      user_metadata: {
+        ...(existingAuthUser.user_metadata ?? {}),
+        full_name: trimmedName,
+      },
+    });
+
+    if (existingAuthUserUpdateError) {
+      return { ok: false as const, message: "Olemassa olevan käyttäjätilin viimeistely epäonnistui." };
+    }
+
+    const finalizeResult = await finalizeInviteProfileActivation({
+      admin,
+      authUserId: existingAuthUser.id,
+      email: normalizedInviteEmail,
+      fullName: trimmedName,
+      invite,
+    });
+
+    if (!finalizeResult.ok) {
+      return { ok: false as const, message: finalizeResult.message };
+    }
+
+    return {
+      ok: true as const,
+      email: normalizedInviteEmail,
+      message: "Tunnus aktivoitiin.",
+    };
+  }
+
   const { data: createdUser, error: createUserError } = await admin.auth.admin.createUser({
-    email: invite.email,
+    email: normalizedInviteEmail,
     password,
     email_confirm: true,
     user_metadata: {
@@ -709,55 +902,22 @@ export async function acceptInviteOnServer({
     return { ok: false as const, message: "Tunnuksen luonti epäonnistui." };
   }
 
-  const now = new Date().toISOString();
-
-  const { error: profileError } = await admin.from("profiles").upsert({
-    id: authUser.id,
-    role: invite.role,
-    full_name: trimmedName,
-    email: invite.email,
-    status: "active",
-    default_dashboard_view: invite.role === "athlete" ? "athlete-log" : "overview",
-    email_notifications: false,
-    theme_mode: "light",
-    created_at: now,
-    updated_at: now,
+  const finalizeResult = await finalizeInviteProfileActivation({
+    admin,
+    authUserId: authUser.id,
+    email: normalizedInviteEmail,
+    fullName: trimmedName,
+    invite,
   });
 
-  if (profileError) {
+  if (!finalizeResult.ok) {
     await admin.auth.admin.deleteUser(authUser.id);
-    return { ok: false as const, message: "Käyttäjäprofiilin luonti epäonnistui." };
-  }
-
-  if (invite.role === "athlete" && invite.coach_id) {
-    const { error: assignmentError } = await admin
-      .from("coach_athlete_assignments")
-      .insert({
-        coach_id: invite.coach_id,
-        athlete_id: authUser.id,
-        active: true,
-        created_at: now,
-      });
-
-    if (assignmentError) {
-      await admin.from("profiles").delete().eq("id", authUser.id);
-      await admin.auth.admin.deleteUser(authUser.id);
-      return { ok: false as const, message: "Valmentajasuhteen luonti epäonnistui." };
-    }
-  }
-
-  const { error: inviteUpdateError } = await admin
-    .from("invites")
-    .update({ status: "accepted" })
-    .eq("id", invite.id);
-
-  if (inviteUpdateError) {
-    return { ok: false as const, message: "Kutsun viimeistely epäonnistui." };
+    return { ok: false as const, message: finalizeResult.message };
   }
 
   return {
     ok: true as const,
-    email: invite.email,
+    email: normalizedInviteEmail,
     message: "Tunnus aktivoitiin.",
   };
 }
