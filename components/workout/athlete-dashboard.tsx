@@ -235,11 +235,29 @@ export function AthleteDashboard({
     .filter((item) => item.athleteId === currentUser?.id)
     .sort((a, b) => a.scheduledDate.localeCompare(b.scheduledDate));
 
+  const scheduledWithSessionIds = useMemo(
+    () => new Set(state.sessions.map((session) => session.scheduledWorkoutId)),
+    [state.sessions],
+  );
+  const activeWorkout = useMemo(
+    () =>
+      [...workouts]
+        .filter((item) => item.status === "in_progress")
+        .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))[0],
+    [workouts],
+  );
+  const resumableWorkout = useMemo(
+    () =>
+      [...workouts]
+        .filter((item) => item.status === "cancelled" && scheduledWithSessionIds.has(item.id))
+        .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))[0],
+    [scheduledWithSessionIds, workouts],
+  );
+  const highlightedWorkout = activeWorkout ?? resumableWorkout;
+  const highlightedWorkoutState = activeWorkout ? "active" : resumableWorkout ? "resumable" : null;
   const selectedWorkout =
     (selectedWorkoutId ? workouts.find((item) => item.id === selectedWorkoutId) : undefined) ??
-    (athleteLogMode === "workout"
-      ? workouts.find((item) => item.status === "in_progress") ?? workouts[workouts.length - 1]
-      : undefined);
+    (athleteLogMode === "workout" ? highlightedWorkout ?? workouts[workouts.length - 1] : undefined);
 
   const selectedSession = state.sessions.find((session) => session.scheduledWorkoutId === selectedWorkout?.id);
   const existingNote = selectedSession ? state.notes.find((note) => note.sessionId === selectedSession.id)?.body ?? "" : "";
@@ -252,7 +270,6 @@ export function AthleteDashboard({
   );
   const progress = selectedWorkout ? getSessionProgress(state, selectedWorkout.id) : null;
   const inProgressCount = workouts.filter((item) => item.status === "in_progress").length;
-  const activeWorkout = workouts.find((item) => item.status === "in_progress");
   useEffect(() => {
     if (!dismissedActiveWorkoutId) {
       return;
@@ -295,10 +312,6 @@ export function AthleteDashboard({
   const workoutInsights = useMemo(() => buildWorkoutInsights(state), [state]);
   const sessionByWorkoutId = useMemo(
     () => new Map(state.sessions.map((session) => [session.scheduledWorkoutId, session])),
-    [state.sessions],
-  );
-  const scheduledWithSessionIds = useMemo(
-    () => new Set(state.sessions.map((session) => session.scheduledWorkoutId)),
     [state.sessions],
   );
   const resolveWorkoutStatus = (workout: (typeof workouts)[number]) => workout.status;
@@ -376,6 +389,27 @@ export function AthleteDashboard({
     if (!result.ok) {
       notify({ tone: "danger", message: result.message });
     }
+  };
+  const openOrResumeWorkout = async (scheduledWorkoutId: string) => {
+    const workout = workouts.find((item) => item.id === scheduledWorkoutId);
+    if (!workout) {
+      return;
+    }
+
+    if (resolveWorkoutStatus(workout) === "cancelled") {
+      const result = await startWorkout(scheduledWorkoutId);
+      if (!result.ok) {
+        setWorkoutMessage(result.message);
+        notify({ tone: "danger", message: result.message });
+        return;
+      }
+
+      setWorkoutMessage("Treeniä jatketaan.");
+      notify({ tone: "info", message: `Treeni "${normalizeWorkoutHistoryTitle(workout.title)}" avattiin uudelleen.` });
+    }
+
+    openWorkoutView(scheduledWorkoutId);
+    onOpenWorkoutLog?.();
   };
   const activeScheduledByProgramWorkoutId = useMemo(() => {
     const activeById = new Map<string, (typeof workouts)[number]>();
@@ -789,24 +823,44 @@ export function AthleteDashboard({
                 </p>
               </div>
               <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface-2)] px-4 py-4">
-                <p className="text-xs font-semibold tracking-[0.04em] text-[var(--text-subtle)]">
-                  {inProgressCount > 0 ? "Aktiivinen treeni" : "Päivän valinta"}
-                </p>
-                <p className="mt-2 text-lg font-semibold text-[var(--text)]">
-                  {activeWorkout
-                    ? normalizeWorkoutHistoryTitle(activeWorkout.title)
-                    : athletePrograms.length
-                      ? "Ei aktiivista treeniä"
-                      : "Ei treenejä vielä"}
-                </p>
-                <p className="mt-1 text-sm text-[var(--text-muted)]">
-                  {activeWorkout
-                    ? "Jatka siitä mihin jäit ja viimeistele sarjat."
-                    : athletePrograms.length
-                      ? "Avaa alapuolelta treenilista ja valitse seuraava treeni ohjelmastasi."
-                      : "Pyydä valmentajaa rakentamaan ensimmäinen ohjelma."}
-                </p>
-              </div>
+                  <p className="text-xs font-semibold tracking-[0.04em] text-[var(--text-subtle)]">
+                    {highlightedWorkoutState === "active"
+                      ? "Aktiivinen treeni"
+                      : highlightedWorkoutState === "resumable"
+                        ? "Keskeytetty treeni"
+                        : "Päivän valinta"}
+                  </p>
+                  <p className="mt-2 text-lg font-semibold text-[var(--text)]">
+                    {highlightedWorkout
+                      ? normalizeWorkoutHistoryTitle(highlightedWorkout.title)
+                      : athletePrograms.length
+                        ? "Ei aktiivista treeniä"
+                        : "Ei treenejä vielä"}
+                  </p>
+                  <p className="mt-1 text-sm text-[var(--text-muted)]">
+                    {highlightedWorkoutState === "active"
+                      ? "Siirry takaisin treeniin ja viimeistele sarjat."
+                      : highlightedWorkoutState === "resumable"
+                        ? "Sinulla on keskeytetty treeni odottamassa jatkoa samasta kohdasta."
+                      : athletePrograms.length
+                        ? "Avaa alapuolelta treenilista ja valitse seuraava treeni ohjelmastasi."
+                        : "Pyydä valmentajaa rakentamaan ensimmäinen ohjelma."}
+                  </p>
+                  {highlightedWorkout ? (
+                    <div className="mt-4">
+                      <Button
+                        type="button"
+                        variant="secondary"
+                        className="w-full sm:w-auto"
+                        onClick={() => {
+                          void openOrResumeWorkout(highlightedWorkout.id);
+                        }}
+                      >
+                        {highlightedWorkoutState === "active" ? "Siirry treeniin" : "Jatka treeniä"}
+                      </Button>
+                    </div>
+                  ) : null}
+                </div>
               <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface-2)] px-4 py-4">
                 <p className="text-xs font-semibold tracking-[0.04em] text-[var(--text-subtle)]">Viimeisin valmis treeni</p>
                 <p className="mt-2 text-lg font-semibold text-[var(--text)]">
@@ -1013,15 +1067,19 @@ export function AthleteDashboard({
         <Card className="border-[var(--border-strong)]">
           <p className="text-xs font-semibold tracking-[0.04em] text-[var(--text-subtle)]">Seuraava askel</p>
           <CardTitle className="text-2xl">
-            {activeWorkout
-              ? "Jatka aktiivista treeniä"
+            {highlightedWorkoutState === "active"
+              ? "Siirry aktiiviseen treeniin"
+              : highlightedWorkoutState === "resumable"
+                ? "Jatka keskeytettyä treeniä"
               : athletePrograms.length
                 ? "Siirry treeneihin"
                 : "Treeniohjelma puuttuu"}
           </CardTitle>
           <CardDescription className="mt-2">
-            {activeWorkout
+            {highlightedWorkoutState === "active"
               ? "Avaa keskeneräinen treeni suoraan siitä kohdasta, johon jäit."
+              : highlightedWorkoutState === "resumable"
+                ? "Jatka keskeytettyä treeniä suoraan siitä kohdasta, johon jäit."
               : athletePrograms.length
                 ? "Treeneissä valitset treenin, seuraat historiaa ja teet kaikki kirjaukset."
                 : "Pyydä valmentajaa lisäämään sinulle ohjelma, niin pääset aloittamaan treenit tästä."}
@@ -1029,29 +1087,30 @@ export function AthleteDashboard({
           <div className="mt-5 grid gap-4 xl:grid-cols-[0.95fr_1.05fr]">
             <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface-2)] p-4">
               <p className="text-xs font-semibold tracking-[0.04em] text-[var(--text-subtle)]">
-                {activeWorkout ? "Nopea toiminto" : "Treenit"}
+                {highlightedWorkout ? "Nopea toiminto" : "Treenit"}
               </p>
               <p className="mt-2 text-lg font-semibold text-[var(--text)]">
-                {activeWorkout ? normalizeWorkoutHistoryTitle(activeWorkout.title) : "Avaa treenit ja historia"}
+                {highlightedWorkout ? normalizeWorkoutHistoryTitle(highlightedWorkout.title) : "Avaa treenit ja historia"}
               </p>
               <p className="mt-1 text-sm text-[var(--text-muted)]">
-                {activeWorkout
-                  ? "Jatka treeniä ilman ylimääräisiä välivaiheita."
+                {highlightedWorkoutState === "active"
+                  ? "Siirry takaisin treeniin ilman ylimääräisiä välivaiheita."
+                  : highlightedWorkoutState === "resumable"
+                    ? "Jatka keskeytettyä treeniä ilman, että aloitat uutta päivää."
                   : athletePrograms.length
                     ? "Valitse treeni, käynnistä se tai palaa aiempiin toteutuksiin."
                     : "Kun ohjelma on luotu, käynnistät treenit tästä näkymästä."}
               </p>
               <div className="mt-4 flex flex-wrap gap-3">
-                {activeWorkout ? (
+                {highlightedWorkout ? (
                   <Button
                     type="button"
                     variant="secondary"
                     onClick={() => {
-                      openWorkoutView(activeWorkout.id);
-                      onOpenWorkoutLog?.();
+                      void openOrResumeWorkout(highlightedWorkout.id);
                     }}
                   >
-                    Jatka treeniä
+                    {highlightedWorkoutState === "active" ? "Siirry treeniin" : "Jatka treeniä"}
                   </Button>
                 ) : (
                   <Button
@@ -1308,10 +1367,26 @@ export function AthleteDashboard({
                  Aloita treeni ohjelmastasi. Aiempien toteutusten tiedot löydät historiasta.
               </CardDescription>
               {blockingWorkout ? (
-                <p className="mt-4 rounded-2xl border border-[var(--accent)] bg-[color:color-mix(in_srgb,var(--accent)_12%,var(--surface))] px-4 py-3 text-sm text-[var(--text)] shadow-[0_10px_24px_-22px_var(--accent)]">
-                  Kesken oleva treeni lukitsee uuden aloituksen. Jatka ensin treeniä{" "}
-                  <span className="font-semibold">{normalizeWorkoutHistoryTitle(blockingWorkout.title)}</span>.
-                </p>
+                <div className="mt-4 rounded-2xl border border-[var(--accent)] bg-[color:color-mix(in_srgb,var(--accent)_12%,var(--surface))] px-4 py-3 text-sm text-[var(--text)] shadow-[0_10px_24px_-22px_var(--accent)]">
+                  <p>
+                    {blockingWorkout.status === "cancelled"
+                      ? "Keskeytetty treeni lukitsee uuden aloituksen. Jatka ensin treeniä "
+                      : "Kesken oleva treeni lukitsee uuden aloituksen. Jatka ensin treeniä "}
+                    <span className="font-semibold">{normalizeWorkoutHistoryTitle(blockingWorkout.title)}</span>.
+                  </p>
+                  <div className="mt-3">
+                    <Button
+                      type="button"
+                      variant="secondary"
+                      className="w-full sm:w-auto"
+                      onClick={() => {
+                        void openOrResumeWorkout(blockingWorkout.id);
+                      }}
+                    >
+                      {blockingWorkout.status === "cancelled" ? "Jatka treeniä" : "Siirry treeniin"}
+                    </Button>
+                  </div>
+                </div>
               ) : null}
               {pendingWorkoutTransition ? (
                 <p className="mt-4 flex items-center gap-3 rounded-2xl border border-[var(--border-strong)] bg-[color:color-mix(in_srgb,var(--surface-2)_84%,var(--surface))] px-4 py-3 text-sm text-[var(--text)] shadow-[0_12px_28px_-24px_var(--shadow)]">
@@ -1474,12 +1549,21 @@ export function AthleteDashboard({
                                     type="button"
                                     variant="secondary"
                                     className="w-full justify-center sm:w-auto"
-                                    disabled={isLockedByAnotherWorkout || pendingWorkoutTransition?.type === "start"}
+                                    disabled={isLockedByAnotherWorkout || (!resumableScheduledId && pendingWorkoutTransition?.type === "start")}
                                     loading={
-                                      pendingWorkoutTransition?.type === "start" && pendingWorkoutTransition.workoutName === workout.name
+                                      !resumableScheduledId &&
+                                      pendingWorkoutTransition?.type === "start" &&
+                                      pendingWorkoutTransition.workoutName === workout.name
                                     }
                                     loadingText="Avataan treeniä..."
-                                    onClick={() => startWorkoutFromProgram(program.id, workout.id, workout.name)}
+                                    onClick={() => {
+                                      if (resumableScheduledId) {
+                                        void openOrResumeWorkout(resumableScheduledId);
+                                        return;
+                                      }
+
+                                      void startWorkoutFromProgram(program.id, workout.id, workout.name);
+                                    }}
                                   >
                                     {resumableScheduledId ? "Jatka treeniä" : "Aloita treeni"}
                                   </Button>

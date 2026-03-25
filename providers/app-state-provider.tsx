@@ -252,12 +252,15 @@ export function resolveBlockingWorkoutStart(
   athleteId: string,
   programWorkoutId?: string,
 ) {
+  const scheduledWorkoutIdsWithSession = new Set(state.sessions.map((session) => session.scheduledWorkoutId));
+
   return (
     state.scheduledWorkouts.find(
       (workout) =>
         workout.athleteId === athleteId &&
         workout.programWorkoutId !== programWorkoutId &&
-        workout.status === "in_progress",
+        (workout.status === "in_progress" ||
+          (workout.status === "cancelled" && scheduledWorkoutIdsWithSession.has(workout.id))),
     ) ?? null
   );
 }

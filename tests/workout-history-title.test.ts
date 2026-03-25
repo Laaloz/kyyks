@@ -14,7 +14,7 @@ describe("workout history title helpers", () => {
 
   it("keeps explicit schedule titles and empty fallback sane", () => {
     expect(normalizeWorkoutHistoryTitle("Viikko 1 · Päivä 2")).toBe("Viikko 1 · Päivä 2");
-    expect(normalizeWorkoutHistoryTitle("  ")).toBe("Harjoitus");
+    expect(normalizeWorkoutHistoryTitle("  ")).toBe("Treeni");
   });
 
   it("builds occurrence order by normalized history title", () => {

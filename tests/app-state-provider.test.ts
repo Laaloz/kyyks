@@ -483,7 +483,7 @@ describe("shouldPreserveStoredSessionDuringSupabaseBootstrap", () => {
     expect(resolvedUser?.status).toBe("active");
   });
 
-  it("finds only an in-progress workout as a blocking start condition", () => {
+  it("finds an in-progress or resumable workout as a blocking start condition", () => {
     const state = cloneDemoState();
     const athleteId = "user_athlete_1";
     const blockingWorkoutId = "workout_blocking";
@@ -503,6 +503,16 @@ describe("shouldPreserveStoredSessionDuringSupabaseBootstrap", () => {
         updatedAt: "2026-03-24T08:10:00.000Z",
       },
     ];
+    state.sessions = [
+      {
+        id: "session_blocking",
+        scheduledWorkoutId: blockingWorkoutId,
+        athleteId,
+        startedAt: "2026-03-24T08:00:00.000Z",
+        updatedAt: "2026-03-24T08:10:00.000Z",
+        setLogs: [],
+      },
+    ];
 
     expect(resolveBlockingWorkoutStart(state, athleteId)?.id).toBe(blockingWorkoutId);
     expect(resolveBlockingWorkoutStart(state, athleteId, blockingProgramWorkoutId)).toBeNull();
@@ -510,6 +520,10 @@ describe("shouldPreserveStoredSessionDuringSupabaseBootstrap", () => {
     state.scheduledWorkouts = state.scheduledWorkouts.map((workout) =>
       workout.id === blockingWorkoutId ? { ...workout, status: "cancelled" } : workout,
     );
+
+    expect(resolveBlockingWorkoutStart(state, athleteId)?.id).toBe(blockingWorkoutId);
+
+    state.sessions = [];
 
     expect(resolveBlockingWorkoutStart(state, athleteId)).toBeNull();
   });

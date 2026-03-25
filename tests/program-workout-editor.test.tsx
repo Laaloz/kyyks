@@ -35,12 +35,12 @@ describe("ProgramWorkoutEditor", () => {
   it("shows a workout name field when split type is custom", () => {
     render(<ProgramWorkoutEditorHarness />);
 
-    expect(screen.queryByLabelText("Harjoituksen nimi")).not.toBeInTheDocument();
+    expect(screen.queryByLabelText("Treenin nimi")).not.toBeInTheDocument();
 
     fireEvent.change(screen.getByLabelText("Treenialue"), {
       target: { value: "custom" },
     });
 
-    expect(screen.getByLabelText("Harjoituksen nimi")).toBeInTheDocument();
+    expect(screen.getByLabelText("Treenin nimi")).toBeInTheDocument();
   });
 });

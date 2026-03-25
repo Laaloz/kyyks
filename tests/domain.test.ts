@@ -175,7 +175,7 @@ describe("domain helpers", () => {
     expect(program.status).toBe("active");
     expect(program.workouts?.[0]?.name).toBe("Upper Prime");
     expect(program.workouts?.[0]?.exercises[0]?.exerciseName).toBe("Penkki kisastopilla");
-    expect(program.workouts?.[1]?.name).toContain("Harjoitus");
+    expect(program.workouts?.[1]?.name).toContain("Treeni");
     expect(program.weekCount).toBe(4);
   });
 
