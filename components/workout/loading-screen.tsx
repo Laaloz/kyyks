@@ -10,6 +10,9 @@ export function LoadingScreen() {
         <CardDescription className="mt-2">
           Varmistetaan paikallinen sessio ja treenidata ennen näkymän avaamista.
         </CardDescription>
+        <p className="mt-3 text-sm text-[var(--text-subtle)]">
+          Jos lataus kestää tavallista pidempään, sovellus yrittää jatkaa automaattisesti paikallisella sessiolla.
+        </p>
         <div className="mt-6 h-2 overflow-hidden rounded-full border border-[var(--border)] bg-[var(--surface-2)]">
           <div className="h-full w-1/2 animate-pulse rounded-full bg-[var(--accent)]" />
         </div>

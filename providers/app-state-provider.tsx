@@ -1350,11 +1350,12 @@ export function AppStateProvider({ children }: PropsWithChildren) {
   const [isStorageHydrated, setIsStorageHydrated] = useState(false);
   const [isSupabaseAuthResolved, setIsSupabaseAuthResolved] = useState(false);
   const [didAttemptBootstrapRevalidation, setDidAttemptBootstrapRevalidation] = useState(false);
+  const [didBootstrapTimeout, setDidBootstrapTimeout] = useState(false);
   const supabase = useMemo(() => createSupabaseBrowserClient(), []);
   const refreshSupabaseVisibleStatePromiseRef = useRef<Promise<boolean> | null>(null);
   const workoutSetRequestStateRef = useRef<Map<string, WorkoutSetRequestState>>(new Map());
   const isHydrated =
-    isStorageHydrated && (supabase ? isSupabaseAuthResolved && didAttemptBootstrapRevalidation : true);
+    isStorageHydrated && (supabase ? (isSupabaseAuthResolved && didAttemptBootstrapRevalidation) || didBootstrapTimeout : true);
 
   useEffect(() => {
     const rawState = window.localStorage.getItem(STATE_KEY);
@@ -1437,6 +1438,27 @@ export function AppStateProvider({ children }: PropsWithChildren) {
       window.removeEventListener("storage", syncFromStorage);
     };
   }, [isStorageHydrated]);
+
+  useEffect(() => {
+    if (!isStorageHydrated) {
+      return;
+    }
+
+    const timeoutId = window.setTimeout(() => {
+      setDidBootstrapTimeout(true);
+      setIsSupabaseAuthResolved(true);
+      setDidAttemptBootstrapRevalidation(true);
+      console.warn("[auth-bootstrap] forcing hydration fallback after timeout");
+    }, 9000);
+
+    return () => window.clearTimeout(timeoutId);
+  }, [isStorageHydrated, supabase]);
+
+  useEffect(() => {
+    if (isSupabaseAuthResolved && didAttemptBootstrapRevalidation) {
+      setDidBootstrapTimeout(false);
+    }
+  }, [didAttemptBootstrapRevalidation, isSupabaseAuthResolved]);
 
   useEffect(() => {
     if (!isStorageHydrated) {
@@ -1581,6 +1603,7 @@ export function AppStateProvider({ children }: PropsWithChildren) {
 
       setIsSupabaseAuthResolved(false);
       setDidAttemptBootstrapRevalidation(false);
+      setDidBootstrapTimeout(false);
 
     void withTimeout(confirmCurrentSupabaseAuthUser(supabase), 5000, null).then((user) => {
       setDidAttemptBootstrapRevalidation(true);
