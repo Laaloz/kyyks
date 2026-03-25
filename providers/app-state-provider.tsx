@@ -1244,6 +1244,21 @@ async function confirmCurrentSupabaseAuthUser(
   return user ?? null;
 }
 
+async function withTimeout<T>(promise: Promise<T>, timeoutMs: number, fallback: T): Promise<T> {
+  return await new Promise<T>((resolve) => {
+    const timeoutId = window.setTimeout(() => resolve(fallback), timeoutMs);
+    promise
+      .then((value) => {
+        window.clearTimeout(timeoutId);
+        resolve(value);
+      })
+      .catch(() => {
+        window.clearTimeout(timeoutId);
+        resolve(fallback);
+      });
+  });
+}
+
 function getSupabaseLoginErrorMessage(message: string) {
   const normalized = message.toLowerCase();
   if (normalized.includes("invalid login credentials")) {
@@ -1474,7 +1489,7 @@ export function AppStateProvider({ children }: PropsWithChildren) {
           )
         ) {
           setDidAttemptBootstrapRevalidation(true);
-          const confirmedAuthUser = await confirmCurrentSupabaseAuthUser(supabase);
+          const confirmedAuthUser = await withTimeout(confirmCurrentSupabaseAuthUser(supabase), 4000, null);
           if (!active) {
             return;
           }
@@ -1541,7 +1556,7 @@ export function AppStateProvider({ children }: PropsWithChildren) {
             hasResolvedAuthUser,
           )
         ) {
-          const confirmedAuthUser = await confirmCurrentSupabaseAuthUser(supabase);
+          const confirmedAuthUser = await withTimeout(confirmCurrentSupabaseAuthUser(supabase), 4000, null);
           if (!active) {
             return;
           }
@@ -1567,7 +1582,7 @@ export function AppStateProvider({ children }: PropsWithChildren) {
       setIsSupabaseAuthResolved(false);
       setDidAttemptBootstrapRevalidation(false);
 
-    void confirmCurrentSupabaseAuthUser(supabase).then((user) => {
+    void withTimeout(confirmCurrentSupabaseAuthUser(supabase), 5000, null).then((user) => {
       setDidAttemptBootstrapRevalidation(true);
       return syncFromAuthUser(user, "bootstrap");
     });
@@ -1597,13 +1612,16 @@ export function AppStateProvider({ children }: PropsWithChildren) {
   );
   const isImpersonating = Boolean(impersonatedUserId);
 
-  async function fetchSupabaseVisibleStateSnapshot() {
+async function fetchSupabaseVisibleStateSnapshot() {
     if (!supabase) {
       return null;
     }
 
     try {
-      const response = await fetch("/api/app-state");
+      const response = await withTimeout(fetch("/api/app-state"), 8000, null as Response | null);
+      if (!response) {
+        return null;
+      }
       const payload = (await response.json().catch(() => null)) as SupabaseVisibleAppStateSnapshot | { message?: string } | null;
       if (!response.ok || !payload || !("users" in payload)) {
         return null;
@@ -1669,7 +1687,7 @@ function findResolvedUserIdInSnapshot(
 
       try {
         setState((previous) => reconcileSupabaseVisibleState(previous, payload));
-        const authUser = await confirmCurrentSupabaseAuthUser(supabase);
+        const authUser = await withTimeout(confirmCurrentSupabaseAuthUser(supabase), 4000, null);
         const resolvedSession = resolveSessionIdsFromSnapshot(
           state,
           payload,
@@ -1807,7 +1825,7 @@ function findResolvedUserIdInSnapshot(
 
         let authUser: SupabaseAuthUser | null = data.user;
         if (!authUser?.email) {
-          authUser = await confirmCurrentSupabaseAuthUser(supabase);
+          authUser = await withTimeout(confirmCurrentSupabaseAuthUser(supabase), 4000, null);
         }
 
         if (!authUser?.email) {
