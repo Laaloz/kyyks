@@ -1679,7 +1679,7 @@ export function AthleteDashboard({
                         } = selectedHistoryWorkout;
                         const isFocusedHistoryItem = historyFocusWorkoutId === workout.id;
                         const isActionMenuOpen = openHistoryMenuWorkoutId === workout.id;
-                        const isGroupExpanded = expandedHistoryGroups[group.key] ?? index === 0;
+                        const isGroupExpanded = expandedHistoryGroups[group.key] ?? false;
 
                         return (
                           <section
