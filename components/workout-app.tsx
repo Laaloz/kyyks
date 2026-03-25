@@ -8,11 +8,11 @@ import { useAppState } from "@/providers/app-state-provider";
 export function WorkoutApp() {
   const { currentUser, hasAuthenticatedSession, isHydrated } = useAppState();
 
-  if (!isHydrated) {
+  if (!isHydrated && !currentUser) {
     return <LoadingScreen />;
   }
 
-  if (hasAuthenticatedSession && !currentUser) {
+  if (hasAuthenticatedSession && !currentUser && !isHydrated) {
     return <LoadingScreen />;
   }
 

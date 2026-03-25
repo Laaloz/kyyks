@@ -5,7 +5,7 @@ import { createRequestTimer } from "@/lib/server/request-timing";
 import { loadVisibleSupabaseAppState } from "@/lib/server/training-sync";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 
-export async function GET() {
+export async function GET(request: Request) {
   const timer = createRequestTimer("app-state");
   const supabase = await createSupabaseServerClient();
   if (!supabase) {
@@ -32,8 +32,9 @@ export async function GET() {
             : null,
     });
 
-    const snapshot = await loadVisibleSupabaseAppState(supabase);
-    timer.log({ userId: user.id });
+    const lite = new URL(request.url).searchParams.get("lite") === "1";
+    const snapshot = await loadVisibleSupabaseAppState(supabase, { lite });
+    timer.log({ userId: user.id, lite });
     return timer.json(snapshot);
   } catch (error) {
     const message = error instanceof Error && error.message ? error.message : "Sovellustilan haku epäonnistui.";

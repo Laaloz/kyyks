@@ -1574,7 +1574,7 @@ export function AppStateProvider({ children }: PropsWithChildren) {
 
       let resolvedUserId: string | null = null;
       if (!profile) {
-        const snapshot = await fetchSupabaseVisibleStateSnapshot();
+        const snapshot = await fetchSupabaseVisibleStateSnapshot({ lite: source === "bootstrap" });
         if (!active) {
           return;
         }
@@ -1673,14 +1673,20 @@ export function AppStateProvider({ children }: PropsWithChildren) {
     [authenticatedUserId, impersonatedUserId, state],
   );
   const isImpersonating = Boolean(impersonatedUserId);
+  const hasStoredSession = Boolean(authenticatedUserId);
 
-async function fetchSupabaseVisibleStateSnapshot() {
+async function fetchSupabaseVisibleStateSnapshot(options?: { lite?: boolean }) {
     if (!supabase) {
       return null;
     }
 
     try {
-      const response = await withTimeout(fetch("/api/app-state"), 8000, null as Response | null);
+      const searchParams = new URLSearchParams();
+      if (options?.lite) {
+        searchParams.set("lite", "1");
+      }
+      const requestPath = searchParams.size > 0 ? `/api/app-state?${searchParams.toString()}` : "/api/app-state";
+      const response = await withTimeout(fetch(requestPath), 8000, null as Response | null);
       if (!response) {
         return null;
       }
@@ -1742,7 +1748,7 @@ function findResolvedUserIdInSnapshot(
     }
 
     const refreshPromise = (async () => {
-      const payload = await fetchSupabaseVisibleStateSnapshot();
+      const payload = await fetchSupabaseVisibleStateSnapshot({ lite: !authenticatedUserId });
       if (!payload) {
         return false;
       }
@@ -1933,7 +1939,7 @@ function findResolvedUserIdInSnapshot(
       state,
       authenticatedUser,
       currentUser,
-      hasAuthenticatedSession: Boolean(authenticatedUserId),
+      hasAuthenticatedSession: hasStoredSession,
       currentRole: currentUser?.role ?? null,
       isImpersonating,
       isHydrated,
@@ -3925,7 +3931,7 @@ function findResolvedUserIdInSnapshot(
         return domainGetCoachAthletes(state, coachId);
       },
     };
-  }, [state, authenticatedUser, authenticatedUserId, currentUser, isHydrated, isImpersonating, supabase]);
+  }, [state, authenticatedUser, currentUser, hasStoredSession, isHydrated, isImpersonating, supabase]);
 
   return (
     <AppStateContext.Provider value={value}>

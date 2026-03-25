@@ -85,7 +85,6 @@ export function DashboardShell() {
   const [isReminderPreviewMode, setIsReminderPreviewMode] = useState(false);
   const [isMobileActionsOpen, setIsMobileActionsOpen] = useState(false);
   const [athleteOverviewFocusTarget, setAthleteOverviewFocusTarget] = useState<AthleteOverviewFocusTarget | null>(null);
-  const didAutoOpenAthleteLog = useRef(false);
   const previousUserIdRef = useRef<string | null>(null);
   const navButtonRefs = useRef<Record<string, HTMLButtonElement | null>>({});
   const mobileActionsRef = useRef<HTMLDivElement | null>(null);
@@ -192,23 +191,6 @@ export function DashboardShell() {
       // Ignore storage failures and keep the in-memory view state.
     }
   }, [currentUser.id, view]);
-
-  useEffect(() => {
-    if (didAutoOpenAthleteLog.current || !navItemsForRole(currentUser.role).includes("athlete-log")) {
-      return;
-    }
-
-    const hasInProgressWorkout = state.scheduledWorkouts.some(
-      (workout) => workout.athleteId === currentUser.id && workout.status === "in_progress",
-    );
-
-    if (!hasInProgressWorkout) {
-      return;
-    }
-
-    setView("athlete-log");
-    didAutoOpenAthleteLog.current = true;
-  }, [currentUser, state.scheduledWorkouts]);
 
   useEffect(() => {
     if (view === "settings") {
