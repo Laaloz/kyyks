@@ -172,8 +172,8 @@ export function AthleteDashboard({
   const [isSavingMeasurements, setIsSavingMeasurements] = useState(false);
   const [isCompletingWorkout, setIsCompletingWorkout] = useState(false);
   const [pendingWorkoutTransition, setPendingWorkoutTransition] = useState<
-    | { type: "open"; scheduledWorkoutId: string; workoutName: string }
-    | { type: "start"; workoutName: string }
+    | { type: "open"; scheduledWorkoutId: string; workoutName: string; sourceKey: string }
+    | { type: "start"; workoutId: string; workoutName: string; sourceKey: string }
     | { type: "complete" }
     | { type: "cancel" }
     | { type: "delete" }
@@ -373,8 +373,8 @@ export function AthleteDashboard({
     setHistoryMenuStyle(null);
     setAthleteLogMode("workout");
   };
-  const startWorkoutFromProgram = async (programId: string, workoutId: string, workoutName: string) => {
-    setPendingWorkoutTransition({ type: "start", workoutName });
+  const startWorkoutFromProgram = async (programId: string, workoutId: string, workoutName: string, sourceKey: string) => {
+    setPendingWorkoutTransition({ type: "start", workoutId, workoutName, sourceKey });
     const result = await startProgramWorkout(programId, workoutId);
     if (result.ok && result.scheduledWorkoutId) {
       openWorkoutView(result.scheduledWorkoutId);
@@ -391,14 +391,14 @@ export function AthleteDashboard({
       notify({ tone: "danger", message: result.message });
     }
   };
-  const openOrResumeWorkout = async (scheduledWorkoutId: string) => {
+  const openOrResumeWorkout = async (scheduledWorkoutId: string, sourceKey: string) => {
     const workout = workouts.find((item) => item.id === scheduledWorkoutId);
     if (!workout) {
       return;
     }
 
     const workoutName = normalizeWorkoutHistoryTitle(workout.title);
-    setPendingWorkoutTransition({ type: "open", scheduledWorkoutId, workoutName });
+    setPendingWorkoutTransition({ type: "open", scheduledWorkoutId, workoutName, sourceKey });
 
     try {
       if (resolveWorkoutStatus(workout) === "cancelled") {
@@ -423,8 +423,8 @@ export function AthleteDashboard({
       );
     }
   };
-  const isOpeningWorkout = (scheduledWorkoutId: string) =>
-    pendingWorkoutTransition?.type === "open" && pendingWorkoutTransition.scheduledWorkoutId === scheduledWorkoutId;
+  const isTransitionLoading = (sourceKey: string) =>
+    pendingWorkoutTransition !== null && "sourceKey" in pendingWorkoutTransition && pendingWorkoutTransition.sourceKey === sourceKey;
   const activeScheduledByProgramWorkoutId = useMemo(() => {
     const activeById = new Map<string, (typeof workouts)[number]>();
     const getWorkoutPriority = (workout: (typeof workouts)[number]) => {
@@ -866,10 +866,10 @@ export function AthleteDashboard({
                         type="button"
                         variant="secondary"
                         className="w-full sm:w-auto"
-                        loading={isOpeningWorkout(highlightedWorkout.id)}
+                        loading={isTransitionLoading("overview-highlight")}
                         loadingText="Avataan treeniä..."
                         onClick={() => {
-                          void openOrResumeWorkout(highlightedWorkout.id);
+                          void openOrResumeWorkout(highlightedWorkout.id, "overview-highlight");
                         }}
                       >
                         {highlightedWorkoutState === "active" ? "Siirry treeniin" : "Jatka treeniä"}
@@ -1122,10 +1122,10 @@ export function AthleteDashboard({
                   <Button
                     type="button"
                     variant="secondary"
-                    loading={isOpeningWorkout(highlightedWorkout.id)}
+                    loading={isTransitionLoading("overview-next-step")}
                     loadingText="Avataan treeniä..."
                     onClick={() => {
-                      void openOrResumeWorkout(highlightedWorkout.id);
+                      void openOrResumeWorkout(highlightedWorkout.id, "overview-next-step");
                     }}
                   >
                     {highlightedWorkoutState === "active" ? "Siirry treeniin" : "Jatka treeniä"}
@@ -1385,23 +1385,32 @@ export function AthleteDashboard({
                  Aloita treeni ohjelmastasi. Aiempien toteutusten tiedot löydät historiasta.
               </CardDescription>
               {blockingWorkout ? (
-                <div className="mt-4 rounded-2xl border border-[var(--accent)] bg-[color:color-mix(in_srgb,var(--accent)_12%,var(--surface))] px-4 py-3 text-sm text-[var(--text)] shadow-[0_10px_24px_-22px_var(--accent)]">
-                  <p>
-                    {blockingWorkout.status === "cancelled"
-                      ? "Keskeytetty treeni lukitsee uuden aloituksen. Jatka alla olevasta treenikortista treeniä "
-                      : "Kesken oleva treeni lukitsee uuden aloituksen. Jatka ensin treeniä "}
-                    <span className="font-semibold">{normalizeWorkoutHistoryTitle(blockingWorkout.title)}</span>.
-                  </p>
+                <div className="mt-4 rounded-2xl border border-[var(--accent)] bg-[color:color-mix(in_srgb,var(--accent)_10%,var(--surface))] px-4 py-4 text-sm text-[var(--text)] shadow-[0_10px_24px_-22px_var(--accent)]">
+                  <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between sm:gap-4">
+                    <div className="min-w-0">
+                      <p className="text-xs font-semibold tracking-[0.04em] text-[var(--accent)]">
+                        {blockingWorkout.status === "cancelled" ? "Keskeytetty treeni" : "Aktiivinen treeni kesken"}
+                      </p>
+                      <p className="mt-1 max-w-2xl leading-6 text-[var(--text-muted)]">
+                        {blockingWorkout.status === "cancelled"
+                          ? "Jatka ensin keskeytetty treeni loppuun ennen uuden aloitusta. Sama treeni odottaa alempana valmiina jatkettavaksi."
+                          : "Sinulla on jo treeni kesken. Palaa siihen ennen kuin aloitat uuden treenin."}
+                      </p>
+                      <p className="mt-2 text-base font-semibold text-[var(--text)]">
+                        {normalizeWorkoutHistoryTitle(blockingWorkout.title)}
+                      </p>
+                    </div>
+                  </div>
                   {blockingWorkout.status !== "cancelled" ? (
                     <div className="mt-3">
                       <Button
                         type="button"
                         variant="secondary"
                         className="w-full sm:w-auto"
-                        loading={isOpeningWorkout(blockingWorkout.id)}
+                        loading={isTransitionLoading(`blocking-${blockingWorkout.id}`)}
                         loadingText="Avataan treeniä..."
                         onClick={() => {
-                          void openOrResumeWorkout(blockingWorkout.id);
+                          void openOrResumeWorkout(blockingWorkout.id, `blocking-${blockingWorkout.id}`);
                         }}
                       >
                         Siirry treeniin
@@ -1410,16 +1419,14 @@ export function AthleteDashboard({
                   ) : null}
                 </div>
               ) : null}
-              {pendingWorkoutTransition ? (
+              {pendingWorkoutTransition && !["open", "start"].includes(pendingWorkoutTransition.type) ? (
                 <p className="mt-4 flex items-center gap-3 rounded-2xl border border-[var(--border-strong)] bg-[color:color-mix(in_srgb,var(--surface-2)_84%,var(--surface))] px-4 py-3 text-sm text-[var(--text)] shadow-[0_12px_28px_-24px_var(--shadow)]">
                   <span
                     aria-hidden="true"
                     className="size-4 animate-spin rounded-full border-2 border-current border-r-transparent text-[var(--accent)]"
                   />
                   <span>
-                    {pendingWorkoutTransition.type === "start" || pendingWorkoutTransition.type === "open"
-                      ? `Avataan treeniä "${pendingWorkoutTransition.workoutName}"...`
-                      : pendingWorkoutTransition.type === "complete"
+                    {pendingWorkoutTransition.type === "complete"
                         ? "Merkitään treeniä valmiiksi ja palataan treenilistaan..."
                       : pendingWorkoutTransition.type === "cancel"
                         ? "Palataan treenilistaan ja päivitetään keskeytetty tila..."
@@ -1562,8 +1569,7 @@ export function AthleteDashboard({
                                     type="button"
                                     variant="ghost"
                                     className="w-full justify-center sm:w-auto"
-                                    loading={isOpeningWorkout(activeScheduledId)}
-                                    loadingText="Avataan treeniä..."
+                                    loading={false}
                                     onClick={() => openWorkoutView(activeScheduledId)}
                                   >
                                     Avaa aktiivinen
@@ -1579,18 +1585,24 @@ export function AthleteDashboard({
                                     }
                                     loading={
                                       resumableScheduledId
-                                        ? isOpeningWorkout(resumableScheduledId)
+                                        ? isTransitionLoading(`program-${program.id}-workout-${workout.id}`)
                                         : pendingWorkoutTransition?.type === "start" &&
-                                          pendingWorkoutTransition.workoutName === workout.name
+                                          pendingWorkoutTransition.workoutId === workout.id &&
+                                          pendingWorkoutTransition.sourceKey === `program-${program.id}-workout-${workout.id}`
                                     }
                                     loadingText="Avataan treeniä..."
                                     onClick={() => {
                                       if (resumableScheduledId) {
-                                        void openOrResumeWorkout(resumableScheduledId);
+                                        void openOrResumeWorkout(resumableScheduledId, `program-${program.id}-workout-${workout.id}`);
                                         return;
                                       }
 
-                                      void startWorkoutFromProgram(program.id, workout.id, workout.name);
+                                      void startWorkoutFromProgram(
+                                        program.id,
+                                        workout.id,
+                                        workout.name,
+                                        `program-${program.id}-workout-${workout.id}`,
+                                      );
                                     }}
                                   >
                                     {resumableScheduledId ? "Jatka treeniä" : "Aloita treeni"}
@@ -1702,7 +1714,7 @@ export function AthleteDashboard({
                                            setOpenHistoryMenuWorkoutId(null);
                                            setHistoryMenuAnchorRect(null);
                                            setHistoryMenuStyle(null);
-                                           void openOrResumeWorkout(workout.id);
+                                           void openOrResumeWorkout(workout.id, `history-menu-${workout.id}`);
                                          }}
                                        >
                                          Jatka treeniä
