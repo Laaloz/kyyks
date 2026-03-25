@@ -225,5 +225,6 @@ export function emptyProgramWorkout(
 }
 
 export function numberOrUndefined(value: string) {
-  return value === "" ? undefined : Number(value);
+  const normalized = value.trim().replace(",", ".");
+  return normalized === "" ? undefined : Number(normalized);
 }

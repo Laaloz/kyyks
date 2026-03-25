@@ -431,7 +431,7 @@ export function AthleteSessionPanel({
       return;
     }
 
-    const handlePointerDown = (event: MouseEvent) => {
+    const handlePointerDown = (event: MouseEvent | TouchEvent) => {
       const target = event.target as HTMLElement | null;
       if (target?.closest("[data-session-actions-menu-root='true']")) {
         return;
@@ -443,7 +443,11 @@ export function AthleteSessionPanel({
     };
 
     window.addEventListener("mousedown", handlePointerDown);
-    return () => window.removeEventListener("mousedown", handlePointerDown);
+    window.addEventListener("touchstart", handlePointerDown);
+    return () => {
+      window.removeEventListener("mousedown", handlePointerDown);
+      window.removeEventListener("touchstart", handlePointerDown);
+    };
   }, [isSecondaryActionsOpen]);
 
   useLayoutEffect(() => {
@@ -846,10 +850,8 @@ export function AthleteSessionPanel({
                         <Input
                           className={`h-9 min-w-0 rounded-xl px-2 py-1 text-sm font-medium shadow-[inset_0_1px_0_0_var(--shadow-soft)] md:h-10 md:px-3 ${inputToneClass}`}
                           id={`${scheduledWorkoutId}-${log.id}-load`}
-                          type="number"
+                          type="text"
                           inputMode="decimal"
-                          min={0}
-                          step="0.5"
                           placeholder="0"
                           aria-label={`${exerciseName} sarja ${log.setLabel} toteutunut kuorma`}
                           value={log.actualLoad ?? ""}
@@ -1173,7 +1175,7 @@ export function AthleteSessionPanel({
                             setIsSecondaryActionsOpen(false);
                             setSecondaryActionsAnchorRect(null);
                             setSecondaryActionsMenuStyle(null);
-                            onStart();
+                            void onStart();
                           }}
                         >
                           Jatka treeniä
