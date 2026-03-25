@@ -82,11 +82,12 @@ export function InviteAcceptView({ token, initialInvite }: { token: string; init
         <p className="mt-4 text-xs font-semibold tracking-[0.04em] text-[var(--text-subtle)]">Käyttöönotto</p>
         <CardTitle className="text-2xl">Viimeistele tunnus</CardTitle>
         <CardDescription className="mt-2">
-          Kutsu osoitteeseen {invite.email}. Luo nimi ja salasana, niin pääset heti treenialustalle.
+          Kutsu on lähetetty osoitteeseen {invite.email}. Valitse nimi ja salasana, niin pääset heti omaan
+          työtilaasi.
         </CardDescription>
         {expired ? (
           <div className="mt-6 space-y-4">
-            <p className="text-sm text-[var(--danger)]">Tämä kutsu on vanhentunut. Pyydä uusi kutsu adminilta tai valmentajalta.</p>
+            <p className="text-sm text-[var(--danger)]">Tämä kutsu on vanhentunut. Pyydä uusi kutsu ylläpidolta tai valmentajaltasi.</p>
             <Link className="rounded-xl border-2 border-[var(--border)] bg-[var(--surface-2)] px-4 py-2.5 text-sm font-semibold text-[var(--text)]" href="/">
               Takaisin etusivulle
             </Link>

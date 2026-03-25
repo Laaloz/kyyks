@@ -166,7 +166,7 @@ export function UserSettingsPanel() {
     }
 
     const result = await updateCurrentUserSettings(values);
-    setMessage(result.ok ? "Muutokset tallennettu." : result.message);
+    setMessage(result.ok ? "" : result.message);
     notify({ tone: result.ok ? "success" : "danger", message: result.ok ? "Asetukset tallennettiin." : result.message });
   });
   const isSavingSettings = form.formState.isSubmitting;
@@ -230,7 +230,7 @@ export function UserSettingsPanel() {
               ))}
             </Select>
             <p className="mt-2 text-xs text-[var(--text-subtle)]">
-              Tumma tila vaihtaa koko sovelluksen värimaailman miellyttävämmäksi hämärässä käytössä.
+              Tumma tila vaihtaa koko sovelluksen värimaailman rauhallisemmaksi hämärässä käytössä.
             </p>
           </div>
 
@@ -265,12 +265,10 @@ export function UserSettingsPanel() {
                 ? "text-[var(--text-subtle)]"
                 : !message
                 ? "text-[var(--text-subtle)]"
-                : message.includes("tallennettu")
-                  ? "text-[var(--success)]"
-                  : "text-[var(--danger)]"
+                : "text-[var(--danger)]"
             }`}
           >
-            {isSavingSettings ? "Tallennetaan asetuksia..." : message}
+            {isSavingSettings ? "Tallennetaan asetuksia..." : message || ""}
           </p>
 
           <Button
@@ -331,9 +329,7 @@ export function UserSettingsPanel() {
           <p className="text-xs font-semibold tracking-[0.04em] text-[var(--text-subtle)]">Yhteenveto</p>
           <CardTitle className="text-2xl">Profiilin yhteenveto</CardTitle>
         <CardDescription className="mt-2">
-          {currentUser.role === "athlete"
-            ? "Näet tässä roolin, teeman, ilmoitustilan ja valitun aloitussivun."
-            : "Näet tässä roolin, teeman, ilmoitustilan ja valitun aloitussivun."}
+          Näet tässä roolin, teeman, ilmoitustilan ja valitun aloitussivun yhdellä silmäyksellä.
         </CardDescription>
           <div className="mt-6 grid gap-3">
             <div className="flex items-center justify-between rounded-xl border-2 border-[var(--border)] bg-[var(--surface-2)] px-4 py-3">
@@ -369,7 +365,8 @@ export function UserSettingsPanel() {
             <p className="text-xs font-semibold tracking-[0.04em] text-[var(--text-subtle)]">Admin-oikeudet</p>
             <CardTitle className="text-2xl">Käyttäjien hallinta</CardTitle>
             <CardDescription className="mt-2">
-              Hallitse käyttäjiä turvallisesti: vaihda rooli tarvittaessa, lähetä salasanan nollausviesti, esikatsele reset-linkki ja poista käyttäjä.
+              Hallitse käyttäjiä turvallisesti: vaihda rooli tarvittaessa, lähetä salasanan nollausviesti,
+              esikatsele nollauslinkki ja poista käyttäjä.
             </CardDescription>
 
             {manageableUsers.length === 0 ? (
@@ -534,7 +531,8 @@ export function UserSettingsPanel() {
                             })}
                           </div>
                           <p className="mt-2 text-xs text-[var(--text-subtle)]">
-                            Voit valita treenaajalle useamman valmennuskelpoisen vastuuhenkilön. Myös admin voidaan liittää tähän listaan.
+                            Voit valita treenaajalle useamman valmennuskelpoisen vastuuhenkilön. Myös admin
+                            voidaan liittää tähän listaan.
                           </p>
                         </div>
                         <div className="flex flex-wrap items-center gap-3">
@@ -654,7 +652,8 @@ export function UserSettingsPanel() {
 
                 {isImpersonating && authenticatedUser ? (
                   <p className="mt-2 text-xs text-[var(--text-subtle)]">
-                    User-switch on aktiivinen. Olet kirjautuneena adminina ({authenticatedUser.fullName}) mutta toimit nyt valittuna käyttäjänä.
+                    Käyttäjän vaihto on aktiivinen. Olet kirjautuneena adminina ({authenticatedUser.fullName}),
+                    mutta toimit nyt valittuna käyttäjänä.
                   </p>
                 ) : null}
 
@@ -662,14 +661,15 @@ export function UserSettingsPanel() {
                   <div className="mt-3 grid gap-3 rounded-xl border-2 border-[var(--border)] bg-[var(--surface-2)] p-4">
                     <p className="text-xs font-semibold tracking-[0.03em] text-[var(--text-subtle)]">Sähköpostin esikatselu</p>
                     <p className="text-sm text-[var(--text-muted)]">
-                      Demo-ympäristössä voit avata tästä nollauslinkin esikatselun. Tuotannossa linkki lähetetään suoraan käyttäjän sähköpostiin.
+                      Demo-ympäristössä voit avata tästä nollauslinkin esikatselun. Tuotannossa linkki
+                      lähetetään suoraan käyttäjän sähköpostiin.
                     </p>
                     <a
                       href={previewResetUrl}
                       aria-label={`Avaa salasanan nollauslinkin esikatselu käyttäjälle ${selectedManagedUser?.email ?? "valittu käyttäjä"}`}
                       className="inline-flex w-full items-center justify-center rounded-xl border-2 border-[var(--border-strong)] bg-[var(--surface)] px-3 py-2 text-sm font-semibold text-[var(--text)] transition duration-150 hover:bg-[var(--surface-3)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--background)] sm:w-fit"
                     >
-                      Avaa reset-linkin esikatselu
+                      Avaa nollauslinkin esikatselu
                     </a>
                   </div>
                 ) : null}

@@ -189,7 +189,8 @@ export function AdminDashboard({ view }: { view: WorkspaceView }) {
                 <p className="text-xs font-semibold tracking-[0.04em] text-[var(--text-subtle)]">Hallintanäkymä</p>
                 <CardTitle className="text-2xl">Admin näkee nyt yhdellä silmäyksellä mitä verkossa tapahtuu</CardTitle>
                 <CardDescription className="max-w-3xl leading-6">
-                  Yleiskuva nostaa esiin poikkeamat, valmennussuhteet, aktiivisuuden ja onboardingin. Mukana näkyvät kaikki valmennuskelpoiset vastuuhenkilöt, myös adminit.
+                  Yleiskuva nostaa esiin poikkeamat, valmennussuhteet, aktiivisuuden ja käyttöönoton. Mukana
+                  näkyvät kaikki valmennuskelpoiset vastuuhenkilöt, myös adminit.
                 </CardDescription>
               </div>
               <div className="grid gap-3 sm:grid-cols-3 xl:grid-cols-1 2xl:grid-cols-3">
@@ -201,7 +202,7 @@ export function AdminDashboard({ view }: { view: WorkspaceView }) {
                 <div className="rounded-xl border-2 border-[var(--border)] bg-[var(--surface-2)] px-4 py-4">
                   <p className="text-xs font-semibold tracking-[0.04em] text-[var(--text-subtle)]">Monivalmentajat</p>
                   <p className="mt-2 text-2xl font-semibold text-[var(--text)]">{overview.athletesWithMultipleCoaches.length}</p>
-                  <p className="mt-1 text-sm text-[var(--text-muted)]">treenaajalla on useampi coach</p>
+                  <p className="mt-1 text-sm text-[var(--text-muted)]">treenaajalla on useampi valmentaja</p>
                 </div>
                 <div className="rounded-xl border-2 border-[var(--border)] bg-[var(--surface-2)] px-4 py-4">
                   <p className="text-xs font-semibold tracking-[0.04em] text-[var(--text-subtle)]">Vanhenee pian</p>
@@ -266,7 +267,7 @@ export function AdminDashboard({ view }: { view: WorkspaceView }) {
                   <div className="flex items-center justify-between gap-4">
                     <div>
                       <p className="text-sm font-semibold text-[var(--text)]">Kutsut vanhenevat pian</p>
-                      <p className="text-sm text-[var(--text-muted)]">Tarkista 72 tunnin sisällä vanhenevat kutsut ennen kuin onboarding pysähtyy.</p>
+                       <p className="text-sm text-[var(--text-muted)]">Tarkista 72 tunnin sisällä vanhenevat kutsut ennen kuin käyttöönotto pysähtyy.</p>
                     </div>
                     <Badge>{overview.pendingInvitesExpiringSoon.length}</Badge>
                   </div>
@@ -386,10 +387,11 @@ export function AdminDashboard({ view }: { view: WorkspaceView }) {
             </Card>
 
             <Card>
-              <p className="text-xs font-semibold tracking-[0.04em] text-[var(--text-subtle)]">Kutsut ja onboarding</p>
+              <p className="text-xs font-semibold tracking-[0.04em] text-[var(--text-subtle)]">Kutsut ja käyttöönotto</p>
               <CardTitle className="text-2xl">Seuraa kuka on tulossa sisään järjestelmään</CardTitle>
               <CardDescription className="mt-2">
-                Täältä näet paljonko kutsuja on auki, kuinka moni käyttäjä on vielä invited-tilassa ja ketkä tarvitsevat seuraavan stepin.
+                Täältä näet paljonko kutsuja on auki, kuinka moni käyttäjä odottaa vielä aktivointia ja ketkä
+                tarvitsevat seuraavan vaiheen.
               </CardDescription>
               <div className="mt-6 grid gap-3 sm:grid-cols-3">
                 <div className="rounded-xl border-2 border-[var(--border)] bg-[var(--surface-2)] p-4">
@@ -397,7 +399,7 @@ export function AdminDashboard({ view }: { view: WorkspaceView }) {
                   <p className="mt-3 text-3xl font-semibold text-[var(--text)]">{pendingInvites.length}</p>
                 </div>
                 <div className="rounded-xl border-2 border-[var(--border)] bg-[var(--surface-2)] p-4">
-                  <p className="text-xs font-semibold tracking-[0.03em] text-[var(--text-subtle)]">Invited-käyttäjät</p>
+                  <p className="text-xs font-semibold tracking-[0.03em] text-[var(--text-subtle)]">Odottaa aktivointia</p>
                   <p className="mt-3 text-3xl font-semibold text-[var(--text)]">{overview.invitedUsers.length}</p>
                 </div>
                 <div className="rounded-xl border-2 border-[var(--border)] bg-[var(--surface-2)] p-4">
@@ -414,7 +416,7 @@ export function AdminDashboard({ view }: { view: WorkspaceView }) {
                 </p>
                 {pendingInvites.length === 0 ? (
                   <p className="rounded-xl border-2 border-[var(--border)] bg-[var(--surface-2)] px-4 py-3 text-sm text-[var(--text-muted)]">
-                    Onboarding-jono on tällä hetkellä tyhjä.
+                    Käyttöönottolista on tällä hetkellä tyhjä.
                   </p>
                 ) : (
                   pendingInvites.slice(0, 4).map((invite) => {
@@ -475,7 +477,8 @@ export function AdminDashboard({ view }: { view: WorkspaceView }) {
             <p className="text-xs font-semibold tracking-[0.04em] text-[var(--text-subtle)]">Valmentajien kuormitus</p>
             <CardTitle className="text-2xl">Vastuuhenkilöiden rosterit ja ohjelmakuorma</CardTitle>
             <CardDescription className="mt-2">
-              Näet nopeasti kunkin valmennuskelpoisen vastuuhenkilön rosterin, ohjelmien määrän ja avoimet onboardingit.
+              Näet nopeasti kunkin valmennuskelpoisen vastuuhenkilön rosterin, ohjelmien määrän ja avoimet
+              käyttöönotot.
             </CardDescription>
             <div className="mt-6 grid gap-4 md:grid-cols-2 2xl:grid-cols-3">
               {overview.coachLoad.length === 0 ? (
@@ -518,13 +521,14 @@ export function AdminDashboard({ view }: { view: WorkspaceView }) {
             <p className="text-xs font-semibold tracking-[0.04em] text-[var(--text-subtle)]">Käyttäjähallinta</p>
             <CardTitle className="text-2xl">Lähetä uusi kutsu</CardTitle>
             <CardDescription className="mt-2">
-              Ylläpitäjä voi kutsua uuden valmentajan tai treenaajan. Treenaajalle voi samalla valita vastuullisen valmentajan.
+              Lähetä kutsu uudelle valmentajalle tai treenaajalle. Treenaajalle voit samalla valita vastuullisen
+              valmentajan.
             </CardDescription>
             <form
               className="mt-6 space-y-4"
               onSubmit={form.handleSubmit(async (values) => {
                 const result = await createInvite(values);
-                setInviteMessage(result.ok ? `Kutsu lähetetty osoitteeseen ${values.email}.` : result.message);
+                setInviteMessage(result.ok ? `Kutsu lähetettiin osoitteeseen ${values.email}.` : result.message);
                 notify({
                   tone: result.ok ? "success" : "danger",
                   message: result.ok ? `Kutsu lähetettiin osoitteeseen ${values.email}.` : result.message,
@@ -605,7 +609,7 @@ export function AdminDashboard({ view }: { view: WorkspaceView }) {
             <p className="text-xs font-semibold tracking-[0.04em] text-[var(--text-subtle)]">Kutsutilanne</p>
             <CardTitle className="text-2xl">Avoimet kutsut</CardTitle>
             <CardDescription className="mt-2">
-              Seuraa, mikä kutsu on avoinna, ja avaa liittymislinkki tarvittaessa uudelleen.
+              Täältä näet avoimet kutsut ja voit avata tai lähettää liittymislinkin uudelleen tarvittaessa.
             </CardDescription>
             <p
               aria-live="polite"

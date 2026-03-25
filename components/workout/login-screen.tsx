@@ -55,11 +55,11 @@ export function LoginScreen() {
         <div className="space-y-4">
           <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[var(--accent)]">rooki.fit</p>
           <h1 className="max-w-2xl font-[family-name:var(--font-display)] text-4xl font-semibold leading-tight text-[var(--text)] md:text-5xl">
-            Kirjaudu omaan treenityötilaasi.
+            Kirjaudu omaan treenityötilaasi
           </h1>
           <p className="max-w-xl text-lg leading-8 text-[var(--text-muted)]">
-            Tämä näkymä on tarkoitettu jo hyväksytyille käyttäjille. Kun tilisi on luotu tai kutsu on aktivoitu,
-            pääset tästä suoraan omaan näkymääsi.
+            Tämä näkymä on tarkoitettu olemassa oleville käyttäjille. Kun tilisi on luotu tai kutsu on
+            aktivoitu, pääset tästä suoraan omaan työtilaasi.
           </p>
         </div>
 
@@ -69,8 +69,8 @@ export function LoginScreen() {
               <p className="text-xs font-semibold tracking-[0.04em] text-[var(--text-subtle)]">Sisäänpääsy</p>
               <CardTitle className="mt-2 text-2xl">Näin pääset sisään</CardTitle>
               <CardDescription className="mt-2 max-w-2xl leading-6">
-                Tämä sivu on kirjautumisportti olemassa oleville käyttäjille. Näytämme tässä vain sen tiedon, jota
-                tarvitset päästäksesi omaan työtilaasi ilman ylimääräistä sisältöä.
+                Tämä sivu on tarkoitettu olemassa oleville käyttäjille. Näet tässä vain olennaiset vaiheet,
+                joilla pääset nopeasti omaan työtilaasi.
               </CardDescription>
             </div>
             <div className="grid gap-3 text-sm text-[var(--text-muted)]">
@@ -83,15 +83,15 @@ export function LoginScreen() {
               <div className="rounded-xl border-2 border-[var(--border)] bg-[var(--surface-2)] px-4 py-3">
                 <p className="text-xs font-semibold tracking-[0.04em] text-[var(--text-subtle)]">2. Kutsu tai tunnus</p>
                 <p className="mt-1 font-medium text-[var(--text)]">
-                  Uusi käyttäjä aktivoi tilin kutsulinkistä. Sen jälkeen sisään kirjaudutaan omalla sähköpostilla ja
-                  salasanalla.
+                  Uusi käyttäjä aktivoi tilin kutsulinkistä. Sen jälkeen kirjaudut sisään omalla
+                  sähköpostilla ja salasanalla.
                 </p>
               </div>
               <div className="rounded-xl border-2 border-[var(--border)] bg-[var(--surface-2)] px-4 py-3">
                 <p className="text-xs font-semibold tracking-[0.04em] text-[var(--text-subtle)]">3. Jos et pääse sisään</p>
                 <p className="mt-1 font-medium text-[var(--text)]">
-                  Tarkista ensin sähköposti ja salasana. Jos ongelma jatkuu, pyydä ylläpidolta uusi kutsu tai
-                  salasanan nollauslinkki.
+                  Tarkista ensin sähköposti ja salasana. Jos ongelma jatkuu, pyydä ylläpidolta uusi kutsu
+                  tai salasanan nollauslinkki.
                 </p>
               </div>
             </div>
@@ -104,8 +104,7 @@ export function LoginScreen() {
           <p className="text-xs font-semibold tracking-[0.04em] text-[var(--text-subtle)]">Kirjautuminen</p>
           <CardTitle>Kirjaudu sisään</CardTitle>
           <CardDescription className="mt-2">
-            Käytä sähköpostia ja salasanaa, jotka on liitetty käyttäjätiliisi. Jos tiliäsi ei ole vielä aktivoitu,
-            aloita saamastasi kutsulinkistä.
+            Käytä sähköpostia ja salasanaa, jotka on liitetty käyttäjätiliisi. Jos tiliäsi ei ole vielä aktivoitu, aloita saamastasi kutsulinkistä.
           </CardDescription>
           <form
             className="mt-6 space-y-4"
@@ -206,8 +205,8 @@ export function LoginScreen() {
               Avaa työtila
             </Button>
             <p className="rounded-xl border-2 border-[var(--border)] bg-[var(--surface-2)] px-4 py-3 text-sm leading-6 text-[var(--text-muted)]">
-              Etkö pääse sisään? Tarkista ensin, että käytät oikeaa sähköpostiosoitetta. Jos ongelma jatkuu, pyydä
-              ylläpidolta uusi kutsu tai salasanan nollaus.
+              Etkö pääse sisään? Tarkista ensin, että käytät oikeaa sähköpostiosoitetta. Jos ongelma
+              jatkuu, pyydä ylläpidolta uusi kutsu tai salasanan nollaus.
             </p>
           </form>
         </Card>

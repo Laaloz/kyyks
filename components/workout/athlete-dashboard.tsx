@@ -803,7 +803,7 @@ export function AthleteDashboard({
                     ? "Jatka siitä mihin jäit ja viimeistele sarjat."
                     : athletePrograms.length
                       ? "Voit valita vapaasti minkä tahansa ohjelmasi harjoituksen."
-                      : "Luo valmentajan kanssa uusi treenikaari"}
+                      : "Pyydä valmentajaa rakentamaan ensimmäinen ohjelma."}
                 </p>
               </div>
               <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface-2)] px-4 py-4">
@@ -838,8 +838,8 @@ export function AthleteDashboard({
                 <p className="text-xs font-semibold tracking-[0.04em] text-[var(--text-subtle)]">Kehon seuranta</p>
                 <CardTitle className="mt-2 text-2xl">Mitat ja kehitys</CardTitle>
                 <CardDescription className="mt-2 max-w-3xl">
-                  Päivitä pituus, paino ja vyötärö tähän samaan paikkaan. Paino- ja vyötärötrendit päivittyvät automaattisesti viimeisimmän mittauksen mukaan.
-              </CardDescription>
+                  Näet tästä viimeisimmät mitat ja niiden kehityksen. Kun kirjaat uuden mittauksen, seuranta päivittyy automaattisesti.
+                </CardDescription>
             </div>
             <div className="grid w-full gap-3 sm:grid-cols-2 xl:w-auto xl:min-w-[38rem] xl:grid-cols-4">
               <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface-2)] px-4 py-4">
@@ -871,9 +871,9 @@ export function AthleteDashboard({
           <div className="mt-5 rounded-2xl border border-[var(--border)] bg-[var(--surface-2)] p-4">
             <div className="flex flex-col gap-2">
               <div>
-                <p className="text-sm font-semibold text-[var(--text)]">Päivitä tämänhetkiset mitat</p>
+                <p className="text-sm font-semibold text-[var(--text)]">Kirjaa uusi mittaus</p>
                 <p className="text-sm text-[var(--text-muted)]">
-                  Kaikki kentät ovat valinnaisia. Pituus muuttuu harvoin, mutta painon ja vyötärön voit päivittää tähän vaikka kerran viikossa.
+                  Lisää tähän uusin mittaus, kun haluat päivittää seurannan. Voit täyttää vain ne kentät, joihin tuli muutos.
                 </p>
               </div>
             </div>
@@ -948,8 +948,8 @@ export function AthleteDashboard({
               >
                 {measurementMessage ||
                   (isMeasurementDirty
-                    ? "Tallennus päivittää viimeisimmän mittauksen ja trendikaaviot."
-                    : "Muuta jotakin valinnaista kenttää, kun haluat tallentaa uuden mittauksen.")}
+                    ? "Tallennus päivittää viimeisimmän mittauksen ja trendit."
+                    : "Täytä yksi tai useampi kenttä, kun haluat tallentaa uuden mittauksen.")}
               </p>
               <Button
                 type="button"
@@ -1304,7 +1304,7 @@ export function AthleteDashboard({
               <p className="text-xs font-semibold tracking-[0.04em] text-[var(--text-subtle)]">Ohjelman harjoitukset</p>
               <CardTitle className="text-2xl">Valitse harjoitus</CardTitle>
               <CardDescription className="mt-2">
-                Aloita harjoitus ohjelmastasi. Aiempien treenien tiedot löydät historiasta.
+                 Aloita harjoitus ohjelmastasi. Aiempien toteutusten tiedot löydät historiasta.
               </CardDescription>
               {blockingWorkout ? (
                 <p className="mt-4 rounded-2xl border border-[var(--accent)] bg-[color:color-mix(in_srgb,var(--accent)_12%,var(--surface))] px-4 py-3 text-sm text-[var(--text)] shadow-[0_10px_24px_-22px_var(--accent)]">
@@ -1493,7 +1493,7 @@ export function AthleteDashboard({
                 </div>
               ) : (
                 <p className="mt-5 rounded-2xl border border-[var(--border)] bg-[var(--surface-2)] px-4 py-3 text-sm text-[var(--text-muted)]">
-                  Sinulle ei ole vielä luotu ohjelmia. Pyydä valmentajaa lisäämään ohjelma.
+                  Sinulle ei ole vielä luotu ohjelmia. Pyydä valmentajaa lisäämään ensimmäinen ohjelma.
                 </p>
               )}
             </Card>
@@ -1502,7 +1502,7 @@ export function AthleteDashboard({
                 <p className="text-xs font-semibold tracking-[0.04em] text-[var(--text-subtle)]">Treenihistoria</p>
                 <CardTitle className="text-2xl">Historia</CardTitle>
                 <CardDescription className="mt-2">
-                  Historia on ryhmitelty treenialueittain. Valitse toteutus päivämäärän mukaan tai avaa treeni tarkasteluun ja korjaukseen.
+                  Historia on ryhmitelty treeneittäin. Valitse toteutus päivämäärän mukaan tai avaa treeni tarkasteluun ja korjaukseen.
                 </CardDescription>
                 {workoutHistory.length === 0 ? (
                   <p className="mt-5 rounded-2xl border border-[var(--border)] bg-[var(--surface-2)] px-4 py-3 text-sm text-[var(--text-muted)]">

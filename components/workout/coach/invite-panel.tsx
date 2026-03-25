@@ -40,7 +40,7 @@ export function CoachInvitePanel() {
       <Card>
         <CardTitle>Kutsu uusi treenaaja</CardTitle>
         <CardDescription className="mt-2">
-          Valmentaja voi lisätä oman asiakkaansa suoraan palveluun. Kutsu muodostaa samalla valmentaja-treenaaja-suhteen.
+          Lähetä uusi kutsu suoraan treenaajalle. Kutsu liittää treenaajan samalla rosteriisi.
         </CardDescription>
         <form
           className="mt-6 space-y-4"
@@ -91,7 +91,7 @@ export function CoachInvitePanel() {
         <Card>
           <CardTitle>Avoimet kutsut</CardTitle>
           <CardDescription className="mt-2">
-            Jos kutsu luotiin jo aiemmin, voit lähettää sen tästä uudelleen samaan osoitteeseen.
+            Täältä näet avoimet kutsut ja voit lähettää kutsulinkin uudelleen tarvittaessa.
           </CardDescription>
           <p
             aria-live="polite"

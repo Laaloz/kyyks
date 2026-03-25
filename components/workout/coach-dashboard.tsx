@@ -197,8 +197,8 @@ export function CoachDashboard({
     || !state.scheduledWorkouts.some((workout) => workout.trainingPlanId === editingProgramId);
   const editorTitle = isEditingProgram ? "Muokkaa treeniohjelmaa" : "Uusi treeniohjelma";
   const editorDescription = isEditingProgram
-    ? "Päivitä ohjelman harjoitukset, liikkeet ja kuormitus. Käyttäjän voi vaihtaa vain ennen kuin ohjelmasta on käynnistetty treenejä."
-    : "Luo ohjelma itsellesi tai valmennettavalle: lisää harjoitukset ja valitse liikkeet valmiista pankista tai omana liikkeenä.";
+    ? "Päivitä ohjelman harjoitukset, liikkeet ja kuormitus. Treenaajan voi vaihtaa vain ennen kuin ohjelmasta on käynnistetty treenejä."
+    : "Luo uusi ohjelma itsellesi tai valmennettavalle. Lisää harjoitukset ja valitse liikkeet valmiista pankista tai omina liikkeinä.";
 
   const resetComposer = (athleteId: string) => {
     form.reset({
@@ -254,7 +254,7 @@ export function CoachDashboard({
               <div className="mt-4 flex flex-wrap items-center gap-3 rounded-xl border border-[var(--border)] bg-[var(--surface-2)] p-3">
                 <Badge>Muokkaustila</Badge>
                 <p className="text-sm text-[var(--text-muted)]">
-                  Muokkaat olemassa olevaa ohjelmaa. Sulje muokkaus, jos haluat palata uuden ohjelman luontiin.
+                  Muokkaat olemassa olevaa ohjelmaa. Sulje muokkaus, jos haluat palata uuden ohjelman tekoon.
                 </p>
                 <Button
                   type="button"
@@ -340,7 +340,7 @@ export function CoachDashboard({
                     className="min-h-24"
                   />
                   <p className="mt-1 text-xs text-[var(--text-subtle)]">
-                    Tähän voit kirjoittaa ohjelman tavoitteen, arjen muistutukset tai muut lisähuomiot treenaajalle.
+                     Tähän voit kirjoittaa ohjelman tavoitteen, arjen muistutukset tai muut tarkentavat huomiot treenaajalle.
                   </p>
                 </div>
               </fieldset>
@@ -577,7 +577,7 @@ export function CoachDashboard({
                     <div className="rounded-xl border border-dashed border-[var(--border)] bg-[var(--surface-2)] p-4">
                       <p className="text-sm font-medium text-[var(--text)]">Ei aktiivisia ohjelmia.</p>
                       <p className="mt-1 text-sm text-[var(--text-muted)]">
-                        Luo uusi ohjelma tai nosta arkistoitu ohjelma takaisin aktiiviseksi.
+                        Luo uusi ohjelma tai ota aiempi ohjelma takaisin käyttöön.
                       </p>
                     </div>
                   )}
@@ -588,7 +588,7 @@ export function CoachDashboard({
                     <div>
                       <p className="text-sm font-semibold text-[var(--text)]">Aiemmat ohjelmat</p>
                       <p className="mt-1 text-sm text-[var(--text-muted)]">
-                        Vanhat ohjelmat säilyvät tallessa, mutta eivät näy treenaajalle käytössä olevina.
+                        Vanhat ohjelmat säilyvät tallessa, mutta eivät näy treenaajalle aktiivisina.
                       </p>
                     </div>
                     <Badge>{archivedCoachPrograms.length}</Badge>
