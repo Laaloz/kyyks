@@ -63,8 +63,8 @@ export function LoginScreen() {
             Kirjaudu omaan treenityötilaasi
           </h1>
           <p className="max-w-xl text-lg leading-8 text-[var(--text-muted)]">
-            Kirjaudu sisään samalla sähköpostilla, jolla kutsu hyväksyttiin tai käyttäjätili aktivoitiin.
-            Avaamme tämän jälkeen suoraan oman treeninäkymäsi.
+            Käytä samaa sähköpostia, jolla tilisi on aktivoitu. Kun kirjautuminen onnistuu, siirryt suoraan
+            omaan työtilaasi.
           </p>
         </div>
 
@@ -72,30 +72,24 @@ export function LoginScreen() {
           <div className="space-y-5">
             <div>
               <p className="text-xs font-semibold tracking-[0.04em] text-[var(--text-subtle)]">Sisäänpääsy</p>
-              <CardTitle className="mt-2 text-2xl">Nopea tarkistus ennen kirjautumista</CardTitle>
+              <CardTitle className="mt-2 text-2xl">Selkeä eteneminen</CardTitle>
               <CardDescription className="mt-2 max-w-2xl leading-6">
-                Tämä sivu on tarkoitettu olemassa oleville käyttäjille. Tarkista vain nämä asiat, jos
-                kirjautuminen ei mene suoraan läpi.
+                Tällä sivulla on kaksi toimintoa: kirjaudu sisään olemassa olevalla tunnuksella tai pyydä
+                uusi salasanalinkki samalla sähköpostilla.
               </CardDescription>
             </div>
             <div className="grid gap-3 text-sm text-[var(--text-muted)]">
               <div className="rounded-xl border-2 border-[var(--border)] bg-[var(--surface-2)] px-4 py-3">
-                <p className="text-xs font-semibold tracking-[0.04em] text-[var(--text-subtle)]">1. Oikea sähköposti</p>
+                <p className="text-xs font-semibold tracking-[0.04em] text-[var(--text-subtle)]">1. Syötä sähköposti ensin</p>
                 <p className="mt-1 font-medium text-[var(--text)]">
-                  Käytä samaa sähköpostia, johon kutsu tai tunnus on liitetty.
+                  Sama kenttä toimii sekä kirjautumiseen että salasanan nollaukseen.
                 </p>
               </div>
               <div className="rounded-xl border-2 border-[var(--border)] bg-[var(--surface-2)] px-4 py-3">
-                <p className="text-xs font-semibold tracking-[0.04em] text-[var(--text-subtle)]">2. Aktivointi valmiina</p>
+                <p className="text-xs font-semibold tracking-[0.04em] text-[var(--text-subtle)]">2. Jos salasana on hukassa</p>
                 <p className="mt-1 font-medium text-[var(--text)]">
-                  Uusi käyttäjä hyväksyy ensin kutsun tai asettaa salasanan valmiiksi, ja kirjautuu sen
-                  jälkeen tästä näkymästä.
-                </p>
-              </div>
-              <div className="rounded-xl border-2 border-[var(--border)] bg-[var(--surface-2)] px-4 py-3">
-                <p className="text-xs font-semibold tracking-[0.04em] text-[var(--text-subtle)]">3. Jos kirjautuminen estyy</p>
-                <p className="mt-1 font-medium text-[var(--text)]">
-                  Tarkista salasana ensin. Jos ongelma jatkuu, pyydä uusi kutsu tai salasanan nollauslinkki.
+                  Pyydä nollauslinkki suoraan lomakkeelta. Jos olet uusi käyttäjä, aktivoi tunnus ensin
+                  kutsulinkistä.
                 </p>
               </div>
             </div>
@@ -108,7 +102,8 @@ export function LoginScreen() {
           <p className="text-xs font-semibold tracking-[0.04em] text-[var(--text-subtle)]">Kirjautuminen</p>
           <CardTitle>Kirjaudu sisään</CardTitle>
           <CardDescription className="mt-2">
-            Syötä sähköposti ja salasana. Jos tiliä ei ole vielä aktivoitu, aloita ensin saamastasi kutsulinkistä.
+            Aloita sähköpostiosoitteesta. Sen jälkeen voit joko kirjautua salasanalla tai pyytää uuden
+            salasanalinkin.
           </CardDescription>
           <form
             className="mt-6 space-y-4"
@@ -119,6 +114,7 @@ export function LoginScreen() {
               }
 
               setIsSubmitting(true);
+              setResetMessage(null);
               const result = await login(values.email, values.password, {
                 captchaToken: captchaToken ?? undefined,
               });
@@ -154,6 +150,56 @@ export function LoginScreen() {
                   {form.formState.errors.email.message}
                 </p>
               ) : null}
+            </div>
+            <div className="rounded-2xl border-2 border-[var(--border)] bg-[var(--surface-2)] p-4">
+              <p className="text-sm font-semibold text-[var(--text)]">Unohditko salasanasi?</p>
+              <p className="mt-1 text-sm leading-6 text-[var(--text-muted)]">
+                Anna ensin sähköposti yllä ja pyydä uusi salasanan nollauslinkki tähän samaan osoitteeseen.
+              </p>
+              <div className="mt-3 flex flex-col gap-3 sm:flex-row sm:items-center">
+                <Button
+                  type="button"
+                  variant="secondary"
+                  className="w-full sm:w-auto"
+                  disabled={isRequestingReset}
+                  loading={isRequestingReset}
+                  loadingText="Lähetetään nollauslinkkiä..."
+                  onClick={async () => {
+                    const email = form.getValues("email").trim();
+                    if (!email) {
+                      form.setError("email", { message: "Anna sähköpostiosoite ensin." });
+                      setResetMessage("Anna sähköpostiosoite ennen salasanan nollausta.");
+                      setResetMessageTone("error");
+                      return;
+                    }
+
+                    setError(null);
+                    setIsRequestingReset(true);
+                    try {
+                      const result = await requestPasswordResetForEmail({
+                        email,
+                        captchaToken: captchaToken ?? undefined,
+                      });
+                      setResetMessage(result.message);
+                      setResetMessageTone(result.ok ? "success" : "error");
+                      if (requiresCaptcha) {
+                        captchaRef.current?.resetCaptcha();
+                        setCaptchaToken(null);
+                      }
+                    } finally {
+                      setIsRequestingReset(false);
+                    }
+                  }}
+                >
+                  Lähetä nollauslinkki
+                </Button>
+                <p
+                  aria-live="polite"
+                  className={`min-h-5 text-sm ${resetMessageTone === "success" ? "text-[var(--success)]" : "text-[var(--danger)]"}`}
+                >
+                  {resetMessage ?? ""}
+                </p>
+              </div>
             </div>
             <div>
               <Label htmlFor={`${formId}-password`}>Salasana</Label>
@@ -213,65 +259,9 @@ export function LoginScreen() {
               Avaa työtila
             </Button>
             <p className="rounded-xl border-2 border-[var(--border)] bg-[var(--surface-2)] px-4 py-3 text-sm leading-6 text-[var(--text-muted)]">
-              Etkö pääse sisään? Tarkista ensin sähköposti, salasana ja mahdollinen captcha. Jos ongelma
-              jatkuu, pyydä ylläpidolta uusi kutsu tai salasanan nollauslinkki.
+              Jos kirjautuminen ei onnistu, tarkista ensin sähköposti, salasana ja mahdollinen captcha.
             </p>
           </form>
-        </Card>
-
-        <Card className="border-[var(--border-strong)] bg-[var(--surface)]">
-          <p className="text-xs font-semibold tracking-[0.04em] text-[var(--text-subtle)]">Salasana hukassa?</p>
-          <CardTitle className="mt-2">Unohditko salasanasi?</CardTitle>
-          <CardDescription className="mt-2 leading-6">
-            Jos et muista salasanaasi, voit pyytää uuden salasanan linkin suoraan tästä näkymästä.
-          </CardDescription>
-          <div className="mt-5 space-y-4">
-            <div className="rounded-xl border-2 border-[var(--border)] bg-[var(--surface-2)] px-4 py-3 text-sm leading-6 text-[var(--text-muted)]">
-              Käytämme kirjautumislomakkeen sähköpostiosoitetta. Jos sinulla on jo nollauslinkki, avaa se
-              suoraan sähköpostistasi.
-            </div>
-            <Button
-              type="button"
-              variant="secondary"
-              className="w-full"
-              disabled={isRequestingReset}
-              loading={isRequestingReset}
-              loadingText="Lähetetään nollauslinkkiä..."
-              onClick={async () => {
-                const email = form.getValues("email").trim();
-                if (!email) {
-                  form.setError("email", { message: "Anna sähköpostiosoite ensin." });
-                  setResetMessage("Anna sähköpostiosoite ennen salasanan nollausta.");
-                  setResetMessageTone("error");
-                  return;
-                }
-
-                setIsRequestingReset(true);
-                try {
-                  const result = await requestPasswordResetForEmail({
-                    email,
-                    captchaToken: captchaToken ?? undefined,
-                  });
-                  setResetMessage(result.message);
-                  setResetMessageTone(result.ok ? "success" : "error");
-                  if (requiresCaptcha) {
-                    captchaRef.current?.resetCaptcha();
-                    setCaptchaToken(null);
-                  }
-                } finally {
-                  setIsRequestingReset(false);
-                }
-              }}
-            >
-              Lähetä nollauslinkki
-            </Button>
-            <p
-              aria-live="polite"
-              className={`min-h-5 text-sm ${resetMessageTone === "success" ? "text-[var(--success)]" : "text-[var(--danger)]"}`}
-            >
-              {resetMessage ?? ""}
-            </p>
-          </div>
         </Card>
 
         {showLocalDemoUsers ? (
