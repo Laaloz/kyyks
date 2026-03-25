@@ -1,6 +1,6 @@
 "use client";
 
-import { BookOpen, Check, ChevronDown, ChevronUp, MoreHorizontal } from "lucide-react";
+import { BookOpen, Check, ChevronDown, ChevronUp, GripVertical, MoreHorizontal } from "lucide-react";
 import {
   useEffect,
   useLayoutEffect,
@@ -8,6 +8,7 @@ import {
   useRef,
   useState,
   type KeyboardEvent,
+  type PointerEvent as ReactPointerEvent,
   type CSSProperties,
 } from "react";
 
@@ -44,8 +45,25 @@ type PersistedWorkoutUiState = {
   restExerciseName?: string;
 };
 
-const inputStepperButtonClass =
-  "flex flex-1 items-center justify-center rounded-[0.45rem] border border-[color-mix(in_srgb,var(--border)_58%,transparent)] bg-[color-mix(in_srgb,var(--surface)_96%,transparent)] text-[color-mix(in_srgb,var(--text-subtle)_82%,transparent)] transition hover:border-[color-mix(in_srgb,var(--border-strong)_72%,transparent)] hover:bg-[color-mix(in_srgb,var(--surface)_98%,var(--surface-2))] hover:text-[var(--text-muted)] disabled:cursor-not-allowed disabled:opacity-45";
+const inputDragHandleClass =
+  "flex h-full w-full items-center justify-center rounded-[0.6rem] border border-[color-mix(in_srgb,var(--border)_58%,transparent)] bg-[color-mix(in_srgb,var(--surface)_96%,transparent)] text-[color-mix(in_srgb,var(--text-subtle)_82%,transparent)] transition hover:border-[color-mix(in_srgb,var(--border-strong)_72%,transparent)] hover:bg-[color-mix(in_srgb,var(--surface)_98%,var(--surface-2))] hover:text-[var(--text-muted)]";
+
+const inputDragHandleActiveClass =
+  "border-[color-mix(in_srgb,var(--accent)_55%,var(--border))] bg-[color-mix(in_srgb,var(--accent)_12%,var(--surface))] text-[var(--accent)] shadow-[0_10px_20px_-16px_var(--accent)]";
+
+const dragPixelsPerStep = 14;
+
+type DragField = "reps" | "load";
+
+type DragSession = {
+  logId: string;
+  field: DragField;
+  pointerId: number;
+  startY: number;
+  lastStepOffset: number;
+  currentValue: number;
+  increment: number;
+};
 
 function getWorkoutUiStorageKey(scheduledWorkoutId: string) {
   return `rookiapp.workout-ui.${scheduledWorkoutId}`;
@@ -400,6 +418,7 @@ export function AthleteSessionPanel({
   const [isCancellingWorkout, setIsCancellingWorkout] = useState(false);
   const [isDeletingWorkout, setIsDeletingWorkout] = useState(false);
   const [loadDrafts, setLoadDrafts] = useState<Record<string, string>>({});
+  const [dragSession, setDragSession] = useState<DragSession | null>(null);
   const secondaryActionsMenuRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
@@ -803,6 +822,13 @@ export function AthleteSessionPanel({
     onUpdate(log.id, patch);
   };
 
+  const handleLogUpdateById = (
+    logId: string,
+    patch: { actualReps?: number; actualLoad?: number; done?: boolean },
+  ) => {
+    onUpdate(logId, patch);
+  };
+
   const handleDoneUpdate = (log: WorkoutSession["setLogs"][number], nextDone: boolean) => {
     if (nextDone && activeWorkoutCount && activeWorkoutCount > 1) {
       console.warn("[workout-ui] multiple-active-workouts-detected", {
@@ -890,6 +916,113 @@ export function AthleteSessionPanel({
 
     handleLogUpdate(log, { actualLoad: nextValue });
   };
+
+  const beginFieldDrag = (
+    event: ReactPointerEvent<HTMLButtonElement>,
+    log: WorkoutSession["setLogs"][number],
+    field: DragField,
+  ) => {
+    if (readOnly) {
+      return;
+    }
+
+    const currentValue = field === "reps" ? log.actualReps ?? 0 : log.actualLoad ?? 0;
+    const increment = field === "reps" ? 1 : loadIncrementKg;
+
+    event.preventDefault();
+    event.currentTarget.setPointerCapture(event.pointerId);
+
+    setDragSession({
+      logId: log.id,
+      field,
+      pointerId: event.pointerId,
+      startY: event.clientY,
+      lastStepOffset: 0,
+      currentValue,
+      increment,
+    });
+  };
+
+  const updateDragSession = (event: ReactPointerEvent<HTMLButtonElement>) => {
+    if (!dragSession || event.pointerId !== dragSession.pointerId) {
+      return;
+    }
+
+    event.preventDefault();
+
+    const deltaY = dragSession.startY - event.clientY;
+    const nextStepOffset = Math.trunc(deltaY / dragPixelsPerStep);
+    if (nextStepOffset === dragSession.lastStepOffset) {
+      return;
+    }
+
+    const stepDelta = nextStepOffset - dragSession.lastStepOffset;
+    const nextValue = Math.max(0, roundToIncrement(dragSession.currentValue + stepDelta * dragSession.increment, dragSession.increment));
+
+    if (dragSession.field === "reps") {
+      handleLogUpdateById(dragSession.logId, { actualReps: nextValue });
+    } else {
+      setLoadDrafts((previous) => {
+        if (!(dragSession.logId in previous)) {
+          return previous;
+        }
+
+        const next = { ...previous };
+        delete next[dragSession.logId];
+        return next;
+      });
+
+      handleLogUpdateById(dragSession.logId, { actualLoad: nextValue });
+    }
+
+    setDragSession((previous) =>
+      previous && previous.pointerId === event.pointerId
+        ? { ...previous, currentValue: nextValue, lastStepOffset: nextStepOffset }
+        : previous,
+    );
+  };
+
+  const endFieldDrag = (event: ReactPointerEvent<HTMLButtonElement>) => {
+    if (!dragSession || event.pointerId !== dragSession.pointerId) {
+      return;
+    }
+
+    if (event.currentTarget.hasPointerCapture(event.pointerId)) {
+      event.currentTarget.releasePointerCapture(event.pointerId);
+    }
+
+    setDragSession(null);
+  };
+
+  const handleFieldDragKeyDown = (
+    event: KeyboardEvent<HTMLButtonElement>,
+    log: WorkoutSession["setLogs"][number],
+    field: DragField,
+  ) => {
+    if (readOnly) {
+      return;
+    }
+
+    if (event.key === "ArrowUp" || event.key === "ArrowRight") {
+      event.preventDefault();
+      if (field === "reps") {
+        adjustActualReps(log, 1);
+      } else {
+        adjustActualLoad(log, loadIncrementKg);
+      }
+      return;
+    }
+
+    if (event.key === "ArrowDown" || event.key === "ArrowLeft") {
+      event.preventDefault();
+      if (field === "reps") {
+        adjustActualReps(log, -1);
+      } else {
+        adjustActualLoad(log, -loadIncrementKg);
+      }
+    }
+  };
+
   const focusWorkoutField = (logId: string, field: "reps" | "load") => {
     if (typeof window === "undefined") {
       return;
@@ -1104,24 +1237,24 @@ export function AthleteSessionPanel({
                             onChange={(event) => handleLogUpdate(log, { actualReps: numberOrUndefined(event.target.value) })}
                             onKeyDown={(event) => handleWorkoutFieldEnter(event, logs, log, "reps")}
                           />
-                          <div className="absolute inset-y-1 right-1 flex w-7 flex-col justify-center gap-px rounded-[0.6rem] bg-[color-mix(in_srgb,var(--border)_26%,transparent)] p-px">
+                          <div className="absolute inset-y-1 right-1 w-7 rounded-[0.6rem] bg-[color-mix(in_srgb,var(--border)_26%,transparent)] p-px">
                             <button
                               type="button"
-                              className={inputStepperButtonClass}
+                              className={`${inputDragHandleClass} ${dragSession?.logId === log.id && dragSession.field === "reps" ? inputDragHandleActiveClass : ""}`}
                               disabled={readOnly}
-                              aria-label={`${exerciseName} sarja ${log.setLabel} lisaa toistoja`}
-                              onClick={() => adjustActualReps(log, 1)}
+                              role="spinbutton"
+                              aria-label={`${exerciseName} sarja ${log.setLabel} saata toistoja vetamalla ylos tai alas`}
+                              aria-valuemin={0}
+                              aria-valuenow={log.actualReps ?? 0}
+                              aria-valuetext={`${log.actualReps ?? 0} toistoa`}
+                              onPointerDown={(event) => beginFieldDrag(event, log, "reps")}
+                              onPointerMove={updateDragSession}
+                              onPointerUp={endFieldDrag}
+                              onPointerCancel={endFieldDrag}
+                              onKeyDown={(event) => handleFieldDragKeyDown(event, log, "reps")}
+                              style={{ touchAction: "none" }}
                             >
-                              <ChevronUp className="size-3" aria-hidden="true" />
-                            </button>
-                            <button
-                              type="button"
-                              className={inputStepperButtonClass}
-                              disabled={readOnly || (log.actualReps ?? 0) <= 0}
-                              aria-label={`${exerciseName} sarja ${log.setLabel} vahenna toistoja`}
-                              onClick={() => adjustActualReps(log, -1)}
-                            >
-                              <ChevronDown className="size-3" aria-hidden="true" />
+                              <GripVertical className="size-3.5" aria-hidden="true" />
                             </button>
                           </div>
                         </div>
@@ -1141,24 +1274,24 @@ export function AthleteSessionPanel({
                             onBlur={() => handleLoadDraftBlur(log)}
                             onKeyDown={(event) => handleWorkoutFieldEnter(event, logs, log, "load")}
                           />
-                          <div className="absolute inset-y-1 right-1 flex w-7 flex-col justify-center gap-px rounded-[0.6rem] bg-[color-mix(in_srgb,var(--border)_26%,transparent)] p-px">
+                          <div className="absolute inset-y-1 right-1 w-7 rounded-[0.6rem] bg-[color-mix(in_srgb,var(--border)_26%,transparent)] p-px">
                             <button
                               type="button"
-                              className={inputStepperButtonClass}
+                              className={`${inputDragHandleClass} ${dragSession?.logId === log.id && dragSession.field === "load" ? inputDragHandleActiveClass : ""}`}
                               disabled={readOnly}
-                              aria-label={`${exerciseName} sarja ${log.setLabel} lisaa kuormaa`}
-                              onClick={() => adjustActualLoad(log, loadIncrementKg)}
+                              role="spinbutton"
+                              aria-label={`${exerciseName} sarja ${log.setLabel} saata kuormaa vetamalla ylos tai alas`}
+                              aria-valuemin={0}
+                              aria-valuenow={log.actualLoad ?? 0}
+                              aria-valuetext={`${log.actualLoad ?? 0} kiloa`}
+                              onPointerDown={(event) => beginFieldDrag(event, log, "load")}
+                              onPointerMove={updateDragSession}
+                              onPointerUp={endFieldDrag}
+                              onPointerCancel={endFieldDrag}
+                              onKeyDown={(event) => handleFieldDragKeyDown(event, log, "load")}
+                              style={{ touchAction: "none" }}
                             >
-                              <ChevronUp className="size-3" aria-hidden="true" />
-                            </button>
-                            <button
-                              type="button"
-                              className={inputStepperButtonClass}
-                              disabled={readOnly || (log.actualLoad ?? 0) <= 0}
-                              aria-label={`${exerciseName} sarja ${log.setLabel} vahenna kuormaa`}
-                              onClick={() => adjustActualLoad(log, -loadIncrementKg)}
-                            >
-                              <ChevronDown className="size-3" aria-hidden="true" />
+                              <GripVertical className="size-3.5" aria-hidden="true" />
                             </button>
                           </div>
                         </div>

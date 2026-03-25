@@ -421,7 +421,7 @@ export function UserSettingsPanel() {
                 ))}
               </Select>
               <p className="mt-2 text-xs text-[var(--text-subtle)]">
-                Tätä askelta käytetään treenitaulukon kuorman + ja - painikkeissa.
+                Tätä askelta käytetään treenitaulukon kuorman vetosäädössä ja näppäimistöohjauksessa.
               </p>
             </div>
 
