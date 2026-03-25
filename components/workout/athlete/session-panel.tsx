@@ -233,9 +233,6 @@ function formatExerciseTargetSummary(logs: WorkoutSession["setLogs"]) {
   }
 
   const repTargets = Array.from(new Set(logs.map((log) => formatTargetReps(log))));
-  const targetLoads = logs
-    .map((log) => log.targetLoad)
-    .filter((value): value is number => value !== undefined);
   const restTargets = logs
     .map((log) => log.targetRestSeconds)
     .filter((value): value is number => value !== undefined);
@@ -247,11 +244,6 @@ function formatExerciseTargetSummary(logs: WorkoutSession["setLogs"]) {
       ? `${repTargets[0]} toistoa`
       : "sarjakohtaiset toistot",
   );
-
-  if (targetLoads.length > 0) {
-    const uniqueLoads = Array.from(new Set(targetLoads));
-    parts.push(uniqueLoads.length === 1 ? `${uniqueLoads[0]} kg` : "sarjakohtainen kuorma");
-  }
 
   if (restTargets.length > 0) {
     const uniqueRests = Array.from(new Set(restTargets));
