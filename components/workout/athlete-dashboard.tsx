@@ -796,14 +796,14 @@ export function AthleteDashboard({
                   {activeWorkout
                     ? normalizeWorkoutHistoryTitle(activeWorkout.title)
                     : athletePrograms.length
-                      ? "Valitse treeni ohjelmasta"
+                      ? "Ei aktiivista treeniä"
                       : "Ei treenejä vielä"}
                 </p>
                 <p className="mt-1 text-sm text-[var(--text-muted)]">
                   {activeWorkout
                     ? "Jatka siitä mihin jäit ja viimeistele sarjat."
                     : athletePrograms.length
-                      ? "Voit valita vapaasti minkä tahansa ohjelmasi harjoituksen."
+                      ? "Avaa alapuolelta treenilista ja valitse seuraava treeni ohjelmastasi."
                       : "Pyydä valmentajaa rakentamaan ensimmäinen ohjelma."}
                 </p>
               </div>
