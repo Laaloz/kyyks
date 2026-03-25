@@ -500,11 +500,11 @@ export function DashboardShell() {
                   aria-controls={`workspace-panel-${item}`}
                   tabIndex={isActive ? 0 : -1}
                   aria-label={navLabelByView[item]}
-                  className={
-                    isActive
-                      ? "min-h-10 w-full min-w-0 rounded-xl px-2 py-2 text-center text-[0.82rem] leading-tight whitespace-nowrap hover:translate-y-0 hover:brightness-100 sm:min-h-10 sm:flex-row sm:gap-1.5 sm:px-3 sm:text-sm"
-                      : "min-h-10 w-full min-w-0 rounded-xl px-2 py-2 text-center text-[0.82rem] leading-tight whitespace-nowrap sm:min-h-10 sm:flex-row sm:gap-1.5 sm:px-3 sm:text-sm"
-                  }
+                    className={
+                      isActive
+                        ? "min-h-10 w-full min-w-0 rounded-xl px-2 py-2 text-center text-[0.82rem] leading-tight whitespace-nowrap hover:opacity-100 hover:brightness-100 sm:min-h-10 sm:flex-row sm:gap-1.5 sm:px-3 sm:text-sm"
+                        : "min-h-10 w-full min-w-0 rounded-xl px-2 py-2 text-center text-[0.82rem] leading-tight whitespace-nowrap sm:min-h-10 sm:flex-row sm:gap-1.5 sm:px-3 sm:text-sm"
+                    }
                   onKeyDown={(event) => handleNavKeyDown(event, index)}
                   onClick={() => setView(item)}
                 >

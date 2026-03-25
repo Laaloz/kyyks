@@ -795,7 +795,7 @@ export function AthleteSessionPanel({
           {instruction ? (
             <button
               type="button"
-              className="inline-flex items-center gap-1 rounded-full border border-[color-mix(in_srgb,var(--accent)_22%,var(--border))] bg-[color-mix(in_srgb,var(--accent)_7%,var(--surface))] px-2.5 py-0.5 text-[10px] font-semibold text-[var(--accent)] shadow-[0_4px_12px_-14px_var(--accent)] transition hover:-translate-y-[1px] hover:border-[color-mix(in_srgb,var(--accent)_36%,var(--border))] hover:bg-[color-mix(in_srgb,var(--accent)_10%,var(--surface))]"
+              className="inline-flex items-center gap-1 rounded-full border border-[color-mix(in_srgb,var(--accent)_22%,var(--border))] bg-[color-mix(in_srgb,var(--accent)_7%,var(--surface))] px-2.5 py-0.5 text-[10px] font-semibold text-[var(--accent)] shadow-[0_4px_12px_-14px_var(--accent)] transition hover:border-[color-mix(in_srgb,var(--accent)_36%,var(--border))] hover:bg-[color-mix(in_srgb,var(--accent)_10%,var(--surface))] hover:opacity-95"
               onClick={() => setOpenInstruction({ exerciseName, instruction })}
             >
               <BookOpen className="size-3.5" aria-hidden="true" />

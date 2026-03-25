@@ -261,18 +261,14 @@ export function UserSettingsPanel() {
             </label>
           </div>
 
-          <p
-            aria-live="polite"
-            className={`min-h-5 text-sm ${
-              isSavingSettings
-                ? "text-[var(--text-subtle)]"
-                : !message
-                ? "text-[var(--text-subtle)]"
-                : "text-[var(--danger)]"
-            }`}
-          >
-            {isSavingSettings ? "Tallennetaan asetuksia..." : message || ""}
-          </p>
+          {isSavingSettings || message ? (
+            <p
+              aria-live="polite"
+              className={`text-sm ${isSavingSettings ? "text-[var(--text-subtle)]" : "text-[var(--danger)]"}`}
+            >
+              {isSavingSettings ? "Tallennetaan asetuksia..." : message}
+            </p>
+          ) : null}
 
           <Button
             type="button"
@@ -311,18 +307,14 @@ export function UserSettingsPanel() {
               <KeyRound className="mr-2 size-4" />
               Lähetä nollauslinkki
             </Button>
-            <p
-              aria-live="polite"
-              className={`text-sm ${
-                !passwordResetMessage
-                  ? "text-[var(--text-subtle)]"
-                  : passwordResetMessage.includes("lähet")
-                    ? "text-[var(--success)]"
-                    : "text-[var(--danger)]"
-              }`}
-            >
-              {passwordResetMessage || "Ei aktiivista pyyntöä."}
-            </p>
+            {passwordResetMessage ? (
+              <p
+                aria-live="polite"
+                className={`text-sm ${passwordResetMessage.includes("lähet") ? "text-[var(--success)]" : "text-[var(--danger)]"}`}
+              >
+                {passwordResetMessage}
+              </p>
+            ) : null}
           </div>
         </div>
       </Card>

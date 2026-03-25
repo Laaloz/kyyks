@@ -7,27 +7,27 @@ type Variant = "primary" | "secondary" | "ghost" | "danger";
 
 const variantStyles: Record<Variant, string> = {
   primary:
-    "border border-[var(--accent-strong)] bg-[var(--accent-strong)] text-[var(--accent-contrast)] shadow-[0_1px_0_0_var(--accent-strong),0_12px_24px_-16px_var(--accent)] hover:-translate-y-[1px] hover:brightness-105",
+    "border border-[var(--accent-strong)] bg-[var(--accent-strong)] text-[var(--accent-contrast)] shadow-[0_1px_0_0_var(--accent-strong),0_12px_24px_-16px_var(--accent)] hover:opacity-95 hover:brightness-105",
   secondary:
-    "border border-[var(--border-strong)] bg-[var(--surface)] text-[var(--text)] shadow-[0_1px_0_0_var(--shadow-soft),0_8px_20px_-16px_var(--shadow)] hover:-translate-y-[1px] hover:bg-[var(--surface-2)]",
+    "border border-[var(--border-strong)] bg-[var(--surface)] text-[var(--text)] shadow-[0_1px_0_0_var(--shadow-soft),0_8px_20px_-16px_var(--shadow)] hover:bg-[var(--surface-2)] hover:opacity-95",
   ghost:
     "border border-[var(--border)] bg-[var(--surface)] text-[var(--text-muted)] hover:border-[var(--border-strong)] hover:bg-[var(--surface-2)] hover:text-[var(--text)]",
-  danger: "border border-[#9c2217] bg-[var(--danger)] text-white shadow-[0_1px_0_0_#861e14,0_10px_22px_-14px_#b42318] hover:-translate-y-[1px] hover:brightness-105",
+  danger: "border border-[#9c2217] bg-[var(--danger)] text-white shadow-[0_1px_0_0_#861e14,0_10px_22px_-14px_#b42318] hover:opacity-95 hover:brightness-105",
 };
 
 const loadingStyles: Record<Variant, string> = {
   primary:
-    "cursor-progress opacity-100 border-[var(--accent-strong)] bg-[var(--accent-strong)] text-[var(--accent-contrast)] shadow-[0_1px_0_0_var(--accent-strong),0_12px_24px_-16px_var(--accent)] hover:translate-y-0 hover:brightness-100",
+    "cursor-progress opacity-100 border-[var(--accent-strong)] bg-[var(--accent-strong)] text-[var(--accent-contrast)] shadow-[0_1px_0_0_var(--accent-strong),0_12px_24px_-16px_var(--accent)] hover:opacity-100 hover:brightness-100",
   secondary:
-    "cursor-progress opacity-100 border-[var(--border-strong)] bg-[var(--surface)] text-[var(--text)] shadow-[0_1px_0_0_var(--shadow-soft),0_8px_20px_-16px_var(--shadow)] hover:translate-y-0 hover:bg-[var(--surface)]",
+    "cursor-progress opacity-100 border-[var(--border-strong)] bg-[var(--surface)] text-[var(--text)] shadow-[0_1px_0_0_var(--shadow-soft),0_8px_20px_-16px_var(--shadow)] hover:opacity-100 hover:bg-[var(--surface)]",
   ghost:
-    "cursor-progress opacity-100 border-[var(--border)] bg-[var(--surface)] text-[var(--text)] shadow-none hover:translate-y-0 hover:bg-[var(--surface)]",
+    "cursor-progress opacity-100 border-[var(--border)] bg-[var(--surface)] text-[var(--text)] shadow-none hover:opacity-100 hover:bg-[var(--surface)]",
   danger:
-    "cursor-progress opacity-100 border-[#9c2217] bg-[var(--danger)] text-white shadow-[0_1px_0_0_#861e14,0_10px_22px_-14px_#b42318] hover:translate-y-0 hover:brightness-100",
+    "cursor-progress opacity-100 border-[#9c2217] bg-[var(--danger)] text-white shadow-[0_1px_0_0_#861e14,0_10px_22px_-14px_#b42318] hover:opacity-100 hover:brightness-100",
 };
 
 const disabledStyles =
-  "cursor-not-allowed opacity-45 shadow-none hover:translate-y-0 hover:brightness-100 hover:bg-[var(--surface-3)]";
+  "cursor-not-allowed opacity-45 shadow-none hover:opacity-45 hover:brightness-100 hover:bg-[var(--surface-3)]";
 
 export interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
   variant?: Variant;

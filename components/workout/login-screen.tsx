@@ -151,56 +151,6 @@ export function LoginScreen() {
                 </p>
               ) : null}
             </div>
-            <div className="rounded-2xl border-2 border-[var(--border)] bg-[var(--surface-2)] p-4">
-              <p className="text-sm font-semibold text-[var(--text)]">Unohditko salasanasi?</p>
-              <p className="mt-1 text-sm leading-6 text-[var(--text-muted)]">
-                Anna ensin sähköposti yllä ja pyydä uusi salasanan nollauslinkki tähän samaan osoitteeseen.
-              </p>
-              <div className="mt-3 flex flex-col gap-3 sm:flex-row sm:items-center">
-                <Button
-                  type="button"
-                  variant="secondary"
-                  className="w-full sm:w-auto"
-                  disabled={isRequestingReset}
-                  loading={isRequestingReset}
-                  loadingText="Lähetetään nollauslinkkiä..."
-                  onClick={async () => {
-                    const email = form.getValues("email").trim();
-                    if (!email) {
-                      form.setError("email", { message: "Anna sähköpostiosoite ensin." });
-                      setResetMessage("Anna sähköpostiosoite ennen salasanan nollausta.");
-                      setResetMessageTone("error");
-                      return;
-                    }
-
-                    setError(null);
-                    setIsRequestingReset(true);
-                    try {
-                      const result = await requestPasswordResetForEmail({
-                        email,
-                        captchaToken: captchaToken ?? undefined,
-                      });
-                      setResetMessage(result.message);
-                      setResetMessageTone(result.ok ? "success" : "error");
-                      if (requiresCaptcha) {
-                        captchaRef.current?.resetCaptcha();
-                        setCaptchaToken(null);
-                      }
-                    } finally {
-                      setIsRequestingReset(false);
-                    }
-                  }}
-                >
-                  Lähetä nollauslinkki
-                </Button>
-                <p
-                  aria-live="polite"
-                  className={`min-h-5 text-sm ${resetMessageTone === "success" ? "text-[var(--success)]" : "text-[var(--danger)]"}`}
-                >
-                  {resetMessage ?? ""}
-                </p>
-              </div>
-            </div>
             <div>
               <Label htmlFor={`${formId}-password`}>Salasana</Label>
               <Input
@@ -258,6 +208,53 @@ export function LoginScreen() {
             >
               Avaa työtila
             </Button>
+            <div className="flex flex-col items-start gap-2">
+              <Button
+                type="button"
+                variant="ghost"
+                className="h-auto border-0 px-0 py-0 text-sm text-[var(--text-muted)] shadow-none hover:underline"
+                disabled={isRequestingReset}
+                loading={isRequestingReset}
+                loadingText="Lähetetään nollauslinkkiä..."
+                onClick={async () => {
+                  const email = form.getValues("email").trim();
+                  if (!email) {
+                    form.setError("email", { message: "Anna sähköpostiosoite ensin." });
+                    setResetMessage("Anna sähköpostiosoite ennen salasanan nollausta.");
+                    setResetMessageTone("error");
+                    return;
+                  }
+
+                  setError(null);
+                  setIsRequestingReset(true);
+                  try {
+                    const result = await requestPasswordResetForEmail({
+                      email,
+                      captchaToken: captchaToken ?? undefined,
+                    });
+                    setResetMessage(result.message);
+                    setResetMessageTone(result.ok ? "success" : "error");
+                    if (requiresCaptcha) {
+                      captchaRef.current?.resetCaptcha();
+                      setCaptchaToken(null);
+                    }
+                  } finally {
+                    setIsRequestingReset(false);
+                  }
+                }}
+              >
+                Unohditko salasanasi?
+              </Button>
+              <p className="text-xs text-[var(--text-subtle)]">Syötä sähköposti yllä ennen nollauslinkin tilaamista.</p>
+              {resetMessage ? (
+                <p
+                  aria-live="polite"
+                  className={`text-sm ${resetMessageTone === "success" ? "text-[var(--success)]" : "text-[var(--danger)]"}`}
+                >
+                  {resetMessage}
+                </p>
+              ) : null}
+            </div>
             <p className="rounded-xl border-2 border-[var(--border)] bg-[var(--surface-2)] px-4 py-3 text-sm leading-6 text-[var(--text-muted)]">
               Jos kirjautuminen ei onnistu, tarkista ensin sähköposti, salasana ja mahdollinen captcha.
             </p>
