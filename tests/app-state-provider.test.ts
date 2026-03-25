@@ -22,6 +22,7 @@ import {
   shouldRevalidateSupabaseSessionBeforeClearingAuth,
   shouldTreatInviteActivationLoginFailureAsPartialSuccess,
   shouldSyncSupabaseAuthEvent,
+  preserveActiveWorkoutShells,
 } from "@/providers/app-state-provider";
 
 describe("shouldPreserveStoredSessionDuringSupabaseBootstrap", () => {
@@ -182,6 +183,51 @@ describe("shouldPreserveStoredSessionDuringSupabaseBootstrap", () => {
 
     expect(nextState.sessions[0]?.setLogs[0]?.done).toBe(true);
     expect(nextState.scheduledWorkouts[0]?.updatedAt).toBe("2026-03-24T08:10:00.000Z");
+  });
+
+  it("preserves an optimistic active workout shell until the server snapshot catches up", () => {
+    const state = cloneDemoState();
+
+    state.scheduledWorkouts = [
+      {
+        id: "workout_local_start",
+        athleteId: "user_athlete_1",
+        coachId: "user_admin",
+        trainingPlanId: "plan_1",
+        programWorkoutId: "day_1",
+        title: "Penkki",
+        scheduledDate: "2026-03-24T08:00:00.000Z",
+        status: "in_progress",
+        createdAt: "2026-03-24T08:00:00.000Z",
+        updatedAt: "2026-03-24T08:00:00.000Z",
+      },
+    ];
+    state.sessions = [
+      {
+        id: "session_local_start",
+        scheduledWorkoutId: "workout_local_start",
+        athleteId: "user_athlete_1",
+        startedAt: "2026-03-24T08:00:00.000Z",
+        updatedAt: "2026-03-24T08:00:00.000Z",
+        pausedDurationSeconds: 0,
+        setLogs: [],
+      },
+    ];
+
+    const preserved = preserveActiveWorkoutShells(state, {
+      users: state.users,
+      bodyMeasurements: state.bodyMeasurements,
+      assignments: state.assignments,
+      exercises: state.exercises,
+      templates: state.templates,
+      plans: state.plans,
+      scheduledWorkouts: [],
+      sessions: [],
+      notes: state.notes,
+    });
+
+    expect(preserved.scheduledWorkouts.some((workout: { id: string }) => workout.id === "workout_local_start")).toBe(true);
+    expect(preserved.sessions.some((session: { id: string }) => session.id === "session_local_start")).toBe(true);
   });
 
   it("rekeys an invited placeholder user to the real Supabase profile id after activation", () => {

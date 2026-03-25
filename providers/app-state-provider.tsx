@@ -105,6 +105,35 @@ function warnIfOptimisticServerIdLeak(kind: "workout" | "program" | "template", 
   }
 }
 
+export function preserveActiveWorkoutShells(previous: AppState, snapshot: SupabaseVisibleAppStateSnapshot) {
+  const snapshotWorkoutIds = new Set(snapshot.scheduledWorkouts.map((workout) => workout.id));
+  const snapshotSessionWorkoutIds = new Set(snapshot.sessions.map((session) => session.scheduledWorkoutId));
+
+  const optimisticWorkouts = previous.scheduledWorkouts.filter(
+    (workout) =>
+      workout.status === "in_progress" &&
+      !snapshotWorkoutIds.has(workout.id) &&
+      !snapshot.scheduledWorkouts.some(
+        (candidate) =>
+          candidate.athleteId === workout.athleteId &&
+          candidate.programWorkoutId === workout.programWorkoutId &&
+          candidate.templateId === workout.templateId &&
+          candidate.status === "in_progress",
+      ),
+  );
+
+  const optimisticSessions = previous.sessions.filter(
+    (session) =>
+      !snapshotSessionWorkoutIds.has(session.scheduledWorkoutId) &&
+      optimisticWorkouts.some((workout) => workout.id === session.scheduledWorkoutId),
+  );
+
+  return {
+    scheduledWorkouts: [...snapshot.scheduledWorkouts, ...optimisticWorkouts],
+    sessions: [...snapshot.sessions, ...optimisticSessions],
+  };
+}
+
 function defaultUserSettings(role: Role) {
   return {
     defaultDashboardView: getDefaultDashboardView(role),
@@ -934,6 +963,7 @@ export function reconcileSupabaseVisibleState(
   previous: AppState,
   snapshot: SupabaseVisibleAppStateSnapshot,
 ) {
+  const withOptimisticWorkouts = preserveActiveWorkoutShells(previous, snapshot);
   const previousScheduledWorkoutsById = new Map(previous.scheduledWorkouts.map((workout) => [workout.id, workout]));
   const previousSessionsById = new Map(previous.sessions.map((session) => [session.id, session]));
   const activeServerEmails = new Set(
@@ -973,7 +1003,7 @@ export function reconcileSupabaseVisibleState(
     exercises: snapshot.exercises,
     templates: snapshot.templates,
     plans: snapshot.plans,
-    scheduledWorkouts: snapshot.scheduledWorkouts.map((workout) => {
+    scheduledWorkouts: withOptimisticWorkouts.scheduledWorkouts.map((workout) => {
       const localWorkout = previousScheduledWorkoutsById.get(workout.id);
       if (!localWorkout) {
         return workout;
@@ -985,7 +1015,7 @@ export function reconcileSupabaseVisibleState(
         ? localWorkout
         : workout;
     }),
-    sessions: snapshot.sessions.map((session) => {
+    sessions: withOptimisticWorkouts.sessions.map((session) => {
       const localSession = previousSessionsById.get(session.id);
       if (!localSession) {
         return session;
@@ -1299,9 +1329,11 @@ export function AppStateProvider({ children }: PropsWithChildren) {
   const [impersonatedUserId, setImpersonatedUserId] = useState<string | null>(null);
   const [isStorageHydrated, setIsStorageHydrated] = useState(false);
   const [isSupabaseAuthResolved, setIsSupabaseAuthResolved] = useState(false);
+  const [didAttemptBootstrapRevalidation, setDidAttemptBootstrapRevalidation] = useState(false);
   const supabase = useMemo(() => createSupabaseBrowserClient(), []);
   const refreshSupabaseVisibleStatePromiseRef = useRef<Promise<boolean> | null>(null);
-  const isHydrated = isStorageHydrated && (supabase ? isSupabaseAuthResolved : true);
+  const isHydrated =
+    isStorageHydrated && (supabase ? isSupabaseAuthResolved && didAttemptBootstrapRevalidation : true);
 
   useEffect(() => {
     const rawState = window.localStorage.getItem(STATE_KEY);
@@ -1391,6 +1423,7 @@ export function AppStateProvider({ children }: PropsWithChildren) {
     }
 
     if (!supabase) {
+      setDidAttemptBootstrapRevalidation(true);
       setIsSupabaseAuthResolved(true);
       return;
     }
@@ -1434,6 +1467,7 @@ export function AppStateProvider({ children }: PropsWithChildren) {
             hasResolvedAuthUser,
           )
         ) {
+          setDidAttemptBootstrapRevalidation(true);
           const confirmedAuthUser = await confirmCurrentSupabaseAuthUser(supabase);
           if (!active) {
             return;
@@ -1524,9 +1558,13 @@ export function AppStateProvider({ children }: PropsWithChildren) {
       setIsSupabaseAuthResolved(true);
     };
 
-    setIsSupabaseAuthResolved(false);
+      setIsSupabaseAuthResolved(false);
+      setDidAttemptBootstrapRevalidation(false);
 
-    void supabase.auth.getSession().then(({ data }) => syncFromAuthUser(data.session?.user ?? null, "bootstrap"));
+    void confirmCurrentSupabaseAuthUser(supabase).then((user) => {
+      setDidAttemptBootstrapRevalidation(true);
+      return syncFromAuthUser(user, "bootstrap");
+    });
 
     const {
       data: { subscription },
@@ -1738,11 +1776,11 @@ function findResolvedUserIdInSnapshot(
   }, [currentUser?.settings?.themeMode, isHydrated]);
 
   const value = useMemo<AppStateContextValue>(() => {
-    const signInWithSupabasePassword = async (
-      email: string,
-      password: string,
-      options?: { captchaToken?: string },
-    ): Promise<LoginResult> => {
+      const signInWithSupabasePassword = async (
+        email: string,
+        password: string,
+        options?: { captchaToken?: string },
+      ): Promise<LoginResult> => {
       if (!supabase) {
         return { ok: false, message: "Supabase-kirjautuminen ei ole käytettävissä." };
       }
@@ -1761,11 +1799,14 @@ function findResolvedUserIdInSnapshot(
         return { ok: false, message: getSupabaseLoginErrorMessage(error.message) };
       }
 
-      const authUser = data.user;
-      if (!authUser?.email) {
-        await supabase.auth.signOut();
-        return { ok: false, message: "Käyttäjätiliä ei voitu tunnistaa kirjautumisen jälkeen." };
-      }
+        let authUser: SupabaseAuthUser | null = data.user;
+        if (!authUser?.email) {
+          authUser = await confirmCurrentSupabaseAuthUser(supabase);
+        }
+
+        if (!authUser?.email) {
+          return { ok: false, message: "Käyttäjätiliä ei voitu tunnistaa kirjautumisen jälkeen." };
+        }
 
       const profile = await fetchSupabaseProfileWithRetry(supabase, authUser.id);
       if (!profile) {
@@ -1790,13 +1831,12 @@ function findResolvedUserIdInSnapshot(
         return resolution.nextState;
       });
 
-      if (!resolvedUserId) {
-        await supabase.auth.signOut();
-        return {
-          ok: false,
-          message: "Käyttäjälle ei löytynyt profiilia tai käyttöoikeutta tähän sovellukseen.",
-        };
-      }
+        if (!resolvedUserId) {
+          return {
+            ok: false,
+            message: "Käyttäjälle ei löytynyt profiilia tai käyttöoikeutta tähän sovellukseen.",
+          };
+        }
 
       setAuthenticatedUserId(resolvedUserId);
       setImpersonatedUserId(null);
