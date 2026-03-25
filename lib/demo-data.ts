@@ -1110,7 +1110,6 @@ export const demoState: AppState = {
           targetLoad: 45,
           actualReps: 8,
           actualLoad: 45,
-          rpe: 7,
           done: true,
         },
         {
@@ -1125,7 +1124,6 @@ export const demoState: AppState = {
           targetLoad: 45,
           actualReps: 8,
           actualLoad: 45,
-          rpe: 8,
           done: true,
         },
         {
@@ -1140,7 +1138,6 @@ export const demoState: AppState = {
           targetLoad: 18,
           actualReps: 10,
           actualLoad: 18,
-          rpe: 7,
           done: true,
         },
       ],
@@ -1166,7 +1163,6 @@ export const demoState: AppState = {
           targetLoad: 70,
           actualReps: 5,
           actualLoad: 70,
-          rpe: 7,
           done: true,
         },
         {
@@ -1181,7 +1177,6 @@ export const demoState: AppState = {
           targetLoad: 70,
           actualReps: 5,
           actualLoad: 70,
-          rpe: 8,
           done: true,
         },
       ],
@@ -1206,7 +1201,6 @@ export const demoState: AppState = {
           targetLoad: 45,
           actualReps: 8,
           actualLoad: 45,
-          rpe: 7,
           done: true,
         },
         {

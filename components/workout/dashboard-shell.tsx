@@ -1,6 +1,6 @@
 "use client";
 
-import { Bell, BellRing, Dumbbell, Home, LogOut, MoreHorizontal, NotebookPen, Settings, Sparkles, Users, type LucideIcon } from "lucide-react";
+import { Bell, BellRing, Dumbbell, Home, LogOut, MoreHorizontal, NotebookPen, Sparkles, UserRoundCog, Users, type LucideIcon } from "lucide-react";
 import { useEffect, useRef, useState, type KeyboardEvent } from "react";
 
 import { AdminDashboard } from "@/components/workout/admin-dashboard";
@@ -100,7 +100,7 @@ export function DashboardShell() {
     invites: "Kutsut",
     "athlete-log": "Treenit",
     conversation: "Keskustelu",
-    settings: "Asetukset",
+    settings: "Tili",
   };
   const navMobileLabelByView: Record<WorkspaceView, string> = {
     overview: "Yleiskuva",
@@ -108,7 +108,7 @@ export function DashboardShell() {
     invites: "Kutsut",
     "athlete-log": "Treenit",
     conversation: "Viestit",
-    settings: "Asetukset",
+    settings: "Tili",
   };
   const navIconByView: Record<PrimaryWorkspaceView, LucideIcon> = {
     overview: Home,
@@ -367,15 +367,15 @@ export function DashboardShell() {
                     ? "!border-[var(--accent)] !bg-[var(--surface)] !text-[var(--accent)] shadow-[0_0_0_1px_var(--accent)]"
                     : ""
                 }`}
-                aria-label="Asetukset"
-                title="Asetukset"
+                aria-label="Tili"
+                title="Tili"
                 aria-pressed={view === "settings"}
               >
-                <Settings
+                <UserRoundCog
                   className={`size-5 ${view === "settings" ? "text-[var(--accent)]" : ""}`}
                   aria-hidden="true"
                 />
-                <span className="sr-only">Asetukset</span>
+                <span className="sr-only">Tili</span>
               </Button>
               <Button
                 onClick={() => {
@@ -435,8 +435,8 @@ export function DashboardShell() {
                       setView("settings");
                     }}
                   >
-                    <Settings className="size-4" aria-hidden="true" />
-                    Asetukset
+                    <UserRoundCog className="size-4" aria-hidden="true" />
+                    Tili
                   </button>
                   <button
                     type="button"

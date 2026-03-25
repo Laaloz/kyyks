@@ -6,6 +6,7 @@ import type {
   AppState,
   BodyMeasurement,
   CoachAthleteAssignment,
+  ConversationEntry,
   Exercise,
   ScheduledWorkout,
   TrainingPlan,
@@ -31,6 +32,7 @@ type ProfileRow = {
   default_dashboard_view: UserProfile["settings"] extends infer _ ? string | null : string | null;
   email_notifications: boolean;
   theme_mode: "light" | "dark";
+  load_increment_kg: 1 | 2.5 | 5 | null;
   height_cm: number | string | null;
   weight_kg: number | string | null;
   waist_cm: number | string | null;
@@ -93,6 +95,7 @@ type TemplateExerciseRow = {
   id: string;
   block_id: string;
   exercise_id: string;
+  muscle_group: string | null;
   instruction: string;
   sort_order: number;
 };
@@ -168,7 +171,6 @@ type WorkoutSetLogRow = {
   program_workout_id: string | null;
   actual_reps: number | null;
   actual_load: number | string | null;
-  rpe: number | string | null;
   done: boolean;
 };
 
@@ -182,6 +184,21 @@ type WorkoutNoteRow = {
   updated_at: string;
 };
 
+type ConversationEntryRow = {
+  id: string;
+  athlete_id: string;
+  coach_id: string;
+  author_user_id: string;
+  author_role: ConversationEntry["authorRole"];
+  type: ConversationEntry["type"];
+  body: string;
+  context_type: ConversationEntry["contextType"];
+  context_id: string | null;
+  context_label: string | null;
+  read_by_user_ids: string[] | null;
+  created_at: string;
+};
+
 export type SupabaseVisibleAppStateSnapshot = Pick<
   AppState,
   | "users"
@@ -193,6 +210,7 @@ export type SupabaseVisibleAppStateSnapshot = Pick<
   | "scheduledWorkouts"
   | "sessions"
   | "notes"
+  | "conversationEntries"
 >;
 
 function toNumberOrUndefined(value: number | string | null | undefined) {
@@ -227,6 +245,7 @@ function mapProfileRow(profile: ProfileRow): UserProfile {
             : "overview",
       emailNotifications: profile.email_notifications,
       themeMode: profile.theme_mode,
+      loadIncrementKg: profile.load_increment_kg ?? 2.5,
     },
     createdAt: profile.created_at,
     updatedAt: profile.updated_at,
@@ -357,11 +376,12 @@ export async function loadVisibleSupabaseAppState(
     sessionsResult,
     setLogsResult,
     notesResult,
+    conversationEntriesResult,
   ] = await Promise.all([
     supabase
       .from("profiles")
       .select(
-        "id, role, status, full_name, email, default_dashboard_view, email_notifications, theme_mode, height_cm, weight_kg, waist_cm, created_at, updated_at",
+        "id, role, status, full_name, email, default_dashboard_view, email_notifications, theme_mode, load_increment_kg, height_cm, weight_kg, waist_cm, created_at, updated_at",
       )
       .order("created_at", { ascending: false }),
     supabase
@@ -387,7 +407,7 @@ export async function loadVisibleSupabaseAppState(
       .order("sort_order", { ascending: true }),
     supabase
       .from("workout_template_exercises")
-      .select("id, block_id, exercise_id, instruction, sort_order")
+      .select("id, block_id, exercise_id, muscle_group, instruction, sort_order")
       .order("sort_order", { ascending: true }),
     supabase
       .from("workout_template_sets")
@@ -409,13 +429,21 @@ export async function loadVisibleSupabaseAppState(
       .order("started_at", { ascending: false }),
     supabase
       .from("workout_set_logs")
-      .select("id, session_id, scheduled_workout_id, template_exercise_id, set_id, exercise_id, exercise_name, muscle_group, superset_group, set_label, target_reps, target_reps_min, target_reps_max, target_load, target_rest_seconds, program_workout_id, actual_reps, actual_load, rpe, done")
+      .select("id, session_id, scheduled_workout_id, template_exercise_id, set_id, exercise_id, exercise_name, muscle_group, superset_group, set_label, target_reps, target_reps_min, target_reps_max, target_load, target_rest_seconds, program_workout_id, actual_reps, actual_load, done")
+      .order("session_id", { ascending: true })
+      .order("template_exercise_id", { ascending: true })
+      .order("set_label", { ascending: true })
       .limit(lite ? 320 : isAdminViewer ? 4000 : 1500),
     supabase
       .from("workout_notes")
       .select("id, session_id, athlete_id, coach_id, body, created_at, updated_at")
       .limit(lite ? 40 : isAdminViewer ? 300 : 150)
       .order("updated_at", { ascending: false }),
+    supabase
+      .from("conversation_entries")
+      .select("id, athlete_id, coach_id, author_user_id, author_role, type, body, context_type, context_id, context_label, read_by_user_ids, created_at")
+      .limit(lite ? 80 : isAdminViewer ? 1000 : 400)
+      .order("created_at", { ascending: false }),
   ]);
   logSyncPhase("all-queries", queryStartedAt);
 
@@ -432,6 +460,7 @@ export async function loadVisibleSupabaseAppState(
   throwIfQueryFailed("Workout sessions", sessionsResult);
   throwIfQueryFailed("Workout set logs", setLogsResult);
   throwIfQueryFailed("Workout notes", notesResult);
+  throwIfQueryFailed("Conversation entries", conversationEntriesResult);
 
   const mappingStartedAt = performance.now();
 
@@ -471,12 +500,13 @@ export async function loadVisibleSupabaseAppState(
   const exercisesByBlockId = new Map<string, WorkoutTemplate["blocks"][number]["exercises"]>();
   templateExercises.forEach((entry) => {
     const existing = exercisesByBlockId.get(entry.block_id) ?? [];
-    existing.push({
-      id: entry.id,
-      exerciseId: exerciseIdByDatabaseId.get(entry.exercise_id) ?? entry.exercise_id,
-      instruction: entry.instruction,
-      sets: setsByTemplateExerciseId.get(entry.id) ?? [],
-    });
+        existing.push({
+          id: entry.id,
+          exerciseId: exerciseIdByDatabaseId.get(entry.exercise_id) ?? entry.exercise_id,
+          muscleGroup: (entry.muscle_group as WorkoutTemplate["blocks"][number]["exercises"][number]["muscleGroup"]) ?? undefined,
+          instruction: entry.instruction,
+          sets: setsByTemplateExerciseId.get(entry.id) ?? [],
+        });
     exercisesByBlockId.set(entry.block_id, existing);
   });
 
@@ -532,7 +562,6 @@ export async function loadVisibleSupabaseAppState(
       programWorkoutId: entry.program_workout_id ?? undefined,
       actualReps: entry.actual_reps ?? undefined,
       actualLoad: toNumberOrUndefined(entry.actual_load),
-      rpe: toNumberOrUndefined(entry.rpe),
       done: entry.done,
     });
     setLogsBySessionId.set(entry.session_id, existing);
@@ -552,6 +581,20 @@ export async function loadVisibleSupabaseAppState(
   }));
 
   const notes = ((notesResult.data ?? []) as WorkoutNoteRow[]).map((entry) => mapWorkoutNoteRow(entry));
+  const conversationEntries = ((conversationEntriesResult.data ?? []) as ConversationEntryRow[]).map((entry) => ({
+    id: entry.id,
+    athleteId: entry.athlete_id,
+    coachId: entry.coach_id,
+    authorUserId: entry.author_user_id,
+    authorRole: entry.author_role,
+    type: entry.type,
+    body: entry.body,
+    contextType: entry.context_type,
+    contextId: entry.context_id ?? undefined,
+    contextLabel: entry.context_label ?? undefined,
+    readByUserIds: entry.read_by_user_ids ?? [],
+    createdAt: entry.created_at,
+  }));
 
   logSyncPhase("mapping", mappingStartedAt);
 
@@ -565,5 +608,6 @@ export async function loadVisibleSupabaseAppState(
     scheduledWorkouts,
     sessions,
     notes,
+    conversationEntries,
   };
 }

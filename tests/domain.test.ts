@@ -34,6 +34,7 @@ describe("domain helpers", () => {
         exercises: [
           {
             exerciseId: "ex_bench_press",
+            muscleGroup: "chest",
             instruction: "Pidä toisto puhtaana",
             setCount: 4,
             targetReps: 6,
@@ -47,6 +48,7 @@ describe("domain helpers", () => {
 
     expect(template.blocks).toHaveLength(1);
     expect(template.blocks[0]?.exercises[0]?.sets).toHaveLength(4);
+    expect(template.blocks[0]?.exercises[0]?.muscleGroup).toBe("chest");
     expect(template.blocks[0]?.exercises[0]?.sets[0]?.targetReps).toBe(6);
   });
 
@@ -778,17 +780,14 @@ describe("domain helpers", () => {
     expect(squatLogs).toHaveLength(2);
     expect(squatLogs[0]?.actualReps).toBe(5);
     expect(squatLogs[0]?.actualLoad).toBe(70);
-    expect(squatLogs[0]?.rpe).toBe(7);
     expect(squatLogs[0]?.done).toBe(false);
     expect(squatLogs[1]?.actualReps).toBe(5);
     expect(squatLogs[1]?.actualLoad).toBe(70);
-    expect(squatLogs[1]?.rpe).toBe(8);
     expect(squatLogs[1]?.done).toBe(false);
 
     const unknownExerciseLog = started.session.setLogs.find((log) => log.exerciseId === "ex_split_squat");
     expect(unknownExerciseLog?.actualReps).toBe(10);
     expect(unknownExerciseLog?.actualLoad).toBe(16);
-    expect(unknownExerciseLog?.rpe).toBe(8);
   });
 
   it("checks coach ownership and invite expiry", () => {

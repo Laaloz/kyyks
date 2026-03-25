@@ -7,6 +7,7 @@ import { createSupabaseServerClient } from "@/lib/supabase/server";
 
 const exerciseSchema = z.object({
   exerciseId: z.string(),
+  muscleGroup: z.enum(["shoulders", "arms", "chest", "abs", "back", "legs", "other"]).optional(),
   instruction: z.string(),
   setCount: z.number(),
   targetReps: z.number(),

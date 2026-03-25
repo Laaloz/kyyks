@@ -8,7 +8,6 @@ import { createSupabaseServerClient } from "@/lib/supabase/server";
 const requestSchema = z.object({
   actualReps: z.number().optional(),
   actualLoad: z.number().optional(),
-  rpe: z.number().optional(),
   done: z.boolean().optional(),
 });
 

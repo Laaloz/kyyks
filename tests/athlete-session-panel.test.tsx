@@ -26,7 +26,6 @@ function buildSession(): WorkoutSession {
         targetRestSeconds: 180,
         actualReps: 5,
         actualLoad: 100,
-        rpe: 8,
         done: false,
       },
     ],
@@ -59,6 +58,8 @@ describe("AthleteSessionPanel", () => {
         progress={{ totalSets: 1, completedSets: 0, percent: 0, allDone: false }}
         previousExerciseResults={new Map()}
         exerciseInstructions={new Map([["exercise_group_1", "Pidä lapatuet tiukkana ja hallitse ala-asento."]])}
+        exerciseOrder={new Map([["exercise_group_1", 0]])}
+        loadIncrementKg={2.5}
         workoutMessage=""
         isCompleting={false}
       />,
@@ -92,6 +93,8 @@ describe("AthleteSessionPanel", () => {
         progress={{ totalSets: 1, completedSets: 0, percent: 0, allDone: false }}
         previousExerciseResults={new Map()}
         exerciseInstructions={new Map([["exercise_group_1", longInstruction]])}
+        exerciseOrder={new Map([["exercise_group_1", 0]])}
+        loadIncrementKg={2.5}
         workoutMessage=""
         isCompleting={false}
       />,

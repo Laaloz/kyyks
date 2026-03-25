@@ -10,6 +10,7 @@ const settingsSchema = z.object({
   defaultDashboardView: z.enum(["overview", "templates", "invites", "athlete-log", "conversation"]),
   emailNotifications: z.boolean(),
   themeMode: z.enum(["light", "dark"]),
+  loadIncrementKg: z.union([z.literal(1), z.literal(2.5), z.literal(5)]),
 });
 
 export async function PATCH(request: Request) {
@@ -48,6 +49,7 @@ export async function PATCH(request: Request) {
       default_dashboard_view: parsed.data.defaultDashboardView,
       email_notifications: parsed.data.emailNotifications,
       theme_mode: parsed.data.themeMode,
+      load_increment_kg: parsed.data.loadIncrementKg,
       updated_at: timestamp,
     })
     .eq("id", user.id);

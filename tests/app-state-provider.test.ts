@@ -4,6 +4,7 @@ import type { User as SupabaseAuthUser } from "@supabase/supabase-js";
 import { cloneDemoState } from "@/lib/domain";
 import type { WorkoutSession } from "@/lib/types";
 import {
+  applyPartialUserMeasurementUpdate,
   applyProgramDeletion,
   applyProgramStatusUpdate,
   applyAdminCoachAssignmentUpdate,
@@ -198,6 +199,7 @@ describe("shouldPreserveStoredSessionDuringSupabaseBootstrap", () => {
         },
       ],
       notes: state.notes,
+      conversationEntries: state.conversationEntries,
     });
 
     expect(nextState.sessions[0]?.setLogs[0]?.done).toBe(true);
@@ -243,6 +245,7 @@ describe("shouldPreserveStoredSessionDuringSupabaseBootstrap", () => {
       scheduledWorkouts: [],
       sessions: [],
       notes: state.notes,
+      conversationEntries: state.conversationEntries,
     });
 
     expect(preserved.scheduledWorkouts.some((workout: { id: string }) => workout.id === "workout_local_start")).toBe(true);
@@ -285,6 +288,7 @@ describe("shouldPreserveStoredSessionDuringSupabaseBootstrap", () => {
         default_dashboard_view: "athlete-log",
         email_notifications: false,
         theme_mode: "light",
+        load_increment_kg: 2.5,
         height_cm: 181,
         weight_kg: null,
         waist_cm: null,
@@ -301,6 +305,9 @@ describe("shouldPreserveStoredSessionDuringSupabaseBootstrap", () => {
     expect(
       resolution.nextState.users.find((user) => user.id === supabaseUserId)?.heightCm,
     ).toBe(181);
+    expect(
+      resolution.nextState.users.find((user) => user.id === supabaseUserId)?.settings?.loadIncrementKg,
+    ).toBe(2.5);
     expect(
       resolution.nextState.assignments.some((assignment) => assignment.athleteId === supabaseUserId),
     ).toBe(true);
@@ -379,6 +386,7 @@ describe("shouldPreserveStoredSessionDuringSupabaseBootstrap", () => {
             defaultDashboardView: "athlete-log",
             emailNotifications: false,
             themeMode: "light",
+            loadIncrementKg: 2.5,
           },
           createdAt: "2026-03-24T08:30:00.000Z",
           updatedAt: "2026-03-24T08:30:00.000Z",
@@ -445,6 +453,7 @@ describe("shouldPreserveStoredSessionDuringSupabaseBootstrap", () => {
             defaultDashboardView: "athlete-log",
             emailNotifications: false,
             themeMode: "light",
+            loadIncrementKg: 2.5,
           },
           createdAt: "2026-03-24T08:30:00.000Z",
           updatedAt: "2026-03-24T08:30:00.000Z",
@@ -458,6 +467,7 @@ describe("shouldPreserveStoredSessionDuringSupabaseBootstrap", () => {
       scheduledWorkouts: [],
       sessions: [],
       notes: [],
+      conversationEntries: [],
     });
 
     expect(nextState.users.some((user) => user.id === "user_placeholder_visible")).toBe(false);
@@ -490,6 +500,7 @@ describe("shouldPreserveStoredSessionDuringSupabaseBootstrap", () => {
           defaultDashboardView: "athlete-log",
           emailNotifications: false,
           themeMode: "light",
+          loadIncrementKg: 2.5,
         },
         createdAt: "2026-03-24T08:30:00.000Z",
         updatedAt: "2026-03-24T08:30:00.000Z",
@@ -686,5 +697,59 @@ describe("shouldPreserveStoredSessionDuringSupabaseBootstrap", () => {
 
     expect(nextState.plans.find((plan) => plan.id === "plan_a")?.status).toBe("archived");
     expect(nextState.plans.find((plan) => plan.id === "plan_b")?.status).toBe("active");
+  });
+});
+
+describe("applyPartialUserMeasurementUpdate", () => {
+  it("keeps height and waist when only weight is updated", () => {
+    const state = cloneDemoState();
+    const athleteId = "user_athlete_1";
+    state.users = state.users.map((user) =>
+      user.id === athleteId
+        ? {
+            ...user,
+            heightCm: 181,
+            weightKg: 80,
+            waistCm: 86,
+          }
+        : user,
+    );
+
+    const nextState = applyPartialUserMeasurementUpdate(state, athleteId, { weightKg: 78.5 }, "2026-03-25T10:00:00.000Z");
+    const nextUser = nextState.users.find((user) => user.id === athleteId);
+    const newestMeasurement = nextState.bodyMeasurements[0];
+
+    expect(nextUser?.heightCm).toBe(181);
+    expect(nextUser?.weightKg).toBe(78.5);
+    expect(nextUser?.waistCm).toBe(86);
+    expect(newestMeasurement?.heightCm).toBeUndefined();
+    expect(newestMeasurement?.weightKg).toBe(78.5);
+    expect(newestMeasurement?.waistCm).toBeUndefined();
+  });
+
+  it("keeps weight and waist when only height is updated", () => {
+    const state = cloneDemoState();
+    const athleteId = "user_athlete_1";
+    state.users = state.users.map((user) =>
+      user.id === athleteId
+        ? {
+            ...user,
+            heightCm: 181,
+            weightKg: 80,
+            waistCm: 86,
+          }
+        : user,
+    );
+
+    const nextState = applyPartialUserMeasurementUpdate(state, athleteId, { heightCm: 182 }, "2026-03-25T10:05:00.000Z");
+    const nextUser = nextState.users.find((user) => user.id === athleteId);
+    const newestMeasurement = nextState.bodyMeasurements[0];
+
+    expect(nextUser?.heightCm).toBe(182);
+    expect(nextUser?.weightKg).toBe(80);
+    expect(nextUser?.waistCm).toBe(86);
+    expect(newestMeasurement?.heightCm).toBe(182);
+    expect(newestMeasurement?.weightKg).toBeUndefined();
+    expect(newestMeasurement?.waistCm).toBeUndefined();
   });
 });

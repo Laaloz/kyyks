@@ -8,7 +8,6 @@ import {
   useRef,
   useState,
   type CSSProperties,
-  type KeyboardEvent as ReactKeyboardEvent,
 } from "react";
 
 import { Badge } from "@/components/ui/badge";
@@ -25,7 +24,6 @@ import { formatDate } from "@/lib/utils";
 type PreviousExerciseResult = {
   actualReps?: number;
   actualLoad?: number;
-  rpe?: number;
   completedAt: string;
   timesCompleted: number;
 };
@@ -36,6 +34,13 @@ type ExerciseGroup = {
   supersetGroup?: string;
   logs: WorkoutSession["setLogs"];
 };
+
+const inputStepperButtonClass =
+  "flex flex-1 items-center justify-center rounded-[0.45rem] border border-[color-mix(in_srgb,var(--border)_58%,transparent)] bg-[color-mix(in_srgb,var(--surface)_96%,transparent)] text-[color-mix(in_srgb,var(--text-subtle)_82%,transparent)] transition hover:border-[color-mix(in_srgb,var(--border-strong)_72%,transparent)] hover:bg-[color-mix(in_srgb,var(--surface)_98%,var(--surface-2))] hover:text-[var(--text-muted)] disabled:cursor-not-allowed disabled:opacity-45";
+
+function compareSetLabels(left: string, right: string) {
+  return left.localeCompare(right, undefined, { numeric: true, sensitivity: "base" });
+}
 
 function CoachInstructionDialog({
   exerciseName,
@@ -158,10 +163,6 @@ function formatPreviousExerciseResult(previous: PreviousExerciseResult) {
   if (previous.actualLoad !== undefined) {
     parts.push(`${previous.actualLoad} kg`);
   }
-  if (previous.rpe !== undefined) {
-    parts.push(`RPE ${previous.rpe}`);
-  }
-
   return parts.length ? parts.join(" · ") : "ei tallennettua dataa";
 }
 
@@ -259,9 +260,6 @@ const repsTooltipText =
 const loadTooltipText =
   "Kirjaa tähän sarjassa käytetty kuorma kiloina. Jos teit sarjan ilman lisäpainoa, jätä kenttä arvoon 0 tai tyhjäksi käytäntönne mukaan.";
 
-const rpeTooltipText =
-  "RPE kertoo, miltä sarja tuntui asteikolla 1-10. 10 = et olisi saanut enää yhtään toistoa, 9 = noin 1 toisto olisi vielä mennyt, 8 = noin 2 toistoa olisi vielä mennyt.";
-
 export function AthleteSessionPanel({
   scheduledWorkoutId,
   scheduledWorkoutTitle,
@@ -281,8 +279,11 @@ export function AthleteSessionPanel({
   progress,
   previousExerciseResults,
   exerciseInstructions,
+  exerciseOrder,
+  activeWorkoutCount,
   workoutMessage,
   isCompleting,
+  loadIncrementKg,
 }: {
   scheduledWorkoutId: string;
   scheduledWorkoutTitle: string;
@@ -290,7 +291,7 @@ export function AthleteSessionPanel({
   note: string;
   status: string;
   onStart: () => void | Promise<void>;
-  onUpdate: (logId: string, patch: { actualReps?: number; actualLoad?: number; rpe?: number; done?: boolean }) => void;
+  onUpdate: (logId: string, patch: { actualReps?: number; actualLoad?: number; done?: boolean }) => void;
   onUpdateDuration: (durationSeconds: number) => Promise<{ ok: boolean; message?: string }>;
   onSaveNote: (body: string) => void;
   onComplete: () => void | Promise<void>;
@@ -302,8 +303,11 @@ export function AthleteSessionPanel({
   progress: { totalSets: number; completedSets: number; percent: number; allDone: boolean } | null;
   previousExerciseResults: Map<string, PreviousExerciseResult>;
   exerciseInstructions: Map<string, string>;
+  exerciseOrder: Map<string, number>;
+  activeWorkoutCount?: number;
   workoutMessage: string;
   isCompleting: boolean;
+  loadIncrementKg: 1 | 2.5 | 5;
 }) {
   const [localNote, setLocalNote] = useState(note);
   const noteSaveTimeoutRef = useRef<number | null>(null);
@@ -324,6 +328,7 @@ export function AthleteSessionPanel({
   const [restTotalSeconds, setRestTotalSeconds] = useState(0);
   const [restSecondsLeft, setRestSecondsLeft] = useState(0);
   const [restRunning, setRestRunning] = useState(false);
+  const [restEndsAt, setRestEndsAt] = useState<number | null>(null);
   const [restExerciseKey, setRestExerciseKey] = useState<string | null>(null);
   const [restExerciseName, setRestExerciseName] = useState<string | null>(null);
   const [expandedExerciseKeys, setExpandedExerciseKeys] = useState<Record<string, boolean>>({});
@@ -340,49 +345,6 @@ export function AthleteSessionPanel({
   const [loadDrafts, setLoadDrafts] = useState<Record<string, string>>({});
   const secondaryActionsMenuRef = useRef<HTMLDivElement | null>(null);
 
-  const focusWorkoutLogField = (logId: string, field: "reps" | "load" | "rpe") => {
-    const element = document.getElementById(`${scheduledWorkoutId}-${logId}-${field}`);
-    if (element instanceof HTMLInputElement) {
-      element.focus();
-      element.select();
-    }
-  };
-
-  const focusWorkoutLogFieldAfterInputCommit = (logId: string, field: "reps" | "load" | "rpe") => {
-    window.requestAnimationFrame(() => {
-      focusWorkoutLogField(logId, field);
-    });
-  };
-
-  const handleSetFieldEnter = (
-    event: ReactKeyboardEvent<HTMLInputElement>,
-    log: WorkoutSession["setLogs"][number],
-    field: "reps" | "load" | "rpe",
-  ) => {
-    if (event.key !== "Enter") {
-      return;
-    }
-
-    event.preventDefault();
-
-    if (field === "reps") {
-      focusWorkoutLogFieldAfterInputCommit(log.id, "load");
-      return;
-    }
-
-    if (field === "load") {
-      focusWorkoutLogFieldAfterInputCommit(log.id, "rpe");
-      return;
-    }
-
-    const currentExerciseLogs = selectedSession?.setLogs.filter((entry) => entry.exerciseId === log.exerciseId) ?? [];
-    const currentIndex = currentExerciseLogs.findIndex((entry) => entry.id === log.id);
-    const nextLog = currentIndex >= 0 ? currentExerciseLogs[currentIndex + 1] : undefined;
-    if (nextLog) {
-      focusWorkoutLogFieldAfterInputCommit(nextLog.id, "reps");
-    }
-  };
-
   useEffect(() => {
     setLocalNote(note);
   }, [note, scheduledWorkoutId]);
@@ -398,6 +360,7 @@ export function AthleteSessionPanel({
     setRestTotalSeconds(0);
     setRestSecondsLeft(0);
     setRestRunning(false);
+    setRestEndsAt(null);
     setRestExerciseKey(null);
     setRestExerciseName(null);
     setExpandedExerciseKeys({});
@@ -426,11 +389,26 @@ export function AthleteSessionPanel({
       return;
     }
 
-    const interval = window.setInterval(() => {
+    const syncElapsed = () => {
       setElapsedSeconds(getElapsed());
+    };
+
+    const interval = window.setInterval(() => {
+      syncElapsed();
     }, 1000);
 
-    return () => window.clearInterval(interval);
+    const handleVisibilityOrFocus = () => {
+      syncElapsed();
+    };
+
+    window.addEventListener("focus", handleVisibilityOrFocus);
+    document.addEventListener("visibilitychange", handleVisibilityOrFocus);
+
+    return () => {
+      window.clearInterval(interval);
+      window.removeEventListener("focus", handleVisibilityOrFocus);
+      document.removeEventListener("visibilitychange", handleVisibilityOrFocus);
+    };
   }, [selectedSession, status]);
 
   useEffect(() => {
@@ -438,30 +416,50 @@ export function AthleteSessionPanel({
   }, [elapsedSeconds, scheduledWorkoutId, correctionMode]);
 
   useEffect(() => {
-    if (!restRunning || restSecondsLeft <= 0) {
+    if (!restRunning || !restEndsAt) {
       return;
     }
 
+    const syncRestCountdown = () => {
+      const remainingSeconds = Math.max(0, Math.ceil((restEndsAt - Date.now()) / 1000));
+
+      if (remainingSeconds <= 0) {
+        setRestSecondsLeft(0);
+        setRestRunning(false);
+        setRestTotalSeconds(0);
+        setRestEndsAt(null);
+        setRestExerciseKey(null);
+        setRestExerciseName(null);
+        return;
+      }
+
+      setRestSecondsLeft(remainingSeconds);
+    };
+
+    syncRestCountdown();
+
     const interval = window.setInterval(() => {
-      setRestSecondsLeft((value) => {
-        const next = value - 1;
-        if (next <= 0) {
-          setRestRunning(false);
-          setRestTotalSeconds(0);
-          setRestExerciseKey(null);
-          setRestExerciseName(null);
-          return 0;
-        }
-        return next;
-      });
+      syncRestCountdown();
     }, 1000);
 
-    return () => window.clearInterval(interval);
-  }, [restRunning, restSecondsLeft]);
+    const handleVisibilityOrFocus = () => {
+      syncRestCountdown();
+    };
+
+    window.addEventListener("focus", handleVisibilityOrFocus);
+    document.addEventListener("visibilitychange", handleVisibilityOrFocus);
+
+    return () => {
+      window.clearInterval(interval);
+      window.removeEventListener("focus", handleVisibilityOrFocus);
+      document.removeEventListener("visibilitychange", handleVisibilityOrFocus);
+    };
+  }, [restEndsAt, restRunning]);
 
   useEffect(() => {
     if (status !== "in_progress") {
       setRestRunning(false);
+      setRestEndsAt(null);
     }
   }, [status]);
 
@@ -535,10 +533,19 @@ export function AthleteSessionPanel({
     selectedSession.setLogs.forEach((log) => {
       const key = log.templateExerciseId;
       const current = grouped.get(key);
+      const sortedLogs = (logs: WorkoutSession["setLogs"]) =>
+        [...logs].sort((left, right) => {
+          const byLabel = compareSetLabels(left.setLabel, right.setLabel);
+          if (byLabel !== 0) {
+            return byLabel;
+          }
+
+          return left.id.localeCompare(right.id);
+        });
       if (current) {
         grouped.set(key, {
           ...current,
-          logs: [...current.logs, log],
+          logs: sortedLogs([...current.logs, log]),
         });
         return;
       }
@@ -550,8 +557,16 @@ export function AthleteSessionPanel({
         logs: [log],
       });
     });
-    return Array.from(grouped.values());
-  }, [selectedSession]);
+    return Array.from(grouped.values()).sort((left, right) => {
+      const leftOrder = exerciseOrder.get(left.key) ?? Number.MAX_SAFE_INTEGER;
+      const rightOrder = exerciseOrder.get(right.key) ?? Number.MAX_SAFE_INTEGER;
+      if (leftOrder !== rightOrder) {
+        return leftOrder - rightOrder;
+      }
+
+      return left.exerciseName.localeCompare(right.exerciseName, undefined, { sensitivity: "base" });
+    });
+  }, [exerciseOrder, selectedSession]);
 
   const supersetMembersByGroup = useMemo(() => {
     const map = new Map<string, string[]>();
@@ -645,6 +660,7 @@ export function AthleteSessionPanel({
     setRestTotalSeconds(duration);
     setRestSecondsLeft(duration);
     setRestRunning(true);
+    setRestEndsAt(Date.now() + duration * 1000);
     setRestExerciseKey(exerciseKey);
     setRestExerciseName(exerciseName);
     setExpandedExerciseKeys((previous) => {
@@ -663,6 +679,7 @@ export function AthleteSessionPanel({
     setRestRunning(false);
     setRestSecondsLeft(0);
     setRestTotalSeconds(0);
+    setRestEndsAt(null);
     setRestExerciseKey(null);
     setRestExerciseName(null);
   };
@@ -674,16 +691,24 @@ export function AthleteSessionPanel({
 
     setRestSecondsLeft(restTotalSeconds);
     setRestRunning(true);
+    setRestEndsAt(Date.now() + restTotalSeconds * 1000);
   };
 
   const handleLogUpdate = (
     log: WorkoutSession["setLogs"][number],
-    patch: { actualReps?: number; actualLoad?: number; rpe?: number; done?: boolean },
+    patch: { actualReps?: number; actualLoad?: number; done?: boolean },
   ) => {
     onUpdate(log.id, patch);
   };
 
   const handleDoneUpdate = (log: WorkoutSession["setLogs"][number], nextDone: boolean) => {
+    if (nextDone && activeWorkoutCount && activeWorkoutCount > 1) {
+      console.warn("[workout-ui] multiple-active-workouts-detected", {
+        scheduledWorkoutId,
+        activeWorkoutCount,
+      });
+    }
+
     onUpdate(log.id, { done: nextDone });
 
     if (!nextDone) {
@@ -737,6 +762,32 @@ export function AthleteSessionPanel({
   const showBottomBackToList = status !== "in_progress";
   const hasSecondaryActions = showResumeAction || showCancelAction || showDeleteAction;
   const isDurationDirty = durationDraft.trim() !== formatWorkoutDuration(elapsedSeconds);
+  const roundToIncrement = (value: number, increment: number) => {
+    const next = Math.round(value / increment) * increment;
+    return Number(next.toFixed(increment % 1 === 0 ? 0 : 2));
+  };
+
+  const adjustActualReps = (log: WorkoutSession["setLogs"][number], delta: number) => {
+    const nextValue = Math.max(0, (log.actualReps ?? 0) + delta);
+    handleLogUpdate(log, { actualReps: nextValue });
+  };
+
+  const adjustActualLoad = (log: WorkoutSession["setLogs"][number], delta: number) => {
+    const baseValue = log.actualLoad ?? 0;
+    const nextValue = Math.max(0, roundToIncrement(baseValue + delta, loadIncrementKg));
+
+    setLoadDrafts((previous) => {
+      if (!(log.id in previous)) {
+        return previous;
+      }
+
+      const next = { ...previous };
+      delete next[log.id];
+      return next;
+    });
+
+    handleLogUpdate(log, { actualLoad: nextValue });
+  };
   const toggleSecondaryActionsMenu = (anchor: HTMLButtonElement) => {
     if (isSecondaryActionsOpen) {
       setIsSecondaryActionsOpen(false);
@@ -851,115 +902,124 @@ export function AthleteSessionPanel({
             aria-labelledby={disclosureButtonId}
             className="mt-3 border-t border-[var(--border)] pt-3"
           >
-            <div className="rounded-[1rem] bg-[color-mix(in_srgb,var(--surface-2)_68%,var(--surface))]">
-              <div className="relative z-10 hidden items-center gap-3 rounded-t-[1rem] border-b border-[var(--border)] bg-[color-mix(in_srgb,var(--surface-3)_82%,var(--surface))] px-3.5 py-2.5 text-[10px] font-semibold uppercase tracking-[0.05em] text-[var(--text-subtle)] md:grid md:grid-cols-[3.25rem_1fr_1fr_0.9fr_auto]">
-                <span className="pl-1">Sarja</span>
-                <span className="inline-flex items-center gap-1">
-                  Toistot
-                  <InfoTooltip text={repsTooltipText} />
-                </span>
-                <span className="inline-flex items-center gap-1">
-                  Kuorma
-                  <InfoTooltip text={loadTooltipText} />
-                </span>
-                <span className="inline-flex items-center gap-1">
-                  RPE
-                  <InfoTooltip text={rpeTooltipText} />
-                </span>
-                <span className="inline-flex items-center justify-end gap-1">
-                  <span className="hidden md:inline">Tila</span>
-                  <InfoTooltip text="Merkitse sarja tehdyksi kun sarja on valmis. Voit myös kumota kuittauksen tarvittaessa." />
-                </span>
-              </div>
-              <div className="grid grid-cols-[1.5rem_1fr_1fr_0.9fr_2rem] items-center gap-2 border-b border-[var(--border)] px-3 py-2 text-[10px] font-semibold uppercase tracking-[0.05em] text-[var(--text-subtle)] md:hidden">
-                <span className="text-center">#</span>
-                <span className="inline-flex items-center gap-1">
-                  <span>Toistot</span>
-                  <InfoTooltip text={repsTooltipText} />
-                </span>
-                <span className="inline-flex items-center gap-1">
-                  <span>Kuorma</span>
-                  <InfoTooltip text={loadTooltipText} />
-                </span>
-                <span className="inline-flex items-center gap-1">
-                  <span>RPE</span>
-                  <InfoTooltip text={rpeTooltipText} />
-                </span>
-                <span aria-hidden="true" />
-              </div>
-              <div className="overflow-hidden rounded-b-[1rem] divide-y divide-[var(--border)]">
-              {logs.map((log) => {
-                  const rowToneClass = log.done
-                    ? "bg-[color-mix(in_srgb,var(--success)_10%,var(--surface))]"
-                    : "bg-transparent";
-                  const inputToneClass = log.done
-                    ? "border-[color-mix(in_srgb,var(--success)_40%,var(--border))] bg-[color-mix(in_srgb,var(--success)_12%,var(--surface))] text-[var(--text)]"
+            <div className="overflow-hidden rounded-[1rem] bg-[color-mix(in_srgb,var(--surface-2)_68%,var(--surface))]">
+              <table className="w-full table-fixed border-collapse">
+                <thead>
+                  <tr className="border-b border-[var(--border)] bg-[color-mix(in_srgb,var(--surface-3)_82%,var(--surface))] text-[10px] font-semibold uppercase tracking-[0.05em] text-[var(--text-subtle)]">
+                    <th scope="col" className="w-14 px-2 py-2.5 text-left md:px-3.5">Sarja</th>
+                    <th scope="col" className="px-2 py-2.5 text-left md:px-3.5">
+                      <span className="inline-flex items-center gap-1">
+                        Toistot
+                        <InfoTooltip text={repsTooltipText} />
+                      </span>
+                    </th>
+                    <th scope="col" className="px-2 py-2.5 text-left md:px-3.5">
+                      <span className="inline-flex items-center gap-1">
+                        Kuorma
+                        <InfoTooltip text={loadTooltipText} />
+                      </span>
+                    </th>
+                    <th scope="col" className="w-14 px-2 py-2.5 text-center md:px-3.5 md:text-right">
+                      <span className="inline-flex items-center justify-center gap-1 md:justify-end">Tila</span>
+                    </th>
+                  </tr>
+                </thead>
+                <tbody>
+                {logs.map((log) => {
+                   const rowToneClass = log.done
+                     ? "bg-[color-mix(in_srgb,var(--success)_10%,var(--surface))]"
+                     : "bg-transparent";
+                   const inputToneClass = log.done
+                     ? "border-[color-mix(in_srgb,var(--success)_40%,var(--border))] bg-[color-mix(in_srgb,var(--success)_12%,var(--surface))] text-[var(--text)]"
                     : "border-[var(--border)] bg-[var(--surface-2)] text-[var(--text)]";
                   const setLabelToneClass = log.done
                     ? "text-[var(--success)] md:border-[color-mix(in_srgb,var(--success)_35%,var(--border))] md:bg-[color-mix(in_srgb,var(--success)_12%,var(--surface))]"
                     : "text-[var(--text-subtle)] md:border-[var(--border)] md:bg-[var(--surface-2)]";
 
-                  return (
-                    <div
-                      key={log.id}
-                      className={`grid grid-cols-[1.5rem_1fr_1fr_0.9fr_2rem] items-center gap-2 px-3 py-2.5 md:grid-cols-[3.25rem_1fr_1fr_0.9fr_auto] md:gap-3 md:px-3.5 ${rowToneClass}`}
+                   return (
+                    <tr
+                       key={log.id}
+                       className={`border-b border-[var(--border)] last:border-b-0 ${rowToneClass}`}
                     >
-                      <span
-                        className={`inline-flex h-8 w-8 items-center justify-center justify-self-center text-xs font-semibold tabular-nums md:h-8 md:w-8 md:justify-self-start md:rounded-full md:border ${setLabelToneClass}`}
-                      >
-                        {log.setLabel}
-                      </span>
-                      <div className="min-w-0">
-                        <Input
-                          className={`h-9 min-w-0 rounded-xl px-2 py-1 text-sm font-medium shadow-[inset_0_1px_0_0_var(--shadow-soft)] md:h-10 md:px-3 ${inputToneClass}`}
-                          id={`${scheduledWorkoutId}-${log.id}-reps`}
-                          type="number"
-                          inputMode="numeric"
-                          enterKeyHint="next"
-                          min={0}
-                          placeholder="0"
-                          aria-label={`${exerciseName} sarja ${log.setLabel} toteutuneet toistot`}
-                          value={log.actualReps ?? ""}
-                          disabled={readOnly}
-                          onChange={(event) => handleLogUpdate(log, { actualReps: numberOrUndefined(event.target.value) })}
-                          onKeyDown={(event) => handleSetFieldEnter(event, log, "reps")}
-                        />
-                      </div>
-                      <div className="min-w-0">
-                        <Input
-                          className={`h-9 min-w-0 rounded-xl px-2 py-1 text-sm font-medium shadow-[inset_0_1px_0_0_var(--shadow-soft)] md:h-10 md:px-3 ${inputToneClass}`}
-                          id={`${scheduledWorkoutId}-${log.id}-load`}
-                          type="text"
-                          inputMode="decimal"
-                          enterKeyHint="next"
-                          placeholder="0"
-                          aria-label={`${exerciseName} sarja ${log.setLabel} toteutunut kuorma`}
-                          value={loadDrafts[log.id] ?? (log.actualLoad !== undefined ? String(log.actualLoad).replace(".", ",") : "")}
-                          disabled={readOnly}
-                          onChange={(event) => handleLoadDraftChange(log, event.target.value)}
-                          onBlur={() => handleLoadDraftBlur(log)}
-                          onKeyDown={(event) => handleSetFieldEnter(event, log, "load")}
-                        />
-                      </div>
-                      <div className="min-w-0">
-                        <Input
-                          className={`h-9 min-w-0 rounded-xl px-2 py-1 text-sm font-medium shadow-[inset_0_1px_0_0_var(--shadow-soft)] md:h-10 md:px-3 ${inputToneClass}`}
-                          id={`${scheduledWorkoutId}-${log.id}-rpe`}
-                          type="number"
-                          inputMode="numeric"
-                          enterKeyHint="done"
-                          min={1}
-                          max={10}
-                          step={1}
-                          placeholder="-"
-                          aria-label={`${exerciseName} sarja ${log.setLabel} RPE`}
-                          value={log.rpe ?? ""}
-                          disabled={readOnly}
-                          onChange={(event) => handleLogUpdate(log, { rpe: numberOrUndefined(event.target.value) })}
-                          onKeyDown={(event) => handleSetFieldEnter(event, log, "rpe")}
-                        />
-                      </div>
-                      <div className="flex justify-end">
+                      <td className="px-1 py-2.5 text-center align-middle md:px-3.5">
+                        <span
+                          className={`inline-flex h-8 w-8 items-center justify-center text-xs font-semibold tabular-nums md:rounded-full md:border ${setLabelToneClass}`}
+                        >
+                          {log.setLabel}
+                        </span>
+                      </td>
+                      <td className="px-1 py-2.5 align-middle md:px-3.5">
+                        <div className="relative">
+                          <Input
+                            className={`h-9 min-w-0 rounded-xl px-2 py-1 pr-8 text-center text-sm font-medium shadow-[inset_0_1px_0_0_var(--shadow-soft)] md:h-10 md:px-3 md:pr-9 ${inputToneClass}`}
+                            type="text"
+                            inputMode="numeric"
+                            pattern="[0-9]*"
+                            placeholder="0"
+                            aria-label={`${exerciseName} sarja ${log.setLabel} toteutuneet toistot`}
+                            value={log.actualReps ?? ""}
+                            disabled={readOnly}
+                            onChange={(event) => handleLogUpdate(log, { actualReps: numberOrUndefined(event.target.value) })}
+                          />
+                          <div className="absolute inset-y-1 right-1 flex w-6 flex-col justify-center gap-px rounded-[0.55rem] bg-[color-mix(in_srgb,var(--border)_26%,transparent)] p-px">
+                            <button
+                              type="button"
+                              className={inputStepperButtonClass}
+                              disabled={readOnly}
+                              aria-label={`${exerciseName} sarja ${log.setLabel} lisaa toistoja`}
+                              onClick={() => adjustActualReps(log, 1)}
+                            >
+                              <ChevronUp className="size-2.5" aria-hidden="true" />
+                            </button>
+                            <button
+                              type="button"
+                              className={inputStepperButtonClass}
+                              disabled={readOnly || (log.actualReps ?? 0) <= 0}
+                              aria-label={`${exerciseName} sarja ${log.setLabel} vahenna toistoja`}
+                              onClick={() => adjustActualReps(log, -1)}
+                            >
+                              <ChevronDown className="size-2.5" aria-hidden="true" />
+                            </button>
+                          </div>
+                        </div>
+                      </td>
+                      <td className="px-1 py-2.5 align-middle md:px-3.5">
+                        <div className="relative">
+                          <Input
+                            className={`h-9 min-w-0 rounded-xl px-2 py-1 pr-8 text-center text-sm font-medium shadow-[inset_0_1px_0_0_var(--shadow-soft)] md:h-10 md:px-3 md:pr-9 ${inputToneClass}`}
+                            type="text"
+                            inputMode="decimal"
+                            placeholder="0"
+                            aria-label={`${exerciseName} sarja ${log.setLabel} toteutunut kuorma`}
+                            value={loadDrafts[log.id] ?? (log.actualLoad !== undefined ? String(log.actualLoad).replace(".", ",") : "")}
+                            disabled={readOnly}
+                            onChange={(event) => handleLoadDraftChange(log, event.target.value)}
+                            onBlur={() => handleLoadDraftBlur(log)}
+                          />
+                          <div className="absolute inset-y-1 right-1 flex w-6 flex-col justify-center gap-px rounded-[0.55rem] bg-[color-mix(in_srgb,var(--border)_26%,transparent)] p-px">
+                            <button
+                              type="button"
+                              className={inputStepperButtonClass}
+                              disabled={readOnly}
+                              aria-label={`${exerciseName} sarja ${log.setLabel} lisaa kuormaa`}
+                              onClick={() => adjustActualLoad(log, loadIncrementKg)}
+                            >
+                              <ChevronUp className="size-2.5" aria-hidden="true" />
+                            </button>
+                            <button
+                              type="button"
+                              className={inputStepperButtonClass}
+                              disabled={readOnly || (log.actualLoad ?? 0) <= 0}
+                              aria-label={`${exerciseName} sarja ${log.setLabel} vahenna kuormaa`}
+                              onClick={() => adjustActualLoad(log, -loadIncrementKg)}
+                            >
+                              <ChevronDown className="size-2.5" aria-hidden="true" />
+                            </button>
+                          </div>
+                        </div>
+                      </td>
+                      <td className="px-2 py-2.5 text-center align-middle md:px-3.5 md:text-right">
+                        <div className="flex justify-center md:justify-end">
                         <Button
                           type="button"
                           variant="ghost"
@@ -976,11 +1036,13 @@ export function AthleteSessionPanel({
                         >
                           <Check className="size-4 md:size-5" aria-hidden="true" />
                         </Button>
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
+                        </div>
+                      </td>
+                    </tr>
+                   );
+                 })}
+                </tbody>
+              </table>
             </div>
           </div>
         ) : null}

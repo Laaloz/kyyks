@@ -21,8 +21,6 @@ function nowIso() {
   return new Date().toISOString();
 }
 
-const DEFAULT_RPE = 8;
-
 function normalizeComparableEmail(email: string | null | undefined) {
   return email?.trim().toLowerCase() ?? "";
 }
@@ -144,7 +142,6 @@ function buildProgramWorkouts(
 type AutofillSnapshot = {
   actualReps?: number;
   actualLoad?: number;
-  rpe?: number;
 };
 
 type SetLogDefaultsTarget = {
@@ -195,14 +192,13 @@ function buildExerciseAutofillSnapshots(
         return;
       }
 
-      if (log.actualReps === undefined && log.actualLoad === undefined && log.rpe === undefined) {
+      if (log.actualReps === undefined && log.actualLoad === undefined) {
         return;
       }
 
       const snapshot: AutofillSnapshot = {
         actualReps: log.actualReps,
         actualLoad: log.actualLoad,
-        rpe: log.rpe,
       };
       const exerciseSetKey = `${log.exerciseId}:${log.setLabel}`;
       if (!byExerciseAndSetLabel.has(exerciseSetKey)) {
@@ -243,6 +239,7 @@ export function createTemplate(input: TemplateBuilderInput, coachId: string): Wo
         exercises: input.exercises.map((exercise) => ({
           id: makeId("template_ex"),
           exerciseId: exercise.exerciseId,
+          muscleGroup: exercise.muscleGroup,
           instruction: exercise.instruction,
           sets: Array.from({ length: exercise.setCount }, (_, index) => ({
             id: makeId("set"),
@@ -527,7 +524,6 @@ export function startSession(
             targetRestSeconds: set.restSeconds,
             actualReps: snapshot?.actualReps ?? resolveDefaultActualReps(set),
             actualLoad: snapshot?.actualLoad ?? resolveDefaultActualLoad(set),
-            rpe: snapshot?.rpe ?? DEFAULT_RPE,
             done: false,
           };
         }),
@@ -567,7 +563,6 @@ export function startSession(
           programWorkoutId: programWorkout.id,
           actualReps: snapshot?.actualReps ?? resolveDefaultActualReps(set),
           actualLoad: snapshot?.actualLoad ?? resolveDefaultActualLoad(set),
-          rpe: snapshot?.rpe ?? DEFAULT_RPE,
           done: false,
         };
       }),

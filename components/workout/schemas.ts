@@ -1,5 +1,17 @@
 import { z } from "zod";
 
+export const CUSTOM_EXERCISE_VALUE = "__custom__";
+export const SUPERSET_GROUP_OPTIONS = ["A", "B", "C", "D"] as const;
+export const CUSTOM_MUSCLE_GROUP_OPTIONS = [
+  "shoulders",
+  "arms",
+  "chest",
+  "abs",
+  "back",
+  "legs",
+  "other",
+] as const;
+
 function optionalEnumField<const TValues extends readonly [string, ...string[]]>(values: TValues) {
   return z.union([z.enum(values), z.literal("")]).transform((value) => (value === "" ? undefined : value));
 }
@@ -20,6 +32,7 @@ export const userSettingsSchema = z.object({
   defaultDashboardView: z.enum(["overview", "templates", "invites", "athlete-log", "conversation"]),
   emailNotifications: z.boolean(),
   themeMode: z.enum(["light", "dark"]),
+  loadIncrementKg: z.union([z.literal(1), z.literal(2.5), z.literal(5)]),
 });
 
 export const bodyMeasurementSchema = z.object({
@@ -50,6 +63,7 @@ export const templateSchema = z.object({
     .array(
       z.object({
         exerciseId: z.string().min(1, "Valitse liike."),
+        muscleGroup: optionalEnumField(CUSTOM_MUSCLE_GROUP_OPTIONS),
         instruction: z.string().min(2, "Anna lyhyt valmennusohje."),
         setCount: z.coerce.number().min(1).max(8),
         targetReps: z.coerce.number().min(1).max(30),
@@ -94,18 +108,6 @@ export const programSchema = z
       path: ["fullBodyTemplateId"],
     },
   );
-
-export const CUSTOM_EXERCISE_VALUE = "__custom__";
-export const SUPERSET_GROUP_OPTIONS = ["A", "B", "C", "D"] as const;
-export const CUSTOM_MUSCLE_GROUP_OPTIONS = [
-  "shoulders",
-  "arms",
-  "chest",
-  "abs",
-  "back",
-  "legs",
-  "other",
-] as const;
 
 export const programWorkoutExerciseSchema = z
   .object({
@@ -184,6 +186,7 @@ export const programComposerSchema = z.object({
 export function emptyTemplateExercise() {
   return {
     exerciseId: "",
+    muscleGroup: "" as "" | (typeof CUSTOM_MUSCLE_GROUP_OPTIONS)[number],
     instruction: "",
     setCount: 3,
     targetReps: 8,

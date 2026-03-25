@@ -24,6 +24,7 @@ import { estimateStrengthCalories, getLatestMeasurement, getMeasurementsForUser,
 import { calculateSessionDurationSeconds, getSessionProgress } from "@/lib/domain";
 import { withMinimumDelay } from "@/lib/min-delay";
 import { isProgramActive } from "@/lib/program-status";
+import { buildScheduledWorkoutExerciseOrder } from "@/lib/workout-exercise-order";
 import { buildWorkoutConversationContextOptions } from "@/lib/workout-conversation-context";
 import { buildWorkoutHistoryTitleMap, normalizeWorkoutHistoryTitle } from "@/lib/workout-history-title";
 import { cn } from "@/lib/utils";
@@ -33,10 +34,44 @@ import { resolveBlockingWorkoutStart, useAppState } from "@/providers/app-state-
 
 import { workoutStatusLabel, type WorkspaceView } from "@/components/workout/shared";
 
+type WorkoutSelectionPriority = 0 | 2 | 3;
+
+type WorkoutOrderMetadata = {
+  primaryTimestamp: string;
+  secondaryTimestamp: string;
+};
+
+function getWorkoutOrderTimestamps(
+  workout: AppState["scheduledWorkouts"][number],
+  session?: WorkoutSession,
+): WorkoutOrderMetadata {
+  return {
+    primaryTimestamp: session?.startedAt ?? workout.createdAt ?? workout.scheduledDate,
+    secondaryTimestamp: workout.scheduledDate ?? workout.createdAt,
+  };
+}
+
+function compareWorkoutOrderValues(left: WorkoutOrderMetadata, right: WorkoutOrderMetadata) {
+  const primaryComparison = right.primaryTimestamp.localeCompare(left.primaryTimestamp);
+  if (primaryComparison !== 0) {
+    return primaryComparison;
+  }
+
+  const secondaryComparison = right.secondaryTimestamp.localeCompare(left.secondaryTimestamp);
+  if (secondaryComparison !== 0) {
+    return secondaryComparison;
+  }
+
+  return 0;
+}
+
+function getSessionDisplayCompletedAt(session: WorkoutSession) {
+  return session.completedAt ?? session.startedAt ?? session.updatedAt;
+}
+
 type PreviousExerciseResult = {
   actualReps?: number;
   actualLoad?: number;
-  rpe?: number;
   completedAt: string;
   timesCompleted: number;
 };
@@ -164,7 +199,6 @@ export function AthleteDashboard({
   const [expandedHistoryGroups, setExpandedHistoryGroups] = useState<Record<string, boolean>>({});
   const [selectedHistoryWorkoutByGroup, setSelectedHistoryWorkoutByGroup] = useState<Record<string, string>>({});
   const [measurementDraft, setMeasurementDraft] = useState({
-    heightCm: "",
     weightKg: "",
     waistCm: "",
   });
@@ -204,11 +238,10 @@ export function AthleteDashboard({
   }, [currentUser?.id]);
   useEffect(() => {
     setMeasurementDraft({
-      heightCm: currentUser?.heightCm !== undefined ? String(currentUser.heightCm) : "",
       weightKg: currentUser?.weightKg !== undefined ? String(currentUser.weightKg) : "",
       waistCm: currentUser?.waistCm !== undefined ? String(currentUser.waistCm) : "",
     });
-  }, [currentUser?.id, currentUser?.heightCm, currentUser?.weightKg, currentUser?.waistCm]);
+  }, [currentUser?.id, currentUser?.weightKg, currentUser?.waistCm]);
   useEffect(() => {
     setMeasurementMessage("");
     setMeasurementMessageTone("info");
@@ -244,25 +277,40 @@ export function AthleteDashboard({
     () => new Set(state.sessions.map((session) => session.scheduledWorkoutId)),
     [state.sessions],
   );
+  const getWorkoutOrderMetadata = useMemo(() => {
+    const sessionByWorkoutId = new Map(state.sessions.map((session) => [session.scheduledWorkoutId, session]));
+    return (workout: (typeof workouts)[number]): WorkoutOrderMetadata =>
+      getWorkoutOrderTimestamps(workout, sessionByWorkoutId.get(workout.id));
+  }, [state.sessions]);
+  const compareWorkoutOrder = useMemo(() => {
+    return (left: (typeof workouts)[number], right: (typeof workouts)[number]) => {
+      const leftOrder = getWorkoutOrderMetadata(left);
+      const rightOrder = getWorkoutOrderMetadata(right);
+
+      const metadataComparison = compareWorkoutOrderValues(leftOrder, rightOrder);
+      return metadataComparison !== 0 ? metadataComparison : right.id.localeCompare(left.id);
+    };
+  }, [getWorkoutOrderMetadata]);
   const activeWorkout = useMemo(
     () =>
       [...workouts]
         .filter((item) => item.status === "in_progress")
-        .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))[0],
-    [workouts],
+        .sort(compareWorkoutOrder)[0],
+    [compareWorkoutOrder, workouts],
   );
   const resumableWorkout = useMemo(
     () =>
       [...workouts]
         .filter((item) => item.status === "cancelled" && scheduledWithSessionIds.has(item.id))
-        .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))[0],
-    [scheduledWithSessionIds, workouts],
+        .sort(compareWorkoutOrder)[0],
+    [compareWorkoutOrder, scheduledWithSessionIds, workouts],
   );
   const highlightedWorkout = activeWorkout ?? resumableWorkout;
   const highlightedWorkoutState = activeWorkout ? "active" : resumableWorkout ? "resumable" : null;
+  const fallbackSelectedWorkout = athleteLogMode === "workout" ? highlightedWorkout ?? workouts[workouts.length - 1] : undefined;
   const selectedWorkout =
     (selectedWorkoutId ? workouts.find((item) => item.id === selectedWorkoutId) : undefined) ??
-    (athleteLogMode === "workout" ? highlightedWorkout ?? workouts[workouts.length - 1] : undefined);
+    (selectedWorkoutId ? undefined : fallbackSelectedWorkout);
 
   const selectedSession = state.sessions.find((session) => session.scheduledWorkoutId === selectedWorkout?.id);
   const existingNote = selectedSession ? state.notes.find((note) => note.sessionId === selectedSession.id)?.body ?? "" : "";
@@ -314,6 +362,13 @@ export function AthleteDashboard({
         : new Map<string, string>(),
     [selectedWorkout, state.plans, state.templates],
   );
+  const selectedWorkoutExerciseOrder = useMemo(
+    () =>
+      selectedWorkout
+        ? buildScheduledWorkoutExerciseOrder(state, selectedWorkout)
+        : new Map<string, number>(),
+    [selectedWorkout, state],
+  );
   const workoutInsights = useMemo(() => buildWorkoutInsights(state), [state]);
   const sessionByWorkoutId = useMemo(
     () => new Map(state.sessions.map((session) => [session.scheduledWorkoutId, session])),
@@ -331,13 +386,11 @@ export function AthleteDashboard({
     const nextValue = Number(value.replace(",", "."));
     return Number.isFinite(nextValue) ? nextValue : undefined;
   };
-  const nextHeightCm = parseMeasurementField(measurementDraft.heightCm);
   const nextWeightKg = parseMeasurementField(measurementDraft.weightKg);
   const nextWaistCm = parseMeasurementField(measurementDraft.waistCm);
   const isMeasurementDirty =
     currentUser?.role === "athlete" &&
-    (currentUser.heightCm !== nextHeightCm ||
-      currentUser.weightKg !== nextWeightKg ||
+    (currentUser.weightKg !== nextWeightKg ||
       currentUser.waistCm !== nextWaistCm);
   const weightTrendPoints = useMemo(
     () =>
@@ -442,7 +495,7 @@ export function AthleteDashboard({
       : null;
   const activeScheduledByProgramWorkoutId = useMemo(() => {
     const activeById = new Map<string, (typeof workouts)[number]>();
-    const getWorkoutPriority = (workout: (typeof workouts)[number]) => {
+    const getWorkoutPriority = (workout: (typeof workouts)[number]): WorkoutSelectionPriority => {
       const hasSession = scheduledWithSessionIds.has(workout.id);
       const workoutStatus = workout.status;
       if (workoutStatus === "in_progress") {
@@ -475,14 +528,14 @@ export function AthleteDashboard({
         const existingPriority = getWorkoutPriority(existing);
         if (
           candidatePriority > existingPriority ||
-          (candidatePriority === existingPriority && workout.updatedAt > existing.updatedAt)
+          (candidatePriority === existingPriority && compareWorkoutOrder(workout, existing) < 0)
         ) {
           activeById.set(workout.programWorkoutId, workout);
         }
       });
 
-    return activeById;
-  }, [scheduledWithSessionIds, workouts]);
+      return activeById;
+  }, [compareWorkoutOrder, scheduledWithSessionIds, workouts]);
   const blockingWorkout = useMemo(() => {
     const resolved = currentUser ? resolveBlockingWorkoutStart(state, currentUser.id) : null;
     return resolved && dismissedActiveWorkoutId === resolved.id ? null : resolved;
@@ -567,7 +620,10 @@ export function AthleteDashboard({
         return false;
       }
 
-      const completedAt = workout.completedAt ?? sessionByWorkoutId.get(workout.id)?.completedAt ?? workout.updatedAt;
+      const completedAt =
+        workout.completedAt ??
+        sessionByWorkoutId.get(workout.id)?.completedAt ??
+        getWorkoutOrderMetadata(workout).primaryTimestamp;
       return isWithinCurrentWeek(completedAt);
     });
     const completionRateRaw = weeklyTargetCount
@@ -580,7 +636,11 @@ export function AthleteDashboard({
 
     const latestCompleted = [...workouts]
       .filter((workout) => workout.status === "completed")
-      .sort((a, b) => (b.completedAt ?? b.updatedAt).localeCompare(a.completedAt ?? a.updatedAt))[0];
+      .sort((a, b) => {
+        const leftCompletedAt = a.completedAt ?? getWorkoutOrderMetadata(a).primaryTimestamp;
+        const rightCompletedAt = b.completedAt ?? getWorkoutOrderMetadata(b).primaryTimestamp;
+        return rightCompletedAt.localeCompare(leftCompletedAt);
+      })[0];
     const latestCompletedVolume = latestCompleted
       ? workoutInsights.get(latestCompleted.id)?.liftedKg ?? 0
       : 0;
@@ -593,7 +653,7 @@ export function AthleteDashboard({
       latestCompleted,
       latestCompletedVolume,
     };
-  }, [athletePrograms, state.sessions, workoutInsights, workouts]);
+  }, [athletePrograms, getWorkoutOrderMetadata, state.sessions, workoutInsights, workouts]);
   const groupedWorkoutHistory = useMemo(() => {
     const grouped = new Map<
       string,
@@ -634,7 +694,7 @@ export function AthleteDashboard({
       const completedAt =
         workout.completedAt ??
         sessionByWorkoutId.get(workout.id)?.completedAt ??
-        workout.updatedAt ??
+        getWorkoutOrderMetadata(workout).primaryTimestamp ??
         workout.scheduledDate;
       const historyDateLabel =
         workoutStatus === "completed"
@@ -687,6 +747,7 @@ export function AthleteDashboard({
     sessionByWorkoutId,
     workoutHistory,
     workoutHistoryTitles,
+    getWorkoutOrderMetadata,
     workoutInsights,
   ]);
   const historyGroupByWorkoutId = useMemo(() => {
@@ -922,7 +983,7 @@ export function AthleteDashboard({
                 </p>
                 <p className="mt-1 text-sm text-[var(--text-muted)]">
                   {weeklyInsights.latestCompleted
-                    ? `${formatDateWithWeekday(weeklyInsights.latestCompleted.completedAt ?? weeklyInsights.latestCompleted.updatedAt)} · ${formatLiftedKgValue(weeklyInsights.latestCompletedVolume)}`
+                    ? `${formatDateWithWeekday(weeklyInsights.latestCompleted.completedAt ?? getWorkoutOrderMetadata(weeklyInsights.latestCompleted).primaryTimestamp)} · ${formatLiftedKgValue(weeklyInsights.latestCompletedVolume)}`
                     : "Ensimmäinen valmis treeni näkyy tässä automaattisesti."}
                 </p>
               </div>
@@ -949,10 +1010,18 @@ export function AthleteDashboard({
                 </CardDescription>
             </div>
             <div className="grid w-full gap-3 sm:grid-cols-2 xl:w-auto xl:min-w-[38rem] xl:grid-cols-4">
-              <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface-2)] px-4 py-4">
-                <p className="text-xs font-semibold tracking-[0.04em] text-[var(--text-subtle)]">Pituus</p>
+              <div className="rounded-2xl border border-dashed border-[var(--border)] bg-[color-mix(in_srgb,var(--surface-2)_74%,var(--surface))] px-4 py-4">
+                <div className="flex items-center justify-between gap-3">
+                  <p className="text-xs font-semibold tracking-[0.04em] text-[var(--text-subtle)]">Pituus</p>
+                  <Badge className="border-[var(--border)] bg-[var(--surface)] text-[10px] text-[var(--text-subtle)]">
+                    Profiilissa
+                  </Badge>
+                </div>
                 <p className="mt-2 text-lg font-semibold text-[var(--text)]">
                   {currentUser.heightCm !== undefined ? `${currentUser.heightCm} cm` : "Ei asetettu"}
+                </p>
+                <p className="mt-2 text-xs text-[var(--text-subtle)]">
+                  Paivita pituus tilin profiilista. Paino ja vyotaro kirjataan alle mittaseurantaan.
                 </p>
               </div>
               <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface-2)] px-4 py-4">
@@ -984,25 +1053,7 @@ export function AthleteDashboard({
                 </p>
               </div>
             </div>
-            <div className="mt-4 grid gap-3 md:grid-cols-3">
-              <div>
-                <Label htmlFor="overview-height-cm">Pituus (cm, valinnainen)</Label>
-                <Input
-                  id="overview-height-cm"
-                  type="number"
-                  inputMode="decimal"
-                  min={80}
-                  max={250}
-                  step="0.5"
-                  placeholder="Esim. 178"
-                  value={measurementDraft.heightCm}
-                  onChange={(event) => {
-                    setMeasurementDraft((previous) => ({ ...previous, heightCm: event.target.value }));
-                    setMeasurementMessage("");
-                    setMeasurementMessageTone("info");
-                  }}
-                />
-              </div>
+            <div className="mt-4 grid gap-3 md:grid-cols-2">
               <div>
                 <Label htmlFor="overview-weight-kg">Paino (kg, valinnainen)</Label>
                 <Input
@@ -1066,7 +1117,11 @@ export function AthleteDashboard({
                 loadingText="Tallennetaan mittatietoja..."
                 className="w-full sm:w-auto"
                 onClick={async () => {
-                  const parsed = bodyMeasurementSchema.safeParse(measurementDraft);
+                    const parsed = bodyMeasurementSchema.safeParse({
+                      heightCm: "",
+                      weightKg: measurementDraft.weightKg,
+                      waistCm: measurementDraft.waistCm,
+                    });
                   if (!parsed.success) {
                     setMeasurementMessage(parsed.error.issues[0]?.message ?? "Tarkista mittatiedot ja yritä uudelleen.");
                     setMeasurementMessageTone("error");
@@ -1405,6 +1460,9 @@ export function AthleteDashboard({
                 progress={progress}
                 previousExerciseResults={previousExerciseResults}
                 exerciseInstructions={selectedWorkoutInstructions}
+                exerciseOrder={selectedWorkoutExerciseOrder}
+                loadIncrementKg={currentUser?.settings?.loadIncrementKg ?? 2.5}
+                activeWorkoutCount={inProgressCount}
                 workoutMessage={workoutMessage}
                 isCompleting={isCompletingWorkout}
               />
@@ -2008,7 +2066,7 @@ function buildWorkoutInsights(state: AppState) {
         weightKg: getWeightAtMoment(
           userById.get(workout.athleteId),
           bodyMeasurementsByUserId.get(workout.athleteId) ?? [],
-          session.completedAt ?? session.updatedAt,
+          getSessionDisplayCompletedAt(session),
         ),
       });
 
@@ -2212,6 +2270,10 @@ function getLatestWorkoutCompletionDate(
     return undefined;
   }
 
+  const sessionByWorkoutId = new Map(
+    state.sessions.map((session) => [session.scheduledWorkoutId, session]),
+  );
+
   const latest = state.scheduledWorkouts
     .filter(
       (workout) =>
@@ -2221,9 +2283,20 @@ function getLatestWorkoutCompletionDate(
           : workout.templateId === workoutRef.templateId) &&
         workout.status === "completed",
     )
-    .sort((a, b) => (b.completedAt ?? b.updatedAt).localeCompare(a.completedAt ?? a.updatedAt))[0];
+    .sort((a, b) => {
+      const leftCompletedAt =
+        a.completedAt ?? getWorkoutOrderTimestamps(a, sessionByWorkoutId.get(a.id)).primaryTimestamp;
+      const rightCompletedAt =
+        b.completedAt ?? getWorkoutOrderTimestamps(b, sessionByWorkoutId.get(b.id)).primaryTimestamp;
+      return rightCompletedAt.localeCompare(leftCompletedAt);
+    })[0];
 
-  return latest?.completedAt ?? latest?.updatedAt;
+  if (!latest) {
+    return undefined;
+  }
+
+  const latestSession = state.sessions.find((session) => session.scheduledWorkoutId === latest.id);
+  return latest.completedAt ?? getWorkoutOrderTimestamps(latest, latestSession).primaryTimestamp;
 }
 
 function buildPreviousExerciseResults(
@@ -2236,6 +2309,10 @@ function buildPreviousExerciseResults(
     return new Map<string, PreviousExerciseResult>();
   }
 
+  const sessionByWorkoutId = new Map(
+    state.sessions.map((session) => [session.scheduledWorkoutId, session]),
+  );
+
   const previousWorkouts = state.scheduledWorkouts
     .filter(
       (workout) =>
@@ -2246,7 +2323,13 @@ function buildPreviousExerciseResults(
         workout.id !== currentScheduledWorkoutId &&
         workout.status === "completed",
     )
-    .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
+    .sort((a, b) => {
+      const metadataComparison = compareWorkoutOrderValues(
+        getWorkoutOrderTimestamps(a, sessionByWorkoutId.get(a.id)),
+        getWorkoutOrderTimestamps(b, sessionByWorkoutId.get(b.id)),
+      );
+      return metadataComparison !== 0 ? metadataComparison : b.id.localeCompare(a.id);
+    });
 
   const previousWorkoutIds = new Set(previousWorkouts.map((workout) => workout.id));
   const exerciseCompletionCount = new Map<string, number>();
@@ -2266,7 +2349,13 @@ function buildPreviousExerciseResults(
 
   state.sessions
     .filter((session) => previousWorkoutIds.has(session.scheduledWorkoutId))
-    .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))
+    .sort((a, b) => {
+      const metadataComparison = compareWorkoutOrderValues(
+        { primaryTimestamp: getSessionDisplayCompletedAt(a), secondaryTimestamp: a.startedAt ?? a.updatedAt },
+        { primaryTimestamp: getSessionDisplayCompletedAt(b), secondaryTimestamp: b.startedAt ?? b.updatedAt },
+      );
+      return metadataComparison !== 0 ? metadataComparison : b.id.localeCompare(a.id);
+    })
     .forEach((session) => {
       session.setLogs.forEach((log) => {
         if (result.has(log.exerciseId)) {
@@ -2280,8 +2369,7 @@ function buildPreviousExerciseResults(
         result.set(log.exerciseId, {
           actualReps: log.actualReps,
           actualLoad: log.actualLoad,
-          rpe: log.rpe,
-          completedAt: session.completedAt ?? session.updatedAt,
+          completedAt: getSessionDisplayCompletedAt(session),
           timesCompleted: exerciseCompletionCount.get(log.exerciseId) ?? 0,
         });
       });

@@ -21,6 +21,7 @@ create table if not exists public.profiles (
   default_dashboard_view text,
   email_notifications boolean not null default false,
   theme_mode public.theme_mode not null default 'light',
+  load_increment_kg numeric(4,2) not null default 2.5,
   height_cm numeric(5,2),
   weight_kg numeric(5,2),
   waist_cm numeric(5,2),
@@ -116,6 +117,7 @@ create table if not exists public.workout_template_exercises (
   id uuid primary key default gen_random_uuid(),
   block_id uuid not null references public.workout_template_blocks(id) on delete cascade,
   exercise_id uuid not null references public.exercises(id) on delete restrict,
+  muscle_group text,
   instruction text not null default '',
   sort_order int not null default 0
 );

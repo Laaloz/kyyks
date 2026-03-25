@@ -94,7 +94,6 @@ type SetLogRow = {
   program_workout_id: string | null;
   actual_reps: number | null;
   actual_load: number | string | null;
-  rpe: number | string | null;
   done: boolean;
 };
 
@@ -102,6 +101,7 @@ type TemplateExerciseJoinRow = {
   id: string;
   instruction: string;
   exercise_id: string;
+  muscle_group: string | null;
   sort_order: number;
   block_id: string;
   workout_template_sets: Array<{
@@ -213,6 +213,7 @@ function mapTemplateRow(row: TemplateJoinRow, exerciseAppIdByDbId: Map<string, s
           .map((exercise) => ({
             id: exercise.id,
             exerciseId: exerciseAppIdByDbId.get(exercise.exercise_id) ?? exercise.exercise_id,
+            muscleGroup: (exercise.muscle_group as WorkoutTemplate["blocks"][number]["exercises"][number]["muscleGroup"]) ?? undefined,
             instruction: exercise.instruction,
             sets: (exercise.workout_template_sets ?? [])
               .slice()
@@ -457,8 +458,8 @@ async function buildAutofillSnapshotMaps(
   const admin = adminClient ?? createSupabaseAdminClient();
   if (!admin) {
     return {
-      byExerciseAndSetLabel: new Map<string, { actualReps?: number; actualLoad?: number; rpe?: number }>(),
-      byExercise: new Map<string, { actualReps?: number; actualLoad?: number; rpe?: number }>(),
+      byExerciseAndSetLabel: new Map<string, { actualReps?: number; actualLoad?: number }>(),
+      byExercise: new Map<string, { actualReps?: number; actualLoad?: number }>(),
     };
   }
 
@@ -472,14 +473,14 @@ async function buildAutofillSnapshotMaps(
   const sessionIds = (completedSessions ?? []).map((session) => session.id);
   if (!sessionIds.length) {
     return {
-      byExerciseAndSetLabel: new Map<string, { actualReps?: number; actualLoad?: number; rpe?: number }>(),
-      byExercise: new Map<string, { actualReps?: number; actualLoad?: number; rpe?: number }>(),
+      byExerciseAndSetLabel: new Map<string, { actualReps?: number; actualLoad?: number }>(),
+      byExercise: new Map<string, { actualReps?: number; actualLoad?: number }>(),
     };
   }
 
   const { data: logs } = await admin
     .from("workout_set_logs")
-    .select("session_id, exercise_id, set_label, actual_reps, actual_load, rpe, done")
+    .select("session_id, exercise_id, set_label, actual_reps, actual_load, done")
     .in("session_id", sessionIds);
 
   const sessionOrder = new Map(sessionIds.map((sessionId, index) => [sessionId, index]));
@@ -489,8 +490,8 @@ async function buildAutofillSnapshotMaps(
     return leftIndex - rightIndex;
   });
 
-  const byExerciseAndSetLabel = new Map<string, { actualReps?: number; actualLoad?: number; rpe?: number }>();
-  const byExercise = new Map<string, { actualReps?: number; actualLoad?: number; rpe?: number }>();
+  const byExerciseAndSetLabel = new Map<string, { actualReps?: number; actualLoad?: number }>();
+  const byExercise = new Map<string, { actualReps?: number; actualLoad?: number }>();
 
   orderedLogs.forEach((log) => {
     if (!log.done) {
@@ -500,14 +501,9 @@ async function buildAutofillSnapshotMaps(
     const snapshot = {
       actualReps: log.actual_reps ?? undefined,
       actualLoad: toNumberOrUndefined(log.actual_load),
-      rpe: toNumberOrUndefined(log.rpe),
     };
 
-    if (
-      snapshot.actualReps === undefined &&
-      snapshot.actualLoad === undefined &&
-      snapshot.rpe === undefined
-    ) {
+    if (snapshot.actualReps === undefined && snapshot.actualLoad === undefined) {
       return;
     }
 
@@ -558,7 +554,6 @@ async function buildProgramWorkoutSetLogs(
         program_workout_id: programWorkout.id,
         actual_reps: snapshot?.actualReps ?? resolveDefaultActualReps(set),
         actual_load: snapshot?.actualLoad ?? resolveDefaultActualLoad(set) ?? null,
-        rpe: snapshot?.rpe ?? 8,
         done: false,
       };
     }),
@@ -574,7 +569,7 @@ async function buildTemplateWorkoutSetLogs(templateId: string, athleteId: string
   const { data: template } = await exerciseLookup.admin
     .from("workout_templates")
     .select(
-      "id, coach_id, title, description, goal, split_type, status, created_at, updated_at, created_by, updated_by, workout_template_blocks(id, title, note, sort_order, workout_template_exercises(id, instruction, exercise_id, sort_order, workout_template_sets(id, label, target_reps, target_load, rest_seconds, notes, sort_order)))",
+      "id, coach_id, title, description, goal, split_type, status, created_at, updated_at, created_by, updated_by, workout_template_blocks(id, title, note, sort_order, workout_template_exercises(id, instruction, exercise_id, muscle_group, sort_order, workout_template_sets(id, label, target_reps, target_load, rest_seconds, notes, sort_order)))",
     )
     .eq("id", templateId)
     .maybeSingle<TemplateJoinRow>();
@@ -603,7 +598,7 @@ async function buildTemplateWorkoutSetLogs(templateId: string, athleteId: string
           exercise_name:
             exerciseLookup.rows.find((row) => row.id === exercise.exerciseId || row.external_key === exercise.exerciseId)
               ?.name ?? "Liike",
-          muscle_group: null,
+          muscle_group: exercise.muscleGroup ?? null,
           superset_group: null,
           set_label: set.label,
           target_reps: set.targetReps,
@@ -614,7 +609,6 @@ async function buildTemplateWorkoutSetLogs(templateId: string, athleteId: string
           program_workout_id: null,
           actual_reps: snapshot?.actualReps ?? set.targetReps,
           actual_load: snapshot?.actualLoad ?? resolveDefaultActualLoad({ targetLoad: set.targetLoad }) ?? null,
-          rpe: snapshot?.rpe ?? 8,
           done: false,
         };
       }),
@@ -1188,7 +1182,7 @@ export async function updateWorkoutSetOnServer({
 
   const { data: targetLog } = await admin
     .from("workout_set_logs")
-    .select("id, template_exercise_id, set_id, set_label, superset_group, target_reps, target_reps_min, target_load, actual_reps, actual_load, rpe, done")
+    .select("id, template_exercise_id, set_id, set_label, superset_group, target_reps, target_reps_min, target_load, actual_reps, actual_load, done")
     .eq("id", logId)
     .eq("scheduled_workout_id", scheduledWorkoutId)
     .maybeSingle<{
@@ -1202,7 +1196,6 @@ export async function updateWorkoutSetOnServer({
       target_load: number | string | null;
       actual_reps: number | null;
       actual_load: number | string | null;
-      rpe: number | string | null;
       done: boolean;
     }>();
   timer.checkpoint("target-log-query");
@@ -1214,14 +1207,12 @@ export async function updateWorkoutSetOnServer({
   const nextDone = patch.done ?? targetLog.done;
   const nextActualReps = patch.actualReps ?? targetLog.actual_reps ?? undefined;
   const nextActualLoad = patch.actualLoad ?? toNumberOrUndefined(targetLog.actual_load);
-  const nextRpe = patch.rpe ?? toNumberOrUndefined(targetLog.rpe);
 
   const updatePayload = {
     actual_reps:
       nextDone ? (nextActualReps ?? resolveDefaultActualReps({ targetReps: targetLog.target_reps, targetRepsMin: targetLog.target_reps_min ?? undefined })) : nextActualReps ?? null,
     actual_load:
       nextDone ? (nextActualLoad ?? resolveDefaultActualLoad({ targetLoad: toNumberOrUndefined(targetLog.target_load) }) ?? null) : nextActualLoad ?? null,
-    rpe: nextRpe ?? null,
     done: nextDone,
     updated_at: timestamp,
   };
@@ -1241,7 +1232,6 @@ export async function updateWorkoutSetOnServer({
         ? {
             actual_reps: updatePayload.actual_reps,
             actual_load: updatePayload.actual_load,
-            rpe: updatePayload.rpe,
           }
         : {}),
     };
@@ -1628,8 +1618,9 @@ export async function createTemplateOnServer({
       .insert({
         block_id: block.id,
         exercise_id: exerciseDbId,
-        instruction: exercise.instruction,
-        sort_order: exerciseIndex,
+          instruction: exercise.instruction,
+          muscle_group: exercise.muscleGroup ?? null,
+          sort_order: exerciseIndex,
       })
       .select("id")
       .single<{ id: string }>();
@@ -1679,7 +1670,7 @@ export async function duplicateTemplateOnServer({
   const { data: template } = await exerciseLookup.admin
     .from("workout_templates")
     .select(
-      "id, coach_id, title, description, goal, split_type, status, created_at, updated_at, created_by, updated_by, workout_template_blocks(id, title, note, sort_order, workout_template_exercises(id, instruction, exercise_id, sort_order, workout_template_sets(id, label, target_reps, target_load, rest_seconds, notes, sort_order)))",
+      "id, coach_id, title, description, goal, split_type, status, created_at, updated_at, created_by, updated_by, workout_template_blocks(id, title, note, sort_order, workout_template_exercises(id, instruction, exercise_id, muscle_group, sort_order, workout_template_sets(id, label, target_reps, target_load, rest_seconds, notes, sort_order)))",
     )
     .eq("id", templateId)
     .maybeSingle<TemplateJoinRow>();
@@ -1738,6 +1729,7 @@ export async function duplicateTemplateOnServer({
           block_id: copiedBlock.id,
           exercise_id: exercise.exercise_id,
           instruction: exercise.instruction,
+          muscle_group: exercise.muscle_group ?? null,
           sort_order: exercise.sort_order,
         })
         .select("id")

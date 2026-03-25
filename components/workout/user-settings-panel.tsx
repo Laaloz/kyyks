@@ -1,7 +1,7 @@
 "use client";
 
 import { zodResolver } from "@hookform/resolvers/zod";
-import { Bell, KeyRound, Mail, MoonStar, MoreHorizontal, ShieldAlert, UserRoundCog } from "lucide-react";
+import { Bell, KeyRound, Mail, MoonStar, MoreHorizontal, Ruler, ShieldAlert, UserRoundCog, Waves } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
@@ -10,7 +10,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardDescription, CardTitle } from "@/components/ui/card";
 import { Input, Label, Select } from "@/components/ui/field";
-import { userSettingsSchema } from "@/components/workout/schemas";
+import { bodyMeasurementSchema, userSettingsSchema } from "@/components/workout/schemas";
 import { roleLabel } from "@/components/workout/shared";
 import { withMinimumDelay } from "@/lib/min-delay";
 import { getAssignableCoachUsers, getDashboardViewsForRole, getDefaultDashboardView } from "@/lib/role-access";
@@ -29,6 +29,23 @@ const themeModeLabel: Record<ThemeMode, string> = {
   light: "Vaalea",
   dark: "Tumma",
 };
+
+const loadIncrementLabel: Record<1 | 2.5 | 5, string> = {
+  1: "1 kg",
+  2.5: "2,5 kg",
+  5: "5 kg",
+};
+
+const loadIncrementOptions: Array<{ value: 1 | 2.5 | 5; label: string }> = [
+  { value: 1, label: "1 kg" },
+  { value: 2.5, label: "2,5 kg" },
+  { value: 5, label: "5 kg" },
+];
+
+function parseLoadIncrement(value: string) {
+  const parsed = Number(value);
+  return parsed === 1 || parsed === 2.5 || parsed === 5 ? parsed : 2.5;
+}
 
 const SETTINGS_SAVE_MIN_LOADING_MS = 350;
 
@@ -50,6 +67,7 @@ export function UserSettingsPanel() {
     state,
     startAdminImpersonation,
     updateCurrentUserSettings,
+    updateCurrentUserMeasurements,
     requestCurrentUserPasswordReset,
     adminDeleteUser,
     adminSendPasswordResetEmail,
@@ -57,6 +75,7 @@ export function UserSettingsPanel() {
     adminAssignAthleteCoaches,
   } = useAppState();
   const [message, setMessage] = useState<string>("");
+  const [profileMessage, setProfileMessage] = useState<string>("");
   const [passwordResetMessage, setPasswordResetMessage] = useState<string>("");
   const [adminMessage, setAdminMessage] = useState<string>("");
   const [previewResetUrl, setPreviewResetUrl] = useState<string>("");
@@ -66,8 +85,10 @@ export function UserSettingsPanel() {
   const [isSavingRole, setIsSavingRole] = useState(false);
   const [isSavingCoaches, setIsSavingCoaches] = useState(false);
   const [isSendingOwnPasswordReset, setIsSendingOwnPasswordReset] = useState(false);
+  const [isSavingProfile, setIsSavingProfile] = useState(false);
   const [isSendingManagedPasswordReset, setIsSendingManagedPasswordReset] = useState(false);
   const [isDeletingManagedUser, setIsDeletingManagedUser] = useState(false);
+  const [heightCmDraft, setHeightCmDraft] = useState(currentUser?.heightCm !== undefined ? String(currentUser.heightCm) : "");
 
   const form = useForm<z.input<typeof userSettingsSchema>, unknown, z.output<typeof userSettingsSchema>>({
     resolver: zodResolver(userSettingsSchema),
@@ -79,6 +100,7 @@ export function UserSettingsPanel() {
       ),
       emailNotifications: currentUser?.settings?.emailNotifications ?? false,
       themeMode: currentUser?.settings?.themeMode ?? "light",
+      loadIncrementKg: currentUser?.settings?.loadIncrementKg ?? 2.5,
     },
   });
 
@@ -131,7 +153,9 @@ export function UserSettingsPanel() {
       defaultDashboardView: resolveDefaultView(currentUser.role, currentUser.settings?.defaultDashboardView),
       emailNotifications: currentUser.settings?.emailNotifications ?? false,
       themeMode: currentUser.settings?.themeMode ?? "light",
+      loadIncrementKg: currentUser.settings?.loadIncrementKg ?? 2.5,
     });
+    setHeightCmDraft(currentUser.heightCm !== undefined ? String(currentUser.heightCm) : "");
   }, [currentUser, form]);
 
   useEffect(() => {
@@ -173,32 +197,88 @@ export function UserSettingsPanel() {
     notify({ tone: result.ok ? "success" : "danger", message: result.ok ? "Asetukset tallennettiin." : result.message });
   });
   const isSavingSettings = form.formState.isSubmitting;
+  const profileName = form.watch("fullName");
+  const settingsDefaultView = form.watch("defaultDashboardView");
+  const settingsThemeMode = form.watch("themeMode");
+  const settingsEmailNotifications = form.watch("emailNotifications");
+  const settingsLoadIncrementKg = form.watch("loadIncrementKg");
+  const submitProfile = async () => {
+    const trimmedFullName = profileName.trim();
+    const parsedMeasurements = bodyMeasurementSchema.safeParse({ heightCm: heightCmDraft, weightKg: "", waistCm: "" });
+
+    if (!trimmedFullName || trimmedFullName.length < 2) {
+      setProfileMessage("Anna koko nimi ennen tallennusta.");
+      notify({ tone: "danger", message: "Anna koko nimi ennen tallennusta." });
+      return;
+    }
+
+    if (!parsedMeasurements.success) {
+      const nextMessage = parsedMeasurements.error.issues[0]?.message ?? "Tarkista pituus ja yritä uudelleen.";
+      setProfileMessage(nextMessage);
+      notify({ tone: "danger", message: nextMessage });
+      return;
+    }
+
+    setIsSavingProfile(true);
+    try {
+      const settingsResult = await withMinimumDelay(
+        updateCurrentUserSettings({
+          fullName: trimmedFullName,
+          defaultDashboardView: settingsDefaultView,
+          emailNotifications: settingsEmailNotifications,
+          themeMode: settingsThemeMode,
+          loadIncrementKg: settingsLoadIncrementKg,
+        }),
+      );
+
+      if (!settingsResult.ok) {
+        setProfileMessage(settingsResult.message);
+        notify({ tone: "danger", message: settingsResult.message });
+        return;
+      }
+
+      const measurementResult = await withMinimumDelay(
+        updateCurrentUserMeasurements({ heightCm: parsedMeasurements.data.heightCm }),
+      );
+
+      if (!measurementResult.ok) {
+        setProfileMessage(measurementResult.message);
+        notify({ tone: "danger", message: measurementResult.message });
+        return;
+      }
+
+      setProfileMessage("");
+      notify({ tone: "success", message: "Profiili päivitettiin." });
+    } finally {
+      setIsSavingProfile(false);
+    }
+  };
+  const isProfileDirty =
+    Boolean(currentUser) &&
+    (profileName.trim() !== currentUser.fullName ||
+      (heightCmDraft.trim() ? Number(heightCmDraft.replace(",", ".")) : undefined) !== currentUser.heightCm);
 
   return (
     <div className="grid gap-6 lg:grid-cols-[1.05fr_0.95fr]">
       <Card className="border-[var(--border-strong)]">
-        <p className="text-xs font-semibold tracking-[0.04em] text-[var(--text-subtle)]">Tiliasetukset</p>
-        <CardTitle className="text-2xl">Oma profiili</CardTitle>
+        <p className="text-xs font-semibold tracking-[0.04em] text-[var(--text-subtle)]">Tili</p>
+        <CardTitle className="text-2xl">Profiili</CardTitle>
         <CardDescription className="mt-2">
-          Päivitä nimesi, valitse teema ja aloitussivu sekä säädä ilmoitukset omaan käyttöön sopiviksi.
+          Hallitse pysyviä profiilitietojasi erillään sovelluksen asetuksista.
         </CardDescription>
 
-        <form
-          className="mt-6 space-y-4"
-          noValidate
-          onSubmit={submitSettings}
-        >
+        <div className="mt-6 space-y-4">
           <div>
-            <Label htmlFor="settings-full-name">Koko nimi</Label>
+            <Label htmlFor="account-full-name">Koko nimi</Label>
             <Input
-              id="settings-full-name"
+              id="account-full-name"
               aria-invalid={Boolean(form.formState.errors.fullName)}
-              aria-describedby={form.formState.errors.fullName ? "settings-full-name-error" : undefined}
-              disabled={isSavingSettings}
+              aria-describedby={form.formState.errors.fullName ? "account-full-name-error" : undefined}
+              disabled={isSavingProfile}
               {...form.register("fullName")}
             />
             {form.formState.errors.fullName ? (
-              <p className="mt-2 text-sm text-[var(--danger)]" id="settings-full-name-error">
+              <p className="mt-2 text-sm text-[var(--danger)]" id="account-full-name-error">
                 {form.formState.errors.fullName.message}
               </p>
             ) : null}
@@ -213,77 +293,51 @@ export function UserSettingsPanel() {
           </div>
 
           <div>
-            <Label htmlFor="settings-default-view">Aloitussivu</Label>
-            <Select id="settings-default-view" disabled={isSavingSettings} {...form.register("defaultDashboardView")}>
-              {allowedViewOptions.map((view) => (
-                <option key={view} value={view}>
-                  {dashboardViewLabel[view]}
-                </option>
-              ))}
-            </Select>
-          </div>
-
-          <div>
-            <Label htmlFor="settings-theme-mode">Teema</Label>
-            <Select id="settings-theme-mode" disabled={isSavingSettings} {...form.register("themeMode")}>
-              {Object.entries(themeModeLabel).map(([value, label]) => (
-                <option key={value} value={value}>
-                  {label}
-                </option>
-              ))}
-            </Select>
+            <Label htmlFor="account-height-cm">Pituus (cm)</Label>
+            <Input
+              id="account-height-cm"
+              type="number"
+              inputMode="decimal"
+              min={80}
+              max={250}
+              step="0.5"
+              placeholder="Esim. 178"
+              value={heightCmDraft}
+              disabled={isSavingProfile || currentUser.role !== "athlete"}
+              onChange={(event) => {
+                setHeightCmDraft(event.target.value);
+                setProfileMessage("");
+              }}
+            />
             <p className="mt-2 text-xs text-[var(--text-subtle)]">
-              Tumma tila vaihtaa koko sovelluksen värimaailman rauhallisemmaksi hämärässä käytössä.
+              Pituus on pysyva profiilitieto. Paivita paino ja vyotaro edelleen yleiskuvan mittaseurannasta.
             </p>
           </div>
 
-          <div
-            role="group"
-            aria-labelledby="settings-email-notifications-label"
-            className="space-y-3 rounded-xl border-2 border-[var(--border)] bg-[var(--surface-2)] p-4"
-          >
-            <p
-              id="settings-email-notifications-label"
-              className="text-xs font-semibold tracking-[0.03em] text-[var(--text-subtle)]"
-            >
-              Sähköposti-ilmoitukset
-            </p>
-            <label className="flex items-center gap-3">
-              <input
-                type="checkbox"
-                className="size-4 accent-[var(--accent)]"
-                disabled={isSavingSettings}
-                {...form.register("emailNotifications")}
-              />
-              <span className="text-sm text-[var(--text-muted)]">
-                Lähetä sähköposti uusista treeneistä ja ohjelmapäivityksistä
-              </span>
-            </label>
-          </div>
-
-          {isSavingSettings || message ? (
+          {isSavingProfile || profileMessage ? (
             <p
               aria-live="polite"
-              className={`text-sm ${isSavingSettings ? "text-[var(--text-subtle)]" : "text-[var(--danger)]"}`}
+              className={`text-sm ${isSavingProfile ? "text-[var(--text-subtle)]" : "text-[var(--danger)]"}`}
             >
-              {isSavingSettings ? "Tallennetaan asetuksia..." : message}
+              {isSavingProfile ? "Tallennetaan profiilia..." : profileMessage}
             </p>
           ) : null}
 
           <Button
             type="button"
             className="w-full sm:w-auto"
-            disabled={isSavingSettings}
-            loading={isSavingSettings}
-            loadingText="Tallennetaan asetuksia..."
-            onClick={() => void submitSettings()}
+            disabled={!isProfileDirty || isSavingProfile}
+            loading={isSavingProfile}
+            loadingText="Tallennetaan profiilia..."
+            onClick={() => void submitProfile()}
           >
-            Tallenna muutokset
+            Tallenna profiili
           </Button>
-        </form>
+        </div>
 
         <div className="mt-6 rounded-xl border-2 border-[var(--border)] bg-[var(--surface-2)] p-4">
-          <p className="text-xs font-semibold tracking-[0.03em] text-[var(--text-subtle)]">Salasana</p>
+          <p className="text-xs font-semibold tracking-[0.03em] text-[var(--text-subtle)]">Turvallisuus</p>
+          <p className="mt-2 text-lg font-semibold text-[var(--text)]">Salasanan nollaus</p>
           <p className="mt-2 text-sm text-[var(--text-muted)]">
             Lähetä turvallinen nollauslinkki omaan sähköpostiisi. Linkki on kertakäyttöinen ja vanhenee automaattisesti.
           </p>
@@ -321,11 +375,134 @@ export function UserSettingsPanel() {
 
       <div className="grid gap-6">
         <Card>
+          <p className="text-xs font-semibold tracking-[0.04em] text-[var(--text-subtle)]">Asetukset</p>
+          <CardTitle className="text-2xl">Sovelluksen asetukset</CardTitle>
+          <CardDescription className="mt-2">
+            Muokkaa sita, miten sovellus kayttaytyy sinulle paivittaisessa kaytossa.
+          </CardDescription>
+          <form className="mt-6 space-y-4" noValidate onSubmit={submitSettings}>
+            <div>
+              <Label htmlFor="settings-default-view">Aloitussivu</Label>
+              <Select id="settings-default-view" disabled={isSavingSettings} {...form.register("defaultDashboardView")}>
+                {allowedViewOptions.map((view) => (
+                  <option key={view} value={view}>
+                    {dashboardViewLabel[view]}
+                  </option>
+                ))}
+              </Select>
+            </div>
+
+            <div>
+              <Label htmlFor="settings-theme-mode">Teema</Label>
+              <Select id="settings-theme-mode" disabled={isSavingSettings} {...form.register("themeMode")}>
+                {Object.entries(themeModeLabel).map(([value, label]) => (
+                  <option key={value} value={value}>
+                    {label}
+                  </option>
+                ))}
+              </Select>
+              <p className="mt-2 text-xs text-[var(--text-subtle)]">
+                Tumma tila vaihtaa koko sovelluksen varimaailman rauhallisemmaksi hamarassa kaytossa.
+              </p>
+            </div>
+
+            <div>
+              <Label htmlFor="settings-load-increment">Kuorman säätöaskel</Label>
+              <Select
+                id="settings-load-increment"
+                disabled={isSavingSettings}
+                value={String(settingsLoadIncrementKg)}
+                onChange={(event) => form.setValue("loadIncrementKg", parseLoadIncrement(event.target.value), { shouldDirty: true })}
+              >
+                {loadIncrementOptions.map((option) => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
+              </Select>
+              <p className="mt-2 text-xs text-[var(--text-subtle)]">
+                Tätä askelta käytetään treenitaulukon kuorman + ja - painikkeissa.
+              </p>
+            </div>
+
+            <div
+              role="group"
+              aria-labelledby="settings-email-notifications-label"
+              className="space-y-3 rounded-xl border-2 border-[var(--border)] bg-[var(--surface-2)] p-4"
+            >
+              <p
+                id="settings-email-notifications-label"
+                className="text-xs font-semibold tracking-[0.03em] text-[var(--text-subtle)]"
+              >
+                Sähköposti-ilmoitukset
+              </p>
+              <label className="flex items-center gap-3">
+                <input
+                  type="checkbox"
+                  className="size-4 accent-[var(--accent)]"
+                  disabled={isSavingSettings}
+                  {...form.register("emailNotifications")}
+                />
+                <span className="text-sm text-[var(--text-muted)]">
+                  Lähetä sähköposti uusista treeneistä ja ohjelmapäivityksistä
+                </span>
+              </label>
+            </div>
+
+            {isSavingSettings || message ? (
+              <p
+                aria-live="polite"
+                className={`text-sm ${isSavingSettings ? "text-[var(--text-subtle)]" : "text-[var(--danger)]"}`}
+              >
+                {isSavingSettings ? "Tallennetaan asetuksia..." : message}
+              </p>
+            ) : null}
+
+            <Button
+              type="button"
+              className="w-full sm:w-auto"
+              disabled={isSavingSettings}
+              loading={isSavingSettings}
+              loadingText="Tallennetaan asetuksia..."
+              onClick={() => void submitSettings()}
+            >
+              Tallenna asetukset
+            </Button>
+          </form>
+        </Card>
+
+        {currentUser.role === "athlete" ? (
+          <Card>
+            <p className="text-xs font-semibold tracking-[0.04em] text-[var(--text-subtle)]">Mitat</p>
+            <CardTitle className="text-2xl">Kehon seuranta</CardTitle>
+            <CardDescription className="mt-2">
+              Paino ja vyötärö pysyvät erillään profiilitiedoista, jotta muuttuvia mittauksia on helpompi seurata.
+            </CardDescription>
+            <div className="mt-6 grid gap-3">
+              <div className="flex items-center justify-between rounded-xl border-2 border-[var(--border)] bg-[var(--surface-2)] px-4 py-3">
+                <span className="inline-flex items-center gap-2 text-sm text-[var(--text-muted)]">
+                  <Waves className="size-4 text-[var(--accent-secondary)]" />
+                  Paino
+                </span>
+                <Badge>{currentUser.weightKg !== undefined ? `${currentUser.weightKg} kg` : "Ei asetettu"}</Badge>
+              </div>
+              <div className="flex items-center justify-between rounded-xl border-2 border-[var(--border)] bg-[var(--surface-2)] px-4 py-3">
+                <span className="inline-flex items-center gap-2 text-sm text-[var(--text-muted)]">
+                  <Ruler className="size-4 text-[var(--accent-tertiary)]" />
+                  Vyötärö
+                </span>
+                <Badge>{currentUser.waistCm !== undefined ? `${currentUser.waistCm} cm` : "Ei asetettu"}</Badge>
+              </div>
+            </div>
+          </Card>
+        ) : null}
+
+        <Card>
           <p className="text-xs font-semibold tracking-[0.04em] text-[var(--text-subtle)]">Yhteenveto</p>
-          <CardTitle className="text-2xl">Profiilin yhteenveto</CardTitle>
-        <CardDescription className="mt-2">
-          Näet tässä roolin, teeman, ilmoitustilan ja valitun aloitussivun yhdellä silmäyksellä.
-        </CardDescription>
+          <CardTitle className="text-2xl">Tilin yhteenveto</CardTitle>
+          <CardDescription className="mt-2">
+            Näet tässä roolin, teeman, ilmoitustilan ja valitun aloitussivun yhdellä silmäyksellä.
+          </CardDescription>
           <div className="mt-6 grid gap-3">
             <div className="flex items-center justify-between rounded-xl border-2 border-[var(--border)] bg-[var(--surface-2)] px-4 py-3">
               <span className="text-sm text-[var(--text-muted)]">Rooli</span>
@@ -337,6 +514,13 @@ export function UserSettingsPanel() {
                 Teema
               </span>
               <Badge>{themeModeLabel[currentUser.settings?.themeMode ?? "light"]}</Badge>
+            </div>
+            <div className="flex items-center justify-between rounded-xl border-2 border-[var(--border)] bg-[var(--surface-2)] px-4 py-3">
+              <span className="inline-flex items-center gap-2 text-sm text-[var(--text-muted)]">
+                <Waves className="size-4 text-[var(--accent)]" />
+                Kuorman säätöaskel
+              </span>
+              <Badge>{loadIncrementLabel[currentUser.settings?.loadIncrementKg ?? 2.5]}</Badge>
             </div>
             <div className="flex items-center justify-between rounded-xl border-2 border-[var(--border)] bg-[var(--surface-2)] px-4 py-3">
               <span className="inline-flex items-center gap-2 text-sm text-[var(--text-muted)]">

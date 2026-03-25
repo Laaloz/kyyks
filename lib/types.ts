@@ -10,11 +10,13 @@ export type RepTargetMode = "exact" | "range";
 export type DashboardHomeView = "overview" | "templates" | "invites" | "athlete-log" | "conversation";
 export type MuscleGroupKey = "shoulders" | "arms" | "chest" | "abs" | "back" | "legs" | "other";
 export type ThemeMode = "light" | "dark";
+export type LoadIncrement = 1 | 2.5 | 5;
 
 export interface UserSettings {
   defaultDashboardView: DashboardHomeView;
   emailNotifications: boolean;
   themeMode: ThemeMode;
+  loadIncrementKg: LoadIncrement;
 }
 
 export interface UserProfile {
@@ -72,6 +74,7 @@ export interface TemplateSetPrescription {
 export interface WorkoutTemplateExercise {
   id: string;
   exerciseId: string;
+  muscleGroup?: MuscleGroupKey;
   instruction: string;
   sets: TemplateSetPrescription[];
 }
@@ -174,7 +177,6 @@ export interface WorkoutSetLog {
   programWorkoutId?: string;
   actualReps?: number;
   actualLoad?: number;
-  rpe?: number;
   done: boolean;
 }
 
@@ -261,6 +263,7 @@ export interface AppState {
 
 export interface TemplateExerciseInput {
   exerciseId: string;
+  muscleGroup?: MuscleGroupKey;
   instruction: string;
   setCount: number;
   targetReps: number;
@@ -331,6 +334,5 @@ export interface InviteInput {
 export interface WorkoutUpdateInput {
   actualReps?: number;
   actualLoad?: number;
-  rpe?: number;
   done?: boolean;
 }

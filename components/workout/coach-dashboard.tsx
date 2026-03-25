@@ -31,6 +31,7 @@ import {
 import { estimateStrengthCalories, getLatestMeasurement, getMeasurementsForUser, getWeightAtMoment } from "@/lib/body-metrics";
 import { calculateSessionDurationSeconds } from "@/lib/domain";
 import { withMinimumDelay } from "@/lib/min-delay";
+import { buildScheduledWorkoutExerciseOrder } from "@/lib/workout-exercise-order";
 import { buildWorkoutConversationContextOptions } from "@/lib/workout-conversation-context";
 import { buildWorkoutHistoryTitleMap } from "@/lib/workout-history-title";
 import { isProgramActive } from "@/lib/program-status";
@@ -67,6 +68,17 @@ type CoachExerciseSetGroup = {
   supersetGroup?: string;
   logs: WorkoutSession["setLogs"];
 };
+
+function compareCoachSetLabels(left: string, right: string) {
+  return left.localeCompare(right, undefined, { numeric: true, sensitivity: "base" });
+}
+
+function getCoachWorkoutCompletedAt(
+  workout: AppState["scheduledWorkouts"][number],
+  session?: WorkoutSession,
+) {
+  return workout.completedAt ?? session?.completedAt ?? session?.startedAt ?? workout.scheduledDate;
+}
 
 const coachHistoryMuscleGroups: Array<{ key: CoachHistoryMuscleGroupKey; label: string }> = [
   { key: "shoulders", label: "Olkapää" },
@@ -947,14 +959,12 @@ function CoachAthleteInsights({
       const completedSets = insight.completedSetCount;
       const totalSets = insight.setCount;
       const volume = insight.liftedKg;
-      const completedAt =
-        workout.completedAt ??
-        session?.completedAt ??
-        workout.updatedAt ??
-        workout.scheduledDate;
+        const completedAt = getCoachWorkoutCompletedAt(workout, session);
       const note = session ? noteBySessionId.get(session.id) : undefined;
-      const setGroups = buildCoachExerciseSetGroups(session);
-      const rpeStats = buildCoachRpeStats(session);
+      const setGroups = buildCoachExerciseSetGroups(
+        session,
+        buildScheduledWorkoutExerciseOrder(state, workout),
+      );
       const pendingSetCount = Math.max(0, totalSets - completedSets);
       const conversationEntries = conversationEntriesByWorkoutId.get(workout.id) ?? [];
 
@@ -972,12 +982,9 @@ function CoachAthleteInsights({
         insight,
         setGroups,
         pendingSetCount,
-        averageRpe: rpeStats.average,
-        maxRpe: rpeStats.max,
-        rpeSetCount: rpeStats.count,
       };
     });
-  }, [athleteWorkoutHistory, conversationEntriesByWorkoutId, noteBySessionId, sessionByWorkoutId, workoutHistoryTitles, workoutInsights]);
+  }, [athleteWorkoutHistory, conversationEntriesByWorkoutId, noteBySessionId, sessionByWorkoutId, state, workoutHistoryTitles, workoutInsights]);
 
   const groupedWorkoutRows = useMemo(() => {
     const grouped = new Map<
@@ -1051,7 +1058,7 @@ function CoachAthleteInsights({
           return null;
         }
 
-        const completedAt = workout.completedAt ?? session.completedAt ?? workout.updatedAt;
+        const completedAt = getCoachWorkoutCompletedAt(workout, session);
         return {
           id: workout.id,
           completedAt,
@@ -1358,14 +1365,6 @@ function CoachAthleteInsights({
                             tone={selectedRow.pendingSetCount > 0 ? "warning" : "success"}
                           />
                           <CoachOverviewStat
-                            label="RPE"
-                            value={
-                              selectedRow.rpeSetCount > 0 && selectedRow.averageRpe !== undefined
-                                ? `${selectedRow.averageRpe.toFixed(1)} avg`
-                                : "Ei kirjattu"
-                            }
-                          />
-                          <CoachOverviewStat
                             label="Kesto"
                             value={formatCoachWorkoutDuration(selectedRow.insight.durationSeconds)}
                           />
@@ -1402,22 +1401,6 @@ function CoachAthleteInsights({
                                   value={`${Math.round(selectedRow.insight.liftedKg)} kg`}
                                 />
                                 <CoachHistoryMetric label="Suoritus" value={`${selectedRow.insight.completionPercent}%`} />
-                                <CoachHistoryMetric
-                                  label="RPE keskiarvo"
-                                  value={
-                                    selectedRow.rpeSetCount > 0 && selectedRow.averageRpe !== undefined
-                                      ? selectedRow.averageRpe.toFixed(1)
-                                      : "Ei kirjattu"
-                                  }
-                                />
-                                <CoachHistoryMetric
-                                  label="Max RPE"
-                                  value={
-                                    selectedRow.rpeSetCount > 0 && selectedRow.maxRpe !== undefined
-                                      ? selectedRow.maxRpe.toFixed(1)
-                                      : "Ei kirjattu"
-                                  }
-                                />
                                 <CoachHistoryMetric label="Harjoitteet" value={`${selectedRow.insight.exerciseCount}`} />
                               </div>
                               <div className="mt-3 rounded-xl border border-[var(--border)] bg-[var(--surface-2)] px-3 py-2">
@@ -1444,7 +1427,7 @@ function CoachAthleteInsights({
                                   setExpandedWorkoutDetailsId((current) => (current === selectedRow.id ? null : selectedRow.id))
                                 }
                               >
-                                <span>Sarjat, toistot ja RPE</span>
+                                <span>Sarjat ja toistot</span>
                                 {isDetailsOpen ? (
                                   <ChevronUp className="size-4" aria-hidden="true" />
                                 ) : (
@@ -1493,7 +1476,6 @@ function CoachAthleteInsights({
                                                 </div>
                                                 <p className="mt-1 text-xs leading-5 text-[var(--text-subtle)]">
                                                   {formatCoachSetActual(log)}
-                                                  {log.rpe !== undefined ? ` · RPE ${log.rpe}` : " · RPE ei kirjattu"}
                                                 </p>
                                               </div>
                                             ))}
@@ -1682,19 +1664,32 @@ function formatCoachWorkoutDuration(seconds: number) {
   return `${String(hours).padStart(2, "0")}:${String(minutes).padStart(2, "0")}:${String(remainder).padStart(2, "0")}`;
 }
 
-function buildCoachExerciseSetGroups(session?: WorkoutSession): CoachExerciseSetGroup[] {
+function buildCoachExerciseSetGroups(
+  session?: WorkoutSession,
+  exerciseOrder?: Map<string, number>,
+): CoachExerciseSetGroup[] {
   if (!session) {
     return [];
   }
 
   const grouped = new Map<string, CoachExerciseSetGroup>();
+  const sortLogs = (logs: WorkoutSession["setLogs"]) =>
+    [...logs].sort((left, right) => {
+      const byLabel = compareCoachSetLabels(left.setLabel, right.setLabel);
+      if (byLabel !== 0) {
+        return byLabel;
+      }
+
+      return left.id.localeCompare(right.id);
+    });
+
   session.setLogs.forEach((log) => {
     const key = log.templateExerciseId;
     const current = grouped.get(key);
     if (current) {
       grouped.set(key, {
         ...current,
-        logs: [...current.logs, log],
+        logs: sortLogs([...current.logs, log]),
       });
       return;
     }
@@ -1707,31 +1702,15 @@ function buildCoachExerciseSetGroups(session?: WorkoutSession): CoachExerciseSet
     });
   });
 
-  return Array.from(grouped.values());
-}
+  return Array.from(grouped.values()).sort((left, right) => {
+    const leftOrder = exerciseOrder?.get(left.key) ?? Number.MAX_SAFE_INTEGER;
+    const rightOrder = exerciseOrder?.get(right.key) ?? Number.MAX_SAFE_INTEGER;
+    if (leftOrder !== rightOrder) {
+      return leftOrder - rightOrder;
+    }
 
-function buildCoachRpeStats(session?: WorkoutSession): {
-  count: number;
-  average?: number;
-  max?: number;
-} {
-  if (!session) {
-    return { count: 0 };
-  }
-
-  const values = session.setLogs
-    .filter((log) => log.done && log.rpe !== undefined)
-    .map((log) => log.rpe as number);
-  if (values.length === 0) {
-    return { count: 0 };
-  }
-
-  const average = values.reduce((sum, value) => sum + value, 0) / values.length;
-  return {
-    count: values.length,
-    average: Math.round(average * 10) / 10,
-    max: Math.max(...values),
-  };
+    return left.exerciseName.localeCompare(right.exerciseName, undefined, { sensitivity: "base" });
+  });
 }
 
 function formatCoachSetTarget(log: WorkoutSession["setLogs"][number]) {

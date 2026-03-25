@@ -53,6 +53,7 @@ import { makeId } from "@/lib/utils";
 import { normalizeWorkoutHistoryTitle } from "@/lib/workout-history-title";
 import {
   createContext,
+  useCallback,
   useContext,
   useEffect,
   useMemo,
@@ -159,11 +160,71 @@ function clearOptimisticWorkoutArtifacts(state: AppState, scheduledWorkoutId: st
   };
 }
 
+function hasOpenActiveWorkout(state: AppState, athleteId: string | null | undefined) {
+  if (!athleteId) {
+    return false;
+  }
+
+  return state.scheduledWorkouts.some(
+    (workout) => workout.athleteId === athleteId && workout.status === "in_progress",
+  );
+}
+
+export function applyPartialUserMeasurementUpdate(
+  previous: AppState,
+  userId: string,
+  input: UserMeasurementInput,
+  timestamp: string,
+) {
+  const currentUser = previous.users.find((user) => user.id === userId);
+  if (!currentUser) {
+    return previous;
+  }
+
+  const hasHeightInput = Object.prototype.hasOwnProperty.call(input, "heightCm");
+  const hasWeightInput = Object.prototype.hasOwnProperty.call(input, "weightKg");
+  const hasWaistInput = Object.prototype.hasOwnProperty.call(input, "waistCm");
+  const heightCm = hasHeightInput ? input.heightCm : currentUser.heightCm;
+  const weightKg = hasWeightInput ? input.weightKg : currentUser.weightKg;
+  const waistCm = hasWaistInput ? input.waistCm : currentUser.waistCm;
+  const hasRecordedMetric = hasHeightInput || hasWeightInput || hasWaistInput;
+
+  return {
+    ...previous,
+    bodyMeasurements: hasRecordedMetric
+      ? [
+          {
+            id: makeId("measurement"),
+            userId,
+            heightCm: hasHeightInput ? heightCm : undefined,
+            weightKg: hasWeightInput ? weightKg : undefined,
+            waistCm: hasWaistInput ? waistCm : undefined,
+            measuredAt: timestamp,
+            createdAt: timestamp,
+          },
+          ...previous.bodyMeasurements,
+        ]
+      : previous.bodyMeasurements,
+    users: previous.users.map((user) =>
+      user.id === userId
+        ? {
+            ...user,
+            heightCm,
+            weightKg,
+            waistCm,
+            updatedAt: timestamp,
+          }
+        : user,
+    ),
+  };
+}
+
 function defaultUserSettings(role: Role) {
   return {
     defaultDashboardView: getDefaultDashboardView(role),
     emailNotifications: false,
     themeMode: "light" as const,
+    loadIncrementKg: 2.5 as const,
   };
 }
 
@@ -173,6 +234,10 @@ function normalizeUserSettings(role: Role, rawSettings: UserProfile["settings"] 
     emailNotifications: rawSettings?.emailNotifications ?? defaults.emailNotifications,
     defaultDashboardView: normalizeDefaultDashboardView(role, rawSettings?.defaultDashboardView),
     themeMode: rawSettings?.themeMode ?? defaults.themeMode,
+    loadIncrementKg:
+      rawSettings?.loadIncrementKg === 1 || rawSettings?.loadIncrementKg === 2.5 || rawSettings?.loadIncrementKg === 5
+        ? rawSettings.loadIncrementKg
+        : defaults.loadIncrementKg,
   };
 }
 
@@ -510,6 +575,7 @@ type UserSettingsInput = {
   defaultDashboardView: DashboardHomeView;
   emailNotifications: boolean;
   themeMode: "light" | "dark";
+  loadIncrementKg: 1 | 2.5 | 5;
 };
 
 type UserMeasurementInput = {
@@ -723,6 +789,38 @@ function appendConversationEntry(state: AppState, entry: ConversationEntry) {
   };
 }
 
+function removeConversationEntry(state: AppState, entryId: string) {
+  return {
+    ...state,
+    conversationEntries: state.conversationEntries.filter((entry) => entry.id !== entryId),
+  };
+}
+
+async function persistConversationEntry(
+  supabase: NonNullable<ReturnType<typeof createSupabaseBrowserClient>>,
+  entry: ConversationEntry,
+) {
+  const payload = {
+    id: entry.id,
+    athlete_id: entry.athleteId,
+    coach_id: entry.coachId,
+    author_user_id: entry.authorUserId,
+    author_role: entry.authorRole,
+    type: entry.type,
+    body: entry.body,
+    context_type: entry.contextType,
+    context_id: entry.contextId ?? null,
+    context_label: entry.contextLabel ?? null,
+    read_by_user_ids: entry.readByUserIds,
+    created_at: entry.createdAt,
+  };
+
+  const { error } = await supabase.from("conversation_entries").insert(payload);
+  if (error) {
+    throw error;
+  }
+}
+
 type SupabaseProfileRecord = {
   id: string;
   role: Role;
@@ -732,6 +830,7 @@ type SupabaseProfileRecord = {
   default_dashboard_view: DashboardHomeView | null;
   email_notifications: boolean;
   theme_mode: "light" | "dark";
+  load_increment_kg: 1 | 2.5 | 5 | null;
   height_cm: number | null;
   weight_kg: number | null;
   waist_cm: number | null;
@@ -788,6 +887,7 @@ function mapSupabaseProfileToUser(profile: SupabaseProfileRecord): UserProfile {
       defaultDashboardView: normalizeDefaultDashboardView(profile.role, profile.default_dashboard_view ?? undefined),
       emailNotifications: profile.email_notifications,
       themeMode: profile.theme_mode,
+      loadIncrementKg: profile.load_increment_kg ?? 2.5,
     },
     createdAt: profile.created_at,
     updatedAt: profile.updated_at,
@@ -946,6 +1046,7 @@ type SupabaseVisibleAppStateSnapshot = Pick<
   | "scheduledWorkouts"
   | "sessions"
   | "notes"
+  | "conversationEntries"
 >;
 
 export function reconcileSupabaseInviteDirectory(
@@ -1069,6 +1170,7 @@ export function reconcileSupabaseVisibleState(
         : session;
     }),
     notes: snapshot.notes,
+    conversationEntries: snapshot.conversationEntries,
   });
 }
 
@@ -1230,7 +1332,7 @@ async function fetchSupabaseProfile(supabase: NonNullable<ReturnType<typeof crea
   const { data, error } = await supabase
     .from("profiles")
     .select(
-      "id, role, status, full_name, email, default_dashboard_view, email_notifications, theme_mode, height_cm, weight_kg, waist_cm, created_at, updated_at",
+      "id, role, status, full_name, email, default_dashboard_view, email_notifications, theme_mode, load_increment_kg, height_cm, weight_kg, waist_cm, created_at, updated_at",
     )
     .eq("id", userId)
     .maybeSingle();
@@ -1445,6 +1547,13 @@ export function AppStateProvider({ children }: PropsWithChildren) {
   const workoutSetRequestStateRef = useRef<Map<string, WorkoutSetRequestState>>(new Map());
   const isHydrated =
     isStorageHydrated && (supabase ? (isSupabaseAuthResolved && didAttemptBootstrapRevalidation) || didBootstrapTimeout : true);
+  const notify = useCallback((input: { tone: "success" | "danger" | "info"; message: string }) => {
+    setToast({
+      id: Date.now(),
+      tone: input.tone,
+      message: input.message,
+    });
+  }, []);
 
   useEffect(() => {
     const rawState = window.localStorage.getItem(STATE_KEY);
@@ -1734,6 +1843,10 @@ export function AppStateProvider({ children }: PropsWithChildren) {
     () => resolveSelectedUserFromState(state, impersonatedUserId ?? authenticatedUserId),
     [authenticatedUserId, impersonatedUserId, state],
   );
+  const hasActiveWorkoutOpen = useMemo(
+    () => hasOpenActiveWorkout(state, currentUser?.id),
+    [currentUser?.id, state],
+  );
   const isImpersonating = Boolean(impersonatedUserId);
   const hasStoredSession = Boolean(authenticatedUserId);
 
@@ -1862,7 +1975,7 @@ function findResolvedUserIdInSnapshot(
     }
 
     const refreshIfVisible = () => {
-      if (document.visibilityState !== "visible") {
+      if (document.visibilityState !== "visible" || hasActiveWorkoutOpen) {
         return;
       }
 
@@ -1870,7 +1983,7 @@ function findResolvedUserIdInSnapshot(
     };
 
     const handleVisibilityChange = () => {
-      if (document.visibilityState === "visible") {
+      if (document.visibilityState === "visible" && !hasActiveWorkoutOpen) {
         void refreshSupabaseVisibleState();
       }
     };
@@ -1882,7 +1995,15 @@ function findResolvedUserIdInSnapshot(
       window.removeEventListener("focus", refreshIfVisible);
       document.removeEventListener("visibilitychange", handleVisibilityChange);
     };
-  }, [authenticatedUserId, isHydrated, supabase]);
+  }, [authenticatedUserId, hasActiveWorkoutOpen, isHydrated, supabase]);
+
+  useEffect(() => {
+    if (!isHydrated || !supabase || !authenticatedUserId || hasActiveWorkoutOpen) {
+      return;
+    }
+
+    void refreshSupabaseVisibleState();
+  }, [authenticatedUserId, hasActiveWorkoutOpen, isHydrated, supabase]);
 
   useEffect(() => {
     if (!isHydrated || !supabase || !authenticatedUser || !canActAsCoach(authenticatedUser.role)) {
@@ -2018,13 +2139,7 @@ function findResolvedUserIdInSnapshot(
       currentRole: currentUser?.role ?? null,
       isImpersonating,
       isHydrated,
-      notify(input) {
-        setToast({
-          id: Date.now(),
-          tone: input.tone,
-          message: input.message,
-        });
-      },
+      notify,
       async login(email, password, options) {
         const localUser = state.users.find((candidate) => candidate.email.toLowerCase() === email.toLowerCase());
 
@@ -2119,6 +2234,7 @@ function findResolvedUserIdInSnapshot(
           defaultDashboardView: input.defaultDashboardView,
           emailNotifications: input.emailNotifications,
           themeMode: input.themeMode,
+          loadIncrementKg: input.loadIncrementKg,
         };
 
         const hasChanges =
@@ -2163,13 +2279,14 @@ function findResolvedUserIdInSnapshot(
                   }
                 : {}),
             },
-            body: JSON.stringify({
-              fullName,
-              defaultDashboardView: input.defaultDashboardView,
-              emailNotifications: input.emailNotifications,
-              themeMode: input.themeMode,
-            }),
-          });
+              body: JSON.stringify({
+                fullName,
+                defaultDashboardView: input.defaultDashboardView,
+                emailNotifications: input.emailNotifications,
+                themeMode: input.themeMode,
+                loadIncrementKg: input.loadIncrementKg,
+              }),
+            });
 
           if (!response.ok) {
             const payload = (await response.json().catch(() => null)) as { message?: string } | null;
@@ -2192,10 +2309,13 @@ function findResolvedUserIdInSnapshot(
         }
 
         const timestamp = new Date().toISOString();
-        const heightCm = typeof input.heightCm === "number" ? input.heightCm : undefined;
-        const weightKg = typeof input.weightKg === "number" ? input.weightKg : undefined;
-        const waistCm = typeof input.waistCm === "number" ? input.waistCm : undefined;
-        const hasRecordedMetric = heightCm !== undefined || weightKg !== undefined || waistCm !== undefined;
+        const hasHeightInput = Object.prototype.hasOwnProperty.call(input, "heightCm");
+        const hasWeightInput = Object.prototype.hasOwnProperty.call(input, "weightKg");
+        const hasWaistInput = Object.prototype.hasOwnProperty.call(input, "waistCm");
+        const heightCm = hasHeightInput ? input.heightCm : currentUser.heightCm;
+        const weightKg = hasWeightInput ? input.weightKg : currentUser.weightKg;
+        const waistCm = hasWaistInput ? input.waistCm : currentUser.waistCm;
+        const hasRecordedMetric = hasHeightInput || hasWeightInput || hasWaistInput;
         const hasMeasurementChange =
           currentUser.heightCm !== heightCm ||
           currentUser.weightKg !== weightKg ||
@@ -2225,9 +2345,9 @@ function findResolvedUserIdInSnapshot(
               .from("body_measurements")
               .insert({
                 user_id: currentUser.id,
-                height_cm: heightCm ?? null,
-                weight_kg: weightKg ?? null,
-                waist_cm: waistCm ?? null,
+                height_cm: hasHeightInput ? (heightCm ?? null) : null,
+                weight_kg: hasWeightInput ? (weightKg ?? null) : null,
+                waist_cm: hasWaistInput ? (waistCm ?? null) : null,
                 measured_at: timestamp,
                 created_at: timestamp,
               });
@@ -2238,34 +2358,7 @@ function findResolvedUserIdInSnapshot(
           }
         }
 
-        setState((previous) => ({
-          ...previous,
-          bodyMeasurements: hasRecordedMetric
-            ? [
-                {
-                  id: makeId("measurement"),
-                  userId: currentUser.id,
-                  heightCm,
-                  weightKg,
-                  waistCm,
-                  measuredAt: timestamp,
-                  createdAt: timestamp,
-                },
-                ...previous.bodyMeasurements,
-              ]
-            : previous.bodyMeasurements,
-          users: previous.users.map((user) =>
-            user.id === currentUser.id
-              ? {
-                  ...user,
-                  heightCm,
-                  weightKg,
-                  waistCm,
-                  updatedAt: timestamp,
-                }
-              : user,
-          ),
-        }));
+        setState((previous) => applyPartialUserMeasurementUpdate(previous, currentUser.id, input, timestamp));
 
         return { ok: true };
       },
@@ -3650,22 +3743,30 @@ function findResolvedUserIdInSnapshot(
             return { ok: false, message: "Sinulla ei ole oikeutta kommentoida tätä treeniä." };
           }
 
-          setState((previous) =>
-            appendConversationEntry(
-              previous,
-              buildConversationEntry({
-                athleteId: workout.athleteId,
-                coachId: workout.coachId,
-                authorUserId: currentUser.id,
-                authorRole: currentUser.role,
-                type: "comment",
-                body: trimmedBody,
-                contextType: "workout",
-                contextId: workout.id,
-                contextLabel: options.contextLabel ?? displayWorkoutTitle(workout.title),
-              }),
-            ),
-          );
+          const entry = buildConversationEntry({
+            athleteId: workout.athleteId,
+            coachId: workout.coachId,
+            authorUserId: currentUser.id,
+            authorRole: currentUser.role,
+            type: "comment",
+            body: trimmedBody,
+            contextType: "workout",
+            contextId: workout.id,
+            contextLabel: options.contextLabel ?? displayWorkoutTitle(workout.title),
+          });
+
+          setState((previous) => appendConversationEntry(previous, entry));
+
+          if (supabase) {
+            void persistConversationEntry(supabase, entry)
+              .then(() => refreshSupabaseVisibleState())
+              .catch(() => {
+                setState((previous) => removeConversationEntry(previous, entry.id));
+                notify({ tone: "danger", message: "Viestin tallennus epaonnistui. Yrita uudelleen." });
+                return refreshSupabaseVisibleState();
+              });
+          }
+
           return { ok: true };
         }
 
@@ -3685,22 +3786,30 @@ function findResolvedUserIdInSnapshot(
             return { ok: false, message: "Sinulla ei ole oikeutta kommentoida tätä ohjelmaa." };
           }
 
-          setState((previous) =>
-            appendConversationEntry(
-              previous,
-              buildConversationEntry({
-                athleteId: plan.athleteId,
-                coachId: plan.coachId,
-                authorUserId: currentUser.id,
-                authorRole: currentUser.role,
-                type: "comment",
-                body: trimmedBody,
-                contextType: "program",
-                contextId: plan.id,
-                contextLabel: options.contextLabel ?? plan.title,
-              }),
-            ),
-          );
+          const entry = buildConversationEntry({
+            athleteId: plan.athleteId,
+            coachId: plan.coachId,
+            authorUserId: currentUser.id,
+            authorRole: currentUser.role,
+            type: "comment",
+            body: trimmedBody,
+            contextType: "program",
+            contextId: plan.id,
+            contextLabel: options.contextLabel ?? plan.title,
+          });
+
+          setState((previous) => appendConversationEntry(previous, entry));
+
+          if (supabase) {
+            void persistConversationEntry(supabase, entry)
+              .then(() => refreshSupabaseVisibleState())
+              .catch(() => {
+                setState((previous) => removeConversationEntry(previous, entry.id));
+                notify({ tone: "danger", message: "Viestin tallennus epaonnistui. Yrita uudelleen." });
+                return refreshSupabaseVisibleState();
+              });
+          }
+
           return { ok: true };
         }
 
@@ -3710,20 +3819,28 @@ function findResolvedUserIdInSnapshot(
             return { ok: false, message: "Keskustelu tarvitsee ensin aktiivisen valmentajasuhteen." };
           }
 
-          setState((previous) =>
-            appendConversationEntry(
-              previous,
-              buildConversationEntry({
-                athleteId: currentUser.id,
-                coachId: latestCoachId,
-                authorUserId: currentUser.id,
-                authorRole: currentUser.role,
-                type: "comment",
-                body: trimmedBody,
-                contextType: "general",
-              }),
-            ),
-          );
+          const entry = buildConversationEntry({
+            athleteId: currentUser.id,
+            coachId: latestCoachId,
+            authorUserId: currentUser.id,
+            authorRole: currentUser.role,
+            type: "comment",
+            body: trimmedBody,
+            contextType: "general",
+          });
+
+          setState((previous) => appendConversationEntry(previous, entry));
+
+          if (supabase) {
+            void persistConversationEntry(supabase, entry)
+              .then(() => refreshSupabaseVisibleState())
+              .catch(() => {
+                setState((previous) => removeConversationEntry(previous, entry.id));
+                notify({ tone: "danger", message: "Viestin tallennus epaonnistui. Yrita uudelleen." });
+                return refreshSupabaseVisibleState();
+              });
+          }
+
           return { ok: true };
         }
 
@@ -3737,20 +3854,28 @@ function findResolvedUserIdInSnapshot(
             ? resolvePrimaryCoachIdForAthlete(state, athleteId) ?? currentUser.id
             : currentUser.id;
 
-          setState((previous) =>
-            appendConversationEntry(
-              previous,
-              buildConversationEntry({
-                athleteId,
-                coachId: resolvedCoachId,
-                authorUserId: currentUser.id,
-                authorRole: currentUser.role,
-                type: "comment",
-                body: trimmedBody,
-                contextType: "general",
-              }),
-            ),
-          );
+          const entry = buildConversationEntry({
+            athleteId,
+            coachId: resolvedCoachId,
+            authorUserId: currentUser.id,
+            authorRole: currentUser.role,
+            type: "comment",
+            body: trimmedBody,
+            contextType: "general",
+          });
+
+          setState((previous) => appendConversationEntry(previous, entry));
+
+          if (supabase) {
+            void persistConversationEntry(supabase, entry)
+              .then(() => refreshSupabaseVisibleState())
+              .catch(() => {
+                setState((previous) => removeConversationEntry(previous, entry.id));
+                notify({ tone: "danger", message: "Viestin tallennus epaonnistui. Yrita uudelleen." });
+                return refreshSupabaseVisibleState();
+              });
+          }
+
           return { ok: true };
         }
 
@@ -3760,6 +3885,8 @@ function findResolvedUserIdInSnapshot(
         if (!currentUser) {
           return;
         }
+
+        let changedEntryIds: string[] = [];
 
         setState((previous) => {
           const hasUnread = previous.conversationEntries.some(
@@ -3772,6 +3899,13 @@ function findResolvedUserIdInSnapshot(
             return previous;
           }
 
+          changedEntryIds = previous.conversationEntries
+            .filter(
+              (entry) =>
+                isConversationVisibleToUser(previous, entry, currentUser) && !entry.readByUserIds.includes(currentUser.id),
+            )
+            .map((entry) => entry.id);
+
           return {
             ...previous,
             conversationEntries: previous.conversationEntries.map((entry) =>
@@ -3781,6 +3915,24 @@ function findResolvedUserIdInSnapshot(
             ),
           };
         });
+
+        if (supabase && changedEntryIds.length > 0) {
+          const conversationEntriesSnapshot = state.conversationEntries;
+          void Promise.all(
+            changedEntryIds.map(async (entryId) => {
+              const entry = conversationEntriesSnapshot.find((item) => item.id === entryId);
+              if (!entry) {
+                return;
+              }
+
+              const nextReadByUserIds = Array.from(new Set([...entry.readByUserIds, currentUser.id]));
+              await supabase
+                .from("conversation_entries")
+                .update({ read_by_user_ids: nextReadByUserIds })
+                .eq("id", entryId);
+            }),
+          ).then(() => refreshSupabaseVisibleState()).catch(() => refreshSupabaseVisibleState());
+        }
       },
       async startWorkout(scheduledWorkoutId) {
         if (!currentUser) {
