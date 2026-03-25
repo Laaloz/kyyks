@@ -1047,7 +1047,7 @@ export function AthleteSessionPanel({
               <table className="w-full table-fixed border-collapse">
                 <thead>
                   <tr className="border-b border-[var(--border)] bg-[color-mix(in_srgb,var(--surface-3)_82%,var(--surface))] text-[10px] font-semibold uppercase tracking-[0.05em] text-[var(--text-subtle)]">
-                    <th scope="col" className="w-14 px-2 py-2.5 text-left md:px-3.5">Sarja</th>
+                    <th scope="col" className="w-12 px-2 py-2.5 text-left md:w-13 md:px-3.5">Sarja</th>
                     <th scope="col" className="px-2 py-2.5 text-left md:px-3.5">
                       <span className="inline-flex items-center gap-1">
                         Toistot
@@ -1060,7 +1060,7 @@ export function AthleteSessionPanel({
                         <InfoTooltip text={loadTooltipText} />
                       </span>
                     </th>
-                    <th scope="col" className="w-14 px-2 py-2.5 text-center md:px-3.5 md:text-right">
+                    <th scope="col" className="w-12 px-2 py-2.5 text-center md:w-13 md:px-3.5 md:text-right">
                       <span className="inline-flex items-center justify-center gap-1 md:justify-end">Tila</span>
                     </th>
                   </tr>
@@ -1092,7 +1092,7 @@ export function AthleteSessionPanel({
                       <td className="px-1 py-2.5 align-middle md:px-3.5">
                         <div className="relative">
                           <Input
-                            className={`h-9 min-w-0 rounded-xl px-2 py-1 pr-8 text-center text-sm font-medium shadow-[inset_0_1px_0_0_var(--shadow-soft)] md:h-10 md:px-3 md:pr-9 ${inputToneClass}`}
+                            className={`h-9 min-w-0 rounded-xl px-2 py-1 pr-9 text-center text-sm font-medium shadow-[inset_0_1px_0_0_var(--shadow-soft)] md:h-10 md:px-3 md:pr-10 ${inputToneClass}`}
                             id={getWorkoutFieldId(scheduledWorkoutId, log.id, "reps")}
                             type="text"
                             inputMode="numeric"
@@ -1104,7 +1104,7 @@ export function AthleteSessionPanel({
                             onChange={(event) => handleLogUpdate(log, { actualReps: numberOrUndefined(event.target.value) })}
                             onKeyDown={(event) => handleWorkoutFieldEnter(event, logs, log, "reps")}
                           />
-                          <div className="absolute inset-y-1 right-1 flex w-6 flex-col justify-center gap-px rounded-[0.55rem] bg-[color-mix(in_srgb,var(--border)_26%,transparent)] p-px">
+                          <div className="absolute inset-y-1 right-1 flex w-7 flex-col justify-center gap-px rounded-[0.6rem] bg-[color-mix(in_srgb,var(--border)_26%,transparent)] p-px">
                             <button
                               type="button"
                               className={inputStepperButtonClass}
@@ -1112,7 +1112,7 @@ export function AthleteSessionPanel({
                               aria-label={`${exerciseName} sarja ${log.setLabel} lisaa toistoja`}
                               onClick={() => adjustActualReps(log, 1)}
                             >
-                              <ChevronUp className="size-2.5" aria-hidden="true" />
+                              <ChevronUp className="size-3" aria-hidden="true" />
                             </button>
                             <button
                               type="button"
@@ -1121,7 +1121,7 @@ export function AthleteSessionPanel({
                               aria-label={`${exerciseName} sarja ${log.setLabel} vahenna toistoja`}
                               onClick={() => adjustActualReps(log, -1)}
                             >
-                              <ChevronDown className="size-2.5" aria-hidden="true" />
+                              <ChevronDown className="size-3" aria-hidden="true" />
                             </button>
                           </div>
                         </div>
@@ -1129,7 +1129,7 @@ export function AthleteSessionPanel({
                       <td className="px-1 py-2.5 align-middle md:px-3.5">
                         <div className="relative">
                           <Input
-                            className={`h-9 min-w-0 rounded-xl px-2 py-1 pr-8 text-center text-sm font-medium shadow-[inset_0_1px_0_0_var(--shadow-soft)] md:h-10 md:px-3 md:pr-9 ${inputToneClass}`}
+                            className={`h-9 min-w-0 rounded-xl px-2 py-1 pr-9 text-center text-sm font-medium shadow-[inset_0_1px_0_0_var(--shadow-soft)] md:h-10 md:px-3 md:pr-10 ${inputToneClass}`}
                             id={getWorkoutFieldId(scheduledWorkoutId, log.id, "load")}
                             type="text"
                             inputMode="decimal"
@@ -1141,7 +1141,7 @@ export function AthleteSessionPanel({
                             onBlur={() => handleLoadDraftBlur(log)}
                             onKeyDown={(event) => handleWorkoutFieldEnter(event, logs, log, "load")}
                           />
-                          <div className="absolute inset-y-1 right-1 flex w-6 flex-col justify-center gap-px rounded-[0.55rem] bg-[color-mix(in_srgb,var(--border)_26%,transparent)] p-px">
+                          <div className="absolute inset-y-1 right-1 flex w-7 flex-col justify-center gap-px rounded-[0.6rem] bg-[color-mix(in_srgb,var(--border)_26%,transparent)] p-px">
                             <button
                               type="button"
                               className={inputStepperButtonClass}
@@ -1149,7 +1149,7 @@ export function AthleteSessionPanel({
                               aria-label={`${exerciseName} sarja ${log.setLabel} lisaa kuormaa`}
                               onClick={() => adjustActualLoad(log, loadIncrementKg)}
                             >
-                              <ChevronUp className="size-2.5" aria-hidden="true" />
+                              <ChevronUp className="size-3" aria-hidden="true" />
                             </button>
                             <button
                               type="button"
@@ -1158,7 +1158,7 @@ export function AthleteSessionPanel({
                               aria-label={`${exerciseName} sarja ${log.setLabel} vahenna kuormaa`}
                               onClick={() => adjustActualLoad(log, -loadIncrementKg)}
                             >
-                              <ChevronDown className="size-2.5" aria-hidden="true" />
+                              <ChevronDown className="size-3" aria-hidden="true" />
                             </button>
                           </div>
                         </div>
