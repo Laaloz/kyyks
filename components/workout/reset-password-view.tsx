@@ -16,6 +16,7 @@ export function ResetPasswordView({ token }: { token: string }) {
   const { completePasswordReset } = useAppState();
   const [message, setMessage] = useState<string>("");
   const [isSuccess, setIsSuccess] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const formId = useId();
   const form = useForm<z.infer<typeof resetPasswordSchema>>({
     resolver: zodResolver(resetPasswordSchema),
@@ -37,16 +38,22 @@ export function ResetPasswordView({ token }: { token: string }) {
         <form
           className="mt-6 space-y-4"
           onSubmit={form.handleSubmit(async (values) => {
-            const result = await completePasswordReset(token, values.password);
-            if (!result.ok) {
-              setIsSuccess(false);
-              setMessage(result.message);
-              return;
-            }
+            setIsSubmitting(true);
+            setMessage("");
+            try {
+              const result = await completePasswordReset(token, values.password);
+              if (!result.ok) {
+                setIsSuccess(false);
+                setMessage(result.message);
+                return;
+              }
 
-            setIsSuccess(true);
-            setMessage("Salasana päivitettiin onnistuneesti. Voit nyt kirjautua sisään uudella salasanalla.");
-            form.reset();
+              setIsSuccess(true);
+              setMessage("Salasana päivitettiin onnistuneesti. Voit nyt kirjautua sisään uudella salasanalla.");
+              form.reset();
+            } finally {
+              setIsSubmitting(false);
+            }
           })}
         >
           <fieldset className="space-y-4 rounded-xl border-2 border-[var(--border)] bg-[var(--surface-2)] p-4">
@@ -90,14 +97,22 @@ export function ResetPasswordView({ token }: { token: string }) {
           <p
             aria-live="polite"
             className={`min-h-5 text-sm ${
-              !message ? "text-[var(--text-subtle)]" : isSuccess ? "text-[var(--success)]" : "text-[var(--danger)]"
+              isSubmitting
+                ? "text-[var(--text-subtle)]"
+                : !message
+                  ? "text-[var(--text-subtle)]"
+                  : isSuccess
+                    ? "text-[var(--success)]"
+                    : "text-[var(--danger)]"
             }`}
           >
-            {message || "Anna uusi salasana ja vahvista se."}
+            {isSubmitting ? "Päivitetään salasanaa..." : message || "Anna uusi salasana ja vahvista se."}
           </p>
 
           <div className="flex flex-wrap gap-3">
-            <Button type="submit">Päivitä salasana</Button>
+            <Button type="submit" disabled={isSubmitting} loading={isSubmitting} loadingText="Päivitetään salasanaa...">
+              Päivitä salasana
+            </Button>
             <Link
               href="/"
               className="rounded-xl border-2 border-[var(--border)] bg-[var(--surface-2)] px-4 py-2.5 text-sm font-semibold text-[var(--text)]"
