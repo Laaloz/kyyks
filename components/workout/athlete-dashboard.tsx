@@ -404,10 +404,10 @@ export function AthleteDashboard({
 
     return activeById;
   }, [scheduledWithSessionIds, workouts]);
-  const blockingWorkout = useMemo(
-    () => (currentUser ? resolveBlockingWorkoutStart(state, currentUser.id) : null),
-    [currentUser, state],
-  );
+  const blockingWorkout = useMemo(() => {
+    const resolved = currentUser ? resolveBlockingWorkoutStart(state, currentUser.id) : null;
+    return resolved && dismissedActiveWorkoutId === resolved.id ? null : resolved;
+  }, [currentUser, dismissedActiveWorkoutId, state]);
   const workoutHistory = useMemo(
     () =>
       workouts

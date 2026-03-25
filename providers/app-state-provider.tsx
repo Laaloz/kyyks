@@ -111,6 +111,7 @@ export function preserveActiveWorkoutShells(previous: AppState, snapshot: Supaba
 
   const optimisticWorkouts = previous.scheduledWorkouts.filter(
     (workout) =>
+      workout.id.startsWith("workout_") &&
       workout.status === "in_progress" &&
       !snapshotWorkoutIds.has(workout.id) &&
       !snapshot.scheduledWorkouts.some(
@@ -124,6 +125,7 @@ export function preserveActiveWorkoutShells(previous: AppState, snapshot: Supaba
 
   const optimisticSessions = previous.sessions.filter(
     (session) =>
+      session.id.startsWith("session_") &&
       !snapshotSessionWorkoutIds.has(session.scheduledWorkoutId) &&
       optimisticWorkouts.some((workout) => workout.id === session.scheduledWorkoutId),
   );
@@ -131,6 +133,29 @@ export function preserveActiveWorkoutShells(previous: AppState, snapshot: Supaba
   return {
     scheduledWorkouts: [...snapshot.scheduledWorkouts, ...optimisticWorkouts],
     sessions: [...snapshot.sessions, ...optimisticSessions],
+  };
+}
+
+function clearOptimisticWorkoutArtifacts(state: AppState, scheduledWorkoutId: string): AppState {
+  const sessionIds = new Set(
+    state.sessions
+      .filter(
+        (session) =>
+          session.scheduledWorkoutId === scheduledWorkoutId ||
+          (session.id.startsWith("session_") && session.scheduledWorkoutId.startsWith("workout_")),
+      )
+      .map((session) => session.id),
+  );
+
+  return {
+    ...state,
+    scheduledWorkouts: state.scheduledWorkouts.filter(
+      (workout) => workout.id !== scheduledWorkoutId && !(workout.id.startsWith("workout_") && workout.status !== "completed"),
+    ),
+    sessions: state.sessions.filter(
+      (session) => session.scheduledWorkoutId !== scheduledWorkoutId && !sessionIds.has(session.id),
+    ),
+    notes: state.notes.filter((note) => !sessionIds.has(note.sessionId)),
   };
 }
 
@@ -3867,6 +3892,7 @@ function findResolvedUserIdInSnapshot(
             return { ok: false, message: payload?.message ?? "Treenin poisto epäonnistui." };
           }
 
+          setState((current) => clearOptimisticWorkoutArtifacts(current, scheduledWorkoutId));
           void refreshSupabaseVisibleState();
           return { ok: true };
         }
