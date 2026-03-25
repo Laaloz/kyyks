@@ -661,7 +661,7 @@ export function updateSessionSet(
       item.id === scheduledWorkoutId
         ? {
             ...item,
-            status: item.status === "completed" ? "completed" : "in_progress",
+            status: item.status,
             updatedAt,
           }
         : item,

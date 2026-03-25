@@ -3685,6 +3685,10 @@ function findResolvedUserIdInSnapshot(
           return;
         }
 
+        if (workout.status !== "in_progress") {
+          return;
+        }
+
         const requestKey = `${scheduledWorkoutId}:${logId}`;
         const previousRequest = workoutSetRequestStateRef.current.get(requestKey);
         const nextRevision = (previousRequest?.revision ?? 0) + 1;
