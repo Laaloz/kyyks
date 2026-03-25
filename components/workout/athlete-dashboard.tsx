@@ -26,6 +26,7 @@ import { withMinimumDelay } from "@/lib/min-delay";
 import { isProgramActive } from "@/lib/program-status";
 import { buildWorkoutConversationContextOptions } from "@/lib/workout-conversation-context";
 import { buildWorkoutHistoryTitleMap, normalizeWorkoutHistoryTitle } from "@/lib/workout-history-title";
+import { cn } from "@/lib/utils";
 import type { AppState, ConversationEntry, WorkoutSession } from "@/lib/types";
 import { formatDate, formatDateWithWeekday, formatRelativeDate } from "@/lib/utils";
 import { resolveBlockingWorkoutStart, useAppState } from "@/providers/app-state-provider";
@@ -160,7 +161,7 @@ export function AthleteDashboard({
   const [openHistoryMenuWorkoutId, setOpenHistoryMenuWorkoutId] = useState<string | null>(null);
   const [historyMenuAnchorRect, setHistoryMenuAnchorRect] = useState<AnchorRect | null>(null);
   const [historyMenuStyle, setHistoryMenuStyle] = useState<CSSProperties | null>(null);
-  const [isHistoryExpanded, setIsHistoryExpanded] = useState(false);
+  const [expandedHistoryGroups, setExpandedHistoryGroups] = useState<Record<string, boolean>>({});
   const [selectedHistoryWorkoutByGroup, setSelectedHistoryWorkoutByGroup] = useState<Record<string, string>>({});
   const [measurementDraft, setMeasurementDraft] = useState({
     heightCm: "",
@@ -197,6 +198,9 @@ export function AthleteDashboard({
   };
   useEffect(() => {
     setSelectedHistoryWorkoutByGroup({});
+  }, [currentUser?.id]);
+  useEffect(() => {
+    setExpandedHistoryGroups({});
   }, [currentUser?.id]);
   useEffect(() => {
     setMeasurementDraft({
@@ -678,10 +682,17 @@ export function AthleteDashboard({
     workoutHistoryTitles,
     workoutInsights,
   ]);
-  const visibleGroupedWorkoutHistory = useMemo(
-    () => (isHistoryExpanded ? groupedWorkoutHistory : groupedWorkoutHistory.slice(0, 3)),
-    [groupedWorkoutHistory, isHistoryExpanded],
-  );
+  const historyGroupByWorkoutId = useMemo(() => {
+    const groupByWorkoutId = new Map<string, string>();
+
+    groupedWorkoutHistory.forEach((group) => {
+      group.workouts.forEach((item) => {
+        groupByWorkoutId.set(item.workout.id, group.key);
+      });
+    });
+
+    return groupByWorkoutId;
+  }, [groupedWorkoutHistory]);
   const conversationContextOptions = useMemo(
     () => [
       { id: "general", label: "Yleinen keskustelu", contextType: "general" as const },
@@ -718,12 +729,20 @@ export function AthleteDashboard({
       return;
     }
 
+    const focusedGroupKey = historyGroupByWorkoutId.get(historyFocusWorkoutId);
+    if (focusedGroupKey) {
+      setExpandedHistoryGroups((current) => ({
+        ...current,
+        [focusedGroupKey]: true,
+      }));
+    }
+
     const resetTimer = window.setTimeout(() => {
       setHistoryFocusWorkoutId(null);
     }, 5000);
 
     return () => window.clearTimeout(resetTimer);
-  }, [historyFocusWorkoutId]);
+  }, [historyFocusWorkoutId, historyGroupByWorkoutId]);
 
   useEffect(() => {
     if (!openHistoryMenuWorkoutId) {
@@ -1544,7 +1563,7 @@ export function AthleteDashboard({
                               key={workout.id}
                               className="flex h-full w-full flex-col rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-4 shadow-[0_1px_0_0_var(--shadow-soft),0_10px_24px_-20px_var(--shadow)]"
                             >
-                              <div className="flex items-start justify-between gap-3">
+                              <div className="flex items-center justify-between gap-3.5">
                                 <div className="min-w-0">
                                   <p className="text-base font-semibold text-[var(--text)]">{workout.name}</p>
                                   <p className="mt-1 text-xs text-[var(--text-subtle)]">
@@ -1639,227 +1658,284 @@ export function AthleteDashboard({
                   </p>
                 ) : (
                   <>
-                    <div className="mt-5 grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-                      {visibleGroupedWorkoutHistory.map((group) => {
-                      const selectedHistoryWorkout =
-                        group.workouts.find((item) => item.workout.id === selectedHistoryWorkoutByGroup[group.key]) ??
-                        group.workouts[0];
-                      if (!selectedHistoryWorkout) {
-                        return null;
-                      }
+                    <div className="mt-5 space-y-3">
+                      {groupedWorkoutHistory.map((group, index) => {
+                        const selectedHistoryWorkout =
+                          group.workouts.find((item) => item.workout.id === selectedHistoryWorkoutByGroup[group.key]) ??
+                          group.workouts[0];
+                        if (!selectedHistoryWorkout) {
+                          return null;
+                        }
 
-                      const { workout, insight, notePreview, workoutStatus, historyDateLabel, canResumeHistoryWorkout, canDeleteHistoryWorkout, occurrenceLabel } = selectedHistoryWorkout;
-                      const isFocusedHistoryItem = historyFocusWorkoutId === workout.id;
-                      const isActionMenuOpen = openHistoryMenuWorkoutId === workout.id;
-                      return (
-                        <div
-                          key={group.key}
-                          className={`w-full rounded-3xl border bg-[var(--surface-2)] p-5 transition hover:border-[var(--border-strong)] hover:bg-[var(--surface-3)] ${
-                            isFocusedHistoryItem
-                              ? "border-[var(--accent)] shadow-[0_0_0_1px_var(--accent)]"
-                              : "border-[var(--border)]"
-                          }`}
-                        >
-                          <div className="flex items-start justify-between gap-4">
-                            <div>
-                              <p className="font-medium text-[var(--text)]">{group.title}</p>
-                              <p className="text-sm text-[var(--text-muted)]">{historyDateLabel}</p>
-                              <p className="mt-1 text-xs text-[var(--text-subtle)]">
-                                {insight.exerciseCount} liikettä · {occurrenceLabel}
-                              </p>
-                            </div>
-                            <div className="flex shrink-0 items-start gap-2">
-                              <div className="flex flex-col items-end gap-2">
-                                <Badge className={statusTone(workoutStatus)}>{workoutStatusLabel(workoutStatus)}</Badge>
-                              </div>
-                              <div className="relative" data-history-menu-root="true">
-                                <Button
-                                  type="button"
-                                  variant="ghost"
-                                  className="size-8 rounded-full p-0"
-                                  data-history-menu-trigger-id={workout.id}
-                                  aria-expanded={isActionMenuOpen}
-                                  aria-haspopup="menu"
-                                  aria-label="Avaa treenin toiminnot"
-                                  onClick={(event) => {
-                                    if (isActionMenuOpen) {
-                                      setOpenHistoryMenuWorkoutId(null);
-                                      setHistoryMenuAnchorRect(null);
-                                      setHistoryMenuStyle(null);
-                                      return;
-                                    }
+                        const {
+                          workout,
+                          insight,
+                          notePreview,
+                          workoutStatus,
+                          historyDateLabel,
+                          canResumeHistoryWorkout,
+                          canDeleteHistoryWorkout,
+                          occurrenceLabel,
+                        } = selectedHistoryWorkout;
+                        const isFocusedHistoryItem = historyFocusWorkoutId === workout.id;
+                        const isActionMenuOpen = openHistoryMenuWorkoutId === workout.id;
+                        const isGroupExpanded = expandedHistoryGroups[group.key] ?? index === 0;
 
-                                    setHistoryMenuAnchorRect(
-                                      toAnchorRect(event.currentTarget.getBoundingClientRect()),
-                                    );
-                                    setOpenHistoryMenuWorkoutId(workout.id);
-                                  }}
-                                >
-                                  <MoreHorizontal className="size-4" aria-hidden="true" />
-                                </Button>
-                                {isActionMenuOpen ? (
-                                  <div
-                                    ref={historyMenuRef}
-                                    role="menu"
-                                    className="z-20 min-w-36 rounded-xl border border-[var(--border)] bg-[var(--surface)] p-1 shadow-[0_12px_30px_-20px_var(--shadow)]"
-                                    style={
-                                      historyMenuStyle ??
-                                      (historyMenuAnchorRect
-                                        ? getHiddenFloatingMenuStyle(historyMenuAnchorRect)
-                                        : undefined)
-                                    }
-                                  >
-                                    {canResumeHistoryWorkout ? (
-                                      <button
-                                        type="button"
-                                        role="menuitem"
-                                        className="w-full rounded-lg px-3 py-2 text-left text-sm text-[var(--accent)] hover:bg-[var(--surface-3)]"
-                                         onClick={async () => {
-                                           setOpenHistoryMenuWorkoutId(null);
-                                           setHistoryMenuAnchorRect(null);
-                                           setHistoryMenuStyle(null);
-                                           void openOrResumeWorkout(workout.id, `history-menu-${workout.id}`);
-                                         }}
-                                       >
-                                         Jatka treeniä
-                                      </button>
-                                    ) : null}
-                                    {!canResumeHistoryWorkout ? (
-                                      <button
-                                        type="button"
-                                        role="menuitem"
-                                        className="w-full rounded-lg px-3 py-2 text-left text-sm text-[var(--text)] hover:bg-[var(--surface-3)]"
-                                        onClick={async () => {
+                        return (
+                          <section
+                            key={group.key}
+                            className={cn(
+                              "overflow-hidden rounded-3xl border bg-[var(--surface-2)] transition",
+                              isFocusedHistoryItem
+                                ? "border-[var(--accent)] shadow-[0_0_0_1px_var(--accent)]"
+                                : "border-[var(--border)] hover:border-[var(--border-strong)]",
+                            )}
+                          >
+                            <div
+                              role="button"
+                              tabIndex={0}
+                              className="cursor-pointer p-3 text-left outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--surface-2)] sm:p-4"
+                              aria-expanded={isGroupExpanded}
+                              aria-controls={`athlete-history-panel-${group.key}`}
+                              onClick={() =>
+                                setExpandedHistoryGroups((current) => ({
+                                  ...current,
+                                  [group.key]: !isGroupExpanded,
+                                }))
+                              }
+                              onKeyDown={(event) => {
+                                if (event.key === "Enter" || event.key === " ") {
+                                  event.preventDefault();
+                                  setExpandedHistoryGroups((current) => ({
+                                    ...current,
+                                    [group.key]: !isGroupExpanded,
+                                  }));
+                                }
+                              }}
+                            >
+                              <div className="flex items-center justify-between gap-3">
+                                <div className="flex min-w-0 flex-wrap items-center gap-2">
+                                  <span className="text-sm font-semibold text-[var(--text)] sm:text-base">
+                                    {group.title}
+                                  </span>
+                                  <Badge className={statusTone(workoutStatus)}>{workoutStatusLabel(workoutStatus)}</Badge>
+                                </div>
+                                <div className="flex shrink-0 items-center gap-2">
+                                  <div className="relative" data-history-menu-root="true">
+                                    <Button
+                                      type="button"
+                                      variant="ghost"
+                                      className="size-9 rounded-full p-0"
+                                      data-history-menu-trigger-id={workout.id}
+                                      aria-expanded={isActionMenuOpen}
+                                      aria-haspopup="menu"
+                                      aria-label="Avaa treenin toiminnot"
+                                      onClick={(event) => {
+                                        event.stopPropagation();
+                                        if (isActionMenuOpen) {
                                           setOpenHistoryMenuWorkoutId(null);
                                           setHistoryMenuAnchorRect(null);
                                           setHistoryMenuStyle(null);
-                                          openWorkoutView(workout.id, { correctionMode: true });
-                                        }}
-                                      >
-                                        Muokkaa
-                                      </button>
-                                    ) : null}
-                                    {canDeleteHistoryWorkout ? (
-                                      <button
-                                        type="button"
-                                        role="menuitem"
-                                        className="w-full rounded-lg px-3 py-2 text-left text-sm text-[var(--danger)] hover:bg-[var(--surface-3)]"
-                                        onClick={async () => {
-                                          setOpenHistoryMenuWorkoutId(null);
-                                          setHistoryMenuAnchorRect(null);
-                                          setHistoryMenuStyle(null);
-                                          const confirmed = window.confirm(
-                                            `Poistetaanko historiasta vain toteutus "${group.title} · ${historyDateLabel} · ${occurrenceLabel}"? Muut saman treenialueen toteutukset säilyvät. Toimintoa ei voi kumota.`,
-                                          );
-                                          if (!confirmed) {
-                                            return;
-                                          }
+                                          return;
+                                        }
 
-                                          const result = await deleteWorkout(workout.id);
-                                          setWorkoutMessage(result.ok ? "Treeni poistettiin historiasta." : result.message);
-                                          if (result.ok) {
-                                            if (selectedWorkoutId === workout.id) {
-                                              setSelectedWorkoutId(null);
-                                            }
-                                            setHistoryFocusWorkoutId(null);
-                                            setCorrectionModeWorkoutId(null);
-                                          }
-                                        }}
+                                        setHistoryMenuAnchorRect(toAnchorRect(event.currentTarget.getBoundingClientRect()));
+                                        setOpenHistoryMenuWorkoutId(workout.id);
+                                      }}
+                                      onKeyDown={(event) => event.stopPropagation()}
+                                    >
+                                      <MoreHorizontal className="size-4" aria-hidden="true" />
+                                    </Button>
+                                    {isActionMenuOpen ? (
+                                      <div
+                                        ref={historyMenuRef}
+                                        role="menu"
+                                        className="z-20 min-w-36 rounded-xl border border-[var(--border)] bg-[var(--surface)] p-1 shadow-[0_12px_30px_-20px_var(--shadow)]"
+                                        style={
+                                          historyMenuStyle ??
+                                          (historyMenuAnchorRect
+                                            ? getHiddenFloatingMenuStyle(historyMenuAnchorRect)
+                                            : undefined)
+                                        }
                                       >
-                                        Poista
-                                      </button>
+                                        {canResumeHistoryWorkout ? (
+                                          <button
+                                            type="button"
+                                            role="menuitem"
+                                            className="w-full rounded-lg px-3 py-2 text-left text-sm text-[var(--accent)] hover:bg-[var(--surface-3)]"
+                                            onClick={async () => {
+                                              setOpenHistoryMenuWorkoutId(null);
+                                              setHistoryMenuAnchorRect(null);
+                                              setHistoryMenuStyle(null);
+                                              void openOrResumeWorkout(workout.id, `history-menu-${workout.id}`);
+                                            }}
+                                          >
+                                            Jatka treeniä
+                                          </button>
+                                        ) : null}
+                                        {!canResumeHistoryWorkout ? (
+                                          <button
+                                            type="button"
+                                            role="menuitem"
+                                            className="w-full rounded-lg px-3 py-2 text-left text-sm text-[var(--text)] hover:bg-[var(--surface-3)]"
+                                            onClick={async () => {
+                                              setOpenHistoryMenuWorkoutId(null);
+                                              setHistoryMenuAnchorRect(null);
+                                              setHistoryMenuStyle(null);
+                                              openWorkoutView(workout.id, { correctionMode: true });
+                                            }}
+                                          >
+                                            Muokkaa
+                                          </button>
+                                        ) : null}
+                                        {canDeleteHistoryWorkout ? (
+                                          <button
+                                            type="button"
+                                            role="menuitem"
+                                            className="w-full rounded-lg px-3 py-2 text-left text-sm text-[var(--danger)] hover:bg-[var(--surface-3)]"
+                                            onClick={async () => {
+                                              setOpenHistoryMenuWorkoutId(null);
+                                              setHistoryMenuAnchorRect(null);
+                                              setHistoryMenuStyle(null);
+                                              const confirmed = window.confirm(
+                                                `Poistetaanko historiasta vain toteutus "${group.title} · ${historyDateLabel} · ${occurrenceLabel}"? Muut saman treenialueen toteutukset säilyvät. Toimintoa ei voi kumota.`,
+                                              );
+                                              if (!confirmed) {
+                                                return;
+                                              }
+
+                                              const result = await deleteWorkout(workout.id);
+                                              setWorkoutMessage(result.ok ? "Treeni poistettiin historiasta." : result.message);
+                                              if (result.ok) {
+                                                if (selectedWorkoutId === workout.id) {
+                                                  setSelectedWorkoutId(null);
+                                                }
+                                                setHistoryFocusWorkoutId(null);
+                                                setCorrectionModeWorkoutId(null);
+                                              }
+                                            }}
+                                          >
+                                            Poista
+                                          </button>
+                                        ) : null}
+                                      </div>
                                     ) : null}
                                   </div>
-                                ) : null}
-                              </div>
-                            </div>
-                          </div>
-                          <div className="mt-4">
-                            {group.workouts.length === 1 ? (
-                              <div className="rounded-xl border border-[var(--border)] bg-[var(--surface)] px-3 py-2">
-                                <p className="text-[11px] font-semibold tracking-[0.04em] text-[var(--text-subtle)]">
-                                  Toteutus
-                                </p>
-                                <p className="mt-1 text-sm text-[var(--text)]">
-                                  {historyDateLabel} · {occurrenceLabel}
-                                </p>
-                              </div>
-                            ) : (
-                              <div className="rounded-xl border border-[var(--border)] bg-[var(--surface)] px-3 py-3">
-                                <div className="flex items-center justify-between gap-3">
-                                  <Label htmlFor={`athlete-history-group-${group.key}`} className="text-xs">
-                                    Valitse toteutus
-                                  </Label>
-                                  <p className="text-[11px] text-[var(--text-subtle)]">
-                                    {group.workouts.length} toteutusta
-                                  </p>
+                                  <span
+                                    className="grid size-9 place-items-center rounded-full border border-[var(--border)] bg-[var(--surface)] text-[var(--text-subtle)]"
+                                    aria-hidden="true"
+                                  >
+                                    {isGroupExpanded ? (
+                                      <ChevronUp className="size-4" aria-hidden="true" />
+                                    ) : (
+                                      <ChevronDown className="size-4" aria-hidden="true" />
+                                    )}
+                                  </span>
                                 </div>
-                                <Select
-                                  id={`athlete-history-group-${group.key}`}
-                                  value={workout.id}
-                                  className="mt-2"
-                                  onChange={(event) =>
-                                    setSelectedHistoryWorkoutByGroup((current) => ({
-                                      ...current,
-                                      [group.key]: event.target.value,
-                                    }))
-                                  }
-                                >
-                                  {group.workouts.map((item) => (
-                                    <option key={item.workout.id} value={item.workout.id}>
-                                      {item.historyDateLabel} · {item.occurrenceLabel}
-                                    </option>
-                                  ))}
-                                </Select>
                               </div>
-                            )}
-                          </div>
-                          {notePreview ? (
-                            <div className="mt-3 rounded-xl border border-[var(--border)] bg-[var(--surface)] px-3 py-2">
-                              <p className="text-[11px] font-semibold tracking-[0.04em] text-[var(--text-subtle)]">
-                                Oma muistiinpano
-                              </p>
-                              <p className="mt-1 text-xs leading-5 text-[var(--text-muted)]">{notePreview}</p>
-                            </div>
-                          ) : null}
-                          <div className="mt-4 grid grid-cols-2 gap-2">
-                            <HistoryMetric label="Kesto" value={formatWorkoutDuration(insight.durationSeconds)} />
-                            <HistoryMetric label="Sarjat" value={`${insight.completedSetCount}/${insight.setCount}`} />
-                            <HistoryMetric label="Nostettu yhteensä" value={formatLiftedKgValue(insight.liftedKg)} />
-                            <HistoryMetric label="Kalorit" value={formatEstimatedCaloriesValue(insight.estimatedCalories)} />
-                            <HistoryMetric label="Suoritus" value={`${insight.completionPercent}%`} />
-                          </div>
-                          <div className="mt-3 rounded-xl border border-[var(--border)] bg-[var(--surface)] px-3 py-2">
-                            <p className="text-[11px] font-semibold tracking-[0.04em] text-[var(--text-subtle)]">Lihasryhmäyleiskatsaus</p>
-                            <div className="mt-2 grid grid-cols-2 gap-1.5 sm:grid-cols-3">
-                              {historyMuscleGroups.map((group) => (
-                                <p key={group.key} className="text-[11px] text-[var(--text-muted)]">
-                                  {group.label}: {formatLiftedKgValue(insight.muscleGroupLiftedKg[group.key])}
+                              <div className="mt-3 min-w-0">
+                                <p className="text-sm text-[var(--text-muted)]">
+                                  Toteutus: {historyDateLabel} · {occurrenceLabel}
                                 </p>
-                              ))}
+                                <div className="mt-2 flex flex-wrap gap-2 text-[11px] text-[var(--text-subtle)] sm:text-xs">
+                                  <span className="rounded-full border border-[var(--border)] bg-[var(--surface)] px-2 py-1">
+                                    {group.workouts.length} toteutusta
+                                  </span>
+                                  <span className="rounded-full border border-[var(--border)] bg-[var(--surface)] px-2 py-1">
+                                    {insight.exerciseCount} liikettä
+                                  </span>
+                                  <span className="rounded-full border border-[var(--border)] bg-[var(--surface)] px-2 py-1">
+                                    {insight.completedSetCount}/{insight.setCount} sarjaa
+                                  </span>
+                                  <span className="rounded-full border border-[var(--border)] bg-[var(--surface)] px-2 py-1">
+                                    {formatLiftedKgValue(insight.liftedKg)}
+                                  </span>
+                                </div>
+                              </div>
                             </div>
-                          </div>
-                          {!notePreview ? (
-                            <p className="mt-2 text-xs text-[var(--text-subtle)]">Ei muistiinpanoa tästä treenistä.</p>
-                          ) : null}
-                          <WorkoutMiniProgress workoutId={workout.id} />
-                        </div>
-                      );
+
+                            {isGroupExpanded ? (
+                              <div
+                                id={`athlete-history-panel-${group.key}`}
+                                className="border-t border-[var(--border)] bg-[var(--surface)] px-3 py-3 sm:px-4 sm:py-4"
+                              >
+                                {group.workouts.length === 1 ? (
+                                  <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface-2)] px-3 py-2">
+                                    <p className="text-[11px] font-semibold tracking-[0.04em] text-[var(--text-subtle)]">
+                                      Toteutus
+                                    </p>
+                                    <p className="mt-1 text-sm text-[var(--text)]">
+                                      {historyDateLabel} · {occurrenceLabel}
+                                    </p>
+                                  </div>
+                                ) : (
+                                  <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface-2)] px-3 py-3">
+                                    <div className="flex items-center justify-between gap-3">
+                                      <Label htmlFor={`athlete-history-group-${group.key}`} className="text-xs">
+                                        Valitse toteutus
+                                      </Label>
+                                      <p className="text-[11px] text-[var(--text-subtle)]">
+                                        Uusin ensin
+                                      </p>
+                                    </div>
+                                    <Select
+                                      id={`athlete-history-group-${group.key}`}
+                                      value={workout.id}
+                                      className="mt-2"
+                                      onChange={(event) =>
+                                        setSelectedHistoryWorkoutByGroup((current) => ({
+                                          ...current,
+                                          [group.key]: event.target.value,
+                                        }))
+                                      }
+                                    >
+                                      {group.workouts.map((item) => (
+                                        <option key={item.workout.id} value={item.workout.id}>
+                                          {item.historyDateLabel} · {item.occurrenceLabel}
+                                        </option>
+                                      ))}
+                                    </Select>
+                                  </div>
+                                )}
+
+                                {notePreview ? (
+                                  <div className="mt-3 rounded-2xl border border-[var(--border)] bg-[var(--surface-2)] px-3 py-3">
+                                    <p className="text-[11px] font-semibold tracking-[0.04em] text-[var(--text-subtle)]">
+                                      Oma muistiinpano
+                                    </p>
+                                    <p className="mt-1 text-xs leading-5 text-[var(--text-muted)]">{notePreview}</p>
+                                  </div>
+                                ) : (
+                                  <p className="mt-3 text-xs text-[var(--text-subtle)]">Ei muistiinpanoa tästä treenistä.</p>
+                                )}
+
+                                <div className="mt-3 grid grid-cols-2 gap-2 lg:grid-cols-4">
+                                  <HistoryMetric label="Kesto" value={formatWorkoutDuration(insight.durationSeconds)} />
+                                  <HistoryMetric label="Sarjat" value={`${insight.completedSetCount}/${insight.setCount}`} />
+                                  <HistoryMetric label="Nostettu" value={formatLiftedKgValue(insight.liftedKg)} />
+                                  <HistoryMetric label="Kalorit" value={formatEstimatedCaloriesValue(insight.estimatedCalories)} />
+                                </div>
+
+                                <div className="mt-3 rounded-2xl border border-[var(--border)] bg-[var(--surface-2)] px-3 py-3">
+                                  <p className="text-[11px] font-semibold tracking-[0.04em] text-[var(--text-subtle)]">
+                                    Lihasryhmat
+                                  </p>
+                                  <div className="mt-2 grid grid-cols-2 gap-1.5 sm:grid-cols-3 xl:grid-cols-4">
+                                    {historyMuscleGroups.map((muscleGroup) => (
+                                      <p key={muscleGroup.key} className="text-[11px] text-[var(--text-muted)]">
+                                        {muscleGroup.label}: {formatLiftedKgValue(insight.muscleGroupLiftedKg[muscleGroup.key])}
+                                      </p>
+                                    ))}
+                                  </div>
+                                </div>
+
+                                <WorkoutMiniProgress workoutId={workout.id} />
+                              </div>
+                            ) : null}
+                          </section>
+                        );
                       })}
                     </div>
-                    {groupedWorkoutHistory.length > 3 ? (
-                      <div className="mt-4 flex justify-center">
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          onClick={() => setIsHistoryExpanded((value) => !value)}
-                        >
-                          {isHistoryExpanded
-                            ? "Näytä vähemmän"
-                            : `Näytä lisää (${groupedWorkoutHistory.length - 3})`}
-                        </Button>
-                      </div>
-                    ) : null}
                   </>
                 )}
               </Card>
@@ -2345,8 +2421,8 @@ function WorkoutMiniProgress({ workoutId }: { workoutId: string }) {
       <div className="h-2 overflow-hidden rounded-full border border-[var(--border)] bg-[var(--surface)]">
         <div className="h-full rounded-full bg-[var(--accent)]" style={{ width: `${progress.percent}%` }} />
       </div>
-      <p className="mt-1 text-xs text-[var(--text-subtle)]">
-        {progress.completedSets}/{progress.totalSets} sarjaa valmiina ({progress.percent}%)
+      <p className="mt-1 text-xs leading-5 text-[var(--text-subtle)]">
+        {progress.completedSets}/{progress.totalSets} sarjaa tehty - eteneminen {progress.percent}%
       </p>
     </div>
   );
