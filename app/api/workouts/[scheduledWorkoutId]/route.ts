@@ -76,6 +76,13 @@ export async function DELETE(_request: Request, context: { params: Promise<{ sch
     scheduledWorkoutId,
   });
 
+  console.info("[workout-action] delete", {
+    userId: user.id,
+    scheduledWorkoutId,
+    ok: result.ok,
+    message: result.ok ? undefined : result.message,
+  });
+
   if (!result.ok) {
     return timer.json({ message: result.message }, { status: 400 });
   }

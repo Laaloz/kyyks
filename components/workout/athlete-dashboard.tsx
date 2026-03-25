@@ -1178,8 +1178,14 @@ export function AthleteDashboard({
                   const completedWorkoutId = selectedWorkout.id;
                   const completionPercent = progress?.percent ?? 0;
                   setIsCompletingWorkout(true);
+                  console.info("[workout-ui] complete-click", { scheduledWorkoutId: completedWorkoutId });
                   try {
                     const result = await completeWorkout(completedWorkoutId);
+                    console.info("[workout-ui] complete-result", {
+                      scheduledWorkoutId: completedWorkoutId,
+                      ok: result.ok,
+                      message: result.ok ? undefined : result.message,
+                    });
                     if (result.ok) {
                       setDismissedActiveWorkoutId(null);
                       setWorkoutMessage(
@@ -1208,6 +1214,11 @@ export function AthleteDashboard({
                   }
 
                   const result = await cancelWorkout(selectedWorkout.id);
+                  console.info("[workout-ui] cancel-result", {
+                    scheduledWorkoutId: selectedWorkout.id,
+                    ok: result.ok,
+                    message: result.ok ? undefined : result.message,
+                  });
                   setWorkoutMessage(
                     result.ok
                       ? "Treeni keskeytettiin. Voit jatkaa treeniä myöhemmin samasta kohdasta."
@@ -1229,6 +1240,11 @@ export function AthleteDashboard({
                   }
 
                   const result = await deleteWorkout(selectedWorkout.id);
+                  console.info("[workout-ui] delete-result", {
+                    scheduledWorkoutId: selectedWorkout.id,
+                    ok: result.ok,
+                    message: result.ok ? undefined : result.message,
+                  });
                   setWorkoutMessage(result.ok ? "Treeni poistettiin." : result.message);
 
                   if (result.ok) {

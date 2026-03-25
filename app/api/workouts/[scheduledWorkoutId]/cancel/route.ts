@@ -35,6 +35,13 @@ export async function POST(_request: Request, context: { params: Promise<{ sched
     scheduledWorkoutId,
   });
 
+  console.info("[workout-action] cancel", {
+    userId: user.id,
+    scheduledWorkoutId,
+    ok: result.ok,
+    message: result.ok ? undefined : result.message,
+  });
+
   if (!result.ok) {
     return timer.json({ message: result.message }, { status: 400 });
   }

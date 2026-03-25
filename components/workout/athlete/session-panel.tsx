@@ -444,9 +444,11 @@ export function AthleteSessionPanel({
 
     window.addEventListener("mousedown", handlePointerDown);
     window.addEventListener("touchstart", handlePointerDown);
+    window.addEventListener("pointerdown", handlePointerDown);
     return () => {
       window.removeEventListener("mousedown", handlePointerDown);
       window.removeEventListener("touchstart", handlePointerDown);
+      window.removeEventListener("pointerdown", handlePointerDown);
     };
   }, [isSecondaryActionsOpen]);
 
@@ -1140,8 +1142,7 @@ export function AthleteSessionPanel({
                   Takaisin treenilistaan
                 </Button>
               ) : null}
-              <div className="hidden sm:block">
-                {hasSecondaryActions ? (
+              {hasSecondaryActions ? (
                 <div className="relative" data-session-actions-menu-root="true">
                   <Button
                     type="button"
@@ -1151,7 +1152,14 @@ export function AthleteSessionPanel({
                     aria-expanded={isSecondaryActionsOpen}
                     aria-haspopup="menu"
                     aria-label="Avaa treenin lisätoiminnot"
-                    onClick={(event) => toggleSecondaryActionsMenu(event.currentTarget)}
+                    onClick={(event) => {
+                      console.info("[workout-ui] secondary-actions-toggle", {
+                        status,
+                        scheduledWorkoutId,
+                        open: !isSecondaryActionsOpen,
+                      });
+                      toggleSecondaryActionsMenu(event.currentTarget);
+                    }}
                   >
                     <MoreHorizontal className="size-5" aria-hidden="true" />
                   </Button>
@@ -1173,6 +1181,7 @@ export function AthleteSessionPanel({
                           role="menuitem"
                           className="w-full rounded-lg px-3 py-2 text-left text-sm text-[var(--accent)] hover:bg-[var(--surface-3)]"
                           onClick={() => {
+                            console.info("[workout-ui] resume-from-menu", { scheduledWorkoutId });
                             setIsSecondaryActionsOpen(false);
                             setSecondaryActionsAnchorRect(null);
                             setSecondaryActionsMenuStyle(null);
@@ -1189,6 +1198,7 @@ export function AthleteSessionPanel({
                           disabled={isCancellingWorkout || isDeletingWorkout}
                           className="w-full rounded-lg px-3 py-2 text-left text-sm text-[var(--text)] hover:bg-[var(--surface-3)]"
                           onClick={async () => {
+                            console.info("[workout-ui] cancel-from-menu", { scheduledWorkoutId });
                             setIsSecondaryActionsOpen(false);
                             setSecondaryActionsAnchorRect(null);
                             setSecondaryActionsMenuStyle(null);
@@ -1210,6 +1220,7 @@ export function AthleteSessionPanel({
                           disabled={isDeletingWorkout || isCancellingWorkout}
                           className="w-full rounded-lg px-3 py-2 text-left text-sm text-[var(--danger)] hover:bg-[var(--surface-3)]"
                           onClick={async () => {
+                            console.info("[workout-ui] delete-from-menu", { scheduledWorkoutId });
                             setIsSecondaryActionsOpen(false);
                             setSecondaryActionsAnchorRect(null);
                             setSecondaryActionsMenuStyle(null);
@@ -1227,50 +1238,7 @@ export function AthleteSessionPanel({
                     </div>
                   ) : null}
                 </div>
-                ) : null}
-              </div>
-              <div className="grid w-full gap-2 sm:hidden">
-                {showCancelAction ? (
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    className="w-full"
-                    disabled={isCancellingWorkout || isDeletingWorkout}
-                    loading={isCancellingWorkout}
-                    loadingText="Keskeytetään..."
-                    onClick={async () => {
-                      setIsCancellingWorkout(true);
-                      try {
-                        await onCancel();
-                      } finally {
-                        setIsCancellingWorkout(false);
-                      }
-                    }}
-                  >
-                    Keskeytä treeni
-                  </Button>
-                ) : null}
-                {showDeleteAction ? (
-                  <Button
-                    type="button"
-                    variant="danger"
-                    className="w-full"
-                    disabled={isDeletingWorkout || isCancellingWorkout}
-                    loading={isDeletingWorkout}
-                    loadingText="Poistetaan..."
-                    onClick={async () => {
-                      setIsDeletingWorkout(true);
-                      try {
-                        await onDelete();
-                      } finally {
-                        setIsDeletingWorkout(false);
-                      }
-                    }}
-                  >
-                    Poista treeni
-                  </Button>
-                ) : null}
-              </div>
+              ) : null}
             </>
           ) : (
             <div className="inline-flex items-center gap-1">
@@ -1286,8 +1254,7 @@ export function AthleteSessionPanel({
                 side="top"
                 text="Muokkaustilassa voit päivittää valmiin treenin sarjamerkintöjä, muistiinpanoja ja kokonaiskestoa."
               />
-              <div className="hidden sm:block">
-                {showDeleteAction ? (
+              {showDeleteAction ? (
                 <div className="relative" data-session-actions-menu-root="true">
                   <Button
                     type="button"
@@ -1297,7 +1264,14 @@ export function AthleteSessionPanel({
                     aria-expanded={isSecondaryActionsOpen}
                     aria-haspopup="menu"
                     aria-label="Avaa treenin lisätoiminnot"
-                    onClick={(event) => toggleSecondaryActionsMenu(event.currentTarget)}
+                    onClick={(event) => {
+                      console.info("[workout-ui] completed-secondary-actions-toggle", {
+                        status,
+                        scheduledWorkoutId,
+                        open: !isSecondaryActionsOpen,
+                      });
+                      toggleSecondaryActionsMenu(event.currentTarget);
+                    }}
                   >
                     <MoreHorizontal className="size-5" aria-hidden="true" />
                   </Button>
@@ -1318,6 +1292,7 @@ export function AthleteSessionPanel({
                         role="menuitem"
                         className="w-full rounded-lg px-3 py-2 text-left text-sm text-[var(--danger)] hover:bg-[var(--surface-3)]"
                         onClick={() => {
+                          console.info("[workout-ui] delete-completed-from-menu", { scheduledWorkoutId });
                           setIsSecondaryActionsOpen(false);
                           setSecondaryActionsAnchorRect(null);
                           setSecondaryActionsMenuStyle(null);
@@ -1329,8 +1304,7 @@ export function AthleteSessionPanel({
                     </div>
                   ) : null}
                 </div>
-                ) : null}
-              </div>
+              ) : null}
             </div>
           )}
         </div>
