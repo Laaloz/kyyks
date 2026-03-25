@@ -425,6 +425,10 @@ export function AthleteDashboard({
   };
   const isTransitionLoading = (sourceKey: string) =>
     pendingWorkoutTransition !== null && "sourceKey" in pendingWorkoutTransition && pendingWorkoutTransition.sourceKey === sourceKey;
+  const selectionTransitionMessage =
+    pendingWorkoutTransition?.type === "open" || pendingWorkoutTransition?.type === "start"
+      ? `Avataan treeniä "${pendingWorkoutTransition.workoutName}"...`
+      : null;
   const activeScheduledByProgramWorkoutId = useMemo(() => {
     const activeById = new Map<string, (typeof workouts)[number]>();
     const getWorkoutPriority = (workout: (typeof workouts)[number]) => {
@@ -1407,8 +1411,7 @@ export function AthleteDashboard({
                         type="button"
                         variant="secondary"
                         className="w-full sm:w-auto"
-                        loading={isTransitionLoading(`blocking-${blockingWorkout.id}`)}
-                        loadingText="Avataan treeniä..."
+                        disabled={isTransitionLoading(`blocking-${blockingWorkout.id}`)}
                         onClick={() => {
                           void openOrResumeWorkout(blockingWorkout.id, `blocking-${blockingWorkout.id}`);
                         }}
@@ -1419,7 +1422,15 @@ export function AthleteDashboard({
                   ) : null}
                 </div>
               ) : null}
-              {pendingWorkoutTransition && !["open", "start"].includes(pendingWorkoutTransition.type) ? (
+              {selectionTransitionMessage ? (
+                <p className="mt-4 flex items-center gap-3 rounded-2xl border border-[var(--border-strong)] bg-[color:color-mix(in_srgb,var(--surface-2)_84%,var(--surface))] px-4 py-3 text-sm text-[var(--text)] shadow-[0_12px_28px_-24px_var(--shadow)]">
+                  <span
+                    aria-hidden="true"
+                    className="size-4 animate-spin rounded-full border-2 border-current border-r-transparent text-[var(--accent)]"
+                  />
+                  <span>{selectionTransitionMessage}</span>
+                </p>
+              ) : pendingWorkoutTransition ? (
                 <p className="mt-4 flex items-center gap-3 rounded-2xl border border-[var(--border-strong)] bg-[color:color-mix(in_srgb,var(--surface-2)_84%,var(--surface))] px-4 py-3 text-sm text-[var(--text)] shadow-[0_12px_28px_-24px_var(--shadow)]">
                   <span
                     aria-hidden="true"
@@ -1581,16 +1592,9 @@ export function AthleteDashboard({
                                     className="w-full justify-center sm:w-auto"
                                     disabled={
                                       isLockedByAnotherWorkout ||
+                                      isTransitionLoading(`program-${program.id}-workout-${workout.id}`) ||
                                       (!resumableScheduledId && pendingWorkoutTransition?.type === "start")
                                     }
-                                    loading={
-                                      resumableScheduledId
-                                        ? isTransitionLoading(`program-${program.id}-workout-${workout.id}`)
-                                        : pendingWorkoutTransition?.type === "start" &&
-                                          pendingWorkoutTransition.workoutId === workout.id &&
-                                          pendingWorkoutTransition.sourceKey === `program-${program.id}-workout-${workout.id}`
-                                    }
-                                    loadingText="Avataan treeniä..."
                                     onClick={() => {
                                       if (resumableScheduledId) {
                                         void openOrResumeWorkout(resumableScheduledId, `program-${program.id}-workout-${workout.id}`);
