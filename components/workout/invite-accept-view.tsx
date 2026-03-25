@@ -107,7 +107,7 @@ export function InviteAcceptView({ token, initialInvite }: { token: string; init
               });
               setIsSubmitting(false);
 
-              if (requiresCaptcha) {
+              if (requiresCaptcha && !result.ok) {
                 captchaRef.current?.resetCaptcha();
                 setCaptchaToken(null);
               }

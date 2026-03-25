@@ -120,7 +120,7 @@ export function LoginScreen() {
                 captchaToken: captchaToken ?? undefined,
               });
               setIsSubmitting(false);
-              if (requiresCaptcha) {
+              if (requiresCaptcha && !result.ok) {
                 captchaRef.current?.resetCaptcha();
                 setCaptchaToken(null);
               }

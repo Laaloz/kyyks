@@ -89,6 +89,22 @@ function normalizeComparableEmail(email: string | null | undefined) {
   return email?.trim().toLowerCase() ?? "";
 }
 
+function warnIfOptimisticServerIdLeak(kind: "workout" | "program" | "template", id: string | undefined) {
+  if (process.env.NODE_ENV === "production" || !id) {
+    return;
+  }
+
+  const optimisticPrefixes: Record<typeof kind, string> = {
+    workout: "workout_",
+    program: "plan_",
+    template: "template_",
+  };
+
+  if (id.startsWith(optimisticPrefixes[kind])) {
+    console.warn(`[optimistic-id-leak] ${kind}`, { id });
+  }
+}
+
 function defaultUserSettings(role: Role) {
   return {
     defaultDashboardView: getDefaultDashboardView(role),
@@ -407,6 +423,14 @@ type ActionResult =
   | { ok: true; scheduledWorkoutId?: string }
   | { ok: false; message: string };
 
+type CreateTemplateResult =
+  | { ok: true; templateId?: string }
+  | { ok: false; message: string };
+
+type CreateProgramResult =
+  | { ok: true; programId?: string }
+  | { ok: false; message: string };
+
 type PasswordResetRequestResult =
   | { ok: true; message: string; previewUrl?: string }
   | { ok: false; message: string };
@@ -527,7 +551,15 @@ export function shouldRevalidateSupabaseSessionBeforeClearingAuth(
   persistedAuthenticatedUserId: string | null,
   hasResolvedAuthUser = false,
 ) {
-  return source === "event" && hasResolvedAuthUser && Boolean(persistedAuthenticatedUserId);
+  if (!persistedAuthenticatedUserId) {
+    return false;
+  }
+
+  if (source === "bootstrap") {
+    return true;
+  }
+
+  return source === "event" && hasResolvedAuthUser;
 }
 
 export function shouldPreserveStoredSessionOnTransientSupabaseNullEvent(
@@ -1166,7 +1198,15 @@ async function confirmCurrentSupabaseAuthUser(
     data: { session },
   } = await supabase.auth.getSession();
 
-  return session?.user ?? null;
+  if (session?.user) {
+    return session.user;
+  }
+
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  return user ?? null;
 }
 
 function getSupabaseLoginErrorMessage(message: string) {
@@ -1229,8 +1269,8 @@ interface AppStateContextValue {
   createInvite: (input: InviteInput) => Promise<ActionResult>;
   resendInvite: (inviteId: string) => Promise<ActionResult>;
   acceptInvite: (token: string, fullName: string, password: string, options?: { captchaToken?: string }) => Promise<LoginResult>;
-  createTemplate: (input: TemplateBuilderInput) => Promise<ActionResult>;
-  createProgram: (input: ProgramBuilderInput) => Promise<ActionResult>;
+  createTemplate: (input: TemplateBuilderInput) => Promise<CreateTemplateResult>;
+  createProgram: (input: ProgramBuilderInput) => Promise<CreateProgramResult>;
   updateProgram: (programId: string, patch: ProgramUpdateInput) => Promise<ActionResult>;
   setProgramStatus: (programId: string, status: "active" | "archived") => Promise<ActionResult>;
   deleteProgram: (programId: string) => Promise<ActionResult>;
@@ -2910,7 +2950,7 @@ function findResolvedUserIdInSnapshot(
             },
             body: JSON.stringify(input),
           });
-          const payload = (await response.json().catch(() => null)) as { message?: string } | null;
+          const payload = (await response.json().catch(() => null)) as { message?: string; templateId?: string } | null;
           if (!response.ok) {
             setState(previousState);
             await refreshSupabaseVisibleState();
@@ -2918,14 +2958,17 @@ function findResolvedUserIdInSnapshot(
           }
 
           void refreshSupabaseVisibleState();
-          return { ok: true };
+          const templateId = payload?.templateId ?? template.id;
+          warnIfOptimisticServerIdLeak("template", templateId);
+          return { ok: true, templateId };
         }
 
         setState((previous) => ({
           ...previous,
           templates: [template, ...previous.templates],
         }));
-        return { ok: true };
+        warnIfOptimisticServerIdLeak("template", template.id);
+        return { ok: true, templateId: template.id };
       },
       async createProgram(input) {
         if (!currentUser || !canActAsCoach(currentUser.role)) {
@@ -2971,7 +3014,7 @@ function findResolvedUserIdInSnapshot(
               customExercises: resolved.customExercises,
             }),
           });
-          const payload = (await response.json().catch(() => null)) as { message?: string } | null;
+          const payload = (await response.json().catch(() => null)) as { message?: string; programId?: string } | null;
           if (!response.ok) {
             setState(previousState);
             await refreshSupabaseVisibleState();
@@ -2979,7 +3022,9 @@ function findResolvedUserIdInSnapshot(
           }
 
           void refreshSupabaseVisibleState();
-          return { ok: true };
+          const programId = payload?.programId ?? createdProgram.id;
+          warnIfOptimisticServerIdLeak("program", programId);
+          return { ok: true, programId };
         }
 
         setState((previous) =>
@@ -2994,7 +3039,8 @@ function findResolvedUserIdInSnapshot(
           ),
         );
 
-        return { ok: true };
+        warnIfOptimisticServerIdLeak("program", createdProgram.id);
+        return { ok: true, programId: createdProgram.id };
       },
       async updateProgram(programId, patch) {
         if (!currentUser || !canActAsCoach(currentUser.role)) {
@@ -3217,7 +3263,9 @@ function findResolvedUserIdInSnapshot(
             }
 
             void refreshSupabaseVisibleState();
-            return { ok: true, scheduledWorkoutId: started.scheduledWorkout.id };
+            const scheduledWorkoutId = payload?.scheduledWorkoutId ?? started.scheduledWorkout.id;
+            warnIfOptimisticServerIdLeak("workout", scheduledWorkoutId);
+            return { ok: true, scheduledWorkoutId };
           } catch {
             const response = await fetch("/api/workouts/start", {
               method: "POST",
@@ -3232,6 +3280,7 @@ function findResolvedUserIdInSnapshot(
             }
 
             void refreshSupabaseVisibleState();
+            warnIfOptimisticServerIdLeak("workout", payload?.scheduledWorkoutId);
             return { ok: true, scheduledWorkoutId: payload?.scheduledWorkoutId };
           }
         }
@@ -3239,17 +3288,18 @@ function findResolvedUserIdInSnapshot(
         try {
           const started = domainStartProgramWorkout(state, programId, programWorkoutId, currentUser.id);
           setState(started.state);
+          warnIfOptimisticServerIdLeak("workout", started.scheduledWorkout.id);
           return { ok: true, scheduledWorkoutId: started.scheduledWorkout.id };
         } catch {
           return { ok: false, message: "Harjoituksen käynnistys epäonnistui." };
         }
       },
-      async duplicateTemplate(templateId) {
+      async duplicateTemplate(sourceTemplateId) {
         if (!currentUser) {
           return { ok: false, message: "Kirjaudu sisään ennen duplikointia." };
         }
 
-        const template = state.templates.find((item) => item.id === templateId);
+        const template = state.templates.find((item) => item.id === sourceTemplateId);
         if (!template) {
           return { ok: false, message: "Treenipohjaa ei löytynyt." };
         }
@@ -3261,10 +3311,10 @@ function findResolvedUserIdInSnapshot(
             ...previous,
             templates: [duplicatedTemplate, ...previous.templates],
           }));
-          const response = await fetch(`/api/templates/${encodeURIComponent(templateId)}/duplicate`, {
+          const response = await fetch(`/api/templates/${encodeURIComponent(sourceTemplateId)}/duplicate`, {
             method: "POST",
           });
-          const payload = (await response.json().catch(() => null)) as { message?: string } | null;
+          const payload = (await response.json().catch(() => null)) as { message?: string; templateId?: string } | null;
           if (!response.ok) {
             setState(previousState);
             await refreshSupabaseVisibleState();
@@ -3272,14 +3322,17 @@ function findResolvedUserIdInSnapshot(
           }
 
           void refreshSupabaseVisibleState();
-          return { ok: true };
+          const templateId = payload?.templateId ?? duplicatedTemplate.id;
+          warnIfOptimisticServerIdLeak("template", templateId);
+          return { ok: true, templateId };
         }
 
         setState((previous) => ({
           ...previous,
           templates: [domainDuplicateTemplate(template, currentUser.id), ...previous.templates],
         }));
-        return { ok: true };
+        warnIfOptimisticServerIdLeak("template", template.id);
+        return { ok: true, templateId: template.id };
       },
       addConversationComment(body, options) {
         if (!currentUser) {

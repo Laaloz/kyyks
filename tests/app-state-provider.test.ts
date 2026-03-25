@@ -61,10 +61,13 @@ describe("shouldPreserveStoredSessionDuringSupabaseBootstrap", () => {
     ).toBe(false);
     expect(
       shouldRevalidateSupabaseSessionBeforeClearingAuth("bootstrap", "user_athlete_1", true),
-    ).toBe(false);
+    ).toBe(true);
     expect(
       shouldRevalidateSupabaseSessionBeforeClearingAuth("event", null, true),
     ).toBe(false);
+    expect(
+      shouldRevalidateSupabaseSessionBeforeClearingAuth("bootstrap", "user_athlete_1", false),
+    ).toBe(true);
   });
 
   it("preserves the locally restored session during transient null auth events from Supabase", () => {
