@@ -833,6 +833,7 @@ export function AthleteSessionPanel({
                           className={`h-9 min-w-0 rounded-xl px-2 py-1 text-sm font-medium shadow-[inset_0_1px_0_0_var(--shadow-soft)] md:h-10 md:px-3 ${inputToneClass}`}
                           id={`${scheduledWorkoutId}-${log.id}-reps`}
                           type="number"
+                          inputMode="numeric"
                           min={0}
                           placeholder="0"
                           aria-label={`${exerciseName} sarja ${log.setLabel} toteutuneet toistot`}
@@ -846,6 +847,7 @@ export function AthleteSessionPanel({
                           className={`h-9 min-w-0 rounded-xl px-2 py-1 text-sm font-medium shadow-[inset_0_1px_0_0_var(--shadow-soft)] md:h-10 md:px-3 ${inputToneClass}`}
                           id={`${scheduledWorkoutId}-${log.id}-load`}
                           type="number"
+                          inputMode="decimal"
                           min={0}
                           step="0.5"
                           placeholder="0"
@@ -860,6 +862,7 @@ export function AthleteSessionPanel({
                           className={`h-9 min-w-0 rounded-xl px-2 py-1 text-sm font-medium shadow-[inset_0_1px_0_0_var(--shadow-soft)] md:h-10 md:px-3 ${inputToneClass}`}
                           id={`${scheduledWorkoutId}-${log.id}-rpe`}
                           type="number"
+                          inputMode="numeric"
                           min={1}
                           max={10}
                           step={1}
@@ -937,7 +940,11 @@ export function AthleteSessionPanel({
               <Label htmlFor={`${scheduledWorkoutId}-duration`}>Kesto</Label>
               <Input
                 id={`${scheduledWorkoutId}-duration`}
-                inputMode="numeric"
+                type="text"
+                inputMode="text"
+                autoComplete="off"
+                autoCorrect="off"
+                spellCheck={false}
                 placeholder="Esim. 45:00 tai 01:15:00"
                 value={durationDraft}
                 onChange={(event) => {

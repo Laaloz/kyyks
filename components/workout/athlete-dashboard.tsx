@@ -172,7 +172,6 @@ export function AthleteDashboard({
   const isDebugEnabled =
     typeof window !== "undefined" &&
     new URLSearchParams(window.location.search).get("debug_state") === "1";
-  const didAutoResumeWorkout = useRef(false);
   const historySectionRef = useRef<HTMLDivElement | null>(null);
   const historyMenuRef = useRef<HTMLDivElement | null>(null);
   const measurementsSectionRef = useRef<HTMLDivElement | null>(null);
@@ -252,18 +251,7 @@ export function AthleteDashboard({
 
     if (!activeWorkout || activeWorkout.id !== dismissedActiveWorkoutId) {
       setDismissedActiveWorkoutId(null);
-      didAutoResumeWorkout.current = false;
     }
-  }, [activeWorkout, dismissedActiveWorkoutId]);
-
-  useEffect(() => {
-    if (didAutoResumeWorkout.current || !activeWorkout || dismissedActiveWorkoutId === activeWorkout.id) {
-      return;
-    }
-
-    setSelectedWorkoutId(activeWorkout.id);
-    setAthleteLogMode("workout");
-    didAutoResumeWorkout.current = true;
   }, [activeWorkout, dismissedActiveWorkoutId]);
 
   const selectedWorkoutCompletionCount =
