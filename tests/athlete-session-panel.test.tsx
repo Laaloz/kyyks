@@ -1,5 +1,5 @@
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { AthleteSessionPanel } from "@/components/workout/athlete/session-panel";
 import type { WorkoutSession } from "@/lib/types";
@@ -107,5 +107,56 @@ describe("AthleteSessionPanel", () => {
     expect(screen.getByText("Valmentajan ohje")).toBeInTheDocument();
     expect(screen.getAllByText("Penkkipunnerrus")[0]).toBeInTheDocument();
     expect(dialog).toHaveTextContent("Pidä lapatuet tiukkana");
+  });
+
+  it("moves focus semantically to next workout field on Enter", async () => {
+    const session = buildSession();
+    session.setLogs = [
+      ...session.setLogs,
+      {
+        ...session.setLogs[0]!,
+        id: "log_2",
+        setId: "set_2",
+        setLabel: "2",
+      },
+    ];
+
+    render(
+      <AthleteSessionPanel
+        scheduledWorkoutId="workout_1"
+        scheduledWorkoutTitle="Penkkipäivä"
+        selectedSession={session}
+        note=""
+        status="in_progress"
+        onStart={() => undefined}
+        onUpdate={() => undefined}
+        onUpdateDuration={async () => ({ ok: true })}
+        onSaveNote={() => undefined}
+        onComplete={() => undefined}
+        onCancel={() => undefined}
+        onDelete={() => undefined}
+        onBackToList={() => undefined}
+        canDeleteWorkout
+        initialCorrectionMode={false}
+        progress={{ totalSets: 2, completedSets: 0, percent: 0, allDone: false }}
+        previousExerciseResults={new Map()}
+        exerciseInstructions={new Map()}
+        exerciseOrder={new Map([["exercise_group_1", 0]])}
+        loadIncrementKg={2.5}
+        workoutMessage=""
+        isCompleting={false}
+      />,
+    );
+
+    const repsInput = screen.getByLabelText("Penkkipunnerrus sarja 1 toteutuneet toistot");
+    const loadInput = screen.getByLabelText("Penkkipunnerrus sarja 1 toteutunut kuorma");
+    const nextRepsInput = screen.getByLabelText("Penkkipunnerrus sarja 2 toteutuneet toistot");
+
+    repsInput.focus();
+    fireEvent.keyDown(repsInput, { key: "Enter" });
+    await vi.waitFor(() => expect(loadInput).toHaveFocus());
+
+    fireEvent.keyDown(loadInput, { key: "Enter" });
+    await vi.waitFor(() => expect(nextRepsInput).toHaveFocus());
   });
 });

@@ -7,6 +7,7 @@ import {
   useMemo,
   useRef,
   useState,
+  type KeyboardEvent,
   type CSSProperties,
 } from "react";
 
@@ -35,11 +36,67 @@ type ExerciseGroup = {
   logs: WorkoutSession["setLogs"];
 };
 
+type PersistedWorkoutUiState = {
+  noteDraft?: string;
+  restTotalSeconds?: number;
+  restEndsAt?: number;
+  restExerciseKey?: string;
+  restExerciseName?: string;
+};
+
 const inputStepperButtonClass =
   "flex flex-1 items-center justify-center rounded-[0.45rem] border border-[color-mix(in_srgb,var(--border)_58%,transparent)] bg-[color-mix(in_srgb,var(--surface)_96%,transparent)] text-[color-mix(in_srgb,var(--text-subtle)_82%,transparent)] transition hover:border-[color-mix(in_srgb,var(--border-strong)_72%,transparent)] hover:bg-[color-mix(in_srgb,var(--surface)_98%,var(--surface-2))] hover:text-[var(--text-muted)] disabled:cursor-not-allowed disabled:opacity-45";
 
+function getWorkoutUiStorageKey(scheduledWorkoutId: string) {
+  return `rookiapp.workout-ui.${scheduledWorkoutId}`;
+}
+
+function readPersistedWorkoutUiState(scheduledWorkoutId: string): PersistedWorkoutUiState | null {
+  if (typeof window === "undefined") {
+    return null;
+  }
+
+  try {
+    const raw = window.sessionStorage.getItem(getWorkoutUiStorageKey(scheduledWorkoutId));
+    if (!raw) {
+      return null;
+    }
+
+    return JSON.parse(raw) as PersistedWorkoutUiState;
+  } catch {
+    return null;
+  }
+}
+
+function persistWorkoutUiState(scheduledWorkoutId: string, state: PersistedWorkoutUiState) {
+  if (typeof window === "undefined") {
+    return;
+  }
+
+  const hasContent = Object.values(state).some((value) => value !== undefined && value !== null && value !== "");
+
+  try {
+    if (!hasContent) {
+      window.sessionStorage.removeItem(getWorkoutUiStorageKey(scheduledWorkoutId));
+      return;
+    }
+
+    window.sessionStorage.setItem(getWorkoutUiStorageKey(scheduledWorkoutId), JSON.stringify(state));
+  } catch {
+    // Ignore storage failures on restricted browsers.
+  }
+}
+
 function compareSetLabels(left: string, right: string) {
   return left.localeCompare(right, undefined, { numeric: true, sensitivity: "base" });
+}
+
+function getWorkoutFieldId(
+  scheduledWorkoutId: string,
+  logId: string,
+  field: "reps" | "load",
+) {
+  return `${scheduledWorkoutId}-${logId}-${field}`;
 }
 
 function CoachInstructionDialog({
@@ -52,7 +109,7 @@ function CoachInstructionDialog({
   onClose: () => void;
 }) {
   useEffect(() => {
-    const handleKeyDown = (event: KeyboardEvent) => {
+    const handleKeyDown = (event: globalThis.KeyboardEvent) => {
       if (event.key === "Escape") {
         onClose();
       }
@@ -258,7 +315,7 @@ const repsTooltipText =
   "Kirjaa tähän toteutuneet toistot. Jos teit enemmän tai vähemmän kuin suunnitelmassa, merkitse tähän oikea määrä.";
 
 const loadTooltipText =
-  "Kirjaa tähän sarjassa käytetty kuorma kiloina. Jos teit sarjan ilman lisäpainoa, jätä kenttä arvoon 0 tai tyhjäksi käytäntönne mukaan.";
+  "Kirjaa tähän sarjassa käytetty kuorma kiloina. Jos teit sarjan ilman lisäpainoa, jätä kenttä arvoon 0 tai tyhjäksi käytäntönne mukaan. Kuorman säätöaskelta voit muuttaa kohdasta Tili > Asetukset.";
 
 export function AthleteSessionPanel({
   scheduledWorkoutId,
@@ -346,8 +403,53 @@ export function AthleteSessionPanel({
   const secondaryActionsMenuRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
-    setLocalNote(note);
-  }, [note, scheduledWorkoutId]);
+    const persistedState = readPersistedWorkoutUiState(scheduledWorkoutId);
+    if (!persistedState) {
+      setLocalNote(note);
+      setRestTotalSeconds(0);
+      setRestSecondsLeft(0);
+      setRestRunning(false);
+      setRestEndsAt(null);
+      setRestExerciseKey(null);
+      setRestExerciseName(null);
+      return;
+    }
+
+    setLocalNote(persistedState.noteDraft ?? note);
+
+    if (
+      status === "in_progress" &&
+      typeof persistedState.restEndsAt === "number" &&
+      typeof persistedState.restTotalSeconds === "number" &&
+      persistedState.restEndsAt > Date.now() &&
+      persistedState.restTotalSeconds > 0
+    ) {
+      setRestTotalSeconds(persistedState.restTotalSeconds);
+      setRestEndsAt(persistedState.restEndsAt);
+      setRestSecondsLeft(Math.max(0, Math.ceil((persistedState.restEndsAt - Date.now()) / 1000)));
+      setRestRunning(true);
+      setRestExerciseKey(persistedState.restExerciseKey ?? null);
+      setRestExerciseName(persistedState.restExerciseName ?? null);
+      return;
+    }
+
+    setRestTotalSeconds(0);
+    setRestSecondsLeft(0);
+    setRestRunning(false);
+    setRestEndsAt(null);
+    setRestExerciseKey(null);
+    setRestExerciseName(null);
+  }, [note, scheduledWorkoutId, status]);
+
+  useEffect(() => {
+    persistWorkoutUiState(scheduledWorkoutId, {
+      noteDraft: localNote.trim() ? localNote : undefined,
+      restTotalSeconds: restRunning ? restTotalSeconds : undefined,
+      restEndsAt: restRunning ? restEndsAt ?? undefined : undefined,
+      restExerciseKey: restRunning ? restExerciseKey ?? undefined : undefined,
+      restExerciseName: restRunning ? restExerciseName ?? undefined : undefined,
+    });
+  }, [localNote, restEndsAt, restExerciseKey, restExerciseName, restRunning, restTotalSeconds, scheduledWorkoutId]);
 
   useEffect(() => {
     setCorrectionMode(initialCorrectionMode && status === "completed");
@@ -788,6 +890,45 @@ export function AthleteSessionPanel({
 
     handleLogUpdate(log, { actualLoad: nextValue });
   };
+  const focusWorkoutField = (logId: string, field: "reps" | "load") => {
+    if (typeof window === "undefined") {
+      return;
+    }
+
+    window.requestAnimationFrame(() => {
+      const element = document.getElementById(getWorkoutFieldId(scheduledWorkoutId, logId, field));
+      if (!(element instanceof HTMLInputElement)) {
+        return;
+      }
+
+      element.focus();
+      element.select();
+    });
+  };
+
+  const handleWorkoutFieldEnter = (
+    event: KeyboardEvent<HTMLInputElement>,
+    logs: WorkoutSession["setLogs"],
+    currentLog: WorkoutSession["setLogs"][number],
+    field: "reps" | "load",
+  ) => {
+    if (event.key !== "Enter") {
+      return;
+    }
+
+    event.preventDefault();
+
+    if (field === "reps") {
+      focusWorkoutField(currentLog.id, "load");
+      return;
+    }
+
+    const currentIndex = logs.findIndex((entry) => entry.id === currentLog.id);
+    const nextLog = currentIndex >= 0 ? logs[currentIndex + 1] : undefined;
+    if (nextLog) {
+      focusWorkoutField(nextLog.id, "reps");
+    }
+  };
   const toggleSecondaryActionsMenu = (anchor: HTMLButtonElement) => {
     if (isSecondaryActionsOpen) {
       setIsSecondaryActionsOpen(false);
@@ -952,6 +1093,7 @@ export function AthleteSessionPanel({
                         <div className="relative">
                           <Input
                             className={`h-9 min-w-0 rounded-xl px-2 py-1 pr-8 text-center text-sm font-medium shadow-[inset_0_1px_0_0_var(--shadow-soft)] md:h-10 md:px-3 md:pr-9 ${inputToneClass}`}
+                            id={getWorkoutFieldId(scheduledWorkoutId, log.id, "reps")}
                             type="text"
                             inputMode="numeric"
                             pattern="[0-9]*"
@@ -960,6 +1102,7 @@ export function AthleteSessionPanel({
                             value={log.actualReps ?? ""}
                             disabled={readOnly}
                             onChange={(event) => handleLogUpdate(log, { actualReps: numberOrUndefined(event.target.value) })}
+                            onKeyDown={(event) => handleWorkoutFieldEnter(event, logs, log, "reps")}
                           />
                           <div className="absolute inset-y-1 right-1 flex w-6 flex-col justify-center gap-px rounded-[0.55rem] bg-[color-mix(in_srgb,var(--border)_26%,transparent)] p-px">
                             <button
@@ -987,6 +1130,7 @@ export function AthleteSessionPanel({
                         <div className="relative">
                           <Input
                             className={`h-9 min-w-0 rounded-xl px-2 py-1 pr-8 text-center text-sm font-medium shadow-[inset_0_1px_0_0_var(--shadow-soft)] md:h-10 md:px-3 md:pr-9 ${inputToneClass}`}
+                            id={getWorkoutFieldId(scheduledWorkoutId, log.id, "load")}
                             type="text"
                             inputMode="decimal"
                             placeholder="0"
@@ -995,6 +1139,7 @@ export function AthleteSessionPanel({
                             disabled={readOnly}
                             onChange={(event) => handleLoadDraftChange(log, event.target.value)}
                             onBlur={() => handleLoadDraftBlur(log)}
+                            onKeyDown={(event) => handleWorkoutFieldEnter(event, logs, log, "load")}
                           />
                           <div className="absolute inset-y-1 right-1 flex w-6 flex-col justify-center gap-px rounded-[0.55rem] bg-[color-mix(in_srgb,var(--border)_26%,transparent)] p-px">
                             <button
@@ -1206,26 +1351,25 @@ export function AthleteSessionPanel({
       </div>
 
       {status !== "completed" && restTotalSeconds > 0 && restExerciseKey ? (
-        <div className="sticky bottom-[max(env(safe-area-inset-bottom),0.75rem)] z-30 mt-4 md:fixed md:bottom-3 md:right-6 md:left-auto md:mt-0 md:w-[min(24rem,calc(100vw-3rem))]">
-          <div className="ml-auto w-full max-w-full rounded-2xl border border-[var(--accent)] bg-[var(--surface)] p-3.5 shadow-[0_14px_30px_-18px_var(--shadow)]">
+        <div className="sticky bottom-[max(env(safe-area-inset-bottom),0.75rem)] z-30 mt-4 md:fixed md:bottom-3 md:right-6 md:left-auto md:mt-0 md:w-[min(18rem,calc(100vw-2rem))]">
+          <div className="ml-auto w-full max-w-full rounded-2xl border border-[color-mix(in_srgb,var(--accent)_50%,var(--border))] bg-[color-mix(in_srgb,var(--surface)_94%,var(--surface-3))] px-3 py-2.5 shadow-[0_12px_26px_-20px_var(--shadow)] backdrop-blur">
             <div className="flex items-start justify-between gap-3">
               <div className="min-w-0 flex-1">
-                <div className="inline-flex items-center gap-1">
-                  <p className="text-xs font-semibold tracking-[0.04em] text-[var(--text-subtle)]">
-                    Lepoajastin
-                  </p>
-                  <InfoTooltip
-                    side="top"
-                    text="Ajastin käynnistyy, kun sarja merkitään tehdyksi. Ohita lopettaa nykyisen levon."
-                  />
-                </div>
+                <p className="text-[10px] font-semibold uppercase tracking-[0.06em] text-[var(--text-subtle)]">
+                  Lepo
+                </p>
                 <p className="truncate text-sm font-medium text-[var(--text)]">{restExerciseName ?? "Liike"}</p>
               </div>
-              <Badge className="border-[var(--accent)] bg-[var(--surface-3)] text-[var(--accent)]">
-                {formatDuration(restSecondsLeft)}
-              </Badge>
+              <div className="text-right">
+                <p className="text-lg font-semibold tabular-nums text-[var(--accent)]">
+                  {formatDuration(restSecondsLeft)}
+                </p>
+                <p className="text-[10px] text-[var(--text-subtle)]">
+                  {restRunning ? "Kaynnissa" : "Valmis"}
+                </p>
+              </div>
             </div>
-            <div className="mt-3 h-2 overflow-hidden rounded-full bg-[var(--surface-3)]">
+            <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-[var(--surface-3)]">
               <div
                 className="h-full rounded-full bg-[var(--accent)] transition-[width]"
                 style={{
@@ -1233,17 +1377,24 @@ export function AthleteSessionPanel({
                 }}
               />
             </div>
-            <div className="mt-2 flex items-center justify-between gap-3 text-xs text-[var(--text-muted)]">
+            <div className="mt-2 flex items-center justify-between gap-3 text-[11px] text-[var(--text-subtle)]">
               <span>Aloitus {formatDuration(restTotalSeconds)}</span>
-              <span>{restRunning ? "Lepo käynnissä" : "Tauko päättynyt"}</span>
-            </div>
-            <div className="mt-3 flex gap-2">
-              <Button type="button" variant="ghost" className="flex-1 py-2 text-sm" onClick={skipRestTimer}>
-                Ohita
-              </Button>
-              <Button type="button" variant="secondary" className="flex-1 py-2 text-sm" onClick={restartRestTimer}>
-                Uudelleen
-              </Button>
+              <div className="flex items-center gap-1.5">
+                <button
+                  type="button"
+                  className="rounded-full border border-[var(--border)] bg-[var(--surface)] px-2 py-1 text-[11px] font-medium text-[var(--text-muted)] transition hover:border-[var(--border-strong)] hover:text-[var(--text)]"
+                  onClick={skipRestTimer}
+                >
+                  Ohita
+                </button>
+                <button
+                  type="button"
+                  className="rounded-full border border-[var(--border)] bg-[var(--surface)] px-2 py-1 text-[11px] font-medium text-[var(--text-muted)] transition hover:border-[var(--border-strong)] hover:text-[var(--text)]"
+                  onClick={restartRestTimer}
+                >
+                  Uudelleen
+                </button>
+              </div>
             </div>
           </div>
         </div>
