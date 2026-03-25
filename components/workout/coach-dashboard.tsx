@@ -30,6 +30,7 @@ import {
 } from "@/components/workout/coach/program-composer";
 import { estimateStrengthCalories, getLatestMeasurement, getMeasurementsForUser, getWeightAtMoment } from "@/lib/body-metrics";
 import { calculateSessionDurationSeconds } from "@/lib/domain";
+import { withMinimumDelay } from "@/lib/min-delay";
 import { buildWorkoutConversationContextOptions } from "@/lib/workout-conversation-context";
 import { buildWorkoutHistoryTitleMap } from "@/lib/workout-history-title";
 import { isProgramActive } from "@/lib/program-status";
@@ -273,18 +274,22 @@ export function CoachDashboard({
               onSubmit={form.handleSubmit(async (values) => {
                 const payloadWorkouts = mapComposerWorkouts(values.workouts);
                 const result = isEditingProgram && editingProgramId
-                  ? await updateProgram(editingProgramId, {
-                      title: values.title,
-                      description: values.description,
-                      athleteId: values.athleteId,
-                      workouts: payloadWorkouts,
-                    })
-                  : await createProgram({
-                      title: values.title,
-                      description: values.description,
-                      athleteId: values.athleteId,
-                      workouts: payloadWorkouts,
-                    });
+                  ? await withMinimumDelay(
+                      updateProgram(editingProgramId, {
+                        title: values.title,
+                        description: values.description,
+                        athleteId: values.athleteId,
+                        workouts: payloadWorkouts,
+                      }),
+                    )
+                  : await withMinimumDelay(
+                      createProgram({
+                        title: values.title,
+                        description: values.description,
+                        athleteId: values.athleteId,
+                        workouts: payloadWorkouts,
+                      }),
+                    );
 
                 if (!result.ok) {
                   setProgramMessage(result.message);
@@ -364,7 +369,7 @@ export function CoachDashboard({
 
               <div className="rounded-xl border-2 border-dashed border-[var(--border)] bg-[var(--surface-2)] p-4">
                 <p className="text-sm text-[var(--text-muted)]">
-                  Lisää uusi harjoitus ohjelman loppuun. Uusi harjoitus avautuu automaattisesti näkyviin.
+                  Lisää uusi treeni ohjelman loppuun. Uusi treeni avautuu automaattisesti näkyviin.
                 </p>
                 <Button
                   type="button"
@@ -385,7 +390,7 @@ export function CoachDashboard({
                   }}
                 >
                   <Plus className="mr-2 size-4" />
-                  Lisää harjoitus loppuun
+                  Lisää treeni loppuun
                 </Button>
                 {isEditingProgram ? (
                   <p className="mt-2 text-xs text-[var(--text-subtle)]">
@@ -470,7 +475,7 @@ export function CoachDashboard({
                                   <Badge className="border-[var(--accent-strong)] bg-[var(--surface)] text-[var(--accent-strong)]">
                                     Käytössä nyt
                                   </Badge>
-                                  <Badge>{program.workouts?.length ?? 0} harjoitusta</Badge>
+                                  <Badge>{program.workouts?.length ?? 0} treeniä</Badge>
                                   {isActiveEditorTarget ? <Badge>Aktiivinen muokkaus</Badge> : null}
                                 </div>
                                 <p className="mt-1 text-sm text-[var(--text-muted)]">Treenaaja: {athleteName}</p>
@@ -610,7 +615,7 @@ export function CoachDashboard({
                                 <div className="flex flex-wrap items-center gap-2">
                                   <p className="text-lg font-semibold text-[var(--text)]">{program.title}</p>
                                   <Badge>Aiempi ohjelma</Badge>
-                                  <Badge>{program.workouts?.length ?? 0} harjoitusta</Badge>
+                                  <Badge>{program.workouts?.length ?? 0} treeniä</Badge>
                                   {isActiveEditorTarget ? <Badge>Aktiivinen muokkaus</Badge> : null}
                                 </div>
                                 <p className="mt-1 text-sm text-[var(--text-muted)]">Treenaaja: {athleteName}</p>

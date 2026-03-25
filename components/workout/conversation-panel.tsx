@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardDescription, CardTitle } from "@/components/ui/card";
 import { Label, Select, Textarea } from "@/components/ui/field";
 import { isConversationEntryNotifiable } from "@/lib/conversation";
+import { withMinimumDelay } from "@/lib/min-delay";
 import type { AppState, ConversationEntry, Role } from "@/lib/types";
 import { formatDateWithWeekday } from "@/lib/utils";
 import { normalizeWorkoutHistoryTitle } from "@/lib/workout-history-title";
@@ -75,7 +76,7 @@ export function ConversationPanel({
 
     setIsSending(true);
     try {
-      const result = await onSend(draft, selectedContext);
+      const result = await withMinimumDelay(Promise.resolve(onSend(draft, selectedContext)));
       if (!result.ok) {
         setMessage(result.message);
         notify({ tone: "danger", message: result.message });

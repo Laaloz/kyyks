@@ -15,6 +15,7 @@ import { Button } from "@/components/ui/button";
 import { Input, Label, Textarea } from "@/components/ui/field";
 import { InfoTooltip } from "@/components/ui/tooltip";
 import { numberOrUndefined } from "@/components/workout/schemas";
+import { withMinimumDelay } from "@/lib/min-delay";
 import { workoutStatusLabel } from "@/components/workout/shared";
 import { calculateSessionDurationSeconds } from "@/lib/domain";
 import type { WorkoutSession } from "@/lib/types";
@@ -1015,7 +1016,7 @@ export function AthleteSessionPanel({
 
                 setIsSavingDuration(true);
                 try {
-                  const result = await onUpdateDuration(parsedDuration);
+                  const result = await withMinimumDelay(onUpdateDuration(parsedDuration));
                   setDurationMessage(result.ok ? "Kesto päivitetty." : result.message ?? "Keston paivitys epaonnistui.");
                 } finally {
                   setIsSavingDuration(false);
@@ -1153,10 +1154,10 @@ export function AthleteSessionPanel({
             />
             <span>
               {isCompleting
-                ? "Merkitään treeniä valmiiksi..."
+                ? "Merkitään treeni valmiiksi..."
                 : isCancellingWorkout
-                  ? "Keskeytetään treeniä..."
-                  : "Poistetaan treeniä..."}
+                  ? "Keskeytetään treeni..."
+                  : "Poistetaan treeni..."}
             </span>
           </div>
         ) : null}
@@ -1173,23 +1174,23 @@ export function AthleteSessionPanel({
                       setIsStartingWorkout(false);
                     }
                   }}
-                  type="button"
-                  className="w-full sm:w-auto"
-                  loading={isStartingWorkout}
-                  loadingText="Käynnistetään treeniä..."
-                >
-                  Jatka treeniä
-                </Button>
+                   type="button"
+                   className="w-full sm:w-auto"
+                   loading={isStartingWorkout}
+                   loadingText="Käynnistetään treeni..."
+                 >
+                   Jatka treeniä
+                 </Button>
               ) : (
                 <Button
                   onClick={onComplete}
-                  type="button"
-                  className="w-full sm:w-auto"
-                  loading={isCompleting}
-                  loadingText="Merkitään valmiiksi..."
-                >
-                  Merkitse treeni valmiiksi
-                </Button>
+                   type="button"
+                   className="w-full sm:w-auto"
+                   loading={isCompleting}
+                   loadingText="Merkitään treeni valmiiksi..."
+                 >
+                   Merkitse treeni valmiiksi
+                 </Button>
               )}
               {showBottomBackToList ? (
                 <Button onClick={onBackToList} type="button" variant="ghost" className="w-full sm:w-auto">
@@ -1264,7 +1265,7 @@ export function AthleteSessionPanel({
                             }
                           }}
                         >
-                          {isCancellingWorkout ? "Keskeytetään..." : "Keskeytä treeni"}
+                          {isCancellingWorkout ? "Keskeytetään treeni..." : "Keskeytä treeni"}
                         </button>
                       ) : null}
                       {showDeleteAction ? (
@@ -1286,7 +1287,7 @@ export function AthleteSessionPanel({
                             }
                           }}
                         >
-                          {isDeletingWorkout ? "Poistetaan..." : "Poista treeni"}
+                          {isDeletingWorkout ? "Poistetaan treeni..." : "Poista treeni"}
                         </button>
                       ) : null}
                     </div>

@@ -89,7 +89,7 @@ function defaultWorkoutName(splitType: SplitType, _index: number) {
   if (splitType === "upper") return "Yläkroppa";
   if (splitType === "lower") return "Alakroppa";
   if (splitType === "full_body") return "Koko kroppa";
-  return "Harjoitus";
+  return "Treeni";
 }
 
 function buildProgramWorkouts(

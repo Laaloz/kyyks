@@ -12,6 +12,7 @@ import { Card, CardDescription, CardTitle } from "@/components/ui/card";
 import { Input, Label, Select } from "@/components/ui/field";
 import { userSettingsSchema } from "@/components/workout/schemas";
 import { roleLabel } from "@/components/workout/shared";
+import { withMinimumDelay } from "@/lib/min-delay";
 import { getAssignableCoachUsers, getDashboardViewsForRole, getDefaultDashboardView } from "@/lib/role-access";
 import type { DashboardHomeView, Role, ThemeMode } from "@/lib/types";
 import { useAppState } from "@/providers/app-state-provider";
@@ -28,6 +29,8 @@ const themeModeLabel: Record<ThemeMode, string> = {
   light: "Vaalea",
   dark: "Tumma",
 };
+
+const SETTINGS_SAVE_MIN_LOADING_MS = 350;
 
 function resolveDefaultView(role: Role, value: DashboardHomeView | undefined): DashboardHomeView {
   const allowed = getDashboardViewsForRole(role);
@@ -165,7 +168,7 @@ export function UserSettingsPanel() {
       return;
     }
 
-    const result = await updateCurrentUserSettings(values);
+    const result = await withMinimumDelay(updateCurrentUserSettings(values));
     setMessage(result.ok ? "" : result.message);
     notify({ tone: result.ok ? "success" : "danger", message: result.ok ? "Asetukset tallennettiin." : result.message });
   });
@@ -297,7 +300,7 @@ export function UserSettingsPanel() {
               onClick={async () => {
                 setIsSendingOwnPasswordReset(true);
                 try {
-                  const result = await requestCurrentUserPasswordReset();
+                  const result = await withMinimumDelay(requestCurrentUserPasswordReset());
                   setPasswordResetMessage(result.message);
                   notify({ tone: result.ok ? "success" : "danger", message: result.message });
                 } finally {
@@ -426,7 +429,9 @@ export function UserSettingsPanel() {
                             onClick={async () => {
                               setIsSavingRole(true);
                               try {
-                                const result = await adminUpdateUserRole(selectedManagedUser.id, selectedManagedRole);
+                                const result = await withMinimumDelay(
+                                  adminUpdateUserRole(selectedManagedUser.id, selectedManagedRole),
+                                );
                                 setAdminMessage(
                                   result.ok
                                     ? `Rooli päivitettiin: ${selectedManagedUser.fullName} on nyt ${roleLabel(selectedManagedRole)}.`
@@ -476,9 +481,8 @@ export function UserSettingsPanel() {
                               onClick={async () => {
                                 setIsSavingCoaches(true);
                                 try {
-                                  const result = await adminAssignAthleteCoaches(
-                                    selectedManagedUser.id,
-                                    selectedManagedCoachIds,
+                                  const result = await withMinimumDelay(
+                                    adminAssignAthleteCoaches(selectedManagedUser.id, selectedManagedCoachIds),
                                   );
                                   setAdminMessage(
                                     "message" in result ? result.message : "Vastuuhenkilöt tallennettiin.",
@@ -568,7 +572,9 @@ export function UserSettingsPanel() {
                         onClick={async () => {
                           setIsSendingManagedPasswordReset(true);
                           try {
-                            const result = await adminSendPasswordResetEmail(selectedManagedUser.id);
+                            const result = await withMinimumDelay(
+                              adminSendPasswordResetEmail(selectedManagedUser.id),
+                            );
                             setAdminMessage(result.message);
                             setPreviewResetUrl(result.ok ? (result.previewUrl ?? "") : "");
                           } finally {

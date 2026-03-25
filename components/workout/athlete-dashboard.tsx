@@ -22,6 +22,7 @@ import { ConversationPanel } from "@/components/workout/conversation-panel";
 import { MetricTrendChart } from "@/components/workout/metric-trend-chart";
 import { estimateStrengthCalories, getLatestMeasurement, getMeasurementsForUser, getWeightAtMoment } from "@/lib/body-metrics";
 import { calculateSessionDurationSeconds, getSessionProgress } from "@/lib/domain";
+import { withMinimumDelay } from "@/lib/min-delay";
 import { isProgramActive } from "@/lib/program-status";
 import { buildWorkoutConversationContextOptions } from "@/lib/workout-conversation-context";
 import { buildWorkoutHistoryTitleMap, normalizeWorkoutHistoryTitle } from "@/lib/workout-history-title";
@@ -363,15 +364,15 @@ export function AthleteDashboard({
     const result = await startProgramWorkout(programId, workoutId);
     if (result.ok && result.scheduledWorkoutId) {
       openWorkoutView(result.scheduledWorkoutId);
-      setWorkoutMessage(`Harjoitus "${workoutName}" käynnistetty.`);
-      notify({ tone: "success", message: `Harjoitus "${workoutName}" käynnistyi.` });
+      setWorkoutMessage(`Treeni "${workoutName}" käynnistyi.`);
+      notify({ tone: "success", message: `Treeni "${workoutName}" käynnistyi.` });
       onOpenWorkoutLog?.();
       setPendingWorkoutTransition(null);
       return;
     }
 
     setPendingWorkoutTransition(null);
-    setWorkoutMessage(result.ok ? "Harjoitus käynnistetty." : result.message);
+    setWorkoutMessage(result.ok ? "Treeni käynnistyi." : result.message);
     if (!result.ok) {
       notify({ tone: "danger", message: result.message });
     }
@@ -795,7 +796,7 @@ export function AthleteDashboard({
                   {activeWorkout
                     ? normalizeWorkoutHistoryTitle(activeWorkout.title)
                     : athletePrograms.length
-                      ? "Valitse harjoitus ohjelmasta"
+                      ? "Valitse treeni ohjelmasta"
                       : "Ei treenejä vielä"}
                 </p>
                 <p className="mt-1 text-sm text-[var(--text-muted)]">
@@ -968,7 +969,7 @@ export function AthleteDashboard({
 
                   setIsSavingMeasurements(true);
                   try {
-                    const result = await updateCurrentUserMeasurements(parsed.data);
+                    const result = await withMinimumDelay(updateCurrentUserMeasurements(parsed.data));
                     setMeasurementMessage(result.ok ? "Mittatiedot tallennettu." : result.message);
                     setMeasurementMessageTone(result.ok ? "success" : "error");
                   } finally {
@@ -1037,7 +1038,7 @@ export function AthleteDashboard({
                 {activeWorkout
                   ? "Jatka treeniä ilman ylimääräisiä välivaiheita."
                   : athletePrograms.length
-                    ? "Valitse harjoitus, käynnistä treeni tai palaa aiempiin toteutuksiin."
+                    ? "Valitse treeni, käynnistä se tai palaa aiempiin toteutuksiin."
                     : "Kun ohjelma on luotu, käynnistät treenit tästä näkymästä."}
               </p>
               <div className="mt-4 flex flex-wrap gap-3">
@@ -1301,10 +1302,10 @@ export function AthleteDashboard({
         ) : (
           <div className="grid gap-6">
             <Card>
-              <p className="text-xs font-semibold tracking-[0.04em] text-[var(--text-subtle)]">Ohjelman harjoitukset</p>
-              <CardTitle className="text-2xl">Valitse harjoitus</CardTitle>
+              <p className="text-xs font-semibold tracking-[0.04em] text-[var(--text-subtle)]">Ohjelman treenit</p>
+              <CardTitle className="text-2xl">Valitse treeni</CardTitle>
               <CardDescription className="mt-2">
-                 Aloita harjoitus ohjelmastasi. Aiempien toteutusten tiedot löydät historiasta.
+                 Aloita treeni ohjelmastasi. Aiempien toteutusten tiedot löydät historiasta.
               </CardDescription>
               {blockingWorkout ? (
                 <p className="mt-4 rounded-2xl border border-[var(--accent)] bg-[color:color-mix(in_srgb,var(--accent)_12%,var(--surface))] px-4 py-3 text-sm text-[var(--text)] shadow-[0_10px_24px_-22px_var(--accent)]">

@@ -11,6 +11,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardDescription, CardTitle } from "@/components/ui/card";
 import { Input, Label } from "@/components/ui/field";
 import { getInviteLifecycleLabel, getVisiblePendingInvites } from "@/lib/invite-status";
+import { withMinimumDelay } from "@/lib/min-delay";
 import { useAppState } from "@/providers/app-state-provider";
 
 import { inviteSchema } from "@/components/workout/schemas";
@@ -45,11 +46,13 @@ export function CoachInvitePanel() {
         <form
           className="mt-6 space-y-4"
           onSubmit={form.handleSubmit(async (values) => {
-            const result = await createInvite({
-              email: values.email,
-              role: "athlete",
-              coachId: currentUser?.id,
-            });
+            const result = await withMinimumDelay(
+              createInvite({
+                email: values.email,
+                role: "athlete",
+                coachId: currentUser?.id,
+              }),
+            );
             setInviteMessage(result.ok ? `Kutsu lähetettiin osoitteeseen ${values.email}.` : result.message);
             notify({
               tone: result.ok ? "success" : "danger",
@@ -131,7 +134,7 @@ export function CoachInvitePanel() {
                         onClick={async () => {
                           setResendingInviteId(invite.id);
                           try {
-                            const result = await resendInvite(invite.id);
+                            const result = await withMinimumDelay(resendInvite(invite.id));
                             setResendMessage(result.ok ? `Kutsu lähetettiin uudelleen osoitteeseen ${invite.email}.` : result.message);
                             notify({
                               tone: result.ok ? "success" : "danger",

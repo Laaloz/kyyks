@@ -55,7 +55,7 @@ export function ProgramWorkoutEditor({
       id={`program-workout-${fieldId}`}
     >
       <legend className="px-2 text-sm font-semibold text-[var(--text-subtle)]">
-        Harjoitus {index + 1}
+        Treeni {index + 1}
       </legend>
 
       <div className="grid gap-4 [grid-template-columns:repeat(auto-fit,minmax(15rem,1fr))]">
@@ -70,7 +70,7 @@ export function ProgramWorkoutEditor({
         </div>
         {selectedSplitType === "custom" ? (
           <div>
-            <Label htmlFor={`workout-${index}-name`}>Harjoituksen nimi</Label>
+            <Label htmlFor={`workout-${index}-name`}>Treenin nimi</Label>
             <Input
               id={`workout-${index}-name`}
               {...register(`workouts.${index}.nameOverride` as const)}
@@ -312,7 +312,7 @@ export function ProgramWorkoutEditor({
         </Button>
         {removable ? (
           <Button type="button" variant="ghost" onClick={onRemove}>
-            Poista harjoitus
+            Poista treeni
           </Button>
         ) : null}
       </div>

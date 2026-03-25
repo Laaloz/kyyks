@@ -1284,6 +1284,18 @@ async function withTimeout<T>(promise: Promise<T>, timeoutMs: number, fallback: 
   });
 }
 
+async function waitForNextPaint(frameCount = 1) {
+  if (typeof window === "undefined") {
+    return;
+  }
+
+  for (let index = 0; index < frameCount; index += 1) {
+    await new Promise<void>((resolve) => {
+      window.requestAnimationFrame(() => resolve());
+    });
+  }
+}
+
 function getSupabaseLoginErrorMessage(message: string) {
   const normalized = message.toLowerCase();
   if (normalized.includes("invalid login credentials")) {
@@ -2056,7 +2068,7 @@ function findResolvedUserIdInSnapshot(
           return { ok: true, message: "Ei tallennettavia muutoksia." };
         }
 
-        setState((previous) => ({
+        const applySettingsUpdate = () => setState((previous) => ({
           ...previous,
           users: previous.users.map((user) =>
             user.id === currentUser.id
@@ -2102,9 +2114,13 @@ function findResolvedUserIdInSnapshot(
             return { ok: false, message: payload?.message ?? "Asetusten tallennus epäonnistui." };
           }
 
+          applySettingsUpdate();
+          await waitForNextPaint(2);
           return { ok: true };
         }
 
+        applySettingsUpdate();
+        await waitForNextPaint(2);
         return { ok: true };
       },
       async updateCurrentUserMeasurements(input) {

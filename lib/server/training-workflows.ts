@@ -160,7 +160,7 @@ function isExercisesExternalKeySchemaError(message: string | undefined) {
 }
 
 function displayWorkoutTitle(title: string) {
-  return title.trim() || "Harjoitus";
+  return title.trim() || "Treeni";
 }
 
 function resolveDefaultActualReps(target: { targetReps: number; targetRepsMin?: number }) {

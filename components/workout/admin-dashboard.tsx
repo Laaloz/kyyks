@@ -13,6 +13,7 @@ import { Card, CardDescription, CardTitle } from "@/components/ui/card";
 import { Input, Label, Select } from "@/components/ui/field";
 import { getAdminCoachingCoverage, getAdminOverviewAthleteGroups } from "@/lib/admin-overview";
 import { getInviteLifecycleLabel, getVisiblePendingInvites } from "@/lib/invite-status";
+import { withMinimumDelay } from "@/lib/min-delay";
 import { isProgramActive } from "@/lib/program-status";
 import { canResendInvite, getAssignableCoachUsers } from "@/lib/role-access";
 import { formatDate } from "@/lib/utils";
@@ -527,7 +528,7 @@ export function AdminDashboard({ view }: { view: WorkspaceView }) {
             <form
               className="mt-6 space-y-4"
               onSubmit={form.handleSubmit(async (values) => {
-                const result = await createInvite(values);
+                const result = await withMinimumDelay(createInvite(values));
                 setInviteMessage(result.ok ? `Kutsu lähetettiin osoitteeseen ${values.email}.` : result.message);
                 notify({
                   tone: result.ok ? "success" : "danger",
@@ -657,7 +658,7 @@ export function AdminDashboard({ view }: { view: WorkspaceView }) {
                               onClick={async () => {
                                 setResendingInviteId(invite.id);
                                 try {
-                                  const result = await resendInvite(invite.id);
+                                  const result = await withMinimumDelay(resendInvite(invite.id));
                                   setResendMessage(result.ok ? `Kutsu lähetettiin uudelleen osoitteeseen ${invite.email}.` : result.message);
                                   notify({
                                     tone: result.ok ? "success" : "danger",

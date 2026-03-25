@@ -17,7 +17,7 @@ const numericSuffixPattern = /^\d{1,2}$/;
 export function normalizeWorkoutHistoryTitle(title: string) {
   const cleaned = title.trim().replace(/\s+/g, " ");
   if (!cleaned) {
-    return "Harjoitus";
+    return "Treeni";
   }
 
   const tokens = cleaned.split(" ");
