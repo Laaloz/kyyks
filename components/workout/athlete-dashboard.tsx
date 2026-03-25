@@ -377,6 +377,13 @@ export function AthleteDashboard({
     setHistoryMenuStyle(null);
     setAthleteLogMode("workout");
   };
+  const toggleHistoryGroup = (groupKey: string, nextExpanded: boolean) => {
+    setExpandedHistoryGroups((current) => ({
+      ...current,
+      [groupKey]: nextExpanded,
+    }));
+    setHistoryFocusWorkoutId(null);
+  };
   const startWorkoutFromProgram = async (programId: string, workoutId: string, workoutName: string, sourceKey: string) => {
     setPendingWorkoutTransition({ type: "start", workoutId, workoutName, sourceKey });
     const result = await startProgramWorkout(programId, workoutId);
@@ -731,10 +738,16 @@ export function AthleteDashboard({
 
     const focusedGroupKey = historyGroupByWorkoutId.get(historyFocusWorkoutId);
     if (focusedGroupKey) {
-      setExpandedHistoryGroups((current) => ({
-        ...current,
-        [focusedGroupKey]: true,
-      }));
+      setExpandedHistoryGroups((current) => {
+        if (current[focusedGroupKey] !== undefined) {
+          return current;
+        }
+
+        return {
+          ...current,
+          [focusedGroupKey]: true,
+        };
+      });
     }
 
     const resetTimer = window.setTimeout(() => {
@@ -1697,19 +1710,11 @@ export function AthleteDashboard({
                               className="cursor-pointer p-3 text-left outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--surface-2)] sm:p-4"
                               aria-expanded={isGroupExpanded}
                               aria-controls={`athlete-history-panel-${group.key}`}
-                              onClick={() =>
-                                setExpandedHistoryGroups((current) => ({
-                                  ...current,
-                                  [group.key]: !isGroupExpanded,
-                                }))
-                              }
+                              onClick={() => toggleHistoryGroup(group.key, !isGroupExpanded)}
                               onKeyDown={(event) => {
                                 if (event.key === "Enter" || event.key === " ") {
                                   event.preventDefault();
-                                  setExpandedHistoryGroups((current) => ({
-                                    ...current,
-                                    [group.key]: !isGroupExpanded,
-                                  }));
+                                  toggleHistoryGroup(group.key, !isGroupExpanded);
                                 }
                               }}
                             >
