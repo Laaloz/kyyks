@@ -1272,7 +1272,8 @@ export async function updateWorkoutSetOnServer({
           status: "in_progress",
           updated_at: updatePayload.updated_at,
         })
-        .eq("id", scheduledWorkoutId),
+        .eq("id", scheduledWorkoutId)
+        .eq("status", "in_progress"),
     );
   }
 

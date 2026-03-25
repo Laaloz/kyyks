@@ -343,6 +343,7 @@ export function AthleteSessionPanel({
   const [isStartingWorkout, setIsStartingWorkout] = useState(false);
   const [isCancellingWorkout, setIsCancellingWorkout] = useState(false);
   const [isDeletingWorkout, setIsDeletingWorkout] = useState(false);
+  const [loadDrafts, setLoadDrafts] = useState<Record<string, string>>({});
   const secondaryActionsMenuRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
@@ -365,6 +366,7 @@ export function AthleteSessionPanel({
     setExpandedExerciseKeys({});
     setOpenInstruction(null);
     setDurationMessage("");
+    setLoadDrafts({});
   }, [scheduledWorkoutId]);
 
   useEffect(() => {
@@ -655,6 +657,42 @@ export function AthleteSessionPanel({
     startRestTimer(log.targetRestSeconds ?? 180, log.templateExerciseId, log.exerciseName, log.supersetGroup);
   };
 
+  const handleLoadDraftChange = (log: WorkoutSession["setLogs"][number], rawValue: string) => {
+    setLoadDrafts((previous) => ({
+      ...previous,
+      [log.id]: rawValue,
+    }));
+
+    if (rawValue.trim() === "") {
+      onUpdate(log.id, { actualLoad: undefined });
+      return;
+    }
+
+    const normalized = rawValue.trim().replace(",", ".");
+    if (normalized.endsWith(".")) {
+      return;
+    }
+
+    const parsedValue = Number(normalized);
+    if (!Number.isFinite(parsedValue)) {
+      return;
+    }
+
+    onUpdate(log.id, { actualLoad: parsedValue });
+  };
+
+  const handleLoadDraftBlur = (log: WorkoutSession["setLogs"][number]) => {
+    setLoadDrafts((previous) => {
+      if (!(log.id in previous)) {
+        return previous;
+      }
+
+      const next = { ...previous };
+      delete next[log.id];
+      return next;
+    });
+  };
+
   const readOnly = status === "completed" && !correctionMode;
   const showCancelAction = status === "in_progress";
   const showResumeAction = status === "cancelled";
@@ -856,9 +894,10 @@ export function AthleteSessionPanel({
                           inputMode="decimal"
                           placeholder="0"
                           aria-label={`${exerciseName} sarja ${log.setLabel} toteutunut kuorma`}
-                          value={log.actualLoad ?? ""}
+                          value={loadDrafts[log.id] ?? (log.actualLoad !== undefined ? String(log.actualLoad).replace(".", ",") : "")}
                           disabled={readOnly}
-                          onChange={(event) => handleLogUpdate(log, { actualLoad: numberOrUndefined(event.target.value) })}
+                          onChange={(event) => handleLoadDraftChange(log, event.target.value)}
+                          onBlur={() => handleLoadDraftBlur(log)}
                         />
                       </div>
                       <div className="min-w-0">
