@@ -1261,7 +1261,7 @@ export function AthleteDashboard({
                 Aloita harjoitus ohjelmastasi. Aiempien treenien tiedot löydät historiasta.
               </CardDescription>
               {blockingWorkout ? (
-                <p className="mt-4 rounded-2xl border border-[var(--accent)] bg-[color-mix(in_srgb,var(--accent)_8%,white)] px-4 py-3 text-sm text-[var(--text)]">
+                <p className="mt-4 rounded-2xl border border-[var(--accent)] bg-[color:color-mix(in_srgb,var(--accent)_12%,var(--surface))] px-4 py-3 text-sm text-[var(--text)] shadow-[0_10px_24px_-22px_var(--accent)]">
                   Kesken oleva treeni lukitsee uuden aloituksen. Jatka ensin treeniä{" "}
                   <span className="font-semibold">{normalizeWorkoutHistoryTitle(blockingWorkout.title)}</span>.
                 </p>

@@ -1140,7 +1140,8 @@ export function AthleteSessionPanel({
                   Takaisin treenilistaan
                 </Button>
               ) : null}
-              {hasSecondaryActions ? (
+              <div className="hidden sm:block">
+                {hasSecondaryActions ? (
                 <div className="relative" data-session-actions-menu-root="true">
                   <Button
                     type="button"
@@ -1226,7 +1227,50 @@ export function AthleteSessionPanel({
                     </div>
                   ) : null}
                 </div>
-              ) : null}
+                ) : null}
+              </div>
+              <div className="grid w-full gap-2 sm:hidden">
+                {showCancelAction ? (
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    className="w-full"
+                    disabled={isCancellingWorkout || isDeletingWorkout}
+                    loading={isCancellingWorkout}
+                    loadingText="Keskeytetään..."
+                    onClick={async () => {
+                      setIsCancellingWorkout(true);
+                      try {
+                        await onCancel();
+                      } finally {
+                        setIsCancellingWorkout(false);
+                      }
+                    }}
+                  >
+                    Keskeytä treeni
+                  </Button>
+                ) : null}
+                {showDeleteAction ? (
+                  <Button
+                    type="button"
+                    variant="danger"
+                    className="w-full"
+                    disabled={isDeletingWorkout || isCancellingWorkout}
+                    loading={isDeletingWorkout}
+                    loadingText="Poistetaan..."
+                    onClick={async () => {
+                      setIsDeletingWorkout(true);
+                      try {
+                        await onDelete();
+                      } finally {
+                        setIsDeletingWorkout(false);
+                      }
+                    }}
+                  >
+                    Poista treeni
+                  </Button>
+                ) : null}
+              </div>
             </>
           ) : (
             <div className="inline-flex items-center gap-1">
@@ -1242,7 +1286,8 @@ export function AthleteSessionPanel({
                 side="top"
                 text="Muokkaustilassa voit päivittää valmiin treenin sarjamerkintöjä, muistiinpanoja ja kokonaiskestoa."
               />
-              {showDeleteAction ? (
+              <div className="hidden sm:block">
+                {showDeleteAction ? (
                 <div className="relative" data-session-actions-menu-root="true">
                   <Button
                     type="button"
@@ -1284,7 +1329,8 @@ export function AthleteSessionPanel({
                     </div>
                   ) : null}
                 </div>
-              ) : null}
+                ) : null}
+              </div>
             </div>
           )}
         </div>
