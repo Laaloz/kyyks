@@ -312,6 +312,19 @@ export function AthleteSessionPanel({
   isCompleting: boolean;
 }) {
   const [localNote, setLocalNote] = useState(note);
+  const noteSaveTimeoutRef = useRef<number | null>(null);
+
+  useEffect(() => {
+    setLocalNote(note);
+  }, [note, scheduledWorkoutId]);
+
+  useEffect(() => {
+    return () => {
+      if (noteSaveTimeoutRef.current !== null) {
+        window.clearTimeout(noteSaveTimeoutRef.current);
+      }
+    };
+  }, []);
   const [correctionMode, setCorrectionMode] = useState(false);
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
   const [restTotalSeconds, setRestTotalSeconds] = useState(0);
@@ -1018,8 +1031,14 @@ export function AthleteSessionPanel({
           value={localNote}
           disabled={readOnly}
           onChange={(event) => {
-            setLocalNote(event.target.value);
-            onSaveNote(event.target.value);
+            const nextValue = event.target.value;
+            setLocalNote(nextValue);
+            if (noteSaveTimeoutRef.current !== null) {
+              window.clearTimeout(noteSaveTimeoutRef.current);
+            }
+            noteSaveTimeoutRef.current = window.setTimeout(() => {
+              onSaveNote(nextValue);
+            }, 500);
           }}
           placeholder="Kirjaa treenin fiilis, mahdollinen kipu tai muu huomio. Jos treeni jäi kesken, kerro syy lyhyesti."
         />

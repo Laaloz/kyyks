@@ -326,6 +326,20 @@ function throwIfQueryFailed(
 export async function loadVisibleSupabaseAppState(
   supabase: ServerClient,
 ): Promise<SupabaseVisibleAppStateSnapshot> {
+  const {
+    data: { user: authUser },
+  } = await supabase.auth.getUser();
+  const profileStartedAt = performance.now();
+  const { data: currentProfile } = authUser
+    ? await supabase
+        .from("profiles")
+        .select("id, role")
+        .eq("id", authUser.id)
+        .maybeSingle<{ id: string; role: UserProfile["role"] }>()
+    : { data: null };
+  logSyncPhase("current-profile", profileStartedAt);
+
+  const isAdminViewer = currentProfile?.role === "admin";
   const queryStartedAt = performance.now();
   const [
     profilesResult,
@@ -351,6 +365,7 @@ export async function loadVisibleSupabaseAppState(
     supabase
       .from("body_measurements")
       .select("id, user_id, height_cm, weight_kg, waist_cm, measured_at, created_at")
+      .limit(isAdminViewer ? 500 : 200)
       .order("measured_at", { ascending: false }),
     supabase
       .from("coach_athlete_assignments")
@@ -383,17 +398,21 @@ export async function loadVisibleSupabaseAppState(
     supabase
       .from("scheduled_workouts")
       .select("id, training_plan_id, template_id, program_workout_id, athlete_id, coach_id, title, scheduled_date, status, completed_at, created_at, updated_at")
+      .limit(isAdminViewer ? 500 : 200)
       .order("scheduled_date", { ascending: false }),
     supabase
       .from("workout_sessions")
       .select("id, scheduled_workout_id, athlete_id, energy_level, started_at, completed_at, paused_at, paused_duration_seconds, updated_at")
+      .limit(isAdminViewer ? 500 : 200)
       .order("started_at", { ascending: false }),
     supabase
       .from("workout_set_logs")
-      .select("id, session_id, scheduled_workout_id, template_exercise_id, set_id, exercise_id, exercise_name, muscle_group, superset_group, set_label, target_reps, target_reps_min, target_reps_max, target_load, target_rest_seconds, program_workout_id, actual_reps, actual_load, rpe, done"),
+      .select("id, session_id, scheduled_workout_id, template_exercise_id, set_id, exercise_id, exercise_name, muscle_group, superset_group, set_label, target_reps, target_reps_min, target_reps_max, target_load, target_rest_seconds, program_workout_id, actual_reps, actual_load, rpe, done")
+      .limit(isAdminViewer ? 4000 : 1500),
     supabase
       .from("workout_notes")
       .select("id, session_id, athlete_id, coach_id, body, created_at, updated_at")
+      .limit(isAdminViewer ? 300 : 150)
       .order("updated_at", { ascending: false }),
   ]);
   logSyncPhase("all-queries", queryStartedAt);

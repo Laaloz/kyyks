@@ -1168,6 +1168,7 @@ export async function updateWorkoutSetOnServer({
   patch: WorkoutUpdateInput;
 }) {
   const admin = createSupabaseAdminClient();
+  const timer = createPhaseTimer(`workout-set:${scheduledWorkoutId}`);
   if (!admin) {
     return { ok: false as const, message: "Supabase admin -yhteys puuttuu. Tarkista service role -avain." };
   }
@@ -1179,6 +1180,7 @@ export async function updateWorkoutSetOnServer({
     .select("id, athlete_id, status")
     .eq("id", scheduledWorkoutId)
     .maybeSingle<{ id: string; athlete_id: string; status: ScheduledWorkout["status"] }>();
+  timer.checkpoint("workout-query");
 
   if (!workout || (!isAdminRole(requester.role) && workout.athlete_id !== requester.id)) {
     return { ok: false as const, message: "Treeniä ei löytynyt." };
@@ -1203,6 +1205,7 @@ export async function updateWorkoutSetOnServer({
       rpe: number | string | null;
       done: boolean;
     }>();
+  timer.checkpoint("target-log-query");
 
   if (!targetLog) {
     return { ok: false as const, message: "Sarjaa ei löytynyt." };
@@ -1223,14 +1226,12 @@ export async function updateWorkoutSetOnServer({
     updated_at: timestamp,
   };
 
-  const { error: targetError } = await admin
-    .from("workout_set_logs")
-    .update(updatePayload)
-    .eq("id", logId);
-
-  if (targetError) {
-    return { ok: false as const, message: "Sarjan päivitys epäonnistui." };
-  }
+  const updates: Array<PromiseLike<{ error: unknown }>> = [
+    admin
+      .from("workout_set_logs")
+      .update(updatePayload)
+      .eq("id", logId),
+  ];
 
   if (patch.done !== undefined && targetLog.superset_group) {
     const supersetUpdatePayload = {
@@ -1245,30 +1246,44 @@ export async function updateWorkoutSetOnServer({
         : {}),
     };
 
-    await admin
-      .from("workout_set_logs")
-      .update(supersetUpdatePayload)
-      .eq("scheduled_workout_id", scheduledWorkoutId)
-      .eq("superset_group", targetLog.superset_group)
-      .eq("set_label", targetLog.set_label)
-      .neq("id", logId);
+    updates.push(
+      admin
+        .from("workout_set_logs")
+        .update(supersetUpdatePayload)
+        .eq("scheduled_workout_id", scheduledWorkoutId)
+        .eq("superset_group", targetLog.superset_group)
+        .eq("set_label", targetLog.set_label)
+        .neq("id", logId),
+    );
   }
 
-  await admin
-    .from("workout_sessions")
-    .update({ updated_at: updatePayload.updated_at })
-    .eq("scheduled_workout_id", scheduledWorkoutId);
+  updates.push(
+    admin
+      .from("workout_sessions")
+      .update({ updated_at: updatePayload.updated_at })
+      .eq("scheduled_workout_id", scheduledWorkoutId),
+  );
 
   if (workout.status !== "completed") {
-    await admin
-      .from("scheduled_workouts")
-      .update({
-        status: "in_progress",
-        updated_at: updatePayload.updated_at,
-      })
-      .eq("id", scheduledWorkoutId);
+    updates.push(
+      admin
+        .from("scheduled_workouts")
+        .update({
+          status: "in_progress",
+          updated_at: updatePayload.updated_at,
+        })
+        .eq("id", scheduledWorkoutId),
+    );
   }
 
+  const results = await Promise.all(updates);
+  timer.checkpoint("update-write-phase");
+
+  if (results.some((result) => Boolean(result.error))) {
+    return { ok: false as const, message: "Sarjan päivitys epäonnistui." };
+  }
+
+  timer.checkpoint("done");
   return { ok: true as const };
 }
 
