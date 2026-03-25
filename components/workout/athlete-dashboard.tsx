@@ -138,6 +138,7 @@ export function AthleteDashboard({
     authenticatedUser,
     currentUser,
     state,
+    notify,
     startWorkout,
     startProgramWorkout,
     updateCurrentUserMeasurements,
@@ -169,6 +170,13 @@ export function AthleteDashboard({
   const [measurementMessageTone, setMeasurementMessageTone] = useState<MeasurementMessageTone>("info");
   const [isSavingMeasurements, setIsSavingMeasurements] = useState(false);
   const [isCompletingWorkout, setIsCompletingWorkout] = useState(false);
+  const [pendingWorkoutTransition, setPendingWorkoutTransition] = useState<
+    | { type: "start"; workoutName: string }
+    | { type: "complete" }
+    | { type: "cancel" }
+    | { type: "delete" }
+    | null
+  >(null);
   const isDebugEnabled =
     typeof window !== "undefined" &&
     new URLSearchParams(window.location.search).get("debug_state") === "1";
@@ -351,15 +359,22 @@ export function AthleteDashboard({
     setAthleteLogMode("workout");
   };
   const startWorkoutFromProgram = async (programId: string, workoutId: string, workoutName: string) => {
+    setPendingWorkoutTransition({ type: "start", workoutName });
     const result = await startProgramWorkout(programId, workoutId);
     if (result.ok && result.scheduledWorkoutId) {
       openWorkoutView(result.scheduledWorkoutId);
       setWorkoutMessage(`Harjoitus "${workoutName}" käynnistetty.`);
+      notify({ tone: "success", message: `Harjoitus "${workoutName}" käynnistyi.` });
       onOpenWorkoutLog?.();
+      setPendingWorkoutTransition(null);
       return;
     }
 
+    setPendingWorkoutTransition(null);
     setWorkoutMessage(result.ok ? "Harjoitus käynnistetty." : result.message);
+    if (!result.ok) {
+      notify({ tone: "danger", message: result.message });
+    }
   };
   const activeScheduledByProgramWorkoutId = useMemo(() => {
     const activeById = new Map<string, (typeof workouts)[number]>();
@@ -1178,6 +1193,7 @@ export function AthleteDashboard({
                   const completedWorkoutId = selectedWorkout.id;
                   const completionPercent = progress?.percent ?? 0;
                   setIsCompletingWorkout(true);
+                  setPendingWorkoutTransition({ type: "complete" });
                   console.info("[workout-ui] complete-click", { scheduledWorkoutId: completedWorkoutId });
                   try {
                     const result = await completeWorkout(completedWorkoutId);
@@ -1193,14 +1209,18 @@ export function AthleteDashboard({
                           ? `Treeni merkittiin valmiiksi (${completionPercent}% toteutui). Kirjaa muistiinpanoihin, miksi treeni jäi osittaiseksi.`
                           : "Treeni merkittiin valmiiksi.",
                       );
+                      notify({ tone: "success", message: "Treeni merkittiin valmiiksi." });
                       setSelectedWorkoutId(null);
                       setHistoryFocusWorkoutId(completedWorkoutId);
                       setCorrectionModeWorkoutId(null);
                       setAthleteLogMode("library");
+                      window.setTimeout(() => setPendingWorkoutTransition(null), 900);
                       return;
                     }
 
+                    setPendingWorkoutTransition(null);
                     setWorkoutMessage(result.message);
+                    notify({ tone: "danger", message: result.message });
                   } finally {
                     setIsCompletingWorkout(false);
                   }
@@ -1225,10 +1245,15 @@ export function AthleteDashboard({
                       : result.message,
                   );
                   if (result.ok) {
+                    setPendingWorkoutTransition({ type: "cancel" });
                     setDismissedActiveWorkoutId(selectedWorkout.id);
                     setSelectedWorkoutId(null);
                     setCorrectionModeWorkoutId(null);
                     setAthleteLogMode("library");
+                    notify({ tone: "info", message: "Treeni keskeytettiin." });
+                    window.setTimeout(() => setPendingWorkoutTransition(null), 900);
+                  } else {
+                    notify({ tone: "danger", message: result.message });
                   }
                 }}
                 onDelete={async () => {
@@ -1248,10 +1273,15 @@ export function AthleteDashboard({
                   setWorkoutMessage(result.ok ? "Treeni poistettiin." : result.message);
 
                   if (result.ok) {
+                    setPendingWorkoutTransition({ type: "delete" });
                     setDismissedActiveWorkoutId(null);
                     setSelectedWorkoutId(null);
                     setCorrectionModeWorkoutId(null);
                     setAthleteLogMode("library");
+                    notify({ tone: "success", message: "Treeni poistettiin." });
+                    window.setTimeout(() => setPendingWorkoutTransition(null), 900);
+                  } else {
+                    notify({ tone: "danger", message: result.message });
                   }
                 }}
                 canDeleteWorkout={Boolean(selectedWorkout.programWorkoutId)}
@@ -1280,6 +1310,23 @@ export function AthleteDashboard({
                 <p className="mt-4 rounded-2xl border border-[var(--accent)] bg-[color:color-mix(in_srgb,var(--accent)_12%,var(--surface))] px-4 py-3 text-sm text-[var(--text)] shadow-[0_10px_24px_-22px_var(--accent)]">
                   Kesken oleva treeni lukitsee uuden aloituksen. Jatka ensin treeniä{" "}
                   <span className="font-semibold">{normalizeWorkoutHistoryTitle(blockingWorkout.title)}</span>.
+                </p>
+              ) : null}
+              {pendingWorkoutTransition ? (
+                <p className="mt-4 flex items-center gap-3 rounded-2xl border border-[var(--border-strong)] bg-[color:color-mix(in_srgb,var(--surface-2)_84%,var(--surface))] px-4 py-3 text-sm text-[var(--text)] shadow-[0_12px_28px_-24px_var(--shadow)]">
+                  <span
+                    aria-hidden="true"
+                    className="size-4 animate-spin rounded-full border-2 border-current border-r-transparent text-[var(--accent)]"
+                  />
+                  <span>
+                    {pendingWorkoutTransition.type === "start"
+                      ? `Avataan treeniä "${pendingWorkoutTransition.workoutName}"...`
+                      : pendingWorkoutTransition.type === "complete"
+                        ? "Merkitään treeniä valmiiksi ja palataan treenilistaan..."
+                      : pendingWorkoutTransition.type === "cancel"
+                        ? "Palataan treenilistaan ja päivitetään keskeytetty tila..."
+                        : "Poistetaan treeniä ja päivitetään näkymä..."}
+                  </span>
                 </p>
               ) : null}
               {athletePrograms.length ? (
@@ -1426,7 +1473,11 @@ export function AthleteDashboard({
                                     type="button"
                                     variant="secondary"
                                     className="w-full justify-center sm:w-auto"
-                                    disabled={isLockedByAnotherWorkout}
+                                    disabled={isLockedByAnotherWorkout || pendingWorkoutTransition?.type === "start"}
+                                    loading={
+                                      pendingWorkoutTransition?.type === "start" && pendingWorkoutTransition.workoutName === workout.name
+                                    }
+                                    loadingText="Avataan treeniä..."
                                     onClick={() => startWorkoutFromProgram(program.id, workout.id, workout.name)}
                                   >
                                     {resumableScheduledId ? "Jatka treeniä" : "Aloita treeni"}

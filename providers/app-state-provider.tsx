@@ -1328,6 +1328,7 @@ interface AppStateContextValue {
   currentRole: Role | null;
   isImpersonating: boolean;
   isHydrated: boolean;
+  notify: (input: { tone: "success" | "danger" | "info"; message: string }) => void;
   login: (email: string, password: string, options?: { captchaToken?: string }) => Promise<LoginResult>;
   logout: () => Promise<void>;
   loginAsDemoUser: (userId: string) => void;
@@ -1376,6 +1377,7 @@ export function AppStateProvider({ children }: PropsWithChildren) {
   const [isSupabaseAuthResolved, setIsSupabaseAuthResolved] = useState(false);
   const [didAttemptBootstrapRevalidation, setDidAttemptBootstrapRevalidation] = useState(false);
   const [didBootstrapTimeout, setDidBootstrapTimeout] = useState(false);
+  const [toast, setToast] = useState<{ id: number; tone: "success" | "danger" | "info"; message: string } | null>(null);
   const supabase = useMemo(() => createSupabaseBrowserClient(), []);
   const refreshSupabaseVisibleStatePromiseRef = useRef<Promise<boolean> | null>(null);
   const workoutSetRequestStateRef = useRef<Map<string, WorkoutSetRequestState>>(new Map());
@@ -1484,6 +1486,18 @@ export function AppStateProvider({ children }: PropsWithChildren) {
       setDidBootstrapTimeout(false);
     }
   }, [didAttemptBootstrapRevalidation, isSupabaseAuthResolved]);
+
+  useEffect(() => {
+    if (!toast) {
+      return;
+    }
+
+    const timeoutId = window.setTimeout(() => {
+      setToast((current) => (current?.id === toast.id ? null : current));
+    }, 2800);
+
+    return () => window.clearTimeout(timeoutId);
+  }, [toast]);
 
   useEffect(() => {
     if (!isStorageHydrated) {
@@ -1923,6 +1937,13 @@ function findResolvedUserIdInSnapshot(
       currentRole: currentUser?.role ?? null,
       isImpersonating,
       isHydrated,
+      notify(input) {
+        setToast({
+          id: Date.now(),
+          tone: input.tone,
+          message: input.message,
+        });
+      },
       async login(email, password, options) {
         const localUser = state.users.find((candidate) => candidate.email.toLowerCase() === email.toLowerCase());
 
@@ -3906,7 +3927,28 @@ function findResolvedUserIdInSnapshot(
     };
   }, [state, authenticatedUser, authenticatedUserId, currentUser, isHydrated, isImpersonating, supabase]);
 
-  return <AppStateContext.Provider value={value}>{children}</AppStateContext.Provider>;
+  return (
+    <AppStateContext.Provider value={value}>
+      {children}
+      {toast ? (
+        <div className="pointer-events-none fixed inset-x-4 bottom-4 z-50 flex justify-center sm:bottom-6">
+          <div
+            role="status"
+            aria-live="polite"
+            className={`pointer-events-auto w-full max-w-md rounded-2xl border px-4 py-3 text-sm font-medium shadow-[0_20px_40px_-24px_var(--shadow)] ${
+              toast.tone === "success"
+                ? "border-[color-mix(in_srgb,var(--success)_45%,var(--border))] bg-[color:color-mix(in_srgb,var(--success)_14%,var(--surface))] text-[var(--text)]"
+                : toast.tone === "danger"
+                  ? "border-[color-mix(in_srgb,var(--danger)_45%,var(--border))] bg-[color:color-mix(in_srgb,var(--danger)_12%,var(--surface))] text-[var(--text)]"
+                  : "border-[color-mix(in_srgb,var(--accent)_45%,var(--border))] bg-[color:color-mix(in_srgb,var(--accent)_12%,var(--surface))] text-[var(--text)]"
+            }`}
+          >
+            {toast.message}
+          </div>
+        </div>
+      ) : null}
+    </AppStateContext.Provider>
+  );
 }
 
 export function useAppState() {
