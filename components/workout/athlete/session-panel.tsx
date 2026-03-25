@@ -8,6 +8,7 @@ import {
   useRef,
   useState,
   type CSSProperties,
+  type KeyboardEvent as ReactKeyboardEvent,
 } from "react";
 
 import { Badge } from "@/components/ui/badge";
@@ -346,6 +347,49 @@ export function AthleteSessionPanel({
   const [isDeletingWorkout, setIsDeletingWorkout] = useState(false);
   const [loadDrafts, setLoadDrafts] = useState<Record<string, string>>({});
   const secondaryActionsMenuRef = useRef<HTMLDivElement | null>(null);
+
+  const focusWorkoutLogField = (logId: string, field: "reps" | "load" | "rpe") => {
+    const element = document.getElementById(`${scheduledWorkoutId}-${logId}-${field}`);
+    if (element instanceof HTMLInputElement) {
+      element.focus();
+      element.select();
+    }
+  };
+
+  const focusWorkoutLogFieldAfterInputCommit = (logId: string, field: "reps" | "load" | "rpe") => {
+    window.requestAnimationFrame(() => {
+      focusWorkoutLogField(logId, field);
+    });
+  };
+
+  const handleSetFieldEnter = (
+    event: ReactKeyboardEvent<HTMLInputElement>,
+    log: WorkoutSession["setLogs"][number],
+    field: "reps" | "load" | "rpe",
+  ) => {
+    if (event.key !== "Enter") {
+      return;
+    }
+
+    event.preventDefault();
+
+    if (field === "reps") {
+      focusWorkoutLogFieldAfterInputCommit(log.id, "load");
+      return;
+    }
+
+    if (field === "load") {
+      focusWorkoutLogFieldAfterInputCommit(log.id, "rpe");
+      return;
+    }
+
+    const currentExerciseLogs = selectedSession?.setLogs.filter((entry) => entry.exerciseId === log.exerciseId) ?? [];
+    const currentIndex = currentExerciseLogs.findIndex((entry) => entry.id === log.id);
+    const nextLog = currentIndex >= 0 ? currentExerciseLogs[currentIndex + 1] : undefined;
+    if (nextLog) {
+      focusWorkoutLogFieldAfterInputCommit(nextLog.id, "reps");
+    }
+  };
 
   useEffect(() => {
     setLocalNote(note);
@@ -879,12 +923,14 @@ export function AthleteSessionPanel({
                           id={`${scheduledWorkoutId}-${log.id}-reps`}
                           type="number"
                           inputMode="numeric"
+                          enterKeyHint="next"
                           min={0}
                           placeholder="0"
                           aria-label={`${exerciseName} sarja ${log.setLabel} toteutuneet toistot`}
                           value={log.actualReps ?? ""}
                           disabled={readOnly}
                           onChange={(event) => handleLogUpdate(log, { actualReps: numberOrUndefined(event.target.value) })}
+                          onKeyDown={(event) => handleSetFieldEnter(event, log, "reps")}
                         />
                       </div>
                       <div className="min-w-0">
@@ -893,12 +939,14 @@ export function AthleteSessionPanel({
                           id={`${scheduledWorkoutId}-${log.id}-load`}
                           type="text"
                           inputMode="decimal"
+                          enterKeyHint="next"
                           placeholder="0"
                           aria-label={`${exerciseName} sarja ${log.setLabel} toteutunut kuorma`}
                           value={loadDrafts[log.id] ?? (log.actualLoad !== undefined ? String(log.actualLoad).replace(".", ",") : "")}
                           disabled={readOnly}
                           onChange={(event) => handleLoadDraftChange(log, event.target.value)}
                           onBlur={() => handleLoadDraftBlur(log)}
+                          onKeyDown={(event) => handleSetFieldEnter(event, log, "load")}
                         />
                       </div>
                       <div className="min-w-0">
@@ -907,6 +955,7 @@ export function AthleteSessionPanel({
                           id={`${scheduledWorkoutId}-${log.id}-rpe`}
                           type="number"
                           inputMode="numeric"
+                          enterKeyHint="done"
                           min={1}
                           max={10}
                           step={1}
@@ -915,6 +964,7 @@ export function AthleteSessionPanel({
                           value={log.rpe ?? ""}
                           disabled={readOnly}
                           onChange={(event) => handleLogUpdate(log, { rpe: numberOrUndefined(event.target.value) })}
+                          onKeyDown={(event) => handleSetFieldEnter(event, log, "rpe")}
                         />
                       </div>
                       <div className="flex justify-end">
