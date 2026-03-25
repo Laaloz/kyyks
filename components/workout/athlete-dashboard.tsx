@@ -176,6 +176,7 @@ export function AthleteDashboard({
   const historyMenuRef = useRef<HTMLDivElement | null>(null);
   const measurementsSectionRef = useRef<HTMLDivElement | null>(null);
   const closeWorkoutView = () => {
+    setSelectedWorkoutId(null);
     setHistoryFocusWorkoutId(null);
     setCorrectionModeWorkoutId(null);
     setOpenHistoryMenuWorkoutId(null);
@@ -1159,7 +1160,11 @@ export function AthleteDashboard({
                   setSelectedWorkoutId(selectedWorkout.id);
                   setWorkoutMessage("Treeni käynnistetty. Sarjaloki luotiin automaattisesti.");
                 }}
-                onUpdate={(logId, patch) => startTransition(() => updateWorkoutSet(selectedWorkout.id, logId, patch))}
+                onUpdate={(logId, patch) => {
+                  startTransition(() => {
+                    void updateWorkoutSet(selectedWorkout.id, logId, patch);
+                  });
+                }}
                 onUpdateDuration={async (durationSeconds) => {
                   const result = await updateWorkoutDuration(selectedWorkout.id, durationSeconds);
                   setWorkoutMessage(result.ok ? "Treeniaika päivitetty." : result.message);
@@ -1178,6 +1183,7 @@ export function AthleteDashboard({
                           ? `Treeni merkittiin valmiiksi (${completionPercent}% toteutui). Kirjaa muistiinpanoihin, miksi treeni jäi osittaiseksi.`
                           : "Treeni merkittiin valmiiksi.",
                       );
+                      setSelectedWorkoutId(null);
                       setHistoryFocusWorkoutId(completedWorkoutId);
                       setCorrectionModeWorkoutId(null);
                       setAthleteLogMode("library");
@@ -1203,6 +1209,11 @@ export function AthleteDashboard({
                       ? "Treeni keskeytettiin. Voit jatkaa treeniä myöhemmin samasta kohdasta."
                       : result.message,
                   );
+                  if (result.ok) {
+                    setSelectedWorkoutId(null);
+                    setCorrectionModeWorkoutId(null);
+                    setAthleteLogMode("library");
+                  }
                 }}
                 onDelete={async () => {
                   const confirmed = window.confirm(

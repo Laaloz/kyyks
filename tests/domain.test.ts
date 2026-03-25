@@ -551,6 +551,80 @@ describe("domain helpers", () => {
     expect(uncheckedSetOne?.every((log) => !log.done)).toBe(true);
   });
 
+  it("keeps earlier rapid superset toggles checked when the next toggle happens immediately", () => {
+    const baseState = cloneDemoState();
+    const program = createProgram(
+      {
+        title: "Superset rapid toggle",
+        athleteId: "user_athlete_1",
+        workouts: [
+          {
+            splitType: "upper",
+            nameOverride: "Superset B",
+            defaultRestSeconds: 90,
+            exercises: [
+              {
+                exerciseId: "ex_bench_press",
+                exerciseName: "Penkkipunnerrus",
+                supersetGroup: "A",
+                instruction: "Pidä kontrolli.",
+                setCount: 2,
+                targetReps: 8,
+                targetLoad: 50,
+                restSeconds: 90,
+              },
+              {
+                exerciseId: "ex_row",
+                exerciseName: "Kulmasoutu",
+                supersetGroup: "A",
+                instruction: "Vedä lapoihin.",
+                setCount: 2,
+                targetReps: 10,
+                targetLoad: 35,
+                restSeconds: 90,
+              },
+            ],
+          },
+        ],
+      },
+      "user_coach_1",
+    );
+    const workoutId = program.workouts?.[0]?.id;
+    expect(workoutId).toBeDefined();
+    if (!workoutId) {
+      return;
+    }
+
+    const started = startProgramWorkout(
+      {
+        ...baseState,
+        plans: [program, ...baseState.plans],
+      },
+      program.id,
+      workoutId,
+      "user_athlete_1",
+    );
+
+    const scheduledWorkoutId = started.scheduledWorkout.id;
+    const setOneLog = started.session.setLogs.find((log) => log.supersetGroup === "A" && log.setLabel === "1");
+    const setTwoLog = started.session.setLogs.find((log) => log.supersetGroup === "A" && log.setLabel === "2");
+    expect(setOneLog).toBeDefined();
+    expect(setTwoLog).toBeDefined();
+    if (!setOneLog || !setTwoLog) {
+      return;
+    }
+
+    const afterFirstToggle = updateSessionSet(started.state, scheduledWorkoutId, setOneLog.id, { done: true });
+    const afterSecondToggle = updateSessionSet(afterFirstToggle, scheduledWorkoutId, setTwoLog.id, { done: true });
+    const finalSession = afterSecondToggle.sessions.find((session) => session.scheduledWorkoutId === scheduledWorkoutId);
+
+    expect(
+      finalSession?.setLogs
+        .filter((log) => log.supersetGroup === "A")
+        .every((log) => log.done),
+    ).toBe(true);
+  });
+
   it("cancels a started workout and keeps session data for resume", () => {
     const baseState = cloneDemoState();
     const withNote = saveSessionNote(baseState, "scheduled_2", "Testimuistiinpano");

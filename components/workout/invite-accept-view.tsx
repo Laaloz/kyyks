@@ -161,8 +161,13 @@ export function InviteAcceptView({ token, initialInvite }: { token: string; init
               {message ?? ""}
             </p>
             <div className="flex flex-wrap gap-3">
-              <Button type="submit" disabled={isSubmitting || (requiresCaptcha && !captchaToken)}>
-                {isSubmitting ? "Aktivoidaan..." : "Aktivoi tunnus"}
+              <Button
+                type="submit"
+                disabled={isSubmitting || (requiresCaptcha && !captchaToken)}
+                loading={isSubmitting}
+                loadingText="Aktivoidaan..."
+              >
+                Aktivoi tunnus
               </Button>
               <Link className="rounded-xl border-2 border-[var(--border)] bg-[var(--surface-2)] px-4 py-2.5 text-sm font-semibold text-[var(--text)]" href="/">
                 Takaisin etusivulle

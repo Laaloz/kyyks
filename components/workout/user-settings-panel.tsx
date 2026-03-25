@@ -274,11 +274,12 @@ export function UserSettingsPanel() {
           <Button
             type="button"
             className="w-full sm:w-auto"
+            disabled={isSavingSettings}
             loading={isSavingSettings}
             loadingText="Tallennetaan asetuksia..."
             onClick={() => void submitSettings()}
           >
-            {isSavingSettings ? "Tallennetaan..." : "Tallenna muutokset"}
+            Tallenna muutokset
           </Button>
         </form>
 

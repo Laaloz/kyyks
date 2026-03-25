@@ -52,6 +52,7 @@ export function ConversationPanel({
   const [draft, setDraft] = useState("");
   const [message, setMessage] = useState("");
   const [selectedContextId, setSelectedContextId] = useState<string>(contextOptions[0]?.id ?? "general");
+  const [isSending, setIsSending] = useState(false);
 
   const selectedContext = useMemo(
     () => contextOptions.find((option) => option.id === selectedContextId) ?? contextOptions[0],
@@ -64,20 +65,25 @@ export function ConversationPanel({
     }
   }, [contextOptions, selectedContextId]);
 
-  const handleSend = () => {
+  const handleSend = async () => {
     if (!selectedContext) {
       setMessage("Valitse ensin keskustelun kohde.");
       return;
     }
 
-    const result = onSend(draft, selectedContext);
-    if (!result.ok) {
-      setMessage(result.message);
-      return;
-    }
+    setIsSending(true);
+    try {
+      const result = await onSend(draft, selectedContext);
+      if (!result.ok) {
+        setMessage(result.message);
+        return;
+      }
 
-    setDraft("");
-    setMessage("Viesti lisättiin keskusteluun.");
+      setDraft("");
+      setMessage("Viesti lisättiin keskusteluun.");
+    } finally {
+      setIsSending(false);
+    }
   };
 
   return (
@@ -147,7 +153,14 @@ export function ConversationPanel({
             />
           </div>
           <div className="mt-4 flex flex-wrap items-center gap-3">
-            <Button type="button" variant="secondary" onClick={handleSend}>
+            <Button
+              type="button"
+              variant="secondary"
+              onClick={() => void handleSend()}
+              disabled={isSending || !draft.trim()}
+              loading={isSending}
+              loadingText="Lähetetään viestiä..."
+            >
               Lähetä viesti
             </Button>
             <p

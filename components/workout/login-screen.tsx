@@ -196,8 +196,14 @@ export function LoginScreen() {
                 {error}
               </p>
             ) : null}
-            <Button className="w-full" type="submit" disabled={isSubmitting || (requiresCaptcha && !captchaToken)}>
-              {isSubmitting ? "Kirjaudutaan..." : "Avaa työtila"}
+            <Button
+              className="w-full"
+              type="submit"
+              disabled={isSubmitting || (requiresCaptcha && !captchaToken)}
+              loading={isSubmitting}
+              loadingText="Kirjaudutaan..."
+            >
+              Avaa työtila
             </Button>
             <p className="rounded-xl border-2 border-[var(--border)] bg-[var(--surface-2)] px-4 py-3 text-sm leading-6 text-[var(--text-muted)]">
               Etkö pääse sisään? Tarkista ensin, että käytät oikeaa sähköpostiosoitetta. Jos ongelma jatkuu, pyydä

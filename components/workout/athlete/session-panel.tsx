@@ -340,6 +340,9 @@ export function AthleteSessionPanel({
   const [durationDraft, setDurationDraft] = useState("");
   const [durationMessage, setDurationMessage] = useState("");
   const [isSavingDuration, setIsSavingDuration] = useState(false);
+  const [isStartingWorkout, setIsStartingWorkout] = useState(false);
+  const [isCancellingWorkout, setIsCancellingWorkout] = useState(false);
+  const [isDeletingWorkout, setIsDeletingWorkout] = useState(false);
   const secondaryActionsMenuRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
@@ -898,7 +901,7 @@ export function AthleteSessionPanel({
 
   if (!selectedSession) {
     return (
-      <div className="mt-5 rounded-2xl border border-dashed border-[var(--border)] bg-[var(--surface-2)] p-6">
+        <div className="mt-5 rounded-2xl border border-dashed border-[var(--border)] bg-[color:color-mix(in_srgb,var(--surface-2)_82%,var(--surface))] p-6 shadow-[0_10px_24px_-22px_var(--shadow)]">
         <p className="font-medium text-[var(--text)]">{scheduledWorkoutTitle}</p>
         <p className="mt-2 text-sm leading-6 text-[var(--text-muted)]">
           Aloita treeni, niin sovellus luo sinulle sarjalokin automaattisesti ja tallentaa etenemisen jokaisen muutoksen jälkeen.
@@ -1096,7 +1099,20 @@ export function AthleteSessionPanel({
           {status !== "completed" ? (
             <>
               {showResumeAction ? (
-                <Button onClick={onStart} type="button" className="w-full sm:w-auto">
+                <Button
+                  onClick={async () => {
+                    setIsStartingWorkout(true);
+                    try {
+                      await onStart();
+                    } finally {
+                      setIsStartingWorkout(false);
+                    }
+                  }}
+                  type="button"
+                  className="w-full sm:w-auto"
+                  loading={isStartingWorkout}
+                  loadingText="Käynnistetään treeniä..."
+                >
                   Jatka treeniä
                 </Button>
               ) : (
@@ -1160,30 +1176,42 @@ export function AthleteSessionPanel({
                         <button
                           type="button"
                           role="menuitem"
+                          disabled={isCancellingWorkout || isDeletingWorkout}
                           className="w-full rounded-lg px-3 py-2 text-left text-sm text-[var(--text)] hover:bg-[var(--surface-3)]"
-                          onClick={() => {
+                          onClick={async () => {
                             setIsSecondaryActionsOpen(false);
                             setSecondaryActionsAnchorRect(null);
                             setSecondaryActionsMenuStyle(null);
-                            onCancel();
+                            setIsCancellingWorkout(true);
+                            try {
+                              await onCancel();
+                            } finally {
+                              setIsCancellingWorkout(false);
+                            }
                           }}
                         >
-                          Keskeytä treeni
+                          {isCancellingWorkout ? "Keskeytetään..." : "Keskeytä treeni"}
                         </button>
                       ) : null}
                       {showDeleteAction ? (
                         <button
                           type="button"
                           role="menuitem"
+                          disabled={isDeletingWorkout || isCancellingWorkout}
                           className="w-full rounded-lg px-3 py-2 text-left text-sm text-[var(--danger)] hover:bg-[var(--surface-3)]"
-                          onClick={() => {
+                          onClick={async () => {
                             setIsSecondaryActionsOpen(false);
                             setSecondaryActionsAnchorRect(null);
                             setSecondaryActionsMenuStyle(null);
-                            onDelete();
+                            setIsDeletingWorkout(true);
+                            try {
+                              await onDelete();
+                            } finally {
+                              setIsDeletingWorkout(false);
+                            }
                           }}
                         >
-                          Poista treeni
+                          {isDeletingWorkout ? "Poistetaan..." : "Poista treeni"}
                         </button>
                       ) : null}
                     </div>

@@ -460,6 +460,11 @@ type CreateProgramResult =
   | { ok: true; programId?: string }
   | { ok: false; message: string };
 
+type WorkoutSetRequestState = {
+  revision: number;
+  patch: WorkoutUpdateInput;
+};
+
 type PasswordResetRequestResult =
   | { ok: true; message: string; previewUrl?: string }
   | { ok: false; message: string };
@@ -1313,7 +1318,7 @@ interface AppStateContextValue {
   markConversationRead: () => void;
   startWorkout: (scheduledWorkoutId: string) => Promise<ActionResult>;
   updateWorkoutDuration: (scheduledWorkoutId: string, durationSeconds: number) => Promise<ActionResult>;
-  updateWorkoutSet: (scheduledWorkoutId: string, logId: string, patch: WorkoutUpdateInput) => void;
+  updateWorkoutSet: (scheduledWorkoutId: string, logId: string, patch: WorkoutUpdateInput) => Promise<void>;
   saveWorkoutNote: (scheduledWorkoutId: string, body: string) => void;
   completeWorkout: (scheduledWorkoutId: string) => Promise<ActionResult>;
   cancelWorkout: (scheduledWorkoutId: string) => Promise<ActionResult>;
@@ -1332,6 +1337,7 @@ export function AppStateProvider({ children }: PropsWithChildren) {
   const [didAttemptBootstrapRevalidation, setDidAttemptBootstrapRevalidation] = useState(false);
   const supabase = useMemo(() => createSupabaseBrowserClient(), []);
   const refreshSupabaseVisibleStatePromiseRef = useRef<Promise<boolean> | null>(null);
+  const workoutSetRequestStateRef = useRef<Map<string, WorkoutSetRequestState>>(new Map());
   const isHydrated =
     isStorageHydrated && (supabase ? isSupabaseAuthResolved && didAttemptBootstrapRevalidation : true);
 
@@ -3628,7 +3634,7 @@ function findResolvedUserIdInSnapshot(
 
         return { ok: true };
       },
-      updateWorkoutSet(scheduledWorkoutId, logId, patch) {
+      async updateWorkoutSet(scheduledWorkoutId, logId, patch) {
         if (!currentUser) {
           return;
         }
@@ -3638,24 +3644,44 @@ function findResolvedUserIdInSnapshot(
           return;
         }
 
-        setState((previous) => domainUpdateSessionSet(previous, scheduledWorkoutId, logId, patch));
+        const requestKey = `${scheduledWorkoutId}:${logId}`;
+        const previousRequest = workoutSetRequestStateRef.current.get(requestKey);
+        const nextRevision = (previousRequest?.revision ?? 0) + 1;
+        const mergedPatch = {
+          ...previousRequest?.patch,
+          ...patch,
+        } satisfies WorkoutUpdateInput;
+
+        workoutSetRequestStateRef.current.set(requestKey, {
+          revision: nextRevision,
+          patch: mergedPatch,
+        });
+
+        setState((previous) => domainUpdateSessionSet(previous, scheduledWorkoutId, logId, mergedPatch));
 
         if (supabase) {
-          void fetch(`/api/workouts/${encodeURIComponent(scheduledWorkoutId)}/sets/${encodeURIComponent(logId)}`, {
+          const response = await fetch(`/api/workouts/${encodeURIComponent(scheduledWorkoutId)}/sets/${encodeURIComponent(logId)}`, {
             method: "PATCH",
             headers: {
               "Content-Type": "application/json",
             },
-            body: JSON.stringify(patch),
-          })
-            .then((response) => {
-              if (!response.ok) {
-                return refreshSupabaseVisibleState();
-              }
-              return undefined;
-            })
-            .catch(() => refreshSupabaseVisibleState());
+            body: JSON.stringify(mergedPatch),
+          }).catch(() => null);
+
+          const latestRequest = workoutSetRequestStateRef.current.get(requestKey);
+          if (!latestRequest || latestRequest.revision !== nextRevision) {
+            return;
+          }
+
+          workoutSetRequestStateRef.current.delete(requestKey);
+
+          if (!response?.ok) {
+            await refreshSupabaseVisibleState();
+          }
+          return;
         }
+
+        workoutSetRequestStateRef.current.delete(requestKey);
       },
       saveWorkoutNote(scheduledWorkoutId, body) {
         if (!currentUser) {
