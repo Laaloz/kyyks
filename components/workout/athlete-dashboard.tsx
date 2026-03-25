@@ -228,9 +228,10 @@ export function AthleteDashboard({
     .sort((a, b) => a.scheduledDate.localeCompare(b.scheduledDate));
 
   const selectedWorkout =
-    workouts.find((item) => item.id === selectedWorkoutId) ??
-    workouts.find((item) => item.status === "in_progress") ??
-    workouts[workouts.length - 1];
+    (selectedWorkoutId ? workouts.find((item) => item.id === selectedWorkoutId) : undefined) ??
+    (athleteLogMode === "workout"
+      ? workouts.find((item) => item.status === "in_progress") ?? workouts[workouts.length - 1]
+      : undefined);
 
   const selectedSession = state.sessions.find((session) => session.scheduledWorkoutId === selectedWorkout?.id);
   const existingNote = selectedSession ? state.notes.find((note) => note.sessionId === selectedSession.id)?.body ?? "" : "";
