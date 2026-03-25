@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import type { User as SupabaseAuthUser } from "@supabase/supabase-js";
 
 import { cloneDemoState } from "@/lib/domain";
@@ -23,6 +23,7 @@ import {
   shouldTreatInviteActivationLoginFailureAsPartialSuccess,
   shouldSyncSupabaseAuthEvent,
   preserveActiveWorkoutShells,
+  resolveSupabaseAuthUserAfterPasswordSignIn,
 } from "@/providers/app-state-provider";
 
 describe("shouldPreserveStoredSessionDuringSupabaseBootstrap", () => {
@@ -97,6 +98,24 @@ describe("shouldPreserveStoredSessionDuringSupabaseBootstrap", () => {
     expect(
       shouldTreatInviteActivationLoginFailureAsPartialSuccess("Väärä sähköposti tai salasana."),
     ).toBe(false);
+  });
+
+  it("retries auth user resolution after password sign-in until email becomes available", async () => {
+    const confirmUser = vi
+      .fn<() => Promise<SupabaseAuthUser | null>>()
+      .mockResolvedValueOnce(null)
+      .mockResolvedValueOnce({ id: "supabase_user", email: "athlete@example.com" } as SupabaseAuthUser);
+
+    const resolved = await resolveSupabaseAuthUserAfterPasswordSignIn({
+      initialUser: null,
+      confirmUser,
+      attempts: 4,
+      waitForNextPaintFn: async () => undefined,
+      waitForDelayFn: async () => undefined,
+    });
+
+    expect(resolved?.email).toBe("athlete@example.com");
+    expect(confirmUser).toHaveBeenCalledTimes(2);
   });
 
   it("resolves the athlete conversation coach from the training plan when admin is the responsible coach", () => {

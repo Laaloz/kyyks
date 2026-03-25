@@ -17,10 +17,13 @@ import { loginSchema } from "@/components/workout/schemas";
 import { roleLabel } from "@/components/workout/shared";
 
 export function LoginScreen() {
-  const { login, loginAsDemoUser, state } = useAppState();
+  const { login, loginAsDemoUser, requestPasswordResetForEmail, state } = useAppState();
   const [error, setError] = useState<string | null>(null);
+  const [resetMessage, setResetMessage] = useState<string | null>(null);
+  const [resetMessageTone, setResetMessageTone] = useState<"success" | "error">("success");
   const [showLocalDemoUsers, setShowLocalDemoUsers] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isRequestingReset, setIsRequestingReset] = useState(false);
   const [captchaToken, setCaptchaToken] = useState<string | null>(null);
   const [captchaError, setCaptchaError] = useState<string | null>(null);
   const captchaRef = useRef<HCaptcha | null>(null);
@@ -32,6 +35,8 @@ export function LoginScreen() {
       password: "",
     },
   });
+  const emailField = form.register("email");
+  const passwordField = form.register("password");
   const demoUsers = state.users.filter((user) => user.status === "active");
   const requiresCaptcha = isSupabaseConfigured && isHCaptchaConfigured && !showLocalDemoUsers;
 
@@ -58,8 +63,8 @@ export function LoginScreen() {
             Kirjaudu omaan treenityötilaasi
           </h1>
           <p className="max-w-xl text-lg leading-8 text-[var(--text-muted)]">
-            Tämä näkymä on tarkoitettu olemassa oleville käyttäjille. Kun tilisi on luotu tai kutsu on
-            aktivoitu, pääset tästä suoraan omaan työtilaasi.
+            Kirjaudu sisään samalla sähköpostilla, jolla kutsu hyväksyttiin tai käyttäjätili aktivoitiin.
+            Avaamme tämän jälkeen suoraan oman treeninäkymäsi.
           </p>
         </div>
 
@@ -67,31 +72,30 @@ export function LoginScreen() {
           <div className="space-y-5">
             <div>
               <p className="text-xs font-semibold tracking-[0.04em] text-[var(--text-subtle)]">Sisäänpääsy</p>
-              <CardTitle className="mt-2 text-2xl">Näin pääset sisään</CardTitle>
+              <CardTitle className="mt-2 text-2xl">Nopea tarkistus ennen kirjautumista</CardTitle>
               <CardDescription className="mt-2 max-w-2xl leading-6">
-                Tämä sivu on tarkoitettu olemassa oleville käyttäjille. Näet tässä vain olennaiset vaiheet,
-                joilla pääset nopeasti omaan työtilaasi.
+                Tämä sivu on tarkoitettu olemassa oleville käyttäjille. Tarkista vain nämä asiat, jos
+                kirjautuminen ei mene suoraan läpi.
               </CardDescription>
             </div>
             <div className="grid gap-3 text-sm text-[var(--text-muted)]">
               <div className="rounded-xl border-2 border-[var(--border)] bg-[var(--surface-2)] px-4 py-3">
-                <p className="text-xs font-semibold tracking-[0.04em] text-[var(--text-subtle)]">1. Käyttöoikeus</p>
+                <p className="text-xs font-semibold tracking-[0.04em] text-[var(--text-subtle)]">1. Oikea sähköposti</p>
                 <p className="mt-1 font-medium text-[var(--text)]">
-                  Ylläpito lisää käyttäjän palveluun ja määrittää oikean roolin ennen ensimmäistä kirjautumista.
+                  Käytä samaa sähköpostia, johon kutsu tai tunnus on liitetty.
                 </p>
               </div>
               <div className="rounded-xl border-2 border-[var(--border)] bg-[var(--surface-2)] px-4 py-3">
-                <p className="text-xs font-semibold tracking-[0.04em] text-[var(--text-subtle)]">2. Kutsu tai tunnus</p>
+                <p className="text-xs font-semibold tracking-[0.04em] text-[var(--text-subtle)]">2. Aktivointi valmiina</p>
                 <p className="mt-1 font-medium text-[var(--text)]">
-                  Uusi käyttäjä aktivoi tilin kutsulinkistä. Sen jälkeen kirjaudut sisään omalla
-                  sähköpostilla ja salasanalla.
+                  Uusi käyttäjä hyväksyy ensin kutsun tai asettaa salasanan valmiiksi, ja kirjautuu sen
+                  jälkeen tästä näkymästä.
                 </p>
               </div>
               <div className="rounded-xl border-2 border-[var(--border)] bg-[var(--surface-2)] px-4 py-3">
-                <p className="text-xs font-semibold tracking-[0.04em] text-[var(--text-subtle)]">3. Jos et pääse sisään</p>
+                <p className="text-xs font-semibold tracking-[0.04em] text-[var(--text-subtle)]">3. Jos kirjautuminen estyy</p>
                 <p className="mt-1 font-medium text-[var(--text)]">
-                  Tarkista ensin sähköposti ja salasana. Jos ongelma jatkuu, pyydä ylläpidolta uusi kutsu
-                  tai salasanan nollauslinkki.
+                  Tarkista salasana ensin. Jos ongelma jatkuu, pyydä uusi kutsu tai salasanan nollauslinkki.
                 </p>
               </div>
             </div>
@@ -104,7 +108,7 @@ export function LoginScreen() {
           <p className="text-xs font-semibold tracking-[0.04em] text-[var(--text-subtle)]">Kirjautuminen</p>
           <CardTitle>Kirjaudu sisään</CardTitle>
           <CardDescription className="mt-2">
-            Käytä sähköpostia ja salasanaa, jotka on liitetty käyttäjätiliisi. Jos tiliäsi ei ole vielä aktivoitu, aloita saamastasi kutsulinkistä.
+            Syötä sähköposti ja salasana. Jos tiliä ei ole vielä aktivoitu, aloita ensin saamastasi kutsulinkistä.
           </CardDescription>
           <form
             className="mt-6 space-y-4"
@@ -139,7 +143,11 @@ export function LoginScreen() {
                 autoComplete="email"
                 aria-invalid={Boolean(form.formState.errors.email)}
                 aria-describedby={form.formState.errors.email ? `${formId}-email-error` : undefined}
-                {...form.register("email")}
+                {...emailField}
+                onChange={(event) => {
+                  emailField.onChange(event);
+                  setResetMessage(null);
+                }}
               />
               {form.formState.errors.email ? (
                 <p className="mt-2 text-sm text-[var(--danger)]" id={`${formId}-email-error`}>
@@ -155,7 +163,7 @@ export function LoginScreen() {
                 autoComplete="current-password"
                 aria-invalid={Boolean(form.formState.errors.password)}
                 aria-describedby={form.formState.errors.password ? `${formId}-password-error` : undefined}
-                {...form.register("password")}
+                {...passwordField}
               />
               {form.formState.errors.password ? (
                 <p className="mt-2 text-sm text-[var(--danger)]" id={`${formId}-password-error`}>
@@ -205,10 +213,65 @@ export function LoginScreen() {
               Avaa työtila
             </Button>
             <p className="rounded-xl border-2 border-[var(--border)] bg-[var(--surface-2)] px-4 py-3 text-sm leading-6 text-[var(--text-muted)]">
-              Etkö pääse sisään? Tarkista ensin, että käytät oikeaa sähköpostiosoitetta. Jos ongelma
-              jatkuu, pyydä ylläpidolta uusi kutsu tai salasanan nollaus.
+              Etkö pääse sisään? Tarkista ensin sähköposti, salasana ja mahdollinen captcha. Jos ongelma
+              jatkuu, pyydä ylläpidolta uusi kutsu tai salasanan nollauslinkki.
             </p>
           </form>
+        </Card>
+
+        <Card className="border-[var(--border-strong)] bg-[var(--surface)]">
+          <p className="text-xs font-semibold tracking-[0.04em] text-[var(--text-subtle)]">Salasana hukassa?</p>
+          <CardTitle className="mt-2">Unohditko salasanasi?</CardTitle>
+          <CardDescription className="mt-2 leading-6">
+            Jos et muista salasanaasi, voit pyytää uuden salasanan linkin suoraan tästä näkymästä.
+          </CardDescription>
+          <div className="mt-5 space-y-4">
+            <div className="rounded-xl border-2 border-[var(--border)] bg-[var(--surface-2)] px-4 py-3 text-sm leading-6 text-[var(--text-muted)]">
+              Käytämme kirjautumislomakkeen sähköpostiosoitetta. Jos sinulla on jo nollauslinkki, avaa se
+              suoraan sähköpostistasi.
+            </div>
+            <Button
+              type="button"
+              variant="secondary"
+              className="w-full"
+              disabled={isRequestingReset}
+              loading={isRequestingReset}
+              loadingText="Lähetetään nollauslinkkiä..."
+              onClick={async () => {
+                const email = form.getValues("email").trim();
+                if (!email) {
+                  form.setError("email", { message: "Anna sähköpostiosoite ensin." });
+                  setResetMessage("Anna sähköpostiosoite ennen salasanan nollausta.");
+                  setResetMessageTone("error");
+                  return;
+                }
+
+                setIsRequestingReset(true);
+                try {
+                  const result = await requestPasswordResetForEmail({
+                    email,
+                    captchaToken: captchaToken ?? undefined,
+                  });
+                  setResetMessage(result.message);
+                  setResetMessageTone(result.ok ? "success" : "error");
+                  if (requiresCaptcha) {
+                    captchaRef.current?.resetCaptcha();
+                    setCaptchaToken(null);
+                  }
+                } finally {
+                  setIsRequestingReset(false);
+                }
+              }}
+            >
+              Lähetä nollauslinkki
+            </Button>
+            <p
+              aria-live="polite"
+              className={`min-h-5 text-sm ${resetMessageTone === "success" ? "text-[var(--success)]" : "text-[var(--danger)]"}`}
+            >
+              {resetMessage ?? ""}
+            </p>
+          </div>
         </Card>
 
         {showLocalDemoUsers ? (

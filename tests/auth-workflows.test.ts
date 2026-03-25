@@ -6,12 +6,23 @@ const { createSupabaseAdminClientMock } = vi.hoisted(() => ({
   createSupabaseAdminClientMock: vi.fn(),
 }));
 
+const { sendTransactionalEmailMock } = vi.hoisted(() => ({
+  sendTransactionalEmailMock: vi.fn(),
+}));
+
 vi.mock("@/lib/supabase/admin", () => ({
   createSupabaseAdminClient: createSupabaseAdminClientMock,
 }));
+vi.mock("@/lib/email", () => ({
+  sendTransactionalEmail: sendTransactionalEmailMock,
+}));
 vi.mock("server-only", () => ({}));
 
-import { acceptInviteOnServer, ensureProfileForAuthenticatedUserOnServer } from "@/lib/server/auth-workflows";
+import {
+  acceptInviteOnServer,
+  createPasswordResetRequestAndSendEmail,
+  ensureProfileForAuthenticatedUserOnServer,
+} from "@/lib/server/auth-workflows";
 
 type MockInvite = {
   id: string;
@@ -30,6 +41,8 @@ type MockProfile = {
   status: "active" | "invited";
   full_name: string;
   email: string;
+  created_at?: string;
+  updated_at?: string;
 };
 
 type MockAuthUser = {
@@ -54,6 +67,7 @@ function createMockAdminClient({
   const inviteRows = new Map(invites.map((invite) => [invite.id, { ...invite, created_at: invite.created_at ?? new Date().toISOString() }]));
   const profileRows = new Map((profiles ?? []).map((profile) => [profile.id, { ...profile }]));
   const assignmentRows: Array<{ coach_id: string; athlete_id: string; active: boolean; created_at: string }> = [];
+  const passwordResetRows: Array<Record<string, unknown>> = [];
   const authUserRows = new Map((authUsers ?? []).map((user) => [user.id, { ...user }]));
 
   const findInvite = (filters: Array<{ kind: "eq" | "ilike"; column: string; value: unknown }>) =>
@@ -145,6 +159,24 @@ function createMockAdminClient({
             return { data: invite, error: null };
           }
 
+          if (table === "password_reset_requests") {
+            passwordResetRows.forEach((row) => {
+              const matches = filters.every((filter) => {
+                const value = row[filter.column];
+                if (filter.kind === "eq") {
+                  return value === filter.value;
+                }
+
+                return String(value ?? "").toLowerCase() === String(filter.value ?? "").toLowerCase();
+              });
+
+              if (matches) {
+                Object.assign(row, updateValues);
+              }
+            });
+            return { data: null, error: null };
+          }
+
           return { data: null, error: null };
         }
 
@@ -154,6 +186,10 @@ function createMockAdminClient({
       const builder = {
         select: vi.fn(() => builder),
         eq: vi.fn((column: string, value: unknown) => {
+          filters.push({ kind: "eq", column, value });
+          return builder;
+        }),
+        is: vi.fn((column: string, value: unknown) => {
           filters.push({ kind: "eq", column, value });
           return builder;
         }),
@@ -171,6 +207,10 @@ function createMockAdminClient({
         insert: vi.fn(async (values: Record<string, unknown>) => {
           if (table === "coach_athlete_assignments") {
             assignmentRows.push(values as { coach_id: string; athlete_id: string; active: boolean; created_at: string });
+          }
+
+          if (table === "password_reset_requests") {
+            passwordResetRows.push({ ...values });
           }
 
           return { data: null, error: null };
@@ -223,17 +263,20 @@ function createMockAdminClient({
 
   return {
     client,
-    state: {
-      inviteRows,
-      profileRows,
-      assignmentRows,
-      authUserRows,
-    },
-  };
+      state: {
+        inviteRows,
+        profileRows,
+        assignmentRows,
+        passwordResetRows,
+        authUserRows,
+      },
+    };
 }
 
 beforeEach(() => {
   createSupabaseAdminClientMock.mockReset();
+  sendTransactionalEmailMock.mockReset();
+  sendTransactionalEmailMock.mockResolvedValue({ ok: true });
 });
 
 describe("auth workflows", () => {
@@ -333,5 +376,63 @@ describe("auth workflows", () => {
       }),
     );
     expect(mock.state.inviteRows.get("invite-2")?.status).toBe("accepted");
+  });
+
+  it("creates a self-service password reset request using email lookup without an authenticated requester", async () => {
+    const mock = createMockAdminClient({
+      invites: [],
+      profiles: [
+        {
+          id: "athlete-1",
+          role: "athlete",
+          status: "active",
+          full_name: "Athlete One",
+          email: "athlete@example.com",
+        },
+      ],
+    });
+
+    createSupabaseAdminClientMock.mockReturnValue(mock.client);
+
+    const result = await createPasswordResetRequestAndSendEmail({
+      requester: null,
+      targetEmail: "athlete@example.com",
+      origin: "https://rooki.fit",
+      mode: "self_service",
+    });
+
+    expect(result.ok).toBe(true);
+    expect(result.message).toBe(
+      "Jos sähköpostiosoite löytyy järjestelmästä, lähetämme salasanan nollauslinkin hetken kuluttua.",
+    );
+    expect(mock.state.passwordResetRows).toHaveLength(1);
+    expect(mock.state.passwordResetRows[0]).toMatchObject({
+      email: "athlete@example.com",
+      requested_by_role: "self_service",
+      requested_by_user_id: null,
+      user_id: "athlete-1",
+    });
+  });
+
+  it("returns the same self-service reset response when email is missing", async () => {
+    const mock = createMockAdminClient({
+      invites: [],
+      profiles: [],
+    });
+
+    createSupabaseAdminClientMock.mockReturnValue(mock.client);
+
+    const result = await createPasswordResetRequestAndSendEmail({
+      requester: null,
+      targetEmail: "missing@example.com",
+      origin: "https://rooki.fit",
+      mode: "self_service",
+    });
+
+    expect(result).toEqual({
+      ok: true,
+      message: "Jos sähköpostiosoite löytyy järjestelmästä, lähetämme salasanan nollauslinkin hetken kuluttua.",
+    });
+    expect(mock.state.passwordResetRows).toHaveLength(0);
   });
 });

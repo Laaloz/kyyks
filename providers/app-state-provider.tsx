@@ -497,6 +497,14 @@ type PasswordResetRequestResult =
   | { ok: true; message: string; previewUrl?: string }
   | { ok: false; message: string };
 
+type PublicPasswordResetRequestInput = {
+  email: string;
+  captchaToken?: string;
+};
+
+const PUBLIC_PASSWORD_RESET_RESPONSE =
+  "Jos sähköpostiosoite löytyy järjestelmästä, lähetämme salasanan nollauslinkin hetken kuluttua.";
+
 type UserSettingsInput = {
   fullName: string;
   defaultDashboardView: DashboardHomeView;
@@ -1299,6 +1307,44 @@ async function waitForNextPaint(frameCount = 1) {
   }
 }
 
+async function waitForDelay(delayMs: number) {
+  await new Promise((resolve) => window.setTimeout(resolve, delayMs));
+}
+
+export async function resolveSupabaseAuthUserAfterPasswordSignIn({
+  initialUser,
+  confirmUser,
+  attempts = 4,
+  waitForNextPaintFn = waitForNextPaint,
+  waitForDelayFn = waitForDelay,
+}: {
+  initialUser: SupabaseAuthUser | null;
+  confirmUser: () => Promise<SupabaseAuthUser | null>;
+  attempts?: number;
+  waitForNextPaintFn?: (frameCount?: number) => Promise<void>;
+  waitForDelayFn?: (delayMs: number) => Promise<void>;
+}) {
+  let authUser = initialUser;
+
+  for (let attempt = 0; attempt < attempts; attempt += 1) {
+    if (authUser?.email) {
+      return authUser;
+    }
+
+    authUser = await confirmUser();
+    if (authUser?.email) {
+      return authUser;
+    }
+
+    if (attempt < attempts - 1) {
+      await waitForNextPaintFn(2);
+      await waitForDelayFn(180 * (attempt + 1));
+    }
+  }
+
+  return authUser?.email ? authUser : null;
+}
+
 function getSupabaseLoginErrorMessage(message: string) {
   const normalized = message.toLowerCase();
   if (normalized.includes("invalid login credentials")) {
@@ -1352,6 +1398,7 @@ interface AppStateContextValue {
   updateCurrentUserSettings: (input: UserSettingsInput) => Promise<ActionResult>;
   updateCurrentUserMeasurements: (input: UserMeasurementInput) => Promise<ActionResult>;
   requestCurrentUserPasswordReset: () => Promise<PasswordResetRequestResult>;
+  requestPasswordResetForEmail: (input: PublicPasswordResetRequestInput) => Promise<PasswordResetRequestResult>;
   adminSendPasswordResetEmail: (userId: string) => Promise<PasswordResetRequestResult>;
   adminUpdateUserRole: (userId: string, role: Role) => Promise<ActionResult>;
   adminAssignAthleteCoaches: (athleteId: string, coachIds: string[]) => Promise<ActionResult>;
@@ -1906,28 +1953,41 @@ function findResolvedUserIdInSnapshot(
         return { ok: false, message: getSupabaseLoginErrorMessage(error.message) };
       }
 
-        let authUser: SupabaseAuthUser | null = data.user;
-        if (!authUser?.email) {
-          authUser = await withTimeout(confirmCurrentSupabaseAuthUser(supabase), 4000, null);
-        }
+        const authUser = await resolveSupabaseAuthUserAfterPasswordSignIn({
+          initialUser: data.user,
+          confirmUser: () => withTimeout(confirmCurrentSupabaseAuthUser(supabase), 4000, null),
+        });
 
         if (!authUser?.email) {
           return { ok: false, message: "Käyttäjätiliä ei voitu tunnistaa kirjautumisen jälkeen." };
         }
 
-      const profile = await fetchSupabaseProfileWithRetry(supabase, authUser.id);
-      if (!profile) {
-        const snapshot = await fetchSupabaseVisibleStateSnapshot();
-        const resolvedUserId = snapshot ? findResolvedUserIdInSnapshot(snapshot, authUser) : null;
+      let profile: SupabaseProfileRecord | null = null;
+      let resolvedSnapshotUserId: string | null = null;
+      let latestSnapshot: SupabaseVisibleAppStateSnapshot | null = null;
 
-        if (snapshot) {
-          setState((previous) => reconcileSupabaseVisibleState(previous, snapshot));
+      for (let attempt = 0; attempt < 4; attempt += 1) {
+        profile = await fetchSupabaseProfileWithRetry(supabase, authUser.id, 2, 180);
+        if (profile) {
+          break;
         }
 
-        if (resolvedUserId) {
-          setAuthenticatedUserId(resolvedUserId);
+        latestSnapshot = await fetchSupabaseVisibleStateSnapshot();
+        resolvedSnapshotUserId = latestSnapshot ? findResolvedUserIdInSnapshot(latestSnapshot, authUser) : null;
+
+        if (latestSnapshot) {
+          setState((previous) => reconcileSupabaseVisibleState(previous, latestSnapshot as SupabaseVisibleAppStateSnapshot));
+        }
+
+        if (resolvedSnapshotUserId) {
+          setAuthenticatedUserId(resolvedSnapshotUserId);
           setImpersonatedUserId(null);
           return { ok: true };
+        }
+
+        if (attempt < 3) {
+          await waitForNextPaint(2);
+          await waitForDelay(220 * (attempt + 1));
         }
       }
 
@@ -2268,6 +2328,78 @@ function findResolvedUserIdInSnapshot(
           ok: true,
           message:
             "Salasanan nollauspyyntö lähetettiin. Demo-ympäristössä ylläpitäjä voi avata reset-linkin asetuksista.",
+        };
+      },
+      async requestPasswordResetForEmail(input) {
+        const normalizedEmail = input.email.trim().toLowerCase();
+        if (!normalizedEmail) {
+          return { ok: false, message: "Anna sähköpostiosoite." };
+        }
+
+        if (supabase) {
+          const response = await fetch("/api/password-reset", {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({
+              email: normalizedEmail,
+              captchaToken: input.captchaToken,
+            }),
+          });
+          const payload = (await response.json().catch(() => null)) as { message?: string; previewUrl?: string } | null;
+          if (!response.ok) {
+            return { ok: false, message: payload?.message ?? "Nollausviestin lähetys epäonnistui." };
+          }
+
+          return {
+            ok: true,
+            message: payload?.message ?? "Nollausviesti lähetettiin.",
+            previewUrl: payload?.previewUrl,
+          };
+        }
+
+        const targetUser = state.users.find((user) => user.email.toLowerCase() === normalizedEmail);
+        if (!targetUser) {
+          return { ok: true, message: PUBLIC_PASSWORD_RESET_RESPONSE };
+        }
+
+        if (targetUser.status !== "active") {
+          return { ok: true, message: PUBLIC_PASSWORD_RESET_RESPONSE };
+        }
+
+        if (typeof crypto === "undefined" || !("subtle" in crypto)) {
+          return { ok: false, message: "Turvallinen salasanan nollaus ei ole käytettävissä tässä ympäristössä." };
+        }
+
+        const createdAt = new Date().toISOString();
+        const token = createSecureToken();
+        const tokenHash = await hashToken(token);
+        const resetRequest: PasswordResetRequest = {
+          id: makeId("pw_reset"),
+          userId: targetUser.id,
+          email: targetUser.email,
+          tokenHash,
+          createdAt,
+          expiresAt: addMinutesIso(createdAt, RESET_TOKEN_EXPIRY_MINUTES),
+          requestedByRole: "self_service",
+        };
+
+        setState((previous) => ({
+          ...previous,
+          passwordResetRequests: [
+            resetRequest,
+            ...previous.passwordResetRequests.map((request) =>
+              request.userId === targetUser.id && !request.consumedAt && !isTimestampExpired(request.expiresAt)
+                ? { ...request, consumedAt: createdAt }
+                : request,
+            ),
+          ],
+        }));
+
+        return {
+          ok: true,
+          message: PUBLIC_PASSWORD_RESET_RESPONSE,
         };
       },
       async adminSendPasswordResetEmail(userId) {
@@ -2973,7 +3105,7 @@ function findResolvedUserIdInSnapshot(
             headers: {
               "Content-Type": "application/json",
             },
-            body: JSON.stringify({ fullName, password }),
+            body: JSON.stringify({ fullName, password, captchaToken: options?.captchaToken }),
           });
           const payload = (await response.json().catch(() => null)) as { message?: string; email?: string } | null;
 

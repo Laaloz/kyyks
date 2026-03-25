@@ -44,6 +44,8 @@ type ActivationInviteRecord = Pick<StoredInviteRecord, "id" | "email" | "role" |
 
 const PROFILE_WRITE_ATTEMPTS = 4;
 const PROFILE_WRITE_DELAY_MS = 150;
+const PUBLIC_PASSWORD_RESET_RESPONSE =
+  "Jos sähköpostiosoite löytyy järjestelmästä, lähetämme salasanan nollauslinkin hetken kuluttua.";
 
 function mapStoredInviteRecord(invite: StoredInviteRecord) {
   return {
@@ -694,8 +696,8 @@ export async function createPasswordResetRequestAndSendEmail({
   origin,
   mode,
 }: {
-  requester: RequesterProfile;
-  targetUserId: string;
+  requester?: RequesterProfile | null;
+  targetUserId?: string;
   targetEmail?: string;
   origin: string;
   mode: "self_service" | "admin";
@@ -708,10 +710,10 @@ export async function createPasswordResetRequestAndSendEmail({
   let { data: targetUser, error: targetError } = await admin
     .from("profiles")
     .select("id, email, status")
-    .eq("id", targetUserId)
+    .eq("id", targetUserId ?? "")
     .maybeSingle();
 
-  if ((!targetUser || targetError) && targetEmail) {
+  if ((!targetUser || targetError || !targetUserId) && targetEmail) {
     const lookupByEmail = await admin
       .from("profiles")
       .select("id, email, status")
@@ -723,11 +725,15 @@ export async function createPasswordResetRequestAndSendEmail({
   }
 
   if (targetError || !targetUser) {
-    return { ok: false as const, message: "Käyttäjää ei löytynyt." };
+    return mode === "self_service"
+      ? { ok: true as const, message: PUBLIC_PASSWORD_RESET_RESPONSE }
+      : { ok: false as const, message: "Käyttäjää ei löytynyt." };
   }
 
   if (targetUser.status !== "active") {
-    return { ok: false as const, message: "Käyttäjä ei ole vielä aktivoinut tiliään." };
+    return mode === "self_service"
+      ? { ok: true as const, message: PUBLIC_PASSWORD_RESET_RESPONSE }
+      : { ok: false as const, message: "Käyttäjä ei ole vielä aktivoinut tiliään." };
   }
 
   const createdAt = new Date().toISOString();
@@ -746,7 +752,7 @@ export async function createPasswordResetRequestAndSendEmail({
     token_hash: tokenHash,
     created_at: createdAt,
     expires_at: addMinutesIso(createdAt, RESET_TOKEN_EXPIRY_MINUTES),
-    requested_by_user_id: requester.id,
+    requested_by_user_id: requester?.id ?? null,
     requested_by_role: mode,
   });
 
@@ -780,7 +786,7 @@ export async function createPasswordResetRequestAndSendEmail({
 
   return {
     ok: true as const,
-    message: `Nollausviesti lähetettiin osoitteeseen ${targetUser.email}.`,
+    message: mode === "self_service" ? PUBLIC_PASSWORD_RESET_RESPONSE : `Nollausviesti lähetettiin osoitteeseen ${targetUser.email}.`,
   };
 }
 

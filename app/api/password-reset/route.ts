@@ -2,11 +2,13 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 
 import { createPasswordResetRequestAndSendEmail } from "@/lib/server/auth-workflows";
+import { verifyPublicCaptchaOrCreateErrorResponse } from "@/lib/server/hcaptcha";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 
 const requestSchema = z.object({
   userId: z.string().optional(),
   email: z.string().email().optional(),
+  captchaToken: z.string().optional(),
 });
 
 export async function POST(request: Request) {
@@ -25,34 +27,47 @@ export async function POST(request: Request) {
     data: { user },
   } = await supabase.auth.getUser();
 
-  if (!user) {
-    return NextResponse.json({ message: "Kirjaudu sisään ennen salasanan nollausta." }, { status: 401 });
+  let requester = null;
+  if (user) {
+    const profileResult = await supabase
+      .from("profiles")
+      .select("id, role, email, full_name")
+      .eq("id", user.id)
+      .maybeSingle();
+    requester = profileResult.data ?? null;
   }
 
-  const { data: requester } = await supabase
-    .from("profiles")
-    .select("id, role, email, full_name")
-    .eq("id", user.id)
-    .maybeSingle();
+  const isAdminRequest = Boolean(parsed.data.userId);
+  const isPublicSelfServiceRequest = !user && Boolean(parsed.data.email);
 
-  if (!requester) {
-    return NextResponse.json({ message: "Käyttäjäprofiilia ei löytynyt." }, { status: 403 });
+  if (isAdminRequest) {
+    if (!requester) {
+      return NextResponse.json({ message: "Kirjaudu sisään ennen salasanan nollausta." }, { status: 401 });
+    }
+
+    if (requester.role !== "admin") {
+      return NextResponse.json({ message: "Vain admin voi lähettää nollausviestejä muille käyttäjille." }, { status: 403 });
+    }
   }
 
-  const targetUserId = parsed.data.userId ?? requester.id;
-  const mode = parsed.data.userId ? "admin" : "self_service";
+  if (!requester && !isPublicSelfServiceRequest) {
+    return NextResponse.json({ message: "Anna sähköpostiosoite salasanan nollausta varten." }, { status: 400 });
+  }
 
-  if (parsed.data.userId && requester.role !== "admin") {
-    return NextResponse.json({ message: "Vain admin voi lähettää nollausviestejä muille käyttäjille." }, { status: 403 });
+  if (isPublicSelfServiceRequest) {
+    const captchaErrorResponse = await verifyPublicCaptchaOrCreateErrorResponse(parsed.data.captchaToken);
+    if (captchaErrorResponse) {
+      return captchaErrorResponse;
+    }
   }
 
   const origin = new URL(request.url).origin;
   const result = await createPasswordResetRequestAndSendEmail({
     requester,
-    targetUserId,
+    targetUserId: parsed.data.userId ?? requester?.id,
     targetEmail: parsed.data.email,
     origin,
-    mode,
+    mode: isAdminRequest ? "admin" : "self_service",
   });
 
   if (!result.ok) {
