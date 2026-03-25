@@ -16,7 +16,7 @@ import { useAppState } from "@/providers/app-state-provider";
 import { inviteSchema } from "@/components/workout/schemas";
 
 export function CoachInvitePanel() {
-  const { currentUser, createInvite, getCoachAthletes, resendInvite, state } = useAppState();
+  const { currentUser, notify, createInvite, getCoachAthletes, resendInvite, state } = useAppState();
   const formId = useId();
   const [inviteMessage, setInviteMessage] = useState<string>("");
   const [resendMessage, setResendMessage] = useState<string>("");
@@ -51,6 +51,10 @@ export function CoachInvitePanel() {
               coachId: currentUser?.id,
             });
             setInviteMessage(result.ok ? `Kutsu lähetettiin osoitteeseen ${values.email}.` : result.message);
+            notify({
+              tone: result.ok ? "success" : "danger",
+              message: result.ok ? `Kutsu lähetettiin osoitteeseen ${values.email}.` : result.message,
+            });
             setResendMessage("");
             if (result.ok) {
               form.reset({ email: "", role: "athlete", coachId: currentUser?.id });
@@ -129,6 +133,10 @@ export function CoachInvitePanel() {
                           try {
                             const result = await resendInvite(invite.id);
                             setResendMessage(result.ok ? `Kutsu lähetettiin uudelleen osoitteeseen ${invite.email}.` : result.message);
+                            notify({
+                              tone: result.ok ? "success" : "danger",
+                              message: result.ok ? `Kutsu lähetettiin uudelleen osoitteeseen ${invite.email}.` : result.message,
+                            });
                           } finally {
                             setResendingInviteId(null);
                           }

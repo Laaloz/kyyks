@@ -43,6 +43,7 @@ export function UserSettingsPanel() {
     authenticatedUser,
     currentUser,
     isImpersonating,
+    notify,
     state,
     startAdminImpersonation,
     updateCurrentUserSettings,
@@ -166,6 +167,7 @@ export function UserSettingsPanel() {
 
     const result = await updateCurrentUserSettings(values);
     setMessage(result.ok ? "Muutokset tallennettu." : result.message);
+    notify({ tone: result.ok ? "success" : "danger", message: result.ok ? "Asetukset tallennettiin." : result.message });
   });
   const isSavingSettings = form.formState.isSubmitting;
 
@@ -299,6 +301,7 @@ export function UserSettingsPanel() {
                 try {
                   const result = await requestCurrentUserPasswordReset();
                   setPasswordResetMessage(result.message);
+                  notify({ tone: result.ok ? "success" : "danger", message: result.message });
                 } finally {
                   setIsSendingOwnPasswordReset(false);
                 }

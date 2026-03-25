@@ -1145,6 +1145,21 @@ export function AthleteSessionPanel({
       ) : null}
 
       <div className="rounded-none border-0 bg-transparent p-0 shadow-none">
+        {(isCompleting || isCancellingWorkout || isDeletingWorkout) ? (
+          <div className="mb-3 flex items-center gap-3 rounded-2xl border border-[var(--border-strong)] bg-[color:color-mix(in_srgb,var(--surface-2)_84%,var(--surface))] px-4 py-3 text-sm text-[var(--text)] shadow-[0_12px_28px_-24px_var(--shadow)]">
+            <span
+              aria-hidden="true"
+              className="size-4 animate-spin rounded-full border-2 border-current border-r-transparent text-[var(--accent)]"
+            />
+            <span>
+              {isCompleting
+                ? "Merkitään treeniä valmiiksi..."
+                : isCancellingWorkout
+                  ? "Keskeytetään treeniä..."
+                  : "Poistetaan treeniä..."}
+            </span>
+          </div>
+        ) : null}
         <div className="flex flex-wrap gap-3 items-center">
           {status !== "completed" ? (
             <>

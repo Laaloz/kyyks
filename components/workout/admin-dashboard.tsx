@@ -22,7 +22,7 @@ import { inviteSchema } from "@/components/workout/schemas";
 import { MetricGrid, roleLabel, type WorkspaceView } from "@/components/workout/shared";
 
 export function AdminDashboard({ view }: { view: WorkspaceView }) {
-  const { currentUser, state, createInvite, resendInvite } = useAppState();
+  const { currentUser, state, notify, createInvite, resendInvite } = useAppState();
   const formId = useId();
   const [inviteMessage, setInviteMessage] = useState<string>("");
   const [resendMessage, setResendMessage] = useState<string>("");
@@ -525,6 +525,10 @@ export function AdminDashboard({ view }: { view: WorkspaceView }) {
               onSubmit={form.handleSubmit(async (values) => {
                 const result = await createInvite(values);
                 setInviteMessage(result.ok ? `Kutsu lähetetty osoitteeseen ${values.email}.` : result.message);
+                notify({
+                  tone: result.ok ? "success" : "danger",
+                  message: result.ok ? `Kutsu lähetettiin osoitteeseen ${values.email}.` : result.message,
+                });
                 setResendMessage("");
                 if (result.ok) {
                   form.reset({ email: "", role: values.role, coachId: values.coachId });
@@ -651,6 +655,10 @@ export function AdminDashboard({ view }: { view: WorkspaceView }) {
                                 try {
                                   const result = await resendInvite(invite.id);
                                   setResendMessage(result.ok ? `Kutsu lähetettiin uudelleen osoitteeseen ${invite.email}.` : result.message);
+                                  notify({
+                                    tone: result.ok ? "success" : "danger",
+                                    message: result.ok ? `Kutsu lähetettiin uudelleen osoitteeseen ${invite.email}.` : result.message,
+                                  });
                                 } finally {
                                   setResendingInviteId(null);
                                 }

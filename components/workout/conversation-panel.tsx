@@ -11,6 +11,7 @@ import { isConversationEntryNotifiable } from "@/lib/conversation";
 import type { AppState, ConversationEntry, Role } from "@/lib/types";
 import { formatDateWithWeekday } from "@/lib/utils";
 import { normalizeWorkoutHistoryTitle } from "@/lib/workout-history-title";
+import { useAppState } from "@/providers/app-state-provider";
 
 type ConversationContextOption = {
   id: string;
@@ -49,6 +50,7 @@ export function ConversationPanel({
   onSend: (body: string, option: ConversationContextOption) => ActionResult;
   headerSlot?: ReactNode;
 }) {
+  const { notify } = useAppState();
   const [draft, setDraft] = useState("");
   const [message, setMessage] = useState("");
   const [selectedContextId, setSelectedContextId] = useState<string>(contextOptions[0]?.id ?? "general");
@@ -76,11 +78,13 @@ export function ConversationPanel({
       const result = await onSend(draft, selectedContext);
       if (!result.ok) {
         setMessage(result.message);
+        notify({ tone: "danger", message: result.message });
         return;
       }
 
       setDraft("");
       setMessage("Viesti lisättiin keskusteluun.");
+      notify({ tone: "success", message: "Viesti lisättiin keskusteluun." });
     } finally {
       setIsSending(false);
     }
