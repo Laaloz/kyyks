@@ -152,6 +152,7 @@ export function AthleteDashboard({
   const [selectedWorkoutId, setSelectedWorkoutId] = useState<string | null>(null);
   const [workoutMessage, setWorkoutMessage] = useState<string>("");
   const [athleteLogMode, setAthleteLogMode] = useState<AthleteLogMode>("library");
+  const [dismissedActiveWorkoutId, setDismissedActiveWorkoutId] = useState<string | null>(null);
   const [historyFocusWorkoutId, setHistoryFocusWorkoutId] = useState<string | null>(null);
   const [correctionModeWorkoutId, setCorrectionModeWorkoutId] = useState<string | null>(null);
   const [openHistoryMenuWorkoutId, setOpenHistoryMenuWorkoutId] = useState<string | null>(null);
@@ -176,6 +177,7 @@ export function AthleteDashboard({
   const historyMenuRef = useRef<HTMLDivElement | null>(null);
   const measurementsSectionRef = useRef<HTMLDivElement | null>(null);
   const closeWorkoutView = () => {
+    setDismissedActiveWorkoutId(selectedWorkoutId ?? activeWorkout?.id ?? null);
     setSelectedWorkoutId(null);
     setHistoryFocusWorkoutId(null);
     setCorrectionModeWorkoutId(null);
@@ -243,14 +245,25 @@ export function AthleteDashboard({
   const inProgressCount = workouts.filter((item) => item.status === "in_progress").length;
   const activeWorkout = workouts.find((item) => item.status === "in_progress");
   useEffect(() => {
-    if (didAutoResumeWorkout.current || !activeWorkout) {
+    if (!dismissedActiveWorkoutId) {
+      return;
+    }
+
+    if (!activeWorkout || activeWorkout.id !== dismissedActiveWorkoutId) {
+      setDismissedActiveWorkoutId(null);
+      didAutoResumeWorkout.current = false;
+    }
+  }, [activeWorkout, dismissedActiveWorkoutId]);
+
+  useEffect(() => {
+    if (didAutoResumeWorkout.current || !activeWorkout || dismissedActiveWorkoutId === activeWorkout.id) {
       return;
     }
 
     setSelectedWorkoutId(activeWorkout.id);
     setAthleteLogMode("workout");
     didAutoResumeWorkout.current = true;
-  }, [activeWorkout]);
+  }, [activeWorkout, dismissedActiveWorkoutId]);
 
   const selectedWorkoutCompletionCount =
     currentUser && selectedWorkout
@@ -339,6 +352,7 @@ export function AthleteDashboard({
     [currentUser, state],
   );
   const openWorkoutView = (scheduledWorkoutId: string, options?: { correctionMode?: boolean }) => {
+    setDismissedActiveWorkoutId(null);
     setHistoryFocusWorkoutId(null);
     setSelectedWorkoutId(scheduledWorkoutId);
     setCorrectionModeWorkoutId(options?.correctionMode ? scheduledWorkoutId : null);
@@ -1178,6 +1192,7 @@ export function AthleteDashboard({
                   try {
                     const result = await completeWorkout(completedWorkoutId);
                     if (result.ok) {
+                      setDismissedActiveWorkoutId(null);
                       setWorkoutMessage(
                         completionPercent < 100
                           ? `Treeni merkittiin valmiiksi (${completionPercent}% toteutui). Kirjaa muistiinpanoihin, miksi treeni jäi osittaiseksi.`
@@ -1210,6 +1225,7 @@ export function AthleteDashboard({
                       : result.message,
                   );
                   if (result.ok) {
+                    setDismissedActiveWorkoutId(selectedWorkout.id);
                     setSelectedWorkoutId(null);
                     setCorrectionModeWorkoutId(null);
                     setAthleteLogMode("library");
@@ -1227,6 +1243,7 @@ export function AthleteDashboard({
                   setWorkoutMessage(result.ok ? "Treeni poistettiin." : result.message);
 
                   if (result.ok) {
+                    setDismissedActiveWorkoutId(null);
                     setSelectedWorkoutId(null);
                     setCorrectionModeWorkoutId(null);
                     setAthleteLogMode("library");
