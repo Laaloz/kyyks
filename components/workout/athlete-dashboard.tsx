@@ -1388,7 +1388,7 @@ export function AthleteDashboard({
               <CardDescription className="mt-2">
                  Aloita treeni ohjelmastasi. Aiempien toteutusten tiedot löydät historiasta.
               </CardDescription>
-              {blockingWorkout ? (
+              {blockingWorkout && !selectionTransitionMessage ? (
                 <div className="mt-4 rounded-2xl border border-[var(--accent)] bg-[color:color-mix(in_srgb,var(--accent)_10%,var(--surface))] px-4 py-4 text-sm text-[var(--text)] shadow-[0_10px_24px_-22px_var(--accent)]">
                   <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between sm:gap-4">
                     <div className="min-w-0">
