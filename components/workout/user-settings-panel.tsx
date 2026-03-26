@@ -551,9 +551,9 @@ export function UserSettingsPanel({ adminOnly = false }: { adminOnly?: boolean }
                 ) : (
                   <p className="leading-6">
                     iPhone/iPad: paina Safarissa{" "}
-                    <span className="inline-flex items-center gap-1 align-baseline font-medium text-[var(--text)]">
-                      <Share className="size-[0.95rem] text-[var(--accent)]" />
-                      Jaa
+                    <span className="inline-flex items-baseline gap-1 font-medium text-[var(--text)]">
+                      <Share className="relative top-[1px] size-[0.9rem] shrink-0 text-[var(--accent)]" />
+                      <span>Jaa</span>
                     </span>{" "}
                     ja valitse Lisää kotivalikkoon.
                   </p>
