@@ -1433,23 +1433,31 @@ export function AthleteDashboard({
                     return;
                   }
 
-                  const result = await deleteWorkout(selectedWorkout.id);
+                  const deletedWorkoutId = selectedWorkout.id;
+                  const wasInCorrectionMode = correctionModeWorkoutId === deletedWorkoutId;
+
+                  setPendingWorkoutTransition({ type: "delete" });
+                  setSelectedWorkoutId(null);
+                  setCorrectionModeWorkoutId(null);
+                  setAthleteLogMode("library");
+
+                  const result = await deleteWorkout(deletedWorkoutId);
                   console.info("[workout-ui] delete-result", {
-                    scheduledWorkoutId: selectedWorkout.id,
+                    scheduledWorkoutId: deletedWorkoutId,
                     ok: result.ok,
                     message: result.ok ? undefined : result.message,
                   });
                   setWorkoutMessage(result.ok ? "Treeni poistettiin." : result.message);
 
                   if (result.ok) {
-                    setPendingWorkoutTransition({ type: "delete" });
                     setDismissedActiveWorkoutId(null);
-                    setSelectedWorkoutId(null);
-                    setCorrectionModeWorkoutId(null);
-                    setAthleteLogMode("library");
                     notify({ tone: "success", message: "Treeni poistettiin." });
                     window.setTimeout(() => setPendingWorkoutTransition(null), 900);
                   } else {
+                    setPendingWorkoutTransition(null);
+                    setSelectedWorkoutId(deletedWorkoutId);
+                    setCorrectionModeWorkoutId(wasInCorrectionMode ? deletedWorkoutId : null);
+                    setAthleteLogMode("workout");
                     notify({ tone: "danger", message: result.message });
                   }
                 }}
