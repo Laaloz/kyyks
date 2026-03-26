@@ -1,7 +1,7 @@
 "use client";
 
 import { zodResolver } from "@hookform/resolvers/zod";
-import { Bell, KeyRound, Mail, MoonStar, Ruler, UserRoundCog, Waves } from "lucide-react";
+import { Bell, HousePlus, KeyRound, Mail, MoonStar, Ruler, UserRoundCog, Waves } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
@@ -52,6 +52,11 @@ function parseLoadIncrement(value: string) {
 
 const SETTINGS_SAVE_MIN_LOADING_MS = 350;
 
+type DeferredInstallPromptEvent = Event & {
+  prompt: () => Promise<void>;
+  userChoice: Promise<{ outcome: "accepted" | "dismissed"; platform: string }>;
+};
+
 function resolveDefaultView(role: Role, value: DashboardHomeView | undefined): DashboardHomeView {
   const allowed = getDashboardViewsForRole(role);
   if (value && allowed.includes(value)) {
@@ -74,6 +79,9 @@ export function UserSettingsPanel({ adminOnly = false }: { adminOnly?: boolean }
   const [passwordResetMessage, setPasswordResetMessage] = useState<string>("");
   const [isSendingOwnPasswordReset, setIsSendingOwnPasswordReset] = useState(false);
   const [isSavingProfile, setIsSavingProfile] = useState(false);
+  const [deferredInstallPrompt, setDeferredInstallPrompt] = useState<DeferredInstallPromptEvent | null>(null);
+  const [isInstalledToHomeScreen, setIsInstalledToHomeScreen] = useState(false);
+  const [isTriggeringInstallPrompt, setIsTriggeringInstallPrompt] = useState(false);
   const [heightCmDraft, setHeightCmDraft] = useState(currentUser?.heightCm !== undefined ? String(currentUser.heightCm) : "");
 
   const form = useForm<z.input<typeof userSettingsSchema>, unknown, z.output<typeof userSettingsSchema>>({
@@ -191,6 +199,81 @@ export function UserSettingsPanel({ adminOnly = false }: { adminOnly?: boolean }
     Boolean(currentUser) &&
     (profileName.trim() !== currentUser.fullName ||
       (heightCmDraft.trim() ? Number(heightCmDraft.replace(",", ".")) : undefined) !== currentUser.heightCm);
+
+  const installPlatform = useMemo(() => {
+    if (typeof window === "undefined") {
+      return "unknown" as const;
+    }
+
+    const userAgent = window.navigator.userAgent.toLowerCase();
+    if (/iphone|ipad|ipod/.test(userAgent)) {
+      return "ios" as const;
+    }
+    if (/android/.test(userAgent)) {
+      return "android" as const;
+    }
+    return "other" as const;
+  }, []);
+
+  useEffect(() => {
+    if (typeof window === "undefined") {
+      return;
+    }
+
+    const mediaQuery = window.matchMedia("(display-mode: standalone)");
+    const updateInstalledState = () => {
+      const iosStandalone = Boolean((window.navigator as Navigator & { standalone?: boolean }).standalone);
+      setIsInstalledToHomeScreen(mediaQuery.matches || iosStandalone);
+    };
+
+    const handleBeforeInstallPrompt = (event: Event) => {
+      event.preventDefault();
+      setDeferredInstallPrompt(event as DeferredInstallPromptEvent);
+    };
+
+    const handleInstalled = () => {
+      setIsInstalledToHomeScreen(true);
+      setDeferredInstallPrompt(null);
+    };
+
+    updateInstalledState();
+    window.addEventListener("beforeinstallprompt", handleBeforeInstallPrompt);
+    window.addEventListener("appinstalled", handleInstalled);
+
+    if (typeof mediaQuery.addEventListener === "function") {
+      mediaQuery.addEventListener("change", updateInstalledState);
+    } else if (typeof mediaQuery.addListener === "function") {
+      mediaQuery.addListener(updateInstalledState);
+    }
+
+    return () => {
+      window.removeEventListener("beforeinstallprompt", handleBeforeInstallPrompt);
+      window.removeEventListener("appinstalled", handleInstalled);
+
+      if (typeof mediaQuery.removeEventListener === "function") {
+        mediaQuery.removeEventListener("change", updateInstalledState);
+      } else if (typeof mediaQuery.removeListener === "function") {
+        mediaQuery.removeListener(updateInstalledState);
+      }
+    };
+  }, []);
+
+  const installHelpText =
+    installPlatform === "ios"
+      ? "iPhone/iPad: avaa selaimen Jaa-valikko ja valitse Lisää kotivalikkoon."
+      : installPlatform === "android"
+        ? deferredInstallPrompt
+          ? "Android: voit lisätä Rookiappin suoraan alla olevasta painikkeesta."
+          : "Android: avaa selaimen valikko ja valitse Lisää kotivalikkoon tai Asenna."
+        : deferredInstallPrompt
+          ? "Voit lisätä Rookiappin suoraan alla olevasta painikkeesta."
+          : "Lisää Rookiapp selaimen valikosta kotivalikkoon, jos selain tukee sitä.";
+
+  const installStatusText = isInstalledToHomeScreen
+    ? "Rookiapp on avattu kotivalikosta."
+    : "Rookiapp on nyt auki selaimessa.";
+
+  const installStatusBadge = isInstalledToHomeScreen ? "Kotivalikossa" : "Selaimessa";
 
   return (
     <div className="grid gap-6 lg:grid-cols-[1.05fr_0.95fr]">
@@ -403,6 +486,57 @@ export function UserSettingsPanel({ adminOnly = false }: { adminOnly?: boolean }
               Tallenna asetukset
             </Button>
           </form>
+        </Card>
+
+        <Card>
+          <p className="text-xs font-semibold tracking-[0.04em] text-[var(--text-subtle)]">Kotivalikko</p>
+          <CardTitle className="text-2xl">Lisää kotivalikkoon</CardTitle>
+          <CardDescription className="mt-2">
+            Lisää Rookiapp kotivalikkoon, niin saat sen auki yhdellä napautuksella.
+          </CardDescription>
+
+          <div className="mt-6 space-y-4">
+            <div className="flex items-center justify-between rounded-xl border-2 border-[var(--border)] bg-[var(--surface-2)] px-4 py-3">
+              <span className="inline-flex items-center gap-2 text-sm text-[var(--text-muted)]">
+                <HousePlus className="size-4 text-[var(--accent)]" />
+                Tila
+              </span>
+              <Badge>{installStatusBadge}</Badge>
+            </div>
+
+            <p className="text-sm text-[var(--text-muted)]">{installHelpText}</p>
+            <p className="text-xs text-[var(--text-subtle)]">
+              {installStatusText}
+            </p>
+
+            {deferredInstallPrompt && !isInstalledToHomeScreen ? (
+              <Button
+                type="button"
+                className="w-full sm:w-auto"
+                loading={isTriggeringInstallPrompt}
+                loadingText="Avataan valintaa..."
+                onClick={async () => {
+                  setIsTriggeringInstallPrompt(true);
+                  try {
+                    await deferredInstallPrompt.prompt();
+                    const choice = await deferredInstallPrompt.userChoice;
+                    if (choice.outcome === "accepted") {
+                      setIsInstalledToHomeScreen(true);
+                      setDeferredInstallPrompt(null);
+                    }
+                  } finally {
+                    setIsTriggeringInstallPrompt(false);
+                  }
+                }}
+              >
+                Lisää kotivalikkoon
+              </Button>
+            ) : installPlatform !== "ios" && !isInstalledToHomeScreen ? (
+              <p className="text-xs text-[var(--text-subtle)]">
+                Suora painike näkyy vain selaimissa, jotka tarjoavat asennuskehotteen automaattisesti.
+              </p>
+            ) : null}
+          </div>
         </Card>
 
         {currentUser.role === "athlete" ? (
