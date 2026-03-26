@@ -493,6 +493,25 @@ as $$
     where athlete_id = auth.uid()
       and coach_id = target_coach
       and active = true
+  ) or exists (
+    select 1
+    from public.profiles profile
+    where profile.id = target_coach
+      and profile.role = 'admin'
+      and (
+        exists (
+          select 1
+          from public.training_plans plan
+          where plan.athlete_id = auth.uid()
+            and plan.coach_id = target_coach
+        )
+        or exists (
+          select 1
+          from public.scheduled_workouts workout
+          where workout.athlete_id = auth.uid()
+            and workout.coach_id = target_coach
+        )
+      )
   )
 $$;
 
@@ -524,7 +543,7 @@ using (
   auth.uid() = id
   or public.is_admin()
   or (role = 'athlete' and public.is_coach_of(id))
-  or (role = 'coach' and public.is_athlete_of(id))
+  or (role in ('coach', 'admin') and public.is_athlete_of(id))
 );
 
 create policy "profiles insert by admin"
