@@ -15,7 +15,7 @@ import { getMeasurementReminderState } from "@/lib/measurement-reminder";
 import { canActAsCoach, getDashboardViewsForRole, getDefaultDashboardView, isAdminRole } from "@/lib/role-access";
 import { useAppState } from "@/providers/app-state-provider";
 
-import { roleLabel, type WorkspaceView } from "@/components/workout/shared";
+import { PROGRAMS_WORKSPACE_VIEW, roleLabel, type WorkspaceView } from "@/components/workout/shared";
 
 type PrimaryWorkspaceView = Exclude<WorkspaceView, "settings">;
 type AthleteOverviewFocusTarget = "measurements";
@@ -96,7 +96,7 @@ export function DashboardShell() {
   const navItems = navItemsForRole(currentUser.role);
   const navLabelByView: Record<WorkspaceView, string> = {
     overview: "Yleiskuva",
-    templates: "Ohjelmat",
+    [PROGRAMS_WORKSPACE_VIEW]: "Ohjelmat",
     invites: "Kutsut",
     "athlete-log": "Treenit",
     conversation: "Keskustelu",
@@ -104,7 +104,7 @@ export function DashboardShell() {
   };
   const navMobileLabelByView: Record<WorkspaceView, string> = {
     overview: "Yleiskuva",
-    templates: "Ohjelmat",
+    [PROGRAMS_WORKSPACE_VIEW]: "Ohjelmat",
     invites: "Kutsut",
     "athlete-log": "Treenit",
     conversation: "Viestit",
@@ -112,7 +112,7 @@ export function DashboardShell() {
   };
   const navIconByView: Record<PrimaryWorkspaceView, LucideIcon> = {
     overview: Home,
-    templates: Sparkles,
+    [PROGRAMS_WORKSPACE_VIEW]: Sparkles,
     invites: Users,
     "athlete-log": NotebookPen,
     conversation: Bell,
@@ -536,7 +536,7 @@ export function DashboardShell() {
                 overviewFocusTarget={athleteOverviewFocusTarget}
                 onOverviewFocusHandled={() => setAthleteOverviewFocusTarget(null)}
               />
-            ) : view === "templates" || currentUser.role === "coach" || (view === "conversation" && canActAsCoach(currentUser.role)) ? (
+            ) : view === PROGRAMS_WORKSPACE_VIEW || currentUser.role === "coach" || (view === "conversation" && canActAsCoach(currentUser.role)) ? (
               <CoachDashboard view={view} onOpenConversation={() => setView("conversation")} />
             ) : currentUser.role === "admin" ? (
               <AdminDashboard view={view} />

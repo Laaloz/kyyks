@@ -14,12 +14,12 @@ import { bodyMeasurementSchema, userSettingsSchema } from "@/components/workout/
 import { roleLabel } from "@/components/workout/shared";
 import { withMinimumDelay } from "@/lib/min-delay";
 import { getAssignableCoachUsers, getDashboardViewsForRole, getDefaultDashboardView } from "@/lib/role-access";
-import type { DashboardHomeView, Role, ThemeMode } from "@/lib/types";
+import { PROGRAMS_DASHBOARD_VIEW, type DashboardHomeView, type Role, type ThemeMode } from "@/lib/types";
 import { useAppState } from "@/providers/app-state-provider";
 
 const dashboardViewLabel: Record<DashboardHomeView, string> = {
   overview: "Yleiskuva",
-  templates: "Ohjelmat",
+  [PROGRAMS_DASHBOARD_VIEW]: "Ohjelmat",
   invites: "Kutsut",
   "athlete-log": "Treenit",
   conversation: "Keskustelu",

@@ -46,7 +46,7 @@ import {
   emptyProgramWorkout,
   programComposerSchema,
 } from "@/components/workout/schemas";
-import { workoutStatusLabel, type WorkspaceView } from "@/components/workout/shared";
+import { PROGRAMS_WORKSPACE_VIEW, workoutStatusLabel, type WorkspaceView } from "@/components/workout/shared";
 
 type CoachHistoryMuscleGroupKey = "shoulders" | "arms" | "chest" | "abs" | "back" | "legs" | "other";
 
@@ -257,12 +257,15 @@ export function CoachDashboard({
         />
       ) : null}
 
-      {view === "templates" && (
+      {view === PROGRAMS_WORKSPACE_VIEW && (
         <div className="grid gap-6 xl:grid-cols-[1.08fr_0.92fr]">
           <Card className="border-[var(--border-strong)]" id="coach-program-composer">
-            <p className="text-xs font-semibold text-[var(--text-subtle)]">Ohjelman rakentaja</p>
-            <CardTitle className="text-2xl">{editorTitle}</CardTitle>
-            <CardDescription className="mt-2">{editorDescription}</CardDescription>
+              <p className="text-xs font-semibold text-[var(--text-subtle)]">Ohjelman rakentaja</p>
+              <CardTitle className="text-2xl">{editorTitle}</CardTitle>
+              <CardDescription className="mt-2">{editorDescription}</CardDescription>
+              <p className="mt-3 text-xs text-[var(--text-subtle)]">
+                Ohjelmat tallennetaan suoraan ohjelmina. Erillisiä treenipohjia ei käytetä tässä näkymässä.
+              </p>
             {isEditingProgram ? (
               <div className="mt-4 flex flex-wrap items-center gap-3 rounded-xl border border-[var(--border)] bg-[var(--surface-2)] p-3">
                 <Badge>Muokkaustila</Badge>

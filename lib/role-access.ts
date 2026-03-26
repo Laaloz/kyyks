@@ -1,8 +1,8 @@
-import type { DashboardHomeView, Invite, Role, UserProfile } from "@/lib/types";
+import { PROGRAMS_DASHBOARD_VIEW, type DashboardHomeView, type Invite, type Role, type UserProfile } from "@/lib/types";
 
 const coachWorkspaceViews: DashboardHomeView[] = [
   "overview",
-  "templates",
+  PROGRAMS_DASHBOARD_VIEW,
   "athlete-log",
   "conversation",
   "invites",

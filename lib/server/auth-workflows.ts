@@ -3,7 +3,7 @@ import "server-only";
 import { addDaysIso, addMinutesIso, createSecureToken, hashToken, INVITE_EXPIRY_DAYS, RESET_TOKEN_EXPIRY_MINUTES } from "@/lib/auth-tokens";
 import { sendTransactionalEmail } from "@/lib/email";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
-import type { Role, UserProfile } from "@/lib/types";
+import { PROGRAMS_DASHBOARD_VIEW, type Role, type UserProfile } from "@/lib/types";
 
 type AdminClient = NonNullable<ReturnType<typeof createSupabaseAdminClient>>;
 
@@ -88,7 +88,7 @@ function mapStoredProfileRecord(profile: {
     waistCm: profile.waist_cm ?? undefined,
     settings: {
       defaultDashboardView:
-        profile.default_dashboard_view === "templates" ||
+        profile.default_dashboard_view === PROGRAMS_DASHBOARD_VIEW ||
         profile.default_dashboard_view === "invites" ||
         profile.default_dashboard_view === "athlete-log" ||
         profile.default_dashboard_view === "conversation" ||

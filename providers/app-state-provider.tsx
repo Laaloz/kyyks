@@ -9,8 +9,6 @@ import {
   cloneDemoState,
   createProgram as domainCreateProgram,
   createInvite as domainCreateInvite,
-  createTemplate as domainCreateTemplate,
-  duplicateTemplate as domainDuplicateTemplate,
   deleteScheduledWorkout as domainDeleteScheduledWorkout,
   getCoachAthletes as domainGetCoachAthletes,
   isInviteExpired,
@@ -46,7 +44,6 @@ import type {
   ProgramUpdateInput,
   Role,
   UserProfile,
-  TemplateBuilderInput,
   WorkoutUpdateInput,
 } from "@/lib/types";
 import { makeId } from "@/lib/utils";
@@ -593,10 +590,6 @@ type LoginResult =
 
 type ActionResult =
   | { ok: true; scheduledWorkoutId?: string }
-  | { ok: false; message: string };
-
-type CreateTemplateResult =
-  | { ok: true; templateId?: string }
   | { ok: false; message: string };
 
 type CreateProgramResult =
@@ -1608,13 +1601,11 @@ interface AppStateContextValue {
   createInvite: (input: InviteInput) => Promise<ActionResult>;
   resendInvite: (inviteId: string) => Promise<ActionResult>;
   acceptInvite: (token: string, fullName: string, password: string, options?: { captchaToken?: string }) => Promise<LoginResult>;
-  createTemplate: (input: TemplateBuilderInput) => Promise<CreateTemplateResult>;
   createProgram: (input: ProgramBuilderInput) => Promise<CreateProgramResult>;
   updateProgram: (programId: string, patch: ProgramUpdateInput) => Promise<ActionResult>;
   setProgramStatus: (programId: string, status: "active" | "archived") => Promise<ActionResult>;
   deleteProgram: (programId: string) => Promise<ActionResult>;
   startProgramWorkout: (programId: string, programWorkoutId: string) => Promise<ActionResult>;
-  duplicateTemplate: (templateId: string) => Promise<ActionResult>;
   addConversationComment: (
     body: string,
     options?: { scheduledWorkoutId?: string; trainingPlanId?: string; athleteId?: string; contextLabel?: string },
@@ -3402,46 +3393,6 @@ function findResolvedUserIdInSnapshot(
         setImpersonatedUserId(null);
         return { ok: true };
       },
-      async createTemplate(input) {
-        if (!currentUser || !canActAsCoach(currentUser.role)) {
-          return { ok: false, message: "Vain admin tai valmentaja voi luoda treenipohjan." };
-        }
-
-        const template = domainCreateTemplate(input, currentUser.id);
-
-        if (supabase) {
-          const previousState = state;
-          setState((previous) => ({
-            ...previous,
-            templates: [template, ...previous.templates],
-          }));
-          const response = await fetch("/api/templates", {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-            },
-            body: JSON.stringify(input),
-          });
-          const payload = (await response.json().catch(() => null)) as { message?: string; templateId?: string } | null;
-          if (!response.ok) {
-            setState(previousState);
-            await refreshSupabaseVisibleState();
-            return { ok: false, message: payload?.message ?? "Treenipohjan luonti epäonnistui." };
-          }
-
-          void refreshSupabaseVisibleState();
-          const templateId = payload?.templateId ?? template.id;
-          warnIfOptimisticServerIdLeak("template", templateId);
-          return { ok: true, templateId };
-        }
-
-        setState((previous) => ({
-          ...previous,
-          templates: [template, ...previous.templates],
-        }));
-        warnIfOptimisticServerIdLeak("template", template.id);
-        return { ok: true, templateId: template.id };
-      },
       async createProgram(input) {
         if (!currentUser || !canActAsCoach(currentUser.role)) {
           return { ok: false, message: "Vain admin tai valmentaja voi luoda treeniohjelman." };
@@ -3778,46 +3729,6 @@ function findResolvedUserIdInSnapshot(
         } catch {
           return { ok: false, message: "Harjoituksen käynnistys epäonnistui." };
         }
-      },
-      async duplicateTemplate(sourceTemplateId) {
-        if (!currentUser) {
-          return { ok: false, message: "Kirjaudu sisään ennen duplikointia." };
-        }
-
-        const template = state.templates.find((item) => item.id === sourceTemplateId);
-        if (!template) {
-          return { ok: false, message: "Treenipohjaa ei löytynyt." };
-        }
-
-        if (supabase) {
-          const duplicatedTemplate = domainDuplicateTemplate(template, currentUser.id);
-          const previousState = state;
-          setState((previous) => ({
-            ...previous,
-            templates: [duplicatedTemplate, ...previous.templates],
-          }));
-          const response = await fetch(`/api/templates/${encodeURIComponent(sourceTemplateId)}/duplicate`, {
-            method: "POST",
-          });
-          const payload = (await response.json().catch(() => null)) as { message?: string; templateId?: string } | null;
-          if (!response.ok) {
-            setState(previousState);
-            await refreshSupabaseVisibleState();
-            return { ok: false, message: payload?.message ?? "Treenipohjan kopiointi epäonnistui." };
-          }
-
-          void refreshSupabaseVisibleState();
-          const templateId = payload?.templateId ?? duplicatedTemplate.id;
-          warnIfOptimisticServerIdLeak("template", templateId);
-          return { ok: true, templateId };
-        }
-
-        setState((previous) => ({
-          ...previous,
-          templates: [domainDuplicateTemplate(template, currentUser.id), ...previous.templates],
-        }));
-        warnIfOptimisticServerIdLeak("template", template.id);
-        return { ok: true, templateId: template.id };
       },
       async addConversationComment(body, options) {
         if (!currentUser) {

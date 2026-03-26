@@ -2,18 +2,19 @@ import "server-only";
 
 import type { SupabaseClient } from "@supabase/supabase-js";
 
-import type {
-  AppState,
-  BodyMeasurement,
-  CoachAthleteAssignment,
-  ConversationEntry,
-  Exercise,
-  ScheduledWorkout,
-  TrainingPlan,
-  UserProfile,
-  WorkoutNote,
-  WorkoutSession,
-  WorkoutTemplate,
+import {
+  PROGRAMS_DASHBOARD_VIEW,
+  type AppState,
+  type BodyMeasurement,
+  type CoachAthleteAssignment,
+  type ConversationEntry,
+  type Exercise,
+  type ScheduledWorkout,
+  type TrainingPlan,
+  type UserProfile,
+  type WorkoutNote,
+  type WorkoutSession,
+  type WorkoutTemplate,
 } from "@/lib/types";
 
 type ServerClient = SupabaseClient<any, "public", any>;
@@ -235,7 +236,7 @@ function mapProfileRow(profile: ProfileRow): UserProfile {
     settings: {
       defaultDashboardView:
         profile.default_dashboard_view === "overview" ||
-        profile.default_dashboard_view === "templates" ||
+        profile.default_dashboard_view === PROGRAMS_DASHBOARD_VIEW ||
         profile.default_dashboard_view === "invites" ||
         profile.default_dashboard_view === "athlete-log" ||
         profile.default_dashboard_view === "conversation"

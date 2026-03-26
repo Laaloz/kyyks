@@ -7,7 +7,10 @@ export type InviteStatus = "pending" | "accepted";
 export type SplitType = "upper" | "lower" | "full_body" | "custom";
 export type ExerciseScope = "global" | "coach_custom";
 export type RepTargetMode = "exact" | "range";
-export type DashboardHomeView = "overview" | "templates" | "invites" | "athlete-log" | "conversation";
+export const PROGRAMS_DASHBOARD_VIEW = "templates";
+// "templates" is kept as a legacy persisted settings key.
+// The current coach workspace uses it as the programs/program builder view.
+export type DashboardHomeView = "overview" | typeof PROGRAMS_DASHBOARD_VIEW | "invites" | "athlete-log" | "conversation";
 export type MuscleGroupKey = "shoulders" | "arms" | "chest" | "abs" | "back" | "legs" | "other";
 export type ThemeMode = "light" | "dark";
 export type LoadIncrement = 1 | 2.5 | 5;

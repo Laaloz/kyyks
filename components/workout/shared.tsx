@@ -1,9 +1,12 @@
 import type { ComponentType } from "react";
 
 import { Card } from "@/components/ui/card";
-import type { Role } from "@/lib/types";
+import { PROGRAMS_DASHBOARD_VIEW, type DashboardHomeView, type Role } from "@/lib/types";
 
-export type WorkspaceView = "overview" | "templates" | "athlete-log" | "conversation" | "invites" | "settings";
+export const PROGRAMS_WORKSPACE_VIEW = PROGRAMS_DASHBOARD_VIEW;
+
+// The legacy "templates" route key now renders the programs workspace.
+export type WorkspaceView = DashboardHomeView | "settings";
 
 export function metricTone(role: Role | null) {
   switch (role) {
