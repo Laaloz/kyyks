@@ -27,6 +27,7 @@ export function AdminUserManagementPanel() {
     adminAssignAthleteCoaches,
   } = useAppState();
   const [adminMessage, setAdminMessage] = useState<string>("");
+  const [adminMessageTone, setAdminMessageTone] = useState<"success" | "danger" | null>(null);
   const [previewResetUrl, setPreviewResetUrl] = useState<string>("");
   const [selectedManagedUserId, setSelectedManagedUserId] = useState<string>("");
   const [selectedManagedRole, setSelectedManagedRole] = useState<Role>("coach");
@@ -169,6 +170,7 @@ export function AdminUserManagementPanel() {
                                 ? `Rooli päivitettiin: ${selectedManagedUser.fullName} on nyt ${roleLabel(selectedManagedRole)}.`
                                 : result.message,
                             );
+                            setAdminMessageTone(result.ok ? "success" : "danger");
                             notify({ tone: result.ok ? "success" : "danger", message: result.ok ? "Rooli päivitettiin." : result.message });
                           } finally {
                             setIsSavingRole(false);
@@ -219,7 +221,9 @@ export function AdminUserManagementPanel() {
                               );
                               const message = "message" in result ? result.message : "Vastuuhenkilöt tallennettiin.";
                               setAdminMessage(message);
-                              notify({ tone: message.includes("tallenn") ? "success" : "danger", message });
+                              const tone = "ok" in result && result.ok ? "success" : "danger";
+                              setAdminMessageTone(tone);
+                              notify({ tone, message });
                             } finally {
                               setIsSavingCoaches(false);
                             }
@@ -301,6 +305,7 @@ export function AdminUserManagementPanel() {
                   onClick={() => {
                     const result = startAdminImpersonation(selectedManagedUser.id);
                     setAdminMessage(result.ok ? `Vaihdoit käyttäjäksi: ${selectedManagedUser.fullName}.` : result.message);
+                    setAdminMessageTone(result.ok ? "success" : "danger");
                     notify({ tone: result.ok ? "success" : "danger", message: result.ok ? "Käyttäjän vaihto aktivoitiin." : result.message });
                   }}
                 >
@@ -317,6 +322,7 @@ export function AdminUserManagementPanel() {
                     try {
                       const result = await withMinimumDelay(adminSendPasswordResetEmail(selectedManagedUser.id));
                       setAdminMessage(result.message);
+                      setAdminMessageTone(result.ok ? "success" : "danger");
                       setPreviewResetUrl(result.ok ? (result.previewUrl ?? "") : "");
                       notify({ tone: result.ok ? "success" : "danger", message: result.message });
                     } finally {
@@ -349,6 +355,7 @@ export function AdminUserManagementPanel() {
                         try {
                           const result = await adminDeleteUser(selectedManagedUser.id);
                           setAdminMessage(result.ok ? "Käyttäjä poistettiin turvallisesti." : result.message);
+                          setAdminMessageTone(result.ok ? "success" : "danger");
                           if (result.ok) {
                             setPreviewResetUrl("");
                           }
@@ -388,11 +395,7 @@ export function AdminUserManagementPanel() {
             className={`mt-4 text-sm ${
               !adminMessage
                 ? "text-[var(--text-subtle)]"
-                : adminMessage.includes("lähet") ||
-                    adminMessage.includes("poistettiin") ||
-                    adminMessage.includes("Vaihdoit") ||
-                    adminMessage.includes("päivitettiin") ||
-                    adminMessage.includes("asetettiin")
+                : adminMessageTone === "success"
                   ? "text-[var(--success)]"
                   : "text-[var(--danger)]"
             }`}

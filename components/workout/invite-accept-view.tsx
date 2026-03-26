@@ -3,6 +3,7 @@
 import HCaptcha from "@hcaptcha/react-hcaptcha";
 import { zodResolver } from "@hookform/resolvers/zod";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useId, useRef, useState } from "react";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
@@ -28,6 +29,7 @@ type InviteLookup = {
 
 export function InviteAcceptView({ token, initialInvite }: { token: string; initialInvite?: InviteLookup | null }) {
   const { state, acceptInvite } = useAppState();
+  const router = useRouter();
   const invite =
     (initialInvite
       ? {
@@ -114,7 +116,17 @@ export function InviteAcceptView({ token, initialInvite }: { token: string; init
               }
 
               setMessageTone(result.ok ? "success" : "danger");
-              setMessage(result.ok ? result.message ?? "Tunnus aktivoitiin. Voit nyt siirtyä työtilaan." : result.message);
+              setMessage(
+                result.ok
+                  ? `${result.message ?? "Tunnus aktivoitiin onnistuneesti."} Siirrytään kirjautumiseen...`
+                  : result.message,
+              );
+
+              if (result.ok) {
+                window.setTimeout(() => {
+                  router.push("/");
+                }, 900);
+              }
             })}
           >
             <fieldset className="space-y-4 rounded-xl border-2 border-[var(--border)] bg-[var(--surface-2)] p-4">

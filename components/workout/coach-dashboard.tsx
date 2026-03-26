@@ -944,7 +944,7 @@ function CoachAthleteInsights({
       .filter(
         (entry) =>
           entry.athleteId === selectedAthleteId &&
-          (!coachId || entry.coachId === coachId) &&
+          (!coachId || entry.coachId === coachId || entry.authorUserId === coachId) &&
           entry.contextType === "workout" &&
           Boolean(entry.contextId),
       )

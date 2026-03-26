@@ -1595,7 +1595,7 @@ function isConversationVisibleToUser(state: AppState, entry: ConversationEntry, 
   }
 
   if (user.role === "athlete") {
-    return entry.athleteId === user.id;
+    return entry.athleteId === user.id && (publicFacingCoachForConversation(state, entry) !== null || entry.authorRole === "athlete");
   }
 
   if (canActAsCoach(user.role)) {
@@ -1603,6 +1603,14 @@ function isConversationVisibleToUser(state: AppState, entry: ConversationEntry, 
   }
 
   return false;
+}
+
+function publicFacingCoachForConversation(state: AppState, entry: ConversationEntry) {
+  if (state.users.some((user) => user.id === entry.coachId && canActAsCoach(user.role))) {
+    return entry.coachId;
+  }
+
+  return resolvePrimaryCoachIdForAthlete(state, entry.athleteId) ?? null;
 }
 
 interface AppStateContextValue {
@@ -2185,8 +2193,8 @@ function findResolvedUserIdInSnapshot(
       let resolvedSnapshotUserId: string | null = null;
       let latestSnapshot: SupabaseVisibleAppStateSnapshot | null = null;
 
-      for (let attempt = 0; attempt < 4; attempt += 1) {
-        profile = await fetchSupabaseProfileWithRetry(supabase, authUser.id, 2, 180);
+        for (let attempt = 0; attempt < 6; attempt += 1) {
+          profile = await fetchSupabaseProfileWithRetry(supabase, authUser.id, 3, 220);
         if (profile) {
           break;
         }
@@ -2217,11 +2225,11 @@ function findResolvedUserIdInSnapshot(
           return { ok: true };
         }
 
-        if (attempt < 3) {
-          await waitForNextPaint(2);
-          await waitForDelay(220 * (attempt + 1));
+          if (attempt < 5) {
+            await waitForNextPaint(2);
+            await waitForDelay(260 * (attempt + 1));
+          }
         }
-      }
 
       let resolvedUserId: string | null = null;
       setState((previous) => {
@@ -3328,7 +3336,7 @@ function findResolvedUserIdInSnapshot(
             ),
           }));
 
-          const loginResult = await signInWithSupabasePassword(acceptedEmail, password, options);
+          const loginResult = await signInWithSupabasePassword(acceptedEmail, password);
           if (loginResult.ok) {
             return {
               ok: true,
@@ -3354,7 +3362,12 @@ function findResolvedUserIdInSnapshot(
             };
           }
 
-          return loginResult;
+          return {
+            ok: true,
+            message:
+              payload?.message ??
+              "Tili aktivoitiin, mutta sisäänkirjautuminen ei valmistunut heti. Kirjaudu etusivulla sisään samalla sähköpostilla ja salasanalla.",
+          };
         }
 
         const invite = state.invites.find((item) => item.token === token && item.status === "pending");

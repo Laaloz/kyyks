@@ -20,7 +20,9 @@ export function CoachInvitePanel() {
   const { currentUser, notify, createInvite, getCoachAthletes, resendInvite, state } = useAppState();
   const formId = useId();
   const [inviteMessage, setInviteMessage] = useState<string>("");
+  const [inviteMessageTone, setInviteMessageTone] = useState<"success" | "danger" | null>(null);
   const [resendMessage, setResendMessage] = useState<string>("");
+  const [resendMessageTone, setResendMessageTone] = useState<"success" | "danger" | null>(null);
   const [resendingInviteId, setResendingInviteId] = useState<string | null>(null);
   const athletes = currentUser ? getCoachAthletes(currentUser.id) : [];
   const pendingInvites = getVisiblePendingInvites(state.invites, state.users).filter(
@@ -54,11 +56,13 @@ export function CoachInvitePanel() {
               }),
             );
             setInviteMessage(result.ok ? `Kutsu lähetettiin osoitteeseen ${values.email}.` : result.message);
+            setInviteMessageTone(result.ok ? "success" : "danger");
             notify({
               tone: result.ok ? "success" : "danger",
               message: result.ok ? `Kutsu lähetettiin osoitteeseen ${values.email}.` : result.message,
             });
             setResendMessage("");
+            setResendMessageTone(null);
             if (result.ok) {
               form.reset({ email: "", role: "athlete", coachId: currentUser?.id });
             }
@@ -75,7 +79,13 @@ export function CoachInvitePanel() {
           </div>
           <p
             aria-live="polite"
-            className={`min-h-5 text-sm ${inviteMessage.includes("lähetettiin") ? "text-[var(--success)]" : "text-[var(--danger)]"}`}
+            className={`min-h-5 text-sm ${
+              !inviteMessage
+                ? "text-[var(--text-subtle)]"
+                : inviteMessageTone === "success"
+                  ? "text-[var(--success)]"
+                  : "text-[var(--danger)]"
+            }`}
           >
             {inviteMessage}
           </p>
@@ -98,7 +108,13 @@ export function CoachInvitePanel() {
           </CardDescription>
           <p
             aria-live="polite"
-            className={`mt-4 min-h-5 text-sm ${resendMessage.includes("lähetettiin") ? "text-[var(--success)]" : "text-[var(--danger)]"}`}
+            className={`mt-4 min-h-5 text-sm ${
+              !resendMessage
+                ? "text-[var(--text-subtle)]"
+                : resendMessageTone === "success"
+                  ? "text-[var(--success)]"
+                  : "text-[var(--danger)]"
+            }`}
           >
             {resendMessage}
           </p>
@@ -136,6 +152,7 @@ export function CoachInvitePanel() {
                           try {
                             const result = await withMinimumDelay(resendInvite(invite.id));
                             setResendMessage(result.ok ? `Kutsu lähetettiin uudelleen osoitteeseen ${invite.email}.` : result.message);
+                            setResendMessageTone(result.ok ? "success" : "danger");
                             notify({
                               tone: result.ok ? "success" : "danger",
                               message: result.ok ? `Kutsu lähetettiin uudelleen osoitteeseen ${invite.email}.` : result.message,

@@ -77,6 +77,7 @@ export function UserSettingsPanel({ adminOnly = false }: { adminOnly?: boolean }
   const [message, setMessage] = useState<string>("");
   const [profileMessage, setProfileMessage] = useState<string>("");
   const [passwordResetMessage, setPasswordResetMessage] = useState<string>("");
+  const [passwordResetMessageTone, setPasswordResetMessageTone] = useState<"success" | "danger" | null>(null);
   const [isSendingOwnPasswordReset, setIsSendingOwnPasswordReset] = useState(false);
   const [isSavingProfile, setIsSavingProfile] = useState(false);
   const [deferredInstallPrompt, setDeferredInstallPrompt] = useState<DeferredInstallPromptEvent | null>(null);
@@ -369,6 +370,7 @@ export function UserSettingsPanel({ adminOnly = false }: { adminOnly?: boolean }
                 try {
                   const result = await withMinimumDelay(requestCurrentUserPasswordReset());
                   setPasswordResetMessage(result.message);
+                  setPasswordResetMessageTone(result.ok ? "success" : "danger");
                   notify({ tone: result.ok ? "success" : "danger", message: result.message });
                 } finally {
                   setIsSendingOwnPasswordReset(false);
@@ -381,7 +383,7 @@ export function UserSettingsPanel({ adminOnly = false }: { adminOnly?: boolean }
             {passwordResetMessage ? (
               <p
                 aria-live="polite"
-                className={`text-sm ${passwordResetMessage.includes("lähet") ? "text-[var(--success)]" : "text-[var(--danger)]"}`}
+                className={`text-sm ${passwordResetMessageTone === "success" ? "text-[var(--success)]" : "text-[var(--danger)]"}`}
               >
                 {passwordResetMessage}
               </p>
