@@ -11,6 +11,7 @@ import { UserSettingsPanel } from "@/components/workout/user-settings-panel";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { isConversationEntryNotifiable } from "@/lib/conversation";
+import { getCoachConversationAthletes } from "@/lib/domain";
 import { getMeasurementReminderState } from "@/lib/measurement-reminder";
 import { canActAsCoach, getDashboardViewsForRole, getDefaultDashboardView, isAdminRole } from "@/lib/role-access";
 import { useAppState } from "@/providers/app-state-provider";
@@ -96,6 +97,8 @@ export function DashboardShell() {
   const navItems = navItemsForRole(currentUser.role);
   const navLabelByView: Record<WorkspaceView, string> = {
     overview: "Yleiskuva",
+    athletes: "Treenaajat",
+    users: "Käyttäjät",
     [PROGRAMS_WORKSPACE_VIEW]: "Ohjelmat",
     invites: "Kutsut",
     "athlete-log": "Treenit",
@@ -104,6 +107,8 @@ export function DashboardShell() {
   };
   const navMobileLabelByView: Record<WorkspaceView, string> = {
     overview: "Yleiskuva",
+    athletes: "Treenaajat",
+    users: "Käyttäjät",
     [PROGRAMS_WORKSPACE_VIEW]: "Ohjelmat",
     invites: "Kutsut",
     "athlete-log": "Treenit",
@@ -112,38 +117,50 @@ export function DashboardShell() {
   };
   const navIconByView: Record<PrimaryWorkspaceView, LucideIcon> = {
     overview: Home,
+    athletes: Dumbbell,
+    users: Users,
     [PROGRAMS_WORKSPACE_VIEW]: Sparkles,
     invites: Users,
     "athlete-log": NotebookPen,
     conversation: Bell,
   };
   const mobileNavGridClass = navItems.length > 3 ? "grid-cols-2" : "grid-cols-3";
-  const activePrimaryView = view === "settings" ? resolveInitialView(currentUser.role, currentUser.settings?.defaultDashboardView) : view;
+  const activePrimaryView =
+    view === "settings" ? resolveInitialView(currentUser.role, currentUser.settings?.defaultDashboardView) : view;
   const activeTabId = `workspace-tab-${activePrimaryView}`;
   const activePanelId = `workspace-panel-${activePrimaryView}`;
   const measurementReminder = getMeasurementReminderState(state, currentUser);
   const shouldShowMeasurementReminder = currentUser.role === "athlete" && (measurementReminder.isDue || isReminderPreviewMode);
   const weightReminderDue = measurementReminder.weightDue || isReminderPreviewMode;
   const waistReminderDue = measurementReminder.waistDue || isReminderPreviewMode;
+  const adminConversationAthleteIds =
+    currentUser.role === "admin"
+      ? new Set(getCoachConversationAthletes(state, currentUser.id).map((athlete) => athlete.id))
+      : null;
   const unreadConversationCount = state.conversationEntries.filter((entry) => {
-    if (currentUser.role === "athlete" && entry.athleteId !== currentUser.id) {
+    if (currentUser.role === "athlete") {
+      if (entry.athleteId !== currentUser.id) {
+        return false;
+      }
+    } else if (currentUser.role === "admin") {
+      if (!adminConversationAthleteIds?.has(entry.athleteId)) {
+        return false;
+      }
+    } else if (canActAsCoach(currentUser.role)) {
+      if (
+        !state.assignments.some(
+          (assignment) =>
+            assignment.coachId === currentUser.id &&
+            assignment.athleteId === entry.athleteId &&
+            assignment.active,
+        )
+      ) {
+        return false;
+      }
+    } else {
       return false;
     }
-    if (
-      !isAdminRole(currentUser.role) &&
-      canActAsCoach(currentUser.role) &&
-      !state.assignments.some(
-        (assignment) =>
-          assignment.coachId === currentUser.id &&
-          assignment.athleteId === entry.athleteId &&
-          assignment.active,
-      )
-    ) {
-      return false;
-    }
-    if (!canActAsCoach(currentUser.role) && currentUser.role !== "athlete") {
-      return false;
-    }
+
     return isConversationEntryNotifiable(entry) && !entry.readByUserIds.includes(currentUser.id);
   }).length;
 
@@ -536,8 +553,12 @@ export function DashboardShell() {
                 overviewFocusTarget={athleteOverviewFocusTarget}
                 onOverviewFocusHandled={() => setAthleteOverviewFocusTarget(null)}
               />
-            ) : view === PROGRAMS_WORKSPACE_VIEW || currentUser.role === "coach" || (view === "conversation" && canActAsCoach(currentUser.role)) ? (
+            ) : view === PROGRAMS_WORKSPACE_VIEW ||
+              currentUser.role === "coach" ||
+              (currentUser.role === "admin" && (view === "athletes" || view === "conversation")) ? (
               <CoachDashboard view={view} onOpenConversation={() => setView("conversation")} />
+            ) : currentUser.role === "admin" && view === "users" ? (
+              <UserSettingsPanel adminOnly />
             ) : currentUser.role === "admin" ? (
               <AdminDashboard view={view} />
             ) : (

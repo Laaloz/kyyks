@@ -192,6 +192,7 @@ function mapProfileRow(profile: ProfileRow): UserProfile {
     settings: {
       defaultDashboardView:
         profile.default_dashboard_view === "overview" ||
+        profile.default_dashboard_view === "athletes" ||
         profile.default_dashboard_view === PROGRAMS_DASHBOARD_VIEW ||
         profile.default_dashboard_view === "invites" ||
         profile.default_dashboard_view === "athlete-log" ||

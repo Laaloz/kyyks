@@ -1301,7 +1301,7 @@ export function AthleteSessionPanel({
                         <Button
                           type="button"
                           variant="ghost"
-                          className={`size-8 rounded-full p-0 shadow-[0_6px_18px_-12px_var(--shadow)] md:size-9 ${
+                          className={`size-8 shrink-0 rounded-full p-0 shadow-[0_6px_18px_-12px_var(--shadow)] md:size-9 ${
                             log.done
                               ? "border-[var(--success)] bg-[var(--success)] text-white hover:border-[var(--success)] hover:bg-[var(--success)] hover:text-white"
                               : "border-[var(--border-strong)] bg-[var(--surface)] text-[var(--text-subtle)] hover:border-[var(--border-strong)] hover:bg-[var(--surface)] hover:text-[var(--text-subtle)]"
@@ -1312,7 +1312,7 @@ export function AthleteSessionPanel({
                           title={log.done ? "Kumoa kuittaus" : "Merkitse tehdyksi"}
                           onClick={() => handleDoneUpdate(log, !log.done)}
                         >
-                          <Check className="size-4 md:size-5" aria-hidden="true" />
+                          <Check className="size-4 shrink-0 stroke-[2.5] md:size-5" aria-hidden="true" />
                         </Button>
                         </div>
                       </td>

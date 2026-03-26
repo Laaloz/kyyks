@@ -1482,7 +1482,7 @@ export function AthleteDashboard({
           <div className="grid gap-6">
             <Card>
               <p className="text-xs font-semibold tracking-[0.04em] text-[var(--text-subtle)]">Ohjelman treenit</p>
-              <CardTitle className="text-2xl">Valitse treeni</CardTitle>
+              <CardTitle className="text-2xl">Valitse seuraava treeni</CardTitle>
               <CardDescription className="mt-2">
                  Aloita treeni ohjelmastasi. Aiempien toteutusten tiedot löydät historiasta.
               </CardDescription>
@@ -1546,12 +1546,13 @@ export function AthleteDashboard({
               {athletePrograms.length ? (
                 <div className="mt-5 grid gap-4">
                   {athletePrograms.map((program) => (
-                    <div key={program.id} className="rounded-2xl border border-[var(--border)] bg-[var(--surface-2)] p-4">
-                      <p className="text-sm font-semibold text-[var(--text)]">{program.title}</p>
+                    <div key={program.id} className="border-t border-[var(--border)] pt-4 first:border-t-0 first:pt-0">
+                      <p className="text-[11px] font-semibold tracking-[0.08em] text-[var(--text-subtle)]">Aktiivinen ohjelma</p>
+                      <p className="mt-1 text-lg font-semibold text-[var(--text)]">{program.title}</p>
                       {program.description ? (
                         <p className="mt-2 max-w-3xl text-sm text-[var(--text-muted)]">{program.description}</p>
                       ) : null}
-                      <div className="mt-3 grid gap-3 md:grid-cols-2 lg:grid-cols-3">
+                      <div className="mt-4 grid gap-3 md:grid-cols-2 lg:grid-cols-3">
                         {[...(program.workouts ?? [])]
                           .sort((a, b) => {
                             const aActiveScheduled = activeScheduledByProgramWorkoutId.get(a.id);

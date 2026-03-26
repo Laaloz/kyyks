@@ -8,6 +8,16 @@ const coachWorkspaceViews: DashboardHomeView[] = [
   "invites",
 ];
 
+const adminWorkspaceViews: DashboardHomeView[] = [
+  "overview",
+  "athletes",
+  PROGRAMS_DASHBOARD_VIEW,
+  "athlete-log",
+  "conversation",
+  "invites",
+  "users",
+];
+
 const athleteWorkspaceViews: DashboardHomeView[] = ["overview", "athlete-log", "conversation"];
 
 export function canActAsCoach(role: Role | null | undefined) {
@@ -19,7 +29,15 @@ export function isAdminRole(role: Role | null | undefined) {
 }
 
 export function getDashboardViewsForRole(role: Role): DashboardHomeView[] {
-  return role === "athlete" ? athleteWorkspaceViews : coachWorkspaceViews;
+  if (role === "athlete") {
+    return athleteWorkspaceViews;
+  }
+
+  if (role === "admin") {
+    return adminWorkspaceViews;
+  }
+
+  return coachWorkspaceViews;
 }
 
 export function getDefaultDashboardView(role: Role): DashboardHomeView {

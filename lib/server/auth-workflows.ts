@@ -92,6 +92,7 @@ function mapStoredProfileRecord(profile: {
         profile.default_dashboard_view === "invites" ||
         profile.default_dashboard_view === "athlete-log" ||
         profile.default_dashboard_view === "conversation" ||
+        profile.default_dashboard_view === "athletes" ||
         profile.default_dashboard_view === "overview"
           ? profile.default_dashboard_view
           : profile.role === "athlete"

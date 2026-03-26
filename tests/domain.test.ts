@@ -12,6 +12,7 @@ import {
   createTemplate,
   deleteScheduledWorkout,
   duplicateTemplate,
+  getCoachConversationAthletes,
   getCoachAthletes,
   getSessionProgress,
   isInviteExpired,
@@ -805,6 +806,50 @@ describe("domain helpers", () => {
     const state = cloneDemoState();
 
     expect(getCoachAthletes(state, "user_admin_1").map((user) => user.id)).toEqual([
+      "user_athlete_1",
+      "user_athlete_2",
+      "user_athlete_3",
+    ]);
+  });
+
+  it("limits admin conversation athlete lookups to related athletes", () => {
+    const state = cloneDemoState();
+
+    state.assignments = [
+      {
+        id: "assignment_admin_1",
+        coachId: "user_admin_1",
+        athleteId: "user_athlete_1",
+        active: true,
+        createdAt: "2026-03-24T08:00:00.000Z",
+      },
+    ];
+    state.plans = [
+      {
+        id: "plan_admin_1",
+        coachId: "user_admin_1",
+        athleteId: "user_athlete_2",
+        title: "Admin ohjelma",
+        workouts: [],
+        startDate: "2026-03-24",
+        weekCount: 4,
+        createdAt: "2026-03-24T08:00:00.000Z",
+      },
+    ];
+    state.scheduledWorkouts = [
+      {
+        id: "workout_admin_1",
+        athleteId: "user_athlete_3",
+        coachId: "user_admin_1",
+        title: "Admin treeni",
+        scheduledDate: "2026-03-24T08:00:00.000Z",
+        status: "completed",
+        createdAt: "2026-03-24T08:00:00.000Z",
+        updatedAt: "2026-03-24T08:00:00.000Z",
+      },
+    ];
+
+    expect(getCoachConversationAthletes(state, "user_admin_1").map((user) => user.id)).toEqual([
       "user_athlete_1",
       "user_athlete_2",
       "user_athlete_3",

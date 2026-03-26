@@ -29,7 +29,7 @@ import {
   type ProgramComposerValues,
 } from "@/components/workout/coach/program-composer";
 import { estimateStrengthCalories, getLatestMeasurement, getMeasurementsForUser, getWeightAtMoment } from "@/lib/body-metrics";
-import { calculateSessionDurationSeconds } from "@/lib/domain";
+import { calculateSessionDurationSeconds, getCoachConversationAthletes } from "@/lib/domain";
 import { withMinimumDelay } from "@/lib/min-delay";
 import { buildScheduledWorkoutExerciseOrder } from "@/lib/workout-exercise-order";
 import { buildWorkoutConversationContextOptions } from "@/lib/workout-conversation-context";
@@ -112,7 +112,11 @@ export function CoachDashboard({
   const [editingProgramId, setEditingProgramId] = useState<string | null>(null);
   const [selectedAthleteId, setSelectedAthleteId] = useState<string>("");
 
-  const athletes = currentUser ? getCoachAthletes(currentUser.id) : [];
+  const athletes = currentUser
+    ? isAdminRole(currentUser.role)
+      ? getCoachConversationAthletes(state, currentUser.id)
+      : getCoachAthletes(currentUser.id)
+    : [];
   const programTargets = useMemo(() => {
     if (!currentUser) {
       return [];
@@ -230,7 +234,7 @@ export function CoachDashboard({
 
   return (
     <div className="grid gap-6">
-      {view === "overview" ? (
+      {view === "overview" || view === "athletes" ? (
         <CoachAthleteInsights
           athletes={athletes}
           coachId={undefined}
@@ -1294,13 +1298,13 @@ function CoachAthleteInsights({
           </div>
 
           <div className="mt-5">
-            <p className="text-sm font-semibold text-[var(--text)]">Treenialueet, toteumat ja kommunikointi</p>
+            <p className="text-sm font-semibold text-[var(--text)]">Treeniarkisto, toteumat ja keskustelu</p>
             <p className="mt-1 text-sm text-[var(--text-muted)]">
-              Jokainen treenialue näkyy omana korttinaan. Valitse toteutus päivämäärän mukaan ja näe muistiinpanot sekä kommunikointi samasta näkymästä.
+              Jokainen treenialue näkyy omana korttinaan. Valitse toteutus päivämäärän mukaan ja näe muistiinpanot, suoritukset ja keskustelu samasta näkymästä.
             </p>
-            <div className="mx-auto mt-3 grid max-w-[72rem] gap-4 2xl:max-w-none 2xl:grid-cols-2">
+            <div className="mx-auto mt-3 grid max-w-[84rem] gap-4 xl:grid-cols-2">
               {groupedWorkoutRows.length === 0 ? (
-                <p className="text-sm text-[var(--text-muted)] 2xl:col-span-2">Treenejä ei vielä löytynyt valitulle treenaajalle.</p>
+                <p className="text-sm text-[var(--text-muted)] xl:col-span-2">Treenejä ei vielä löytynyt valitulle treenaajalle.</p>
               ) : (
                 groupedWorkoutRows.map((group) => {
                   const selectedRow =

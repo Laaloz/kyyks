@@ -47,8 +47,12 @@ describe("role access helpers", () => {
     expect(canActAsCoach("athlete")).toBe(false);
   });
 
-  it("exposes coach workspace views for admin", () => {
+  it("exposes dedicated admin workspace views", () => {
+    expect(getDashboardViewsForRole("admin")).toContain("athletes");
     expect(getDashboardViewsForRole("admin")).toContain("conversation");
+    expect(getDashboardViewsForRole("admin")).toContain("athlete-log");
+    expect(getDashboardViewsForRole("admin")).toContain("templates");
+    expect(getDashboardViewsForRole("coach")).toContain("conversation");
     expect(getDefaultDashboardView("admin")).toBe("overview");
   });
 

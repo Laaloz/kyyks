@@ -43,7 +43,7 @@ export function workoutStatusLabel(status: string) {
 export function roleHeadline(role: Role) {
   switch (role) {
     case "admin":
-      return "Hallinnoi rosteria ja pidä valmennusverkko hallussa.";
+      return "Hallinnoi rosteria ja seuraa valmennusta omassa nakymassaan.";
     case "coach":
       return "Rakenna ohjelmat nopeasti ja seuraa kuka oikeasti etenee.";
     case "athlete":

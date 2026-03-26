@@ -793,3 +793,45 @@ export function getCoachAthletes(state: AppState, coachId: string) {
   const preferredAthleteIds = new Set(Array.from(preferredAthletesByEmail.values()).map((user) => user.id));
   return athleteUsers.filter((user) => preferredAthleteIds.has(user.id));
 }
+
+export function getCoachConversationAthletes(state: AppState, coachId: string) {
+  const relatedAthleteIds = new Set<string>();
+
+  state.assignments.forEach((assignment) => {
+    if (assignment.coachId === coachId && assignment.active) {
+      relatedAthleteIds.add(assignment.athleteId);
+    }
+  });
+
+  state.plans.forEach((plan) => {
+    if (plan.coachId === coachId) {
+      relatedAthleteIds.add(plan.athleteId);
+    }
+  });
+
+  state.scheduledWorkouts.forEach((workout) => {
+    if (workout.coachId === coachId) {
+      relatedAthleteIds.add(workout.athleteId);
+    }
+  });
+
+  state.conversationEntries.forEach((entry) => {
+    if (entry.coachId === coachId) {
+      relatedAthleteIds.add(entry.athleteId);
+    }
+  });
+
+  const athleteUsers = state.users.filter(
+    (user) => user.role === "athlete" && relatedAthleteIds.has(user.id),
+  );
+  const preferredAthletesByEmail = new Map<string, (typeof athleteUsers)[number]>();
+
+  athleteUsers.forEach((user) => {
+    const emailKey = normalizeComparableEmail(user.email) || `id:${user.id}`;
+    const existing = preferredAthletesByEmail.get(emailKey);
+    preferredAthletesByEmail.set(emailKey, existing ? preferUserCandidate(existing, user) : user);
+  });
+
+  const preferredAthleteIds = new Set(Array.from(preferredAthletesByEmail.values()).map((user) => user.id));
+  return athleteUsers.filter((user) => preferredAthleteIds.has(user.id));
+}
