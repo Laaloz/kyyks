@@ -1399,7 +1399,7 @@ export function AthleteSessionPanel({
                 setIsSavingDuration(true);
                 try {
                   const result = await withMinimumDelay(onUpdateDuration(parsedDuration));
-                  setDurationMessage(result.ok ? "Kesto päivitetty." : result.message ?? "Keston paivitys epaonnistui.");
+                  setDurationMessage(result.ok ? "Kesto päivitetty." : result.message ?? "Keston päivitys epäonnistui.");
                 } finally {
                   setIsSavingDuration(false);
                 }

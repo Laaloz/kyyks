@@ -3867,7 +3867,7 @@ function findResolvedUserIdInSnapshot(
                 message:
                   error instanceof Error && error.message
                     ? error.message
-                    : "Viestin tallennus epaonnistui. Yrita uudelleen.",
+                    : "Viestin tallennus epäonnistui. Yritä uudelleen.",
               };
             }
           }
@@ -3917,7 +3917,7 @@ function findResolvedUserIdInSnapshot(
                 message:
                   error instanceof Error && error.message
                     ? error.message
-                    : "Viestin tallennus epaonnistui. Yrita uudelleen.",
+                    : "Viestin tallennus epäonnistui. Yritä uudelleen.",
               };
             }
           }
@@ -3955,7 +3955,7 @@ function findResolvedUserIdInSnapshot(
                 message:
                   error instanceof Error && error.message
                     ? error.message
-                    : "Viestin tallennus epaonnistui. Yrita uudelleen.",
+                    : "Viestin tallennus epäonnistui. Yritä uudelleen.",
               };
             }
           }
@@ -3997,7 +3997,7 @@ function findResolvedUserIdInSnapshot(
                 message:
                   error instanceof Error && error.message
                     ? error.message
-                    : "Viestin tallennus epaonnistui. Yrita uudelleen.",
+                    : "Viestin tallennus epäonnistui. Yritä uudelleen.",
               };
             }
           }
