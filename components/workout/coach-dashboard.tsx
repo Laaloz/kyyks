@@ -20,6 +20,7 @@ import { Card, CardDescription, CardTitle } from "@/components/ui/card";
 import { Input, Label, Select, Textarea } from "@/components/ui/field";
 import { InfoTooltip } from "@/components/ui/tooltip";
 import { ConversationPanel } from "@/components/workout/conversation-panel";
+import { InlineFeedback } from "@/components/workout/inline-feedback";
 import { MetricTrendChart } from "@/components/workout/metric-trend-chart";
 import { CoachInvitePanel } from "@/components/workout/coach/invite-panel";
 import { ProgramWorkoutEditor } from "@/components/workout/coach/program-workout-editor";
@@ -109,6 +110,7 @@ export function CoachDashboard({
   } = useAppState();
   const formId = useId();
   const [programMessage, setProgramMessage] = useState<string>("");
+  const [programMessageTone, setProgramMessageTone] = useState<"success" | "danger" | null>(null);
   const [editingProgramId, setEditingProgramId] = useState<string | null>(null);
   const [selectedAthleteId, setSelectedAthleteId] = useState<string>("");
 
@@ -230,6 +232,7 @@ export function CoachDashboard({
   const closeProgramEditing = (message?: string) => {
     resetComposer(form.getValues("athleteId"));
     setProgramMessage(message ?? "");
+    setProgramMessageTone(message ? "success" : null);
   };
 
   return (
@@ -312,6 +315,7 @@ export function CoachDashboard({
 
                 if (!result.ok) {
                   setProgramMessage(result.message);
+                  setProgramMessageTone("danger");
                   return;
                 }
 
@@ -319,11 +323,13 @@ export function CoachDashboard({
                   setProgramMessage(
                     `Ohjelma "${values.title}" päivitettiin. Lomake palautettiin uuden ohjelman luontiin.`,
                   );
+                  setProgramMessageTone("success");
                   resetComposer(values.athleteId);
                   return;
                 }
 
                 setProgramMessage(`Ohjelma "${values.title}" tallennettiin.`);
+                setProgramMessageTone("success");
                 resetComposer(values.athleteId);
               })}
             >
@@ -418,20 +424,7 @@ export function CoachDashboard({
                 ) : null}
               </div>
 
-              <p
-                aria-live="polite"
-                className={`min-h-5 text-sm ${
-                  !programMessage
-                    ? "text-[var(--text-subtle)]"
-                    : programMessage.includes("tallennettiin") ||
-                      programMessage.includes("päivitettiin") ||
-                      programMessage.includes("Palasit")
-                    ? "text-[var(--success)]"
-                    : "text-[var(--danger)]"
-                }`}
-              >
-                {programMessage}
-              </p>
+              <InlineFeedback message={programMessage} tone={programMessageTone} className="min-h-5 text-sm" />
               <div className="flex flex-wrap gap-3">
                 <Button
                   type="submit"
@@ -537,10 +530,12 @@ export function CoachDashboard({
                                   const result = await setProgramStatus(program.id, "archived");
                                   if (!result.ok) {
                                     setProgramMessage(result.message);
+                                    setProgramMessageTone("danger");
                                     return;
                                   }
 
                                   setProgramMessage(`Ohjelma "${program.title}" siirrettiin aiempiin ohjelmiin.`);
+                                  setProgramMessageTone("success");
                                 }}
                               >
                                 Poista käytöstä
@@ -569,6 +564,7 @@ export function CoachDashboard({
                                       const result = await deleteProgram(program.id);
                                       if (!result.ok) {
                                         setProgramMessage(result.message);
+                                        setProgramMessageTone("danger");
                                         return;
                                       }
 
@@ -576,6 +572,7 @@ export function CoachDashboard({
                                         resetComposer(form.getValues("athleteId"));
                                       }
                                       setProgramMessage(`Ohjelma "${program.title}" poistettiin.`);
+                                      setProgramMessageTone("success");
                                     }}
                                   >
                                     Poista ohjelma
@@ -658,12 +655,14 @@ export function CoachDashboard({
                                   const result = await setProgramStatus(program.id, "active");
                                   if (!result.ok) {
                                     setProgramMessage(result.message);
+                                    setProgramMessageTone("danger");
                                     return;
                                   }
 
                                   setProgramMessage(
                                     `Ohjelma "${program.title}" aktivoitiin. Muut saman treenaajan ohjelmat arkistoitiin.`,
                                   );
+                                  setProgramMessageTone("success");
                                 }}
                               >
                                 Ota käyttöön
@@ -679,6 +678,7 @@ export function CoachDashboard({
                                   form.reset(buildProgramComposerValues(program, state.exercises));
                                   setEditingProgramId(program.id);
                                   setProgramMessage("");
+                                  setProgramMessageTone(null);
                                   window.requestAnimationFrame(() => {
                                     const composer = document.getElementById("coach-program-composer");
                                     composer?.scrollIntoView({ behavior: "smooth", block: "start" });
@@ -711,6 +711,7 @@ export function CoachDashboard({
                                       const result = await deleteProgram(program.id);
                                       if (!result.ok) {
                                         setProgramMessage(result.message);
+                                        setProgramMessageTone("danger");
                                         return;
                                       }
 
@@ -718,6 +719,7 @@ export function CoachDashboard({
                                         resetComposer(form.getValues("athleteId"));
                                       }
                                       setProgramMessage(`Ohjelma "${program.title}" poistettiin.`);
+                                      setProgramMessageTone("success");
                                     }}
                                   >
                                     Poista ohjelma

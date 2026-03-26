@@ -16,6 +16,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input, Label, Textarea } from "@/components/ui/field";
 import { InfoTooltip } from "@/components/ui/tooltip";
+import { InlineFeedback } from "@/components/workout/inline-feedback";
 import { numberOrUndefined } from "@/components/workout/schemas";
 import { withMinimumDelay } from "@/lib/min-delay";
 import { workoutStatusLabel } from "@/components/workout/shared";
@@ -432,6 +433,8 @@ export function AthleteSessionPanel({
   const [durationDraft, setDurationDraft] = useState("");
   const [dateMessage, setDateMessage] = useState("");
   const [durationMessage, setDurationMessage] = useState("");
+  const [dateMessageTone, setDateMessageTone] = useState<"success" | "danger" | null>(null);
+  const [durationMessageTone, setDurationMessageTone] = useState<"success" | "danger" | null>(null);
   const [isSavingDate, setIsSavingDate] = useState(false);
   const [isSavingDuration, setIsSavingDuration] = useState(false);
   const [hasSeenDragHint, setHasSeenDragHint] = useState(false);
@@ -512,6 +515,8 @@ export function AthleteSessionPanel({
     setOpenInstruction(null);
     setDateMessage("");
     setDurationMessage("");
+    setDateMessageTone(null);
+    setDurationMessageTone(null);
     setHasSeenDragHint(false);
     setLoadDrafts({});
   }, [scheduledWorkoutId]);
@@ -1424,6 +1429,7 @@ export function AthleteSessionPanel({
                     onChange={(event) => {
                       setScheduledDateDraft(event.target.value);
                       setDateMessage("");
+                      setDateMessageTone(null);
                     }}
                   />
                   <p className="mt-2 text-xs text-[var(--text-subtle)]">
@@ -1442,6 +1448,7 @@ export function AthleteSessionPanel({
                     try {
                       const result = await withMinimumDelay(onUpdateDate(scheduledDateDraft));
                       setDateMessage(result.ok ? "Päivämäärä päivitetty." : result.message ?? "Päivämäärän päivitys epäonnistui.");
+                      setDateMessageTone(result.ok ? "success" : "danger");
                     } finally {
                       setIsSavingDate(false);
                     }
@@ -1450,18 +1457,12 @@ export function AthleteSessionPanel({
                   Tallenna päivä
                 </Button>
               </div>
-              <p
-                aria-live="polite"
-                className={`mt-3 text-sm ${
-                  !dateMessage
-                    ? "text-[var(--text-subtle)]"
-                    : dateMessage.includes("päivitetty") || dateMessage.includes("paivitetty")
-                      ? "text-[var(--success)]"
-                      : "text-[var(--danger)]"
-                }`}
-              >
-                {dateMessage || "Muokkaa treenin päivämäärää, jos haluat siirtää toteutuksen oikealle päivälle."}
-              </p>
+              <InlineFeedback
+                message={dateMessage}
+                tone={dateMessageTone}
+                idleMessage="Muokkaa treenin päivämäärää, jos haluat siirtää toteutuksen oikealle päivälle."
+                className="mt-3 text-sm"
+              />
             </div>
             <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-4">
               <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
@@ -1479,6 +1480,7 @@ export function AthleteSessionPanel({
                     onChange={(event) => {
                       setDurationDraft(event.target.value);
                       setDurationMessage("");
+                      setDurationMessageTone(null);
                     }}
                   />
                   <p className="mt-2 text-xs text-[var(--text-subtle)]">
@@ -1496,6 +1498,7 @@ export function AthleteSessionPanel({
                     const parsedDuration = parseDurationInput(durationDraft);
                     if (parsedDuration === null) {
                       setDurationMessage("Anna kesto muodossa mm:ss tai hh:mm:ss.");
+                      setDurationMessageTone("danger");
                       return;
                     }
 
@@ -1503,6 +1506,7 @@ export function AthleteSessionPanel({
                     try {
                       const result = await withMinimumDelay(onUpdateDuration(parsedDuration));
                       setDurationMessage(result.ok ? "Kesto päivitetty." : result.message ?? "Keston päivitys epäonnistui.");
+                      setDurationMessageTone(result.ok ? "success" : "danger");
                     } finally {
                       setIsSavingDuration(false);
                     }
@@ -1511,18 +1515,12 @@ export function AthleteSessionPanel({
                   Tallenna kesto
                 </Button>
               </div>
-              <p
-                aria-live="polite"
-                className={`mt-3 text-sm ${
-                  !durationMessage
-                    ? "text-[var(--text-subtle)]"
-                    : durationMessage.includes("päivitetty") || durationMessage.includes("paivitetty")
-                      ? "text-[var(--success)]"
-                      : "text-[var(--danger)]"
-                }`}
-              >
-                {durationMessage || "Muokkaa treenin kokonaiskestoa, jos ajastin jäi liian pitkäksi tai lyhyeksi."}
-              </p>
+              <InlineFeedback
+                message={durationMessage}
+                tone={durationMessageTone}
+                idleMessage="Muokkaa treenin kokonaiskestoa, jos ajastin jäi liian pitkäksi tai lyhyeksi."
+                className="mt-3 text-sm"
+              />
             </div>
           </div>
         </div>

@@ -11,6 +11,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardDescription, CardTitle } from "@/components/ui/card";
 import { Input, Label, Select } from "@/components/ui/field";
 import { AdminUserManagementPanel } from "@/components/workout/admin-user-management-panel";
+import { InlineFeedback } from "@/components/workout/inline-feedback";
 import { bodyMeasurementSchema, userSettingsSchema } from "@/components/workout/schemas";
 import { roleLabel } from "@/components/workout/shared";
 import { withMinimumDelay } from "@/lib/min-delay";
@@ -75,7 +76,9 @@ export function UserSettingsPanel({ adminOnly = false }: { adminOnly?: boolean }
     requestCurrentUserPasswordReset,
   } = useAppState();
   const [message, setMessage] = useState<string>("");
+  const [messageTone, setMessageTone] = useState<"success" | "danger" | null>(null);
   const [profileMessage, setProfileMessage] = useState<string>("");
+  const [profileMessageTone, setProfileMessageTone] = useState<"success" | "danger" | null>(null);
   const [passwordResetMessage, setPasswordResetMessage] = useState<string>("");
   const [passwordResetMessageTone, setPasswordResetMessageTone] = useState<"success" | "danger" | null>(null);
   const [isSendingOwnPasswordReset, setIsSendingOwnPasswordReset] = useState(false);
@@ -132,11 +135,13 @@ export function UserSettingsPanel({ adminOnly = false }: { adminOnly?: boolean }
   const submitSettings = form.handleSubmit(async (values) => {
     if (!allowedViewOptions.includes(values.defaultDashboardView)) {
       setMessage("Valittu aloitussivu ei ole sallittu roolillesi.");
+      setMessageTone("danger");
       return;
     }
 
     const result = await withMinimumDelay(updateCurrentUserSettings(values));
-    setMessage(result.ok ? "" : result.message);
+    setMessage(result.ok ? "Asetukset tallennettiin." : result.message);
+    setMessageTone(result.ok ? "success" : "danger");
     notify({ tone: result.ok ? "success" : "danger", message: result.ok ? "Asetukset tallennettiin." : result.message });
   });
   const isSavingSettings = form.formState.isSubmitting;
@@ -151,6 +156,7 @@ export function UserSettingsPanel({ adminOnly = false }: { adminOnly?: boolean }
 
     if (!trimmedFullName || trimmedFullName.length < 2) {
       setProfileMessage("Anna koko nimi ennen tallennusta.");
+      setProfileMessageTone("danger");
       notify({ tone: "danger", message: "Anna koko nimi ennen tallennusta." });
       return;
     }
@@ -158,6 +164,7 @@ export function UserSettingsPanel({ adminOnly = false }: { adminOnly?: boolean }
     if (!parsedMeasurements.success) {
       const nextMessage = parsedMeasurements.error.issues[0]?.message ?? "Tarkista pituus ja yritä uudelleen.";
       setProfileMessage(nextMessage);
+      setProfileMessageTone("danger");
       notify({ tone: "danger", message: nextMessage });
       return;
     }
@@ -176,6 +183,7 @@ export function UserSettingsPanel({ adminOnly = false }: { adminOnly?: boolean }
 
       if (!settingsResult.ok) {
         setProfileMessage(settingsResult.message);
+        setProfileMessageTone("danger");
         notify({ tone: "danger", message: settingsResult.message });
         return;
       }
@@ -186,11 +194,13 @@ export function UserSettingsPanel({ adminOnly = false }: { adminOnly?: boolean }
 
       if (!measurementResult.ok) {
         setProfileMessage(measurementResult.message);
+        setProfileMessageTone("danger");
         notify({ tone: "danger", message: measurementResult.message });
         return;
       }
 
-      setProfileMessage("");
+      setProfileMessage("Profiili päivitettiin.");
+      setProfileMessageTone("success");
       notify({ tone: "success", message: "Profiili päivitettiin." });
     } finally {
       setIsSavingProfile(false);
@@ -333,12 +343,13 @@ export function UserSettingsPanel({ adminOnly = false }: { adminOnly?: boolean }
           </div>
 
           {isSavingProfile || profileMessage ? (
-            <p
-              aria-live="polite"
-              className={`text-sm ${isSavingProfile ? "text-[var(--text-subtle)]" : "text-[var(--danger)]"}`}
-            >
-              {isSavingProfile ? "Tallennetaan profiilia..." : profileMessage}
-            </p>
+            <InlineFeedback
+              message={profileMessage}
+              tone={profileMessageTone}
+              pendingMessage="Tallennetaan profiilia..."
+              isPending={isSavingProfile}
+              className="text-sm"
+            />
           ) : null}
 
           <Button
@@ -381,12 +392,7 @@ export function UserSettingsPanel({ adminOnly = false }: { adminOnly?: boolean }
               Lähetä nollauslinkki
             </Button>
             {passwordResetMessage ? (
-              <p
-                aria-live="polite"
-                className={`text-sm ${passwordResetMessageTone === "success" ? "text-[var(--success)]" : "text-[var(--danger)]"}`}
-              >
-                {passwordResetMessage}
-              </p>
+              <InlineFeedback message={passwordResetMessage} tone={passwordResetMessageTone} className="text-sm" />
             ) : null}
           </div>
         </div>
@@ -469,12 +475,13 @@ export function UserSettingsPanel({ adminOnly = false }: { adminOnly?: boolean }
             </div>
 
             {isSavingSettings || message ? (
-              <p
-                aria-live="polite"
-                className={`text-sm ${isSavingSettings ? "text-[var(--text-subtle)]" : "text-[var(--danger)]"}`}
-              >
-                {isSavingSettings ? "Tallennetaan asetuksia..." : message}
-              </p>
+              <InlineFeedback
+                message={message}
+                tone={messageTone}
+                pendingMessage="Tallennetaan asetuksia..."
+                isPending={isSavingSettings}
+                className="text-sm"
+              />
             ) : null}
 
             <Button

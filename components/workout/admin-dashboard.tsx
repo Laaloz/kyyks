@@ -413,7 +413,13 @@ export function AdminDashboard({ view }: { view: WorkspaceView }) {
               <div className="mt-4 grid gap-3">
                 <p
                   aria-live="polite"
-                  className={`min-h-5 text-sm ${resendMessage.includes("lähetettiin") ? "text-[var(--success)]" : "text-[var(--danger)]"}`}
+                  className={`min-h-5 text-sm ${
+                    !resendMessage
+                      ? "text-[var(--text-subtle)]"
+                      : resendMessageTone === "success"
+                        ? "text-[var(--success)]"
+                        : "text-[var(--danger)]"
+                  }`}
                 >
                   {resendMessage}
                 </p>

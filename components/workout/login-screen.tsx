@@ -10,6 +10,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardDescription, CardTitle } from "@/components/ui/card";
 import { Input, Label } from "@/components/ui/field";
+import { InlineFeedback } from "@/components/workout/inline-feedback";
 import { hCaptchaSiteKey, isHCaptchaConfigured, isSupabaseConfigured } from "@/lib/config";
 import { useAppState } from "@/providers/app-state-provider";
 
@@ -128,7 +129,7 @@ export function LoginScreen() {
                 return;
               }
 
-              setError(result.message ?? null);
+              setError(null);
             })}
           >
             <div>
@@ -199,17 +200,13 @@ export function LoginScreen() {
                 {error}
               </p>
             ) : null}
-            {isAuthTransitionPending ? (
-              <p aria-live="polite" className="text-sm text-[var(--accent)]">
-                Kirjautuminen onnistui. Avataan työtilaa...
-              </p>
-            ) : null}
+            {isAuthTransitionPending ? <InlineFeedback tone="info" message="Kirjautuminen onnistui. Avataan työtilaa..." className="text-sm" /> : null}
             <Button
               className="w-full"
               type="submit"
               disabled={isSubmitting || isAuthTransitionPending || (requiresCaptcha && !captchaToken)}
-              loading={isSubmitting}
-              loadingText="Kirjaudutaan..."
+              loading={isSubmitting || isAuthTransitionPending}
+              loadingText={isAuthTransitionPending ? "Avataan työtilaa..." : "Kirjaudutaan..."}
             >
               Avaa työtila
             </Button>
@@ -252,12 +249,7 @@ export function LoginScreen() {
               </Button>
               <p className="text-xs text-[var(--text-subtle)]">Syötä sähköposti yllä ennen nollauslinkin tilaamista.</p>
               {resetMessage ? (
-                <p
-                  aria-live="polite"
-                  className={`text-sm ${resetMessageTone === "success" ? "text-[var(--success)]" : "text-[var(--danger)]"}`}
-                >
-                  {resetMessage}
-                </p>
+                <InlineFeedback message={resetMessage} tone={resetMessageTone === "success" ? "success" : "danger"} className="text-sm" />
               ) : null}
             </div>
             <p className="rounded-xl border-2 border-[var(--border)] bg-[var(--surface-2)] px-4 py-3 text-sm leading-6 text-[var(--text-muted)]">

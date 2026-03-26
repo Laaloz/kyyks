@@ -7,6 +7,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardDescription, CardTitle } from "@/components/ui/card";
 import { Label, Select, Textarea } from "@/components/ui/field";
+import { InlineFeedback } from "@/components/workout/inline-feedback";
 import { isConversationEntryNotifiable } from "@/lib/conversation";
 import { withMinimumDelay } from "@/lib/min-delay";
 import type { AppState, ConversationEntry, Role } from "@/lib/types";
@@ -56,6 +57,7 @@ export function ConversationPanel({
   const { notify } = useAppState();
   const [draft, setDraft] = useState("");
   const [message, setMessage] = useState("");
+  const [messageTone, setMessageTone] = useState<"success" | "danger" | null>(null);
   const [selectedContextId, setSelectedContextId] = useState<string>(contextOptions[0]?.id ?? "general");
   const [isSending, setIsSending] = useState(false);
 
@@ -73,6 +75,7 @@ export function ConversationPanel({
   const handleSend = async () => {
     if (!selectedContext) {
       setMessage("Valitse ensin keskustelun kohde.");
+      setMessageTone("danger");
       return;
     }
 
@@ -81,12 +84,14 @@ export function ConversationPanel({
       const result = await withMinimumDelay(Promise.resolve(onSend(draft, selectedContext)));
       if (!result.ok) {
         setMessage(result.message);
+        setMessageTone("danger");
         notify({ tone: "danger", message: result.message });
         return;
       }
 
       setDraft("");
       setMessage("Viesti lisättiin keskusteluun.");
+      setMessageTone("success");
       notify({ tone: "success", message: "Viesti lisättiin keskusteluun." });
     } finally {
       setIsSending(false);
@@ -154,6 +159,7 @@ export function ConversationPanel({
                 setDraft(event.target.value);
                 if (message) {
                   setMessage("");
+                  setMessageTone(null);
                 }
               }}
               placeholder="Kirjoita viesti valmennuksen etenemisestä, treenin kuormittavuudesta tai ohjelman muutostarpeesta."
@@ -170,18 +176,12 @@ export function ConversationPanel({
             >
               Lähetä viesti
             </Button>
-            <p
-              aria-live="polite"
-              className={`text-sm ${
-                message === "Viesti lisättiin keskusteluun."
-                  ? "text-[var(--success)]"
-                  : message
-                    ? "text-[var(--danger)]"
-                    : "text-[var(--text-subtle)]"
-              }`}
-            >
-              {message || "Uudet viestit näkyvät tässä heti ilman erillistä sähköposti-ilmoitusta."}
-            </p>
+            <InlineFeedback
+              message={message}
+              tone={messageTone}
+              idleMessage="Uudet viestit näkyvät tässä heti keskustelussa."
+              className="text-sm"
+            />
           </div>
         </div>
       </div>
