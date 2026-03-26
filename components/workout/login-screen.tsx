@@ -17,7 +17,7 @@ import { loginSchema } from "@/components/workout/schemas";
 import { roleLabel } from "@/components/workout/shared";
 
 export function LoginScreen() {
-  const { login, loginAsDemoUser, requestPasswordResetForEmail, state } = useAppState();
+  const { login, loginAsDemoUser, requestPasswordResetForEmail, state, isAuthTransitionPending } = useAppState();
   const [error, setError] = useState<string | null>(null);
   const [resetMessage, setResetMessage] = useState<string | null>(null);
   const [resetMessageTone, setResetMessageTone] = useState<"success" | "error">("success");
@@ -128,7 +128,7 @@ export function LoginScreen() {
                 return;
               }
 
-              setError(null);
+              setError(result.message ?? null);
             })}
           >
             <div>
@@ -194,15 +194,20 @@ export function LoginScreen() {
                 ) : null}
               </div>
             ) : null}
-            {error ? (
+            {error && !isAuthTransitionPending ? (
               <p aria-live="polite" className="text-sm text-[var(--danger)]">
                 {error}
+              </p>
+            ) : null}
+            {isAuthTransitionPending ? (
+              <p aria-live="polite" className="text-sm text-[var(--accent)]">
+                Kirjautuminen onnistui. Avataan työtilaa...
               </p>
             ) : null}
             <Button
               className="w-full"
               type="submit"
-              disabled={isSubmitting || (requiresCaptcha && !captchaToken)}
+              disabled={isSubmitting || isAuthTransitionPending || (requiresCaptcha && !captchaToken)}
               loading={isSubmitting}
               loadingText="Kirjaudutaan..."
             >
