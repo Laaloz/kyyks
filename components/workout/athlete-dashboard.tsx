@@ -1021,7 +1021,7 @@ export function AthleteDashboard({
                   {currentUser.heightCm !== undefined ? `${currentUser.heightCm} cm` : "Ei asetettu"}
                 </p>
                 <p className="mt-2 text-xs text-[var(--text-subtle)]">
-                  Paivita pituus tilin profiilista. Paino ja vyotaro kirjataan alle mittaseurantaan.
+                  Päivitä pituus tilin profiilista. Paino ja vyötärö kirjataan alle mittaseurantaan.
                 </p>
               </div>
               <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface-2)] px-4 py-4">

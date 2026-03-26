@@ -310,7 +310,7 @@ export function UserSettingsPanel() {
               }}
             />
             <p className="mt-2 text-xs text-[var(--text-subtle)]">
-              Pituus on pysyva profiilitieto. Paivita paino ja vyotaro edelleen yleiskuvan mittaseurannasta.
+              Pituus on pysyvä profiilitieto. Päivitä paino ja vyötärö edelleen yleiskuvan mittaseurannasta.
             </p>
           </div>
 
@@ -378,7 +378,7 @@ export function UserSettingsPanel() {
           <p className="text-xs font-semibold tracking-[0.04em] text-[var(--text-subtle)]">Asetukset</p>
           <CardTitle className="text-2xl">Sovelluksen asetukset</CardTitle>
           <CardDescription className="mt-2">
-            Muokkaa sita, miten sovellus kayttaytyy sinulle paivittaisessa kaytossa.
+            Muokkaa sitä, miten sovellus käyttäytyy sinulle päivittäisessä käytössä.
           </CardDescription>
           <form className="mt-6 space-y-4" noValidate onSubmit={submitSettings}>
             <div>
@@ -402,7 +402,7 @@ export function UserSettingsPanel() {
                 ))}
               </Select>
               <p className="mt-2 text-xs text-[var(--text-subtle)]">
-                Tumma tila vaihtaa koko sovelluksen varimaailman rauhallisemmaksi hamarassa kaytossa.
+                Tumma tila vaihtaa koko sovelluksen värimaailman rauhallisemmaksi hämärässä käytössä.
               </p>
             </div>
 
