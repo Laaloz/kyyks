@@ -84,4 +84,45 @@ describe("GET /api/app-state", () => {
       message: "Käyttäjäprofiilia ei löytynyt eikä sähköpostille löytynyt kutsua.",
     });
   });
+
+  it("falls back to cookie auth when no bearer token is provided", async () => {
+    const getUser = vi.fn(async () => ({
+      data: {
+        user: {
+          id: "user-2",
+          email: "coach@example.com",
+          user_metadata: { name: "Coach Example" },
+        },
+      },
+    }));
+
+    createSupabaseServerClientMock.mockResolvedValue({
+      auth: {
+        getUser,
+      },
+    });
+
+    ensureProfileForAuthenticatedUserOnServerMock.mockResolvedValue({
+      ok: true,
+      repaired: false,
+    });
+
+    loadVisibleSupabaseAppStateMock.mockResolvedValue({
+      users: [],
+      bodyMeasurements: [],
+      assignments: [],
+      exercises: [],
+      templates: [],
+      plans: [],
+      scheduledWorkouts: [],
+      sessions: [],
+      notes: [],
+      conversationEntries: [],
+    });
+
+    const response = await GET(new Request("https://example.com/api/app-state"));
+
+    expect(getUser).toHaveBeenCalledWith();
+    expect(response.status).toBe(200);
+  });
 });

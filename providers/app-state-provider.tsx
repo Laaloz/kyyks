@@ -1902,12 +1902,25 @@ async function fetchSupabaseVisibleStateSnapshot(options?: { lite?: boolean }) {
     }
 
     try {
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
       const searchParams = new URLSearchParams();
       if (options?.lite) {
         searchParams.set("lite", "1");
       }
       const requestPath = searchParams.size > 0 ? `/api/app-state?${searchParams.toString()}` : "/api/app-state";
-      const response = await withTimeout(fetch(requestPath), 8000, null as Response | null);
+      const response = await withTimeout(
+        fetch(requestPath, {
+          headers: session?.access_token
+            ? {
+                Authorization: `Bearer ${session.access_token}`,
+              }
+            : undefined,
+        }),
+        8000,
+        null as Response | null,
+      );
       if (!response) {
         return null;
       }
