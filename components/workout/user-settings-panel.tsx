@@ -275,6 +275,7 @@ export function UserSettingsPanel({ adminOnly = false }: { adminOnly?: boolean }
           text: "iPhone/iPad: paina Safarissa Jaa ja valitse Lisää kotivalikkoon.",
           icon: Share,
           iconLabel: "Jaa",
+          showBadge: false,
         }
       : installPlatform === "android"
         ? deferredInstallPrompt
@@ -282,22 +283,26 @@ export function UserSettingsPanel({ adminOnly = false }: { adminOnly?: boolean }
               text: "Android: voit lisätä Rookiappin suoraan alla olevasta painikkeesta.",
               icon: HousePlus,
               iconLabel: "Lisää",
+              showBadge: true,
             }
           : {
               text: "Android: avaa selaimen valikko ja valitse Lisää kotivalikkoon tai Asenna.",
               icon: Ellipsis,
               iconLabel: "Valikko",
+              showBadge: true,
             }
         : deferredInstallPrompt
           ? {
               text: "Voit lisätä Rookiappin suoraan alla olevasta painikkeesta.",
               icon: HousePlus,
               iconLabel: "Lisää",
+              showBadge: true,
             }
           : {
               text: "Avaa selaimen valikko ja etsi kohta Lisää kotivalikkoon tai Asenna, jos selaimesi tukee sitä.",
               icon: Ellipsis,
               iconLabel: "Valikko",
+              showBadge: true,
             };
 
   const installStatusText = isInstalledToHomeScreen
@@ -533,13 +538,22 @@ export function UserSettingsPanel({ adminOnly = false }: { adminOnly?: boolean }
               <Badge>{installStatusBadge}</Badge>
             </div>
 
-            <div className="flex items-start gap-3 rounded-xl border border-[var(--border)] bg-[var(--surface-2)] px-4 py-3 text-sm text-[var(--text-muted)]">
-              <span className="inline-flex shrink-0 items-center gap-2 rounded-full border border-[var(--border)] bg-[var(--surface)] px-2.5 py-1 text-[var(--text)]">
-                <installHelp.icon className="size-4 text-[var(--accent)]" />
-                {installHelp.iconLabel}
-              </span>
-              <p>{installHelp.text}</p>
-            </div>
+            {!isInstalledToHomeScreen ? (
+              <div className="flex items-start gap-3 rounded-xl border border-[var(--border)] bg-[var(--surface-2)] px-4 py-3 text-sm text-[var(--text-muted)]">
+                {installHelp.showBadge ? (
+                  <span className="inline-flex shrink-0 items-center gap-2 rounded-full border border-[var(--border)] bg-[var(--surface)] px-2.5 py-1 text-[var(--text)]">
+                    <installHelp.icon className="size-4 text-[var(--accent)]" />
+                    {installHelp.iconLabel}
+                  </span>
+                ) : (
+                  <span className="mt-0.5 inline-flex shrink-0 items-center gap-1 text-[var(--text)]">
+                    <installHelp.icon className="size-4 text-[var(--accent)]" />
+                    <span className="font-medium">{installHelp.iconLabel}</span>
+                  </span>
+                )}
+                <p>{installHelp.text}</p>
+              </div>
+            ) : null}
             <p className="text-xs text-[var(--text-subtle)]">
               {installStatusText}
             </p>
