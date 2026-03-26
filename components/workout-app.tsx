@@ -6,9 +6,9 @@ import { LoadingScreen } from "@/components/workout/loading-screen";
 import { useAppState } from "@/providers/app-state-provider";
 
 export function WorkoutApp() {
-  const { currentUser, hasAuthenticatedSession, isHydrated } = useAppState();
+  const { currentUser, hasAuthenticatedSession, isAuthTransitionPending, isHydrated } = useAppState();
 
-  if (!isHydrated && !currentUser) {
+  if ((!isHydrated && !currentUser) || (isAuthTransitionPending && !currentUser)) {
     return <LoadingScreen />;
   }
 

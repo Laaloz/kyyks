@@ -1618,6 +1618,7 @@ interface AppStateContextValue {
   authenticatedUser: UserProfile | null;
   currentUser: UserProfile | null;
   hasAuthenticatedSession: boolean;
+  isAuthTransitionPending: boolean;
   currentRole: Role | null;
   isImpersonating: boolean;
   isHydrated: boolean;
@@ -1666,6 +1667,7 @@ export function AppStateProvider({ children }: PropsWithChildren) {
   const [state, setState] = useState<AppState>(() => createInitialAppState());
   const [authenticatedUserId, setAuthenticatedUserId] = useState<string | null>(null);
   const [impersonatedUserId, setImpersonatedUserId] = useState<string | null>(null);
+  const [isAuthTransitionPending, setIsAuthTransitionPending] = useState(false);
   const [isStorageHydrated, setIsStorageHydrated] = useState(false);
   const [isSupabaseAuthResolved, setIsSupabaseAuthResolved] = useState(false);
   const [didAttemptBootstrapRevalidation, setDidAttemptBootstrapRevalidation] = useState(false);
@@ -1863,6 +1865,7 @@ export function AppStateProvider({ children }: PropsWithChildren) {
 
         setAuthenticatedUserId(null);
         setImpersonatedUserId(null);
+        setIsAuthTransitionPending(false);
         setIsSupabaseAuthResolved(true);
         return;
       }
@@ -1889,6 +1892,7 @@ export function AppStateProvider({ children }: PropsWithChildren) {
         hasResolvedAuthUser = true;
         setAuthenticatedUserId(resolvedUserId);
         setImpersonatedUserId(null);
+        setIsAuthTransitionPending(false);
         setIsSupabaseAuthResolved(true);
         return;
       }
@@ -1930,6 +1934,7 @@ export function AppStateProvider({ children }: PropsWithChildren) {
 
         setAuthenticatedUserId(null);
         setImpersonatedUserId(null);
+        setIsAuthTransitionPending(false);
         setIsSupabaseAuthResolved(true);
         return;
       }
@@ -1937,6 +1942,7 @@ export function AppStateProvider({ children }: PropsWithChildren) {
       hasResolvedAuthUser = true;
       setAuthenticatedUserId(resolvedUserId);
       setImpersonatedUserId(null);
+      setIsAuthTransitionPending(false);
       setIsSupabaseAuthResolved(true);
     };
 
@@ -2166,6 +2172,8 @@ function findResolvedUserIdInSnapshot(
         return { ok: false, message: "Supabase-kirjautuminen ei ole käytettävissä." };
       }
 
+      setIsAuthTransitionPending(true);
+
       const { data, error } = await supabase.auth.signInWithPassword({
         email,
         password,
@@ -2177,13 +2185,8 @@ function findResolvedUserIdInSnapshot(
       });
 
       if (error) {
+        setIsAuthTransitionPending(false);
         return { ok: false, message: getSupabaseLoginErrorMessage(error.message) };
-      }
-
-      const provisionalAuthUserId = data.user?.id ?? data.session?.user?.id ?? null;
-      if (provisionalAuthUserId) {
-        setAuthenticatedUserId(provisionalAuthUserId);
-        setImpersonatedUserId(null);
       }
 
         const authUser = await resolveSupabaseAuthUserAfterPasswordSignIn({
@@ -2229,6 +2232,7 @@ function findResolvedUserIdInSnapshot(
         if (resolvedSnapshotUserId) {
           setAuthenticatedUserId(resolvedSnapshotUserId);
           setImpersonatedUserId(null);
+          setIsAuthTransitionPending(false);
           return { ok: true };
         }
 
@@ -2252,6 +2256,7 @@ function findResolvedUserIdInSnapshot(
 
       setAuthenticatedUserId(resolvedUserId);
       setImpersonatedUserId(null);
+      setIsAuthTransitionPending(false);
       return { ok: true };
     };
 
@@ -2260,6 +2265,7 @@ function findResolvedUserIdInSnapshot(
       authenticatedUser,
       currentUser,
       hasAuthenticatedSession: hasStoredSession,
+      isAuthTransitionPending,
       currentRole: currentUser?.role ?? null,
       isImpersonating,
       isHydrated,
@@ -2307,10 +2313,12 @@ function findResolvedUserIdInSnapshot(
         if (supabase) {
           await supabase.auth.signOut();
         }
+        setIsAuthTransitionPending(false);
         setAuthenticatedUserId(null);
         setImpersonatedUserId(null);
       },
       loginAsDemoUser(userId) {
+        setIsAuthTransitionPending(false);
         setAuthenticatedUserId(userId);
         setImpersonatedUserId(null);
       },
@@ -4390,7 +4398,7 @@ function findResolvedUserIdInSnapshot(
         return domainGetCoachAthletes(state, coachId);
       },
     };
-  }, [state, authenticatedUser, currentUser, hasStoredSession, isHydrated, isImpersonating, supabase]);
+  }, [state, authenticatedUser, currentUser, hasStoredSession, isAuthTransitionPending, isHydrated, isImpersonating, supabase]);
 
   return (
     <AppStateContext.Provider value={value}>
