@@ -65,4 +65,19 @@ describe("fetchSupabaseVisibleStateSnapshotWithClient", () => {
       }),
     );
   });
+
+  it("throws the backend message when requested", async () => {
+    const fetchMock = vi.fn(async () =>
+      new Response(JSON.stringify({ message: "Profiles sync failed: permission denied" }), { status: 403 }),
+    );
+
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(
+      fetchSupabaseVisibleStateSnapshotWithClient(createSupabaseBrowserClientMock() as never, {
+        accessToken: "direct-token",
+        throwOnError: true,
+      }),
+    ).rejects.toThrow("Profiles sync failed: permission denied");
+  });
 });

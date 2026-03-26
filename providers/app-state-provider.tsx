@@ -1067,7 +1067,7 @@ export function resolveSupabaseUserForState(
 
 export async function fetchSupabaseVisibleStateSnapshotWithClient(
   supabase: NonNullable<ReturnType<typeof createSupabaseBrowserClient>> | null,
-  options?: { lite?: boolean; accessToken?: string },
+  options?: { lite?: boolean; accessToken?: string; throwOnError?: boolean },
 ) {
   if (!supabase) {
     return null;
@@ -1097,13 +1097,19 @@ export async function fetchSupabaseVisibleStateSnapshotWithClient(
     const payload = (await response.json().catch(() => null)) as SupabaseVisibleAppStateSnapshot | { message?: string } | null;
     if (!response.ok || !payload || !("users" in payload)) {
       if (payload && "message" in payload && typeof payload.message === "string") {
-        throw new Error(payload.message);
+        if (options?.throwOnError) {
+          throw new Error(payload.message);
+        }
+        return null;
       }
       return null;
     }
 
     return payload;
-  } catch {
+  } catch (error) {
+    if (options?.throwOnError) {
+      throw error;
+    }
     return null;
   }
 }
@@ -1939,7 +1945,7 @@ export function AppStateProvider({ children }: PropsWithChildren) {
   const isImpersonating = Boolean(impersonatedUserId);
   const hasStoredSession = Boolean(authenticatedUserId);
 
-  const fetchSupabaseVisibleStateSnapshot = (options?: { lite?: boolean; accessToken?: string }) =>
+  const fetchSupabaseVisibleStateSnapshot = (options?: { lite?: boolean; accessToken?: string; throwOnError?: boolean }) =>
     fetchSupabaseVisibleStateSnapshotWithClient(supabase, options);
 
 function findResolvedUserIdInSnapshot(
@@ -2160,13 +2166,17 @@ function findResolvedUserIdInSnapshot(
         }
 
         try {
-          latestSnapshot = await fetchSupabaseVisibleStateSnapshot({ accessToken: data.session?.access_token });
+          latestSnapshot = await fetchSupabaseVisibleStateSnapshot({
+            accessToken: data.session?.access_token,
+            throwOnError: true,
+          });
         } catch (error) {
           return {
             ok: false,
-            message: error instanceof Error && error.message
-              ? error.message
-              : "Käyttäjälle ei löytynyt profiilia tai käyttöoikeutta tähän sovellukseen.",
+            message:
+              error instanceof Error && error.message
+                ? error.message
+                : "Käyttäjälle ei löytynyt profiilia tai käyttöoikeutta tähän sovellukseen.",
           };
         }
         resolvedSnapshotUserId = latestSnapshot ? findResolvedUserIdInSnapshot(latestSnapshot, authUser) : null;
