@@ -539,19 +539,25 @@ export function UserSettingsPanel({ adminOnly = false }: { adminOnly?: boolean }
             </div>
 
             {!isInstalledToHomeScreen ? (
-              <div className="flex items-start gap-3 rounded-xl border border-[var(--border)] bg-[var(--surface-2)] px-4 py-3 text-sm text-[var(--text-muted)]">
+              <div className="rounded-xl border border-[var(--border)] bg-[var(--surface-2)] px-4 py-3 text-sm text-[var(--text-muted)]">
                 {installHelp.showBadge ? (
-                  <span className="inline-flex shrink-0 items-center gap-2 rounded-full border border-[var(--border)] bg-[var(--surface)] px-2.5 py-1 text-[var(--text)]">
-                    <installHelp.icon className="size-4 text-[var(--accent)]" />
-                    {installHelp.iconLabel}
-                  </span>
+                  <div className="flex items-start gap-3">
+                    <span className="inline-flex shrink-0 items-center gap-2 rounded-full border border-[var(--border)] bg-[var(--surface)] px-2.5 py-1 text-[var(--text)]">
+                      <installHelp.icon className="size-4 text-[var(--accent)]" />
+                      {installHelp.iconLabel}
+                    </span>
+                    <p>{installHelp.text}</p>
+                  </div>
                 ) : (
-                  <span className="mt-0.5 inline-flex shrink-0 items-center gap-1 text-[var(--text)]">
-                    <installHelp.icon className="size-4 text-[var(--accent)]" />
-                    <span className="font-medium">{installHelp.iconLabel}</span>
-                  </span>
+                  <p>
+                    iPhone/iPad: paina Safarissa{" "}
+                    <span className="inline-flex items-center gap-1 align-middle font-medium text-[var(--text)]">
+                      <Share className="size-4 text-[var(--accent)]" />
+                      Jaa
+                    </span>{" "}
+                    ja valitse Lisää kotivalikkoon.
+                  </p>
                 )}
-                <p>{installHelp.text}</p>
               </div>
             ) : null}
             <p className="text-xs text-[var(--text-subtle)]">
