@@ -18,12 +18,13 @@ import { loginSchema } from "@/components/workout/schemas";
 import { roleLabel } from "@/components/workout/shared";
 
 export function LoginScreen() {
-  const { login, loginAsDemoUser, requestPasswordResetForEmail, state, isAuthTransitionPending } = useAppState();
+  const { login, loginAsDemoUser, requestPasswordResetForEmail, state, currentUser, isAuthTransitionPending } = useAppState();
   const [error, setError] = useState<string | null>(null);
   const [resetMessage, setResetMessage] = useState<string | null>(null);
   const [resetMessageTone, setResetMessageTone] = useState<"success" | "error">("success");
   const [showLocalDemoUsers, setShowLocalDemoUsers] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isAwaitingWorkspace, setIsAwaitingWorkspace] = useState(false);
   const [isRequestingReset, setIsRequestingReset] = useState(false);
   const [captchaToken, setCaptchaToken] = useState<string | null>(null);
   const [captchaError, setCaptchaError] = useState<string | null>(null);
@@ -54,6 +55,12 @@ export function LoginScreen() {
         hostname.endsWith(".local"),
     );
   }, []);
+
+  useEffect(() => {
+    if (currentUser) {
+      setIsAwaitingWorkspace(false);
+    }
+  }, [currentUser]);
 
   return (
     <div className="mx-auto grid min-h-screen max-w-5xl gap-6 px-4 py-10 lg:grid-cols-[0.95fr_1.05fr] lg:items-center">
@@ -115,6 +122,7 @@ export function LoginScreen() {
               }
 
               setIsSubmitting(true);
+              setIsAwaitingWorkspace(false);
               setResetMessage(null);
               const result = await login(values.email, values.password, {
                 captchaToken: captchaToken ?? undefined,
@@ -125,10 +133,12 @@ export function LoginScreen() {
                 setCaptchaToken(null);
               }
               if (!result.ok) {
+                setIsAwaitingWorkspace(false);
                 setError(result.message);
                 return;
               }
 
+              setIsAwaitingWorkspace(true);
               setError(null);
             })}
           >
@@ -200,13 +210,15 @@ export function LoginScreen() {
                 {error}
               </p>
             ) : null}
-            {isAuthTransitionPending ? <InlineFeedback tone="info" message="Kirjautuminen onnistui. Avataan työtilaa..." className="text-sm" /> : null}
+            {isAuthTransitionPending || isAwaitingWorkspace ? (
+              <InlineFeedback tone="info" message="Kirjautuminen onnistui. Avataan työtilaa..." className="text-sm" />
+            ) : null}
             <Button
               className="w-full"
               type="submit"
-              disabled={isSubmitting || isAuthTransitionPending || (requiresCaptcha && !captchaToken)}
-              loading={isSubmitting || isAuthTransitionPending}
-              loadingText={isAuthTransitionPending ? "Avataan työtilaa..." : "Kirjaudutaan..."}
+              disabled={isSubmitting || isAuthTransitionPending || isAwaitingWorkspace || (requiresCaptcha && !captchaToken)}
+              loading={isSubmitting || isAuthTransitionPending || isAwaitingWorkspace}
+              loadingText={isAuthTransitionPending || isAwaitingWorkspace ? "Avataan työtilaa..." : "Kirjaudutaan..."}
             >
               Avaa työtila
             </Button>
