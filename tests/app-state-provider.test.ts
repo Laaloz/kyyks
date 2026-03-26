@@ -1,3 +1,5 @@
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
 import { describe, expect, it, vi } from "vitest";
 import type { User as SupabaseAuthUser } from "@supabase/supabase-js";
 
@@ -139,6 +141,15 @@ describe("shouldPreserveStoredSessionDuringSupabaseBootstrap", () => {
     ];
 
     expect(resolvePrimaryCoachIdForAthlete(state, "user_athlete_1")).toBe("user_admin");
+  });
+
+  it("keeps schema RLS access open for athlete conversations with admin coaches", () => {
+    const schema = readFileSync(resolve(process.cwd(), "supabase/schema.sql"), "utf8");
+
+    expect(schema).toContain("profile.role = 'admin'");
+    expect(schema).toContain("role in ('coach', 'admin') and public.is_athlete_of(id)");
+    expect(schema).toContain("from public.training_plans plan");
+    expect(schema).toContain("from public.scheduled_workouts workout");
   });
 
   it("keeps newer local workout session data when an older snapshot arrives", () => {
