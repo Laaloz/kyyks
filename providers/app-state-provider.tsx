@@ -1065,6 +1065,49 @@ export function resolveSupabaseUserForState(
   };
 }
 
+export async function fetchSupabaseVisibleStateSnapshotWithClient(
+  supabase: NonNullable<ReturnType<typeof createSupabaseBrowserClient>> | null,
+  options?: { lite?: boolean; accessToken?: string },
+) {
+  if (!supabase) {
+    return null;
+  }
+
+  try {
+    const accessToken = options?.accessToken ? options.accessToken : (await supabase.auth.getSession()).data.session?.access_token;
+    const searchParams = new URLSearchParams();
+    if (options?.lite) {
+      searchParams.set("lite", "1");
+    }
+    const requestPath = searchParams.size > 0 ? `/api/app-state?${searchParams.toString()}` : "/api/app-state";
+    const response = await withTimeout(
+      fetch(requestPath, {
+        headers: accessToken
+          ? {
+              Authorization: `Bearer ${accessToken}`,
+            }
+          : undefined,
+      }),
+      8000,
+      null as Response | null,
+    );
+    if (!response) {
+      return null;
+    }
+    const payload = (await response.json().catch(() => null)) as SupabaseVisibleAppStateSnapshot | { message?: string } | null;
+    if (!response.ok || !payload || !("users" in payload)) {
+      if (payload && "message" in payload && typeof payload.message === "string") {
+        throw new Error(payload.message);
+      }
+      return null;
+    }
+
+    return payload;
+  } catch {
+    return null;
+  }
+}
+
 type SupabaseInviteDirectorySnapshot = {
   invites: Array<{
     id: string;
@@ -1896,47 +1939,8 @@ export function AppStateProvider({ children }: PropsWithChildren) {
   const isImpersonating = Boolean(impersonatedUserId);
   const hasStoredSession = Boolean(authenticatedUserId);
 
-async function fetchSupabaseVisibleStateSnapshot(options?: { lite?: boolean }) {
-    if (!supabase) {
-      return null;
-    }
-
-    try {
-      const {
-        data: { session },
-      } = await supabase.auth.getSession();
-      const searchParams = new URLSearchParams();
-      if (options?.lite) {
-        searchParams.set("lite", "1");
-      }
-      const requestPath = searchParams.size > 0 ? `/api/app-state?${searchParams.toString()}` : "/api/app-state";
-      const response = await withTimeout(
-        fetch(requestPath, {
-          headers: session?.access_token
-            ? {
-                Authorization: `Bearer ${session.access_token}`,
-              }
-            : undefined,
-        }),
-        8000,
-        null as Response | null,
-      );
-      if (!response) {
-        return null;
-      }
-      const payload = (await response.json().catch(() => null)) as SupabaseVisibleAppStateSnapshot | { message?: string } | null;
-      if (!response.ok || !payload || !("users" in payload)) {
-        if (payload && "message" in payload && typeof payload.message === "string") {
-          throw new Error(payload.message);
-        }
-        return null;
-      }
-
-      return payload;
-    } catch {
-      return null;
-    }
-  }
+  const fetchSupabaseVisibleStateSnapshot = (options?: { lite?: boolean; accessToken?: string }) =>
+    fetchSupabaseVisibleStateSnapshotWithClient(supabase, options);
 
 function findResolvedUserIdInSnapshot(
   snapshot: SupabaseVisibleAppStateSnapshot,
@@ -2156,7 +2160,7 @@ function findResolvedUserIdInSnapshot(
         }
 
         try {
-          latestSnapshot = await fetchSupabaseVisibleStateSnapshot();
+          latestSnapshot = await fetchSupabaseVisibleStateSnapshot({ accessToken: data.session?.access_token });
         } catch (error) {
           return {
             ok: false,
