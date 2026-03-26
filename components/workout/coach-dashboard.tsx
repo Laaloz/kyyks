@@ -2117,7 +2117,7 @@ function CoachConversationView({
   onSend: (
     body: string,
     options?: { scheduledWorkoutId?: string; trainingPlanId?: string; athleteId?: string; contextLabel?: string },
-  ) => { ok: true; scheduledWorkoutId?: string } | { ok: false; message: string };
+  ) => Promise<{ ok: true; scheduledWorkoutId?: string } | { ok: false; message: string }>;
   selectedAthleteId: string;
   onSelectAthlete: (athleteId: string) => void;
   plans: AppState["plans"];

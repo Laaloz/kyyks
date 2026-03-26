@@ -26,6 +26,8 @@ type ActionResult =
   | { ok: true; scheduledWorkoutId?: string }
   | { ok: false; message: string };
 
+type SendResult = ActionResult | Promise<ActionResult>;
+
 export function ConversationPanel({
   heading,
   description,
@@ -48,7 +50,7 @@ export function ConversationPanel({
   emptyMessage: string;
   contextOptions: ConversationContextOption[];
   occurrenceLabelByWorkoutId?: Map<string, string>;
-  onSend: (body: string, option: ConversationContextOption) => ActionResult;
+  onSend: (body: string, option: ConversationContextOption) => SendResult;
   headerSlot?: ReactNode;
 }) {
   const { notify } = useAppState();

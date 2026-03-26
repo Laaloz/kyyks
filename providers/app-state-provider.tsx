@@ -1614,7 +1614,7 @@ interface AppStateContextValue {
   addConversationComment: (
     body: string,
     options?: { scheduledWorkoutId?: string; trainingPlanId?: string; athleteId?: string; contextLabel?: string },
-  ) => ActionResult;
+  ) => Promise<ActionResult>;
   markConversationRead: () => void;
   startWorkout: (scheduledWorkoutId: string) => Promise<ActionResult>;
   updateWorkoutDuration: (scheduledWorkoutId: string, durationSeconds: number) => Promise<ActionResult>;
@@ -3815,7 +3815,7 @@ function findResolvedUserIdInSnapshot(
         warnIfOptimisticServerIdLeak("template", template.id);
         return { ok: true, templateId: template.id };
       },
-      addConversationComment(body, options) {
+      async addConversationComment(body, options) {
         if (!currentUser) {
           return { ok: false, message: "Kirjaudu sisään ennen kommentointia." };
         }
@@ -3856,13 +3856,20 @@ function findResolvedUserIdInSnapshot(
           setState((previous) => appendConversationEntry(previous, entry));
 
           if (supabase) {
-            void persistConversationEntry(supabase, entry)
-              .then(() => refreshSupabaseVisibleState())
-              .catch(() => {
-                setState((previous) => removeConversationEntry(previous, entry.id));
-                notify({ tone: "danger", message: "Viestin tallennus epaonnistui. Yrita uudelleen." });
-                return refreshSupabaseVisibleState();
-              });
+            try {
+              await persistConversationEntry(supabase, entry);
+              await refreshSupabaseVisibleState();
+            } catch (error) {
+              setState((previous) => removeConversationEntry(previous, entry.id));
+              await refreshSupabaseVisibleState();
+              return {
+                ok: false,
+                message:
+                  error instanceof Error && error.message
+                    ? error.message
+                    : "Viestin tallennus epaonnistui. Yrita uudelleen.",
+              };
+            }
           }
 
           return { ok: true };
@@ -3899,13 +3906,20 @@ function findResolvedUserIdInSnapshot(
           setState((previous) => appendConversationEntry(previous, entry));
 
           if (supabase) {
-            void persistConversationEntry(supabase, entry)
-              .then(() => refreshSupabaseVisibleState())
-              .catch(() => {
-                setState((previous) => removeConversationEntry(previous, entry.id));
-                notify({ tone: "danger", message: "Viestin tallennus epaonnistui. Yrita uudelleen." });
-                return refreshSupabaseVisibleState();
-              });
+            try {
+              await persistConversationEntry(supabase, entry);
+              await refreshSupabaseVisibleState();
+            } catch (error) {
+              setState((previous) => removeConversationEntry(previous, entry.id));
+              await refreshSupabaseVisibleState();
+              return {
+                ok: false,
+                message:
+                  error instanceof Error && error.message
+                    ? error.message
+                    : "Viestin tallennus epaonnistui. Yrita uudelleen.",
+              };
+            }
           }
 
           return { ok: true };
@@ -3930,13 +3944,20 @@ function findResolvedUserIdInSnapshot(
           setState((previous) => appendConversationEntry(previous, entry));
 
           if (supabase) {
-            void persistConversationEntry(supabase, entry)
-              .then(() => refreshSupabaseVisibleState())
-              .catch(() => {
-                setState((previous) => removeConversationEntry(previous, entry.id));
-                notify({ tone: "danger", message: "Viestin tallennus epaonnistui. Yrita uudelleen." });
-                return refreshSupabaseVisibleState();
-              });
+            try {
+              await persistConversationEntry(supabase, entry);
+              await refreshSupabaseVisibleState();
+            } catch (error) {
+              setState((previous) => removeConversationEntry(previous, entry.id));
+              await refreshSupabaseVisibleState();
+              return {
+                ok: false,
+                message:
+                  error instanceof Error && error.message
+                    ? error.message
+                    : "Viestin tallennus epaonnistui. Yrita uudelleen.",
+              };
+            }
           }
 
           return { ok: true };
@@ -3965,13 +3986,20 @@ function findResolvedUserIdInSnapshot(
           setState((previous) => appendConversationEntry(previous, entry));
 
           if (supabase) {
-            void persistConversationEntry(supabase, entry)
-              .then(() => refreshSupabaseVisibleState())
-              .catch(() => {
-                setState((previous) => removeConversationEntry(previous, entry.id));
-                notify({ tone: "danger", message: "Viestin tallennus epaonnistui. Yrita uudelleen." });
-                return refreshSupabaseVisibleState();
-              });
+            try {
+              await persistConversationEntry(supabase, entry);
+              await refreshSupabaseVisibleState();
+            } catch (error) {
+              setState((previous) => removeConversationEntry(previous, entry.id));
+              await refreshSupabaseVisibleState();
+              return {
+                ok: false,
+                message:
+                  error instanceof Error && error.message
+                    ? error.message
+                    : "Viestin tallennus epaonnistui. Yrita uudelleen.",
+              };
+            }
           }
 
           return { ok: true };
