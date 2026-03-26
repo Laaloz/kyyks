@@ -378,6 +378,25 @@ describe("auth workflows", () => {
     expect(mock.state.inviteRows.get("invite-2")?.status).toBe("accepted");
   });
 
+  it("returns an explicit failure when no invite exists for an authenticated user missing a profile", async () => {
+    const mock = createMockAdminClient({
+      invites: [],
+    });
+
+    createSupabaseAdminClientMock.mockReturnValue(mock.client);
+
+    const result = await ensureProfileForAuthenticatedUserOnServer({
+      authUserId: "auth-user-missing",
+      email: "missing@example.com",
+      fullName: "Missing User",
+    });
+
+    expect(result).toEqual({
+      ok: false,
+      message: "Käyttäjäprofiilia ei löytynyt eikä sähköpostille löytynyt kutsua.",
+    });
+  });
+
   it("creates a self-service password reset request using email lookup without an authenticated requester", async () => {
     const mock = createMockAdminClient({
       invites: [],

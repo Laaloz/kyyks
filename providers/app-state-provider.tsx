@@ -1913,6 +1913,9 @@ async function fetchSupabaseVisibleStateSnapshot(options?: { lite?: boolean }) {
       }
       const payload = (await response.json().catch(() => null)) as SupabaseVisibleAppStateSnapshot | { message?: string } | null;
       if (!response.ok || !payload || !("users" in payload)) {
+        if (payload && "message" in payload && typeof payload.message === "string") {
+          throw new Error(payload.message);
+        }
         return null;
       }
 
@@ -2139,7 +2142,16 @@ function findResolvedUserIdInSnapshot(
           break;
         }
 
-        latestSnapshot = await fetchSupabaseVisibleStateSnapshot();
+        try {
+          latestSnapshot = await fetchSupabaseVisibleStateSnapshot();
+        } catch (error) {
+          return {
+            ok: false,
+            message: error instanceof Error && error.message
+              ? error.message
+              : "Käyttäjälle ei löytynyt profiilia tai käyttöoikeutta tähän sovellukseen.",
+          };
+        }
         resolvedSnapshotUserId = latestSnapshot ? findResolvedUserIdInSnapshot(latestSnapshot, authUser) : null;
 
         if (latestSnapshot) {

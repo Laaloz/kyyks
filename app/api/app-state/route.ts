@@ -12,16 +12,18 @@ export async function GET(request: Request) {
     return timer.json({ message: "Supabase ei ole käytössä tässä ympäristössä." }, { status: 503 });
   }
 
+  const authorization = request.headers.get("authorization");
+  const accessToken = authorization?.startsWith("Bearer ") ? authorization.slice(7) : undefined;
   const {
     data: { user },
-  } = await supabase.auth.getUser();
+  } = accessToken ? await supabase.auth.getUser(accessToken) : await supabase.auth.getUser();
 
   if (!user) {
     return timer.json({ message: "Kirjaudu sisään ennen tietojen synkronointia." }, { status: 401 });
   }
 
   try {
-    await ensureProfileForAuthenticatedUserOnServer({
+    const ensureProfileResult = await ensureProfileForAuthenticatedUserOnServer({
       authUserId: user.id,
       email: user.email,
       fullName:
@@ -31,6 +33,11 @@ export async function GET(request: Request) {
             ? user.user_metadata.name
             : null,
     });
+
+    if (!ensureProfileResult.ok) {
+      timer.log({ userId: user.id, ok: false, profileRepairFailed: true });
+      return timer.json({ message: ensureProfileResult.message }, { status: 403 });
+    }
 
     const lite = new URL(request.url).searchParams.get("lite") === "1";
     const snapshot = await loadVisibleSupabaseAppState(supabase, { lite });
