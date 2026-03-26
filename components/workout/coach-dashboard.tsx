@@ -1913,7 +1913,6 @@ function buildCoachWorkoutInsights(
   athleteWorkouts: AppState["scheduledWorkouts"],
   sessionByWorkoutId: Map<string, WorkoutSession>,
 ) {
-  const templateById = new Map(state.templates.map((template) => [template.id, template]));
   const planById = new Map(state.plans.map((plan) => [plan.id, plan]));
   const exerciseById = new Map(state.exercises.map((exercise) => [exercise.id, exercise]));
   const userById = new Map(state.users.map((user) => [user.id, user]));
@@ -1975,15 +1974,6 @@ function buildCoachWorkoutInsights(
             insight.muscleGroupLiftedKg[groupKey] += distributedLiftedForLog;
           });
         });
-    } else if (workout.templateId) {
-      const template = templateById.get(workout.templateId);
-      if (template) {
-        insight.exerciseCount = template.blocks.reduce((sum, block) => sum + block.exercises.length, 0);
-        insight.setCount = template.blocks.reduce(
-          (sum, block) => sum + block.exercises.reduce((exerciseSum, exercise) => exerciseSum + exercise.sets.length, 0),
-          0,
-        );
-      }
     } else if (workout.trainingPlanId && workout.programWorkoutId) {
       const plan = planById.get(workout.trainingPlanId);
       const programWorkout = plan?.workouts?.find((item) => item.id === workout.programWorkoutId);

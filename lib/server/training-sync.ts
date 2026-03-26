@@ -14,7 +14,6 @@ import {
   type UserProfile,
   type WorkoutNote,
   type WorkoutSession,
-  type WorkoutTemplate,
 } from "@/lib/types";
 
 type ServerClient = SupabaseClient<any, "public", any>;
@@ -70,48 +69,6 @@ type ExerciseRow = {
   coach_id: string | null;
 };
 
-type TemplateRow = {
-  id: string;
-  coach_id: string;
-  title: string;
-  description: string;
-  goal: string;
-  split_type: WorkoutTemplate["splitType"];
-  status: WorkoutTemplate["status"];
-  created_at: string;
-  updated_at: string;
-  created_by: string;
-  updated_by: string;
-};
-
-type TemplateBlockRow = {
-  id: string;
-  template_id: string;
-  title: string;
-  note: string | null;
-  sort_order: number;
-};
-
-type TemplateExerciseRow = {
-  id: string;
-  block_id: string;
-  exercise_id: string;
-  muscle_group: string | null;
-  instruction: string;
-  sort_order: number;
-};
-
-type TemplateSetRow = {
-  id: string;
-  template_exercise_id: string;
-  label: string;
-  target_reps: number;
-  target_load: number | string | null;
-  rest_seconds: number;
-  notes: string | null;
-  sort_order: number;
-};
-
 type TrainingPlanRow = {
   id: string;
   coach_id: string;
@@ -129,7 +86,6 @@ type TrainingPlanRow = {
 type ScheduledWorkoutRow = {
   id: string;
   training_plan_id: string | null;
-  template_id: string | null;
   program_workout_id: string | null;
   athlete_id: string;
   coach_id: string;
@@ -307,7 +263,6 @@ function mapScheduledWorkoutRow(entry: ScheduledWorkoutRow): ScheduledWorkout {
   return {
     id: entry.id,
     trainingPlanId: entry.training_plan_id ?? undefined,
-    templateId: entry.template_id ?? undefined,
     programWorkoutId: entry.program_workout_id ?? undefined,
     athleteId: entry.athlete_id,
     coachId: entry.coach_id,
@@ -368,10 +323,6 @@ export async function loadVisibleSupabaseAppState(
     bodyMeasurementsResult,
     assignmentsResult,
     exercisesResult,
-    templatesResult,
-    templateBlocksResult,
-    templateExercisesResult,
-    templateSetsResult,
     plansResult,
     scheduledWorkoutsResult,
     sessionsResult,
@@ -399,28 +350,12 @@ export async function loadVisibleSupabaseAppState(
       .select("id, external_key, name, category, equipment, cue, scope, coach_id")
       .order("name", { ascending: true }),
     supabase
-      .from("workout_templates")
-      .select("id, coach_id, title, description, goal, split_type, status, created_at, updated_at, created_by, updated_by")
-      .order("created_at", { ascending: false }),
-    supabase
-      .from("workout_template_blocks")
-      .select("id, template_id, title, note, sort_order")
-      .order("sort_order", { ascending: true }),
-    supabase
-      .from("workout_template_exercises")
-      .select("id, block_id, exercise_id, muscle_group, instruction, sort_order")
-      .order("sort_order", { ascending: true }),
-    supabase
-      .from("workout_template_sets")
-      .select("id, template_exercise_id, label, target_reps, target_load, rest_seconds, notes, sort_order")
-      .order("sort_order", { ascending: true }),
-    supabase
       .from("training_plans")
       .select("id, coach_id, athlete_id, title, description, status, start_date, week_count, workouts, created_at, updated_at")
       .order("created_at", { ascending: false }),
     supabase
       .from("scheduled_workouts")
-      .select("id, training_plan_id, template_id, program_workout_id, athlete_id, coach_id, title, scheduled_date, status, completed_at, created_at, updated_at")
+      .select("id, training_plan_id, program_workout_id, athlete_id, coach_id, title, scheduled_date, status, completed_at, created_at, updated_at")
       .limit(lite ? 80 : isAdminViewer ? 500 : 200)
       .order("scheduled_date", { ascending: false }),
     supabase
@@ -452,10 +387,6 @@ export async function loadVisibleSupabaseAppState(
   throwIfQueryFailed("Body measurements", bodyMeasurementsResult);
   throwIfQueryFailed("Assignments", assignmentsResult);
   throwIfQueryFailed("Exercises", exercisesResult);
-  throwIfQueryFailed("Templates", templatesResult);
-  throwIfQueryFailed("Template blocks", templateBlocksResult);
-  throwIfQueryFailed("Template exercises", templateExercisesResult);
-  throwIfQueryFailed("Template sets", templateSetsResult);
   throwIfQueryFailed("Training plans", plansResult);
   throwIfQueryFailed("Scheduled workouts", scheduledWorkoutsResult);
   throwIfQueryFailed("Workout sessions", sessionsResult);
@@ -473,70 +404,7 @@ export async function loadVisibleSupabaseAppState(
     mapAssignmentRow(entry as AssignmentRow),
   );
   const exercises = (exercisesResult.data ?? []).map((entry) => mapExerciseRow(entry as ExerciseRow));
-  const exerciseIdByDatabaseId = new Map(
-    (exercisesResult.data ?? []).map((entry) => [
-      (entry as ExerciseRow).id,
-      (entry as ExerciseRow).external_key ?? (entry as ExerciseRow).id,
-    ]),
-  );
-
-  const templateBlocks = (templateBlocksResult.data ?? []) as TemplateBlockRow[];
-  const templateExercises = (templateExercisesResult.data ?? []) as TemplateExerciseRow[];
-  const templateSets = (templateSetsResult.data ?? []) as TemplateSetRow[];
-
-  const setsByTemplateExerciseId = new Map<string, WorkoutTemplate["blocks"][number]["exercises"][number]["sets"]>();
-  templateSets.forEach((entry) => {
-    const existing = setsByTemplateExerciseId.get(entry.template_exercise_id) ?? [];
-    existing.push({
-      id: entry.id,
-      label: entry.label,
-      targetReps: entry.target_reps,
-      targetLoad: toNumberOrUndefined(entry.target_load),
-      restSeconds: entry.rest_seconds,
-      notes: entry.notes ?? undefined,
-    });
-    setsByTemplateExerciseId.set(entry.template_exercise_id, existing);
-  });
-
-  const exercisesByBlockId = new Map<string, WorkoutTemplate["blocks"][number]["exercises"]>();
-  templateExercises.forEach((entry) => {
-    const existing = exercisesByBlockId.get(entry.block_id) ?? [];
-        existing.push({
-          id: entry.id,
-          exerciseId: exerciseIdByDatabaseId.get(entry.exercise_id) ?? entry.exercise_id,
-          muscleGroup: (entry.muscle_group as WorkoutTemplate["blocks"][number]["exercises"][number]["muscleGroup"]) ?? undefined,
-          instruction: entry.instruction,
-          sets: setsByTemplateExerciseId.get(entry.id) ?? [],
-        });
-    exercisesByBlockId.set(entry.block_id, existing);
-  });
-
-  const blocksByTemplateId = new Map<string, WorkoutTemplate["blocks"]>();
-  templateBlocks.forEach((entry) => {
-    const existing = blocksByTemplateId.get(entry.template_id) ?? [];
-    existing.push({
-      id: entry.id,
-      title: entry.title,
-      note: entry.note ?? undefined,
-      exercises: exercisesByBlockId.get(entry.id) ?? [],
-    });
-    blocksByTemplateId.set(entry.template_id, existing);
-  });
-
-  const templates = ((templatesResult.data ?? []) as TemplateRow[]).map((entry) => ({
-    id: entry.id,
-    coachId: entry.coach_id,
-    title: entry.title,
-    description: entry.description,
-    goal: entry.goal,
-    splitType: entry.split_type,
-    status: entry.status,
-    blocks: blocksByTemplateId.get(entry.id) ?? [],
-    createdAt: entry.created_at,
-    updatedAt: entry.updated_at,
-    createdBy: entry.created_by,
-    updatedBy: entry.updated_by,
-  }));
+  const templates: AppState["templates"] = [];
 
   const scheduledWorkouts = ((scheduledWorkoutsResult.data ?? []) as ScheduledWorkoutRow[]).map((entry) =>
     mapScheduledWorkoutRow(entry),

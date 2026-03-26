@@ -2023,7 +2023,6 @@ function buildWorkoutInsights(state: AppState) {
   const sessionByWorkoutId = new Map(
     state.sessions.map((session) => [session.scheduledWorkoutId, session]),
   );
-  const templateById = new Map(state.templates.map((template) => [template.id, template]));
   const planById = new Map(state.plans.map((plan) => [plan.id, plan]));
   const exerciseById = new Map(state.exercises.map((exercise) => [exercise.id, exercise]));
   const userById = new Map(state.users.map((user) => [user.id, user]));
@@ -2105,15 +2104,6 @@ function buildWorkoutInsights(state: AppState) {
             muscleGroupLiftedKg[groupKey] += distributedLiftedForLog;
           });
         });
-    } else if (workout.templateId) {
-      const template = templateById.get(workout.templateId);
-      if (template) {
-        exerciseCount = template.blocks.reduce((sum, block) => sum + block.exercises.length, 0);
-        setCount = template.blocks.reduce(
-          (sum, block) => sum + block.exercises.reduce((exerciseSum, exercise) => exerciseSum + exercise.sets.length, 0),
-          0,
-        );
-      }
     } else if (workout.trainingPlanId && workout.programWorkoutId) {
       const plan = planById.get(workout.trainingPlanId);
       const programWorkout = plan?.workouts?.find((item) => item.id === workout.programWorkoutId);
@@ -2390,21 +2380,6 @@ function buildWorkoutExerciseInstructions(
   state: AppState,
   scheduledWorkout: AppState["scheduledWorkouts"][number],
 ) {
-  if (scheduledWorkout.templateId) {
-    const template = state.templates.find((item) => item.id === scheduledWorkout.templateId);
-    if (!template) {
-      return new Map<string, string>();
-    }
-
-    return new Map(
-      template.blocks.flatMap((block) =>
-        block.exercises
-          .map((exercise) => [exercise.id, exercise.instruction.trim()] as const)
-          .filter((entry) => entry[1].length > 0),
-      ),
-    );
-  }
-
   if (scheduledWorkout.trainingPlanId && scheduledWorkout.programWorkoutId) {
     const plan = state.plans.find((item) => item.id === scheduledWorkout.trainingPlanId);
     const workout = plan?.workouts?.find((item) => item.id === scheduledWorkout.programWorkoutId);

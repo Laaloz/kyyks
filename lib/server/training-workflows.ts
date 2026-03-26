@@ -12,7 +12,6 @@ import type {
   ScheduledWorkout,
   TrainingPlan,
   WorkoutSession,
-  WorkoutTemplate,
   WorkoutUpdateInput,
 } from "@/lib/types";
 
@@ -96,47 +95,6 @@ type SetLogRow = {
   done: boolean;
 };
 
-type TemplateExerciseJoinRow = {
-  id: string;
-  instruction: string;
-  exercise_id: string;
-  muscle_group: string | null;
-  sort_order: number;
-  block_id: string;
-  workout_template_sets: Array<{
-    id: string;
-    label: string;
-    target_reps: number;
-    target_load: number | string | null;
-    rest_seconds: number;
-    notes: string | null;
-    sort_order: number;
-  }> | null;
-};
-
-type TemplateBlockJoinRow = {
-  id: string;
-  title: string;
-  note: string | null;
-  sort_order: number;
-  workout_template_exercises: TemplateExerciseJoinRow[] | null;
-};
-
-type TemplateJoinRow = {
-  id: string;
-  coach_id: string;
-  title: string;
-  description: string;
-  goal: string;
-  split_type: WorkoutTemplate["splitType"];
-  status: WorkoutTemplate["status"];
-  created_at: string;
-  updated_at: string;
-  created_by: string;
-  updated_by: string;
-  workout_template_blocks: TemplateBlockJoinRow[] | null;
-};
-
 function toNumberOrUndefined(value: number | string | null | undefined) {
   if (value === null || value === undefined || value === "") {
     return undefined;
@@ -187,50 +145,6 @@ function mapPlanRow(row: PlanRow): TrainingPlan {
     weekCount: row.week_count,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
-  };
-}
-
-function mapTemplateRow(row: TemplateJoinRow, exerciseAppIdByDbId: Map<string, string>): WorkoutTemplate {
-  return {
-    id: row.id,
-    coachId: row.coach_id,
-    title: row.title,
-    description: row.description,
-    goal: row.goal,
-    splitType: row.split_type,
-    status: row.status,
-    blocks: (row.workout_template_blocks ?? [])
-      .slice()
-      .sort((left, right) => left.sort_order - right.sort_order)
-      .map((block) => ({
-        id: block.id,
-        title: block.title,
-        note: block.note ?? undefined,
-        exercises: (block.workout_template_exercises ?? [])
-          .slice()
-          .sort((left, right) => left.sort_order - right.sort_order)
-          .map((exercise) => ({
-            id: exercise.id,
-            exerciseId: exerciseAppIdByDbId.get(exercise.exercise_id) ?? exercise.exercise_id,
-            muscleGroup: (exercise.muscle_group as WorkoutTemplate["blocks"][number]["exercises"][number]["muscleGroup"]) ?? undefined,
-            instruction: exercise.instruction,
-            sets: (exercise.workout_template_sets ?? [])
-              .slice()
-              .sort((left, right) => left.sort_order - right.sort_order)
-              .map((set) => ({
-                id: set.id,
-                label: set.label,
-                targetReps: set.target_reps,
-                targetLoad: toNumberOrUndefined(set.target_load),
-                restSeconds: set.rest_seconds,
-                notes: set.notes ?? undefined,
-              })),
-          })),
-      })),
-    createdAt: row.created_at,
-    updatedAt: row.updated_at,
-    createdBy: row.created_by,
-    updatedBy: row.updated_by,
   };
 }
 
@@ -556,62 +470,6 @@ async function buildProgramWorkoutSetLogs(
         done: false,
       };
     }),
-  );
-}
-
-async function buildTemplateWorkoutSetLogs(templateId: string, athleteId: string) {
-  const exerciseLookup = await resolveExerciseDatabaseRows();
-  if (!exerciseLookup.ok) {
-    return null;
-  }
-
-  const { data: template } = await exerciseLookup.admin
-    .from("workout_templates")
-    .select(
-      "id, coach_id, title, description, goal, split_type, status, created_at, updated_at, created_by, updated_by, workout_template_blocks(id, title, note, sort_order, workout_template_exercises(id, instruction, exercise_id, muscle_group, sort_order, workout_template_sets(id, label, target_reps, target_load, rest_seconds, notes, sort_order)))",
-    )
-    .eq("id", templateId)
-    .maybeSingle<TemplateJoinRow>();
-
-  if (!template) {
-    return null;
-  }
-
-  const exerciseAppIdByDbId = new Map(
-    exerciseLookup.rows.map((row) => [row.id, row.external_key ?? row.id]),
-  );
-  const mappedTemplate = mapTemplateRow(template, exerciseAppIdByDbId);
-  const autofill = await buildAutofillSnapshotMaps(athleteId);
-
-  return mappedTemplate.blocks.flatMap((block) =>
-    block.exercises.flatMap((exercise) =>
-      exercise.sets.map((set) => {
-        const snapshot =
-          autofill.byExerciseAndSetLabel.get(`${exercise.exerciseId}:${set.label}`) ??
-          autofill.byExercise.get(exercise.exerciseId);
-
-        return {
-          template_exercise_id: exercise.id,
-          set_id: set.id,
-          exercise_id: exercise.exerciseId,
-          exercise_name:
-            exerciseLookup.rows.find((row) => row.id === exercise.exerciseId || row.external_key === exercise.exerciseId)
-              ?.name ?? "Liike",
-          muscle_group: exercise.muscleGroup ?? null,
-          superset_group: null,
-          set_label: set.label,
-          target_reps: set.targetReps,
-          target_reps_min: null,
-          target_reps_max: null,
-          target_load: set.targetLoad ?? null,
-          target_rest_seconds: set.restSeconds,
-          program_workout_id: null,
-          actual_reps: snapshot?.actualReps ?? set.targetReps,
-          actual_load: snapshot?.actualLoad ?? resolveDefaultActualLoad({ targetLoad: set.targetLoad }) ?? null,
-          done: false,
-        };
-      }),
-    ),
   );
 }
 
@@ -1112,8 +970,6 @@ export async function startScheduledWorkoutOnServer({
     }
 
     setLogs = await buildProgramWorkoutSetLogs(mapPlanRow(planRow), workout.program_workout_id);
-  } else if (workout.template_id) {
-    setLogs = await buildTemplateWorkoutSetLogs(workout.template_id, workout.athlete_id);
   }
 
   if (!setLogs) {
