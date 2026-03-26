@@ -11,6 +11,7 @@ import {
   applyAdminRoleUpdate,
   canDeleteProgramFromState,
   canRetargetProgramInState,
+  rekeyOptimisticWorkoutArtifacts,
   reconcileSupabaseInviteDirectory,
   reconcileSupabaseVisibleState,
   resolveSelectedUserFromState,
@@ -250,6 +251,72 @@ describe("shouldPreserveStoredSessionDuringSupabaseBootstrap", () => {
 
     expect(preserved.scheduledWorkouts.some((workout: { id: string }) => workout.id === "workout_local_start")).toBe(true);
     expect(preserved.sessions.some((session: { id: string }) => session.id === "session_local_start")).toBe(true);
+  });
+
+  it("rekeys optimistic workout artifacts to the persisted workout id", () => {
+    const state = cloneDemoState();
+
+    state.scheduledWorkouts = [
+      {
+        id: "workout_local_start",
+        athleteId: "user_athlete_1",
+        coachId: "user_admin",
+        trainingPlanId: "plan_1",
+        programWorkoutId: "day_1",
+        title: "Penkki",
+        scheduledDate: "2026-03-24T08:00:00.000Z",
+        status: "in_progress",
+        createdAt: "2026-03-24T08:00:00.000Z",
+        updatedAt: "2026-03-24T08:00:00.000Z",
+      },
+    ];
+    state.sessions = [
+      {
+        id: "session_local_start",
+        scheduledWorkoutId: "workout_local_start",
+        athleteId: "user_athlete_1",
+        startedAt: "2026-03-24T08:00:00.000Z",
+        updatedAt: "2026-03-24T08:00:00.000Z",
+        pausedDurationSeconds: 0,
+        setLogs: [
+          {
+            id: "log_local_start",
+            scheduledWorkoutId: "workout_local_start",
+            templateExerciseId: "exercise_1",
+            setId: "set_1",
+            exerciseId: "exercise_1",
+            exerciseName: "Penkkipunnerrus",
+            setLabel: "1",
+            targetReps: 5,
+            actualReps: 0,
+            done: false,
+          },
+        ],
+      },
+    ];
+    state.conversationEntries = [
+      {
+        id: "conversation_1",
+        athleteId: "user_athlete_1",
+        coachId: "user_admin",
+        authorUserId: "user_athlete_1",
+        authorRole: "athlete",
+        type: "comment",
+        body: "Testi",
+        contextType: "workout",
+        contextId: "workout_local_start",
+        contextLabel: "Penkki",
+        readByUserIds: [],
+        createdAt: "2026-03-24T08:00:00.000Z",
+      },
+    ];
+
+    const nextState = rekeyOptimisticWorkoutArtifacts(state, "workout_local_start", "srv_workout_1");
+
+    expect(nextState.scheduledWorkouts[0]?.id).toBe("srv_workout_1");
+    expect(nextState.sessions[0]?.scheduledWorkoutId).toBe("srv_workout_1");
+    expect(nextState.sessions[0]?.setLogs[0]?.scheduledWorkoutId).toBe("srv_workout_1");
+    expect(nextState.conversationEntries[0]?.contextId).toBe("srv_workout_1");
   });
 
   it("rekeys an invited placeholder user to the real Supabase profile id after activation", () => {

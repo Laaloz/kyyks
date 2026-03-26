@@ -137,6 +137,52 @@ export function preserveActiveWorkoutShells(previous: AppState, snapshot: Supaba
   };
 }
 
+export function rekeyOptimisticWorkoutArtifacts(
+  state: AppState,
+  optimisticScheduledWorkoutId: string,
+  persistedScheduledWorkoutId: string,
+): AppState {
+  if (
+    !optimisticScheduledWorkoutId ||
+    !persistedScheduledWorkoutId ||
+    optimisticScheduledWorkoutId === persistedScheduledWorkoutId
+  ) {
+    return state;
+  }
+
+  return {
+    ...state,
+    scheduledWorkouts: state.scheduledWorkouts.map((workout) =>
+      workout.id === optimisticScheduledWorkoutId
+        ? {
+            ...workout,
+            id: persistedScheduledWorkoutId,
+          }
+        : workout,
+    ),
+    sessions: state.sessions.map((session) =>
+      session.scheduledWorkoutId === optimisticScheduledWorkoutId
+        ? {
+            ...session,
+            scheduledWorkoutId: persistedScheduledWorkoutId,
+            setLogs: session.setLogs.map((log) => ({
+              ...log,
+              scheduledWorkoutId: persistedScheduledWorkoutId,
+            })),
+          }
+        : session,
+    ),
+    conversationEntries: state.conversationEntries.map((entry) =>
+      entry.contextType === "workout" && entry.contextId === optimisticScheduledWorkoutId
+        ? {
+            ...entry,
+            contextId: persistedScheduledWorkoutId,
+          }
+        : entry,
+    ),
+  };
+}
+
 function clearOptimisticWorkoutArtifacts(state: AppState, scheduledWorkoutId: string): AppState {
   const sessionIds = new Set(
     state.sessions
@@ -3613,7 +3659,8 @@ function findResolvedUserIdInSnapshot(
             item.programWorkoutId === programWorkoutId &&
             (item.status === "in_progress" || item.status === "cancelled"),
         );
-        if (existingActive) {
+        const existingActiveIsOptimistic = Boolean(existingActive?.id.startsWith("workout_"));
+        if (existingActive && (!supabase || !existingActiveIsOptimistic)) {
           return { ok: true, scheduledWorkoutId: existingActive.id };
         }
 
@@ -3627,9 +3674,16 @@ function findResolvedUserIdInSnapshot(
 
         if (supabase) {
           try {
-            const started = domainStartProgramWorkout(state, programId, programWorkoutId, currentUser.id);
+            const started = existingActiveIsOptimistic
+              ? null
+              : domainStartProgramWorkout(state, programId, programWorkoutId, currentUser.id);
+            const optimisticWorkoutId = existingActiveIsOptimistic
+              ? existingActive?.id ?? null
+              : started?.scheduledWorkout.id ?? null;
             const previousState = state;
-            setState(started.state);
+            if (started) {
+              setState(started.state);
+            }
 
             const response = await fetch("/api/workouts/start", {
               method: "POST",
@@ -3645,8 +3699,13 @@ function findResolvedUserIdInSnapshot(
               return { ok: false, message: payload?.message ?? "Harjoituksen käynnistys epäonnistui." };
             }
 
-            void refreshSupabaseVisibleState();
-            const scheduledWorkoutId = payload?.scheduledWorkoutId ?? started.scheduledWorkout.id;
+            const scheduledWorkoutId = payload?.scheduledWorkoutId ?? optimisticWorkoutId ?? undefined;
+            if (optimisticWorkoutId && scheduledWorkoutId && scheduledWorkoutId !== optimisticWorkoutId) {
+              setState((current) => rekeyOptimisticWorkoutArtifacts(current, optimisticWorkoutId, scheduledWorkoutId));
+              await refreshSupabaseVisibleState();
+            } else {
+              void refreshSupabaseVisibleState();
+            }
             warnIfOptimisticServerIdLeak("workout", scheduledWorkoutId);
             return { ok: true, scheduledWorkoutId };
           } catch {
