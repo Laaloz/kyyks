@@ -471,8 +471,12 @@ function buildConversationEntry(input: {
   readByUserIds?: string[];
 }): ConversationEntry {
   const createdAt = input.createdAt ?? new Date().toISOString();
+  const entryId =
+    typeof crypto !== "undefined" && typeof crypto.randomUUID === "function"
+      ? crypto.randomUUID()
+      : makeId("conversation");
   return {
-    id: makeId("conversation"),
+    id: entryId,
     athleteId: input.athleteId,
     coachId: input.coachId,
     authorUserId: input.authorUserId,
