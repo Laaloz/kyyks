@@ -1,7 +1,7 @@
 "use client";
 
 import { zodResolver } from "@hookform/resolvers/zod";
-import { Bell, HousePlus, KeyRound, Mail, MoonStar, Ruler, UserRoundCog, Waves } from "lucide-react";
+import { Bell, Ellipsis, HousePlus, KeyRound, Mail, MoonStar, Ruler, Share, UserRoundCog, Waves } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
@@ -269,16 +269,36 @@ export function UserSettingsPanel({ adminOnly = false }: { adminOnly?: boolean }
     };
   }, []);
 
-  const installHelpText =
+  const installHelp =
     installPlatform === "ios"
-      ? "iPhone/iPad: avaa selaimen Jaa-valikko ja valitse Lisää kotivalikkoon."
+      ? {
+          text: "iPhone/iPad: paina Safarissa Jaa ja valitse Lisää kotivalikkoon.",
+          icon: Share,
+          iconLabel: "Jaa",
+        }
       : installPlatform === "android"
         ? deferredInstallPrompt
-          ? "Android: voit lisätä Rookiappin suoraan alla olevasta painikkeesta."
-          : "Android: avaa selaimen valikko ja valitse Lisää kotivalikkoon tai Asenna."
+          ? {
+              text: "Android: voit lisätä Rookiappin suoraan alla olevasta painikkeesta.",
+              icon: HousePlus,
+              iconLabel: "Lisää",
+            }
+          : {
+              text: "Android: avaa selaimen valikko ja valitse Lisää kotivalikkoon tai Asenna.",
+              icon: Ellipsis,
+              iconLabel: "Valikko",
+            }
         : deferredInstallPrompt
-          ? "Voit lisätä Rookiappin suoraan alla olevasta painikkeesta."
-          : "Lisää Rookiapp selaimen valikosta kotivalikkoon, jos selain tukee sitä.";
+          ? {
+              text: "Voit lisätä Rookiappin suoraan alla olevasta painikkeesta.",
+              icon: HousePlus,
+              iconLabel: "Lisää",
+            }
+          : {
+              text: "Avaa selaimen valikko ja etsi kohta Lisää kotivalikkoon tai Asenna, jos selaimesi tukee sitä.",
+              icon: Ellipsis,
+              iconLabel: "Valikko",
+            };
 
   const installStatusText = isInstalledToHomeScreen
     ? "Rookiapp on avattu kotivalikosta."
@@ -513,7 +533,13 @@ export function UserSettingsPanel({ adminOnly = false }: { adminOnly?: boolean }
               <Badge>{installStatusBadge}</Badge>
             </div>
 
-            <p className="text-sm text-[var(--text-muted)]">{installHelpText}</p>
+            <div className="flex items-start gap-3 rounded-xl border border-[var(--border)] bg-[var(--surface-2)] px-4 py-3 text-sm text-[var(--text-muted)]">
+              <span className="inline-flex shrink-0 items-center gap-2 rounded-full border border-[var(--border)] bg-[var(--surface)] px-2.5 py-1 text-[var(--text)]">
+                <installHelp.icon className="size-4 text-[var(--accent)]" />
+                {installHelp.iconLabel}
+              </span>
+              <p>{installHelp.text}</p>
+            </div>
             <p className="text-xs text-[var(--text-subtle)]">
               {installStatusText}
             </p>
