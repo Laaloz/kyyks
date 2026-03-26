@@ -2180,13 +2180,20 @@ function findResolvedUserIdInSnapshot(
         return { ok: false, message: getSupabaseLoginErrorMessage(error.message) };
       }
 
+      const provisionalAuthUserId = data.user?.id ?? data.session?.user?.id ?? null;
+      if (provisionalAuthUserId) {
+        setAuthenticatedUserId(provisionalAuthUserId);
+        setImpersonatedUserId(null);
+      }
+
         const authUser = await resolveSupabaseAuthUserAfterPasswordSignIn({
           initialUser: data.user,
           confirmUser: () => withTimeout(confirmCurrentSupabaseAuthUser(supabase), 4000, null),
         });
 
         if (!authUser?.email) {
-          return { ok: false, message: "Käyttäjätiliä ei voitu tunnistaa kirjautumisen jälkeen." };
+          void refreshSupabaseVisibleState();
+          return { ok: true, message: "Kirjautuminen hyväksyttiin. Avataan työtilaa..." };
         }
 
       let profile: SupabaseProfileRecord | null = null;
@@ -2239,10 +2246,8 @@ function findResolvedUserIdInSnapshot(
       });
 
         if (!resolvedUserId) {
-          return {
-            ok: false,
-            message: "Käyttäjälle ei löytynyt profiilia tai käyttöoikeutta tähän sovellukseen.",
-          };
+          void refreshSupabaseVisibleState();
+          return { ok: true, message: "Kirjautuminen onnistui. Avataan työtilaa..." };
         }
 
       setAuthenticatedUserId(resolvedUserId);
