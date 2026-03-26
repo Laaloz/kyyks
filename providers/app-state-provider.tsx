@@ -66,6 +66,36 @@ type PersistedSession = {
   impersonatedUserId: string | null;
 };
 
+function shiftIsoTimestamp(value: string | undefined, deltaMs: number) {
+  if (!value) {
+    return value;
+  }
+
+  const timestamp = new Date(value).getTime();
+  if (!Number.isFinite(timestamp)) {
+    return value;
+  }
+
+  return new Date(timestamp + deltaMs).toISOString();
+}
+
+function resolveWorkoutDateShiftDelta(referenceTimestamp: string, nextDate: string) {
+  const reference = new Date(referenceTimestamp);
+  if (!Number.isFinite(reference.getTime())) {
+    return null;
+  }
+
+  const match = nextDate.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (!match) {
+    return null;
+  }
+
+  const [, yearText, monthText, dayText] = match;
+  const shiftedReference = new Date(reference);
+  shiftedReference.setFullYear(Number(yearText), Number(monthText) - 1, Number(dayText));
+  return shiftedReference.getTime() - reference.getTime();
+}
+
 type SupabaseAuthSyncSource = "bootstrap" | "event";
 type SupabaseAuthEvent =
   | "INITIAL_SESSION"
@@ -1612,6 +1642,7 @@ interface AppStateContextValue {
   ) => Promise<ActionResult>;
   markConversationRead: () => void;
   startWorkout: (scheduledWorkoutId: string) => Promise<ActionResult>;
+  updateWorkoutDate: (scheduledWorkoutId: string, scheduledDate: string) => Promise<ActionResult>;
   updateWorkoutDuration: (scheduledWorkoutId: string, durationSeconds: number) => Promise<ActionResult>;
   updateWorkoutSet: (scheduledWorkoutId: string, logId: string, patch: WorkoutUpdateInput) => Promise<void>;
   saveWorkoutNote: (scheduledWorkoutId: string, body: string) => void;
@@ -4071,6 +4102,72 @@ function findResolvedUserIdInSnapshot(
 
         return { ok: true };
       },
+      async updateWorkoutDate(scheduledWorkoutId, scheduledDate) {
+        if (!currentUser) {
+          return { ok: false, message: "Kirjaudu sisään ennen treenipäivän muokkausta." };
+        }
+
+        const workout = state.scheduledWorkouts.find((item) => item.id === scheduledWorkoutId);
+        if (!workout || (!isAdminRole(currentUser.role) && workout.athleteId !== currentUser.id)) {
+          return { ok: false, message: "Treeniä ei löytynyt." };
+        }
+
+        const session = state.sessions.find((item) => item.scheduledWorkoutId === scheduledWorkoutId);
+        const referenceTimestamp = workout.completedAt ?? session?.completedAt ?? workout.scheduledDate;
+        const deltaMs = resolveWorkoutDateShiftDelta(referenceTimestamp, scheduledDate);
+        if (deltaMs === null) {
+          return { ok: false, message: "Anna treenille kelvollinen päivämäärä." };
+        }
+
+        const updatedAt = new Date().toISOString();
+        const previousState = state;
+
+        setState((previous) => ({
+          ...previous,
+          scheduledWorkouts: previous.scheduledWorkouts.map((item) =>
+            item.id === scheduledWorkoutId
+              ? {
+                  ...item,
+                  scheduledDate: shiftIsoTimestamp(item.scheduledDate, deltaMs) ?? item.scheduledDate,
+                  completedAt: shiftIsoTimestamp(item.completedAt, deltaMs),
+                  updatedAt,
+                }
+              : item,
+          ),
+          sessions: previous.sessions.map((item) =>
+            item.scheduledWorkoutId === scheduledWorkoutId
+              ? {
+                  ...item,
+                  startedAt: shiftIsoTimestamp(item.startedAt, deltaMs) ?? item.startedAt,
+                  completedAt: shiftIsoTimestamp(item.completedAt, deltaMs),
+                  pausedAt: shiftIsoTimestamp(item.pausedAt, deltaMs),
+                  updatedAt,
+                }
+              : item,
+          ),
+        }));
+
+        if (supabase) {
+          const response = await fetch(`/api/workouts/${encodeURIComponent(scheduledWorkoutId)}/date`, {
+            method: "PATCH",
+            headers: {
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({ scheduledDate }),
+          });
+          const payload = (await response.json().catch(() => null)) as { message?: string } | null;
+          if (!response.ok) {
+            setState(previousState);
+            await refreshSupabaseVisibleState();
+            return { ok: false, message: payload?.message ?? "Treenipäivän päivitys epäonnistui." };
+          }
+
+          void refreshSupabaseVisibleState();
+          return { ok: true };
+        }
+
+        return { ok: true };
+      },
       async updateWorkoutSet(scheduledWorkoutId, logId, patch) {
         if (!currentUser) {
           return;
@@ -4081,7 +4178,7 @@ function findResolvedUserIdInSnapshot(
           return;
         }
 
-        if (workout.status !== "in_progress") {
+        if (workout.status !== "in_progress" && workout.status !== "completed") {
           return;
         }
 

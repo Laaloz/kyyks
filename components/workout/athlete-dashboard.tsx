@@ -179,6 +179,7 @@ export function AthleteDashboard({
     startWorkout,
     startProgramWorkout,
     updateCurrentUserMeasurements,
+    updateWorkoutDate,
     updateWorkoutDuration,
     updateWorkoutSet,
     saveWorkoutNote,
@@ -1337,6 +1338,7 @@ export function AthleteDashboard({
                 selectedSession={selectedSession}
                 scheduledWorkoutId={selectedWorkout.id}
                 scheduledWorkoutTitle={normalizeWorkoutHistoryTitle(selectedWorkout.title)}
+                scheduledDate={selectedWorkout.completedAt ?? selectedSession?.completedAt ?? selectedWorkout.scheduledDate}
                 onStart={async () => {
                   const result = await startWorkout(selectedWorkout.id);
                   if (!result.ok) {
@@ -1355,6 +1357,11 @@ export function AthleteDashboard({
                 onUpdateDuration={async (durationSeconds) => {
                   const result = await updateWorkoutDuration(selectedWorkout.id, durationSeconds);
                   setWorkoutMessage(result.ok ? "Treeniaika päivitetty." : result.message);
+                  return result;
+                }}
+                onUpdateDate={async (scheduledDate: string) => {
+                  const result = await updateWorkoutDate(selectedWorkout.id, scheduledDate);
+                  setWorkoutMessage(result.ok ? "Treenipäivä päivitetty." : result.message);
                   return result;
                 }}
                 onSaveNote={(body) => saveWorkoutNote(selectedWorkout.id, body)}

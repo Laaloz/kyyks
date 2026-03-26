@@ -43,6 +43,7 @@ type PersistedWorkoutUiState = {
   restEndsAt?: number;
   restExerciseKey?: string;
   restExerciseName?: string;
+  hasSeenDragHint?: boolean;
 };
 
 const inputDragHandleClass =
@@ -290,6 +291,18 @@ function parseDurationInput(value: string) {
   return null;
 }
 
+function formatWorkoutDateInput(value: string) {
+  const timestamp = new Date(value);
+  if (!Number.isFinite(timestamp.getTime())) {
+    return "";
+  }
+
+  const year = timestamp.getFullYear();
+  const month = String(timestamp.getMonth() + 1).padStart(2, "0");
+  const day = String(timestamp.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
 function formatTargetReps(log: WorkoutSession["setLogs"][number]) {
   if (
     log.targetRepsMin !== undefined &&
@@ -341,8 +354,10 @@ export function AthleteSessionPanel({
   selectedSession,
   note,
   status,
+  scheduledDate,
   onStart,
   onUpdate,
+  onUpdateDate,
   onUpdateDuration,
   onSaveNote,
   onComplete,
@@ -365,8 +380,10 @@ export function AthleteSessionPanel({
   selectedSession?: WorkoutSession;
   note: string;
   status: string;
+  scheduledDate?: string;
   onStart: () => void | Promise<void>;
   onUpdate: (logId: string, patch: { actualReps?: number; actualLoad?: number; done?: boolean }) => void;
+  onUpdateDate: (scheduledDate: string) => Promise<{ ok: boolean; message?: string }>;
   onUpdateDuration: (durationSeconds: number) => Promise<{ ok: boolean; message?: string }>;
   onSaveNote: (body: string) => void;
   onComplete: () => void | Promise<void>;
@@ -411,9 +428,13 @@ export function AthleteSessionPanel({
   const [isSecondaryActionsOpen, setIsSecondaryActionsOpen] = useState(false);
   const [secondaryActionsAnchorRect, setSecondaryActionsAnchorRect] = useState<AnchorRect | null>(null);
   const [secondaryActionsMenuStyle, setSecondaryActionsMenuStyle] = useState<CSSProperties | null>(null);
+  const [scheduledDateDraft, setScheduledDateDraft] = useState("");
   const [durationDraft, setDurationDraft] = useState("");
+  const [dateMessage, setDateMessage] = useState("");
   const [durationMessage, setDurationMessage] = useState("");
+  const [isSavingDate, setIsSavingDate] = useState(false);
   const [isSavingDuration, setIsSavingDuration] = useState(false);
+  const [hasSeenDragHint, setHasSeenDragHint] = useState(false);
   const [isStartingWorkout, setIsStartingWorkout] = useState(false);
   const [isCancellingWorkout, setIsCancellingWorkout] = useState(false);
   const [isDeletingWorkout, setIsDeletingWorkout] = useState(false);
@@ -431,10 +452,12 @@ export function AthleteSessionPanel({
       setRestEndsAt(null);
       setRestExerciseKey(null);
       setRestExerciseName(null);
+      setHasSeenDragHint(false);
       return;
     }
 
     setLocalNote(persistedState.noteDraft ?? note);
+    setHasSeenDragHint(Boolean(persistedState.hasSeenDragHint));
 
     if (
       status === "in_progress" &&
@@ -467,8 +490,9 @@ export function AthleteSessionPanel({
       restEndsAt: restRunning ? restEndsAt ?? undefined : undefined,
       restExerciseKey: restRunning ? restExerciseKey ?? undefined : undefined,
       restExerciseName: restRunning ? restExerciseName ?? undefined : undefined,
+      hasSeenDragHint,
     });
-  }, [localNote, restEndsAt, restExerciseKey, restExerciseName, restRunning, restTotalSeconds, scheduledWorkoutId]);
+  }, [hasSeenDragHint, localNote, restEndsAt, restExerciseKey, restExerciseName, restRunning, restTotalSeconds, scheduledWorkoutId]);
 
   useEffect(() => {
     setCorrectionMode(initialCorrectionMode && status === "completed");
@@ -486,7 +510,9 @@ export function AthleteSessionPanel({
     setRestExerciseName(null);
     setExpandedExerciseKeys({});
     setOpenInstruction(null);
+    setDateMessage("");
     setDurationMessage("");
+    setHasSeenDragHint(false);
     setLoadDrafts({});
   }, [scheduledWorkoutId]);
 
@@ -535,6 +561,10 @@ export function AthleteSessionPanel({
   useEffect(() => {
     setDurationDraft(formatWorkoutDuration(elapsedSeconds));
   }, [elapsedSeconds, scheduledWorkoutId, correctionMode]);
+
+  useEffect(() => {
+    setScheduledDateDraft(scheduledDate ? formatWorkoutDateInput(scheduledDate) : "");
+  }, [scheduledDate, scheduledWorkoutId]);
 
   useEffect(() => {
     if (!restRunning || !restEndsAt) {
@@ -889,6 +919,8 @@ export function AthleteSessionPanel({
   const showDeleteAction = canDeleteWorkout;
   const showBottomBackToList = status !== "in_progress";
   const hasSecondaryActions = showResumeAction || showCancelAction || showDeleteAction;
+  const initialScheduledDateDraft = scheduledDate ? formatWorkoutDateInput(scheduledDate) : "";
+  const isDateDirty = scheduledDateDraft.trim() !== initialScheduledDateDraft;
   const isDurationDirty = durationDraft.trim() !== formatWorkoutDuration(elapsedSeconds);
   const roundToIncrement = (value: number, increment: number) => {
     const next = Math.round(value / increment) * increment;
@@ -931,6 +963,7 @@ export function AthleteSessionPanel({
 
     event.preventDefault();
     event.currentTarget.setPointerCapture(event.pointerId);
+    setHasSeenDragHint(true);
 
     setDragSession({
       logId: log.id,
@@ -1114,55 +1147,66 @@ export function AthleteSessionPanel({
     return (
       <div
         key={exerciseKey}
-        className={`overflow-hidden rounded-[1.35rem] border p-3.5 md:p-4.5 ${cardToneClass}`}
+        className={`overflow-hidden rounded-[1.35rem] border p-3 md:p-3.5 ${cardToneClass}`}
       >
-        <button
-          type="button"
-          className="group grid min-w-0 w-full grid-cols-[minmax(0,1fr)_auto] items-start gap-3 rounded-[1rem] px-1 py-0 text-left text-inherit transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--background)]"
-          id={disclosureButtonId}
-          aria-expanded={isExpanded}
-          aria-controls={disclosurePanelId}
-          onClick={() => setGroupExpansion(group)}
-        >
-          <span className="min-w-0">
-            <span className="flex items-center gap-2">
-              <span className={`size-2.5 rounded-full ${indicatorClass}`} aria-hidden="true" />
-              <span className="text-xs font-semibold tracking-[0.04em] text-[var(--text-subtle)]">
-                Liike
+        <div className="flex items-start gap-2 px-1">
+          <button
+            type="button"
+            className="group min-w-0 flex-1 rounded-[1rem] py-0 text-left text-inherit transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--background)]"
+            id={disclosureButtonId}
+            aria-expanded={isExpanded}
+            aria-controls={disclosurePanelId}
+            onClick={() => setGroupExpansion(group)}
+          >
+            <span className="min-w-0">
+              <span className="flex items-center gap-1.5">
+                <span className={`size-2.5 rounded-full ${indicatorClass}`} aria-hidden="true" />
+                <span className="text-xs font-semibold tracking-[0.04em] text-[var(--text-subtle)]">
+                  Liike
+                </span>
+              </span>
+              <span className="mt-0.5 block font-[family-name:var(--font-display)] text-[0.97rem] font-semibold leading-tight text-[var(--text)] md:text-[1.02rem]">
+                {exerciseName}
               </span>
             </span>
-            <span className="mt-1 block font-[family-name:var(--font-display)] text-base font-semibold leading-tight text-[var(--text)] md:text-[1.05rem]">
-              {exerciseName}
-            </span>
-          </span>
-
-          <span className="flex items-center justify-end self-center">
-            <span className={`grid size-9 place-items-center rounded-full border transition ${chevronClass}`}>
+          </button>
+          <div className="flex shrink-0 items-center gap-2 self-start">
+            {instruction ? (
+              <button
+                type="button"
+                aria-label={`${exerciseName} ohje`}
+                title="Ohje"
+                className="inline-flex size-8.5 items-center justify-center rounded-full border border-[color-mix(in_srgb,var(--accent)_22%,var(--border))] bg-[color-mix(in_srgb,var(--accent)_7%,var(--surface))] text-[var(--accent)] shadow-[0_4px_12px_-14px_var(--accent)] transition hover:border-[color-mix(in_srgb,var(--accent)_36%,var(--border))] hover:bg-[color-mix(in_srgb,var(--accent)_10%,var(--surface))] hover:opacity-95"
+                onClick={() => setOpenInstruction({ exerciseName, instruction })}
+              >
+                <BookOpen className="size-3.5" aria-hidden="true" />
+              </button>
+            ) : null}
+            <button
+              type="button"
+              className={`grid size-8.5 place-items-center rounded-full border transition ${chevronClass}`}
+              aria-label={isExpanded ? `Sulje ${exerciseName}` : `Avaa ${exerciseName}`}
+              aria-expanded={isExpanded}
+              aria-controls={disclosurePanelId}
+              onClick={() => setGroupExpansion(group)}
+            >
               {isExpanded ? (
                 <ChevronUp className="size-4" aria-hidden="true" />
               ) : (
                 <ChevronDown className="size-4" aria-hidden="true" />
               )}
-            </span>
-          </span>
-        </button>
-        <div className="mt-3 flex flex-wrap items-center gap-2 px-1">
-          <Badge className={`min-w-0 ${progressBadgeClass}`}>{completedInExercise}/{logs.length} tehty</Badge>
-          {targetSummary ? (
-            <span className="inline-flex max-w-full rounded-full border border-[var(--border)] bg-[var(--surface)] px-3 py-1 text-[11px] font-medium text-[var(--text-subtle)]">
-              <span className="truncate">{targetSummary}</span>
-            </span>
-          ) : null}
-          {instruction ? (
-            <button
-              type="button"
-              className="inline-flex items-center gap-1 rounded-full border border-[color-mix(in_srgb,var(--accent)_22%,var(--border))] bg-[color-mix(in_srgb,var(--accent)_7%,var(--surface))] px-2.5 py-0.5 text-[10px] font-semibold text-[var(--accent)] shadow-[0_4px_12px_-14px_var(--accent)] transition hover:border-[color-mix(in_srgb,var(--accent)_36%,var(--border))] hover:bg-[color-mix(in_srgb,var(--accent)_10%,var(--surface))] hover:opacity-95"
-              onClick={() => setOpenInstruction({ exerciseName, instruction })}
-            >
-              <BookOpen className="size-3.5" aria-hidden="true" />
-              Ohje
             </button>
-          ) : null}
+          </div>
+        </div>
+        <div className="mt-2 flex items-start gap-2 px-1">
+          <div className="flex min-w-0 flex-wrap items-center gap-1.5">
+            <Badge className={`min-w-0 ${progressBadgeClass}`}>{completedInExercise}/{logs.length} tehty</Badge>
+            {targetSummary ? (
+              <span className="inline-flex max-w-full min-w-0 rounded-full border border-[var(--border)] bg-[var(--surface)] px-2.5 py-0.5 text-[11px] font-medium text-[var(--text-subtle)]">
+                <span className="truncate">{targetSummary}</span>
+              </span>
+            ) : null}
+          </div>
         </div>
         {status === "completed" && previous ? (
           <p className="mt-2 px-1 text-xs text-[var(--text-subtle)]">
@@ -1180,20 +1224,20 @@ export function AthleteSessionPanel({
               <table className="w-full table-fixed border-collapse">
                 <thead>
                   <tr className="border-b border-[var(--border)] bg-[color-mix(in_srgb,var(--surface-3)_82%,var(--surface))] text-[10px] font-semibold uppercase tracking-[0.05em] text-[var(--text-subtle)]">
-                    <th scope="col" className="w-12 px-2 py-2.5 text-left md:w-13 md:px-3.5">Sarja</th>
-                    <th scope="col" className="px-2 py-2.5 text-left md:px-3.5">
+                    <th scope="col" className="w-11 px-2 py-2.5 text-left md:w-12 md:px-3">Sarja</th>
+                    <th scope="col" className="px-2 py-2.5 text-left md:px-3">
                       <span className="inline-flex items-center gap-1">
                         Toistot
                         <InfoTooltip text={repsTooltipText} />
                       </span>
                     </th>
-                    <th scope="col" className="px-2 py-2.5 text-left md:px-3.5">
+                    <th scope="col" className="px-2 py-2.5 text-left md:px-3">
                       <span className="inline-flex items-center gap-1">
                         Kuorma
                         <InfoTooltip text={loadTooltipText} />
                       </span>
                     </th>
-                    <th scope="col" className="w-12 px-2 py-2.5 text-center md:w-13 md:px-3.5 md:text-right">
+                    <th scope="col" className="w-11 px-2 py-2.5 text-center md:w-12 md:px-3 md:text-right">
                       <span className="inline-flex items-center justify-center gap-1 md:justify-end">Tila</span>
                     </th>
                   </tr>
@@ -1215,14 +1259,14 @@ export function AthleteSessionPanel({
                        key={log.id}
                        className={`border-b border-[var(--border)] last:border-b-0 ${rowToneClass}`}
                     >
-                      <td className="px-1 py-2.5 text-center align-middle md:px-3.5">
+                      <td className="px-1 py-2.5 text-center align-middle md:px-3">
                         <span
                           className={`inline-flex h-8 w-8 items-center justify-center text-xs font-semibold tabular-nums md:rounded-full md:border ${setLabelToneClass}`}
                         >
                           {log.setLabel}
                         </span>
                       </td>
-                      <td className="px-1 py-2.5 align-middle md:px-3.5">
+                      <td className="px-1 py-2.5 align-middle md:px-3">
                         <div className="relative">
                           <Input
                             className={`h-9 min-w-0 rounded-xl px-2 py-1 pr-9 text-center text-sm font-medium shadow-[inset_0_1px_0_0_var(--shadow-soft)] md:h-10 md:px-3 md:pr-10 ${inputToneClass}`}
@@ -1259,7 +1303,7 @@ export function AthleteSessionPanel({
                           </div>
                         </div>
                       </td>
-                      <td className="px-1 py-2.5 align-middle md:px-3.5">
+                      <td className="px-1 py-2.5 align-middle md:px-3">
                         <div className="relative">
                           <Input
                             className={`h-9 min-w-0 rounded-xl px-2 py-1 pr-9 text-center text-sm font-medium shadow-[inset_0_1px_0_0_var(--shadow-soft)] md:h-10 md:px-3 md:pr-10 ${inputToneClass}`}
@@ -1296,12 +1340,12 @@ export function AthleteSessionPanel({
                           </div>
                         </div>
                       </td>
-                      <td className="px-2 py-2.5 text-center align-middle md:px-3.5 md:text-right">
+                      <td className="px-1.5 py-2.5 text-center align-middle md:px-3 md:text-right">
                         <div className="flex justify-center md:justify-end">
                         <Button
                           type="button"
                           variant="ghost"
-                          className={`size-8 shrink-0 rounded-full p-0 shadow-[0_6px_18px_-12px_var(--shadow)] md:size-9 ${
+                          className={`size-8 shrink-0 rounded-full p-0 shadow-[0_6px_18px_-12px_var(--shadow)] md:size-8.5 ${
                             log.done
                               ? "border-[var(--success)] bg-[var(--success)] text-white hover:border-[var(--success)] hover:bg-[var(--success)] hover:text-white"
                               : "border-[var(--border-strong)] bg-[var(--surface)] text-[var(--text-subtle)] hover:border-[var(--border-strong)] hover:bg-[var(--surface)] hover:text-[var(--text-subtle)]"
@@ -1312,7 +1356,7 @@ export function AthleteSessionPanel({
                           title={log.done ? "Kumoa kuittaus" : "Merkitse tehdyksi"}
                           onClick={() => handleDoneUpdate(log, !log.done)}
                         >
-                          <Check className="size-4 shrink-0 stroke-[2.5] md:size-5" aria-hidden="true" />
+                          <Check className="size-4 shrink-0 stroke-[2.5]" aria-hidden="true" />
                         </Button>
                         </div>
                       </td>
@@ -1361,70 +1405,137 @@ export function AthleteSessionPanel({
       </div>
       {status === "completed" && correctionMode ? (
         <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface-2)] p-4">
-          <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
-            <div className="w-full sm:max-w-[16rem]">
-              <Label htmlFor={`${scheduledWorkoutId}-duration`}>Kesto</Label>
-              <Input
-                id={`${scheduledWorkoutId}-duration`}
-                type="text"
-                inputMode="text"
-                autoComplete="off"
-                autoCorrect="off"
-                spellCheck={false}
-                placeholder="Esim. 45:00 tai 01:15:00"
-                value={durationDraft}
-                onChange={(event) => {
-                  setDurationDraft(event.target.value);
-                  setDurationMessage("");
-                }}
-              />
-              <p className="mt-2 text-xs text-[var(--text-subtle)]">
-                Hyvaksyy muodot `mm:ss` ja `hh:mm:ss`.
+          <div className="mb-3 flex items-center justify-between gap-2 rounded-xl border border-[color-mix(in_srgb,var(--accent)_18%,var(--border))] bg-[color-mix(in_srgb,var(--accent)_6%,var(--surface))] px-3 py-2 text-xs text-[var(--text-subtle)]">
+            <span>Muokkaa valmiin treenin sarjoja, päivämäärää ja kestoa.</span>
+            <InfoTooltip
+              side="top"
+              text="Sarjamuutokset tallentuvat heti. Päivämäärä ja kesto tallennetaan niiden omista painikkeista."
+            />
+          </div>
+          <div className="grid gap-4 lg:grid-cols-2">
+            <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-4">
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+                <div className="w-full sm:max-w-[16rem]">
+                  <Label htmlFor={`${scheduledWorkoutId}-date`}>Päivämäärä</Label>
+                  <Input
+                    id={`${scheduledWorkoutId}-date`}
+                    type="date"
+                    value={scheduledDateDraft}
+                    onChange={(event) => {
+                      setScheduledDateDraft(event.target.value);
+                      setDateMessage("");
+                    }}
+                  />
+                  <p className="mt-2 text-xs text-[var(--text-subtle)]">
+                    Päivittää myös valmiin treenin toteutuspäivän samaan päivään.
+                  </p>
+                </div>
+                <Button
+                  type="button"
+                  variant={isDateDirty ? "secondary" : "ghost"}
+                  disabled={!isDateDirty || !scheduledDateDraft}
+                  loading={isSavingDate}
+                  loadingText="Tallennetaan päivää..."
+                  className="w-full sm:w-auto"
+                  onClick={async () => {
+                    setIsSavingDate(true);
+                    try {
+                      const result = await withMinimumDelay(onUpdateDate(scheduledDateDraft));
+                      setDateMessage(result.ok ? "Päivämäärä päivitetty." : result.message ?? "Päivämäärän päivitys epäonnistui.");
+                    } finally {
+                      setIsSavingDate(false);
+                    }
+                  }}
+                >
+                  Tallenna päivä
+                </Button>
+              </div>
+              <p
+                aria-live="polite"
+                className={`mt-3 text-sm ${
+                  !dateMessage
+                    ? "text-[var(--text-subtle)]"
+                    : dateMessage.includes("päivitetty") || dateMessage.includes("paivitetty")
+                      ? "text-[var(--success)]"
+                      : "text-[var(--danger)]"
+                }`}
+              >
+                {dateMessage || "Muokkaa treenin päivämäärää, jos haluat siirtää toteutuksen oikealle päivälle."}
               </p>
             </div>
-            <Button
-              type="button"
-              variant={isDurationDirty ? "secondary" : "ghost"}
-              disabled={!isDurationDirty}
-              loading={isSavingDuration}
-              loadingText="Tallennetaan kestoa..."
-              className="w-full sm:w-auto"
-              onClick={async () => {
-                const parsedDuration = parseDurationInput(durationDraft);
-                if (parsedDuration === null) {
-                  setDurationMessage("Anna kesto muodossa mm:ss tai hh:mm:ss.");
-                  return;
-                }
+            <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-4">
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+                <div className="w-full sm:max-w-[16rem]">
+                  <Label htmlFor={`${scheduledWorkoutId}-duration`}>Kesto</Label>
+                  <Input
+                    id={`${scheduledWorkoutId}-duration`}
+                    type="text"
+                    inputMode="text"
+                    autoComplete="off"
+                    autoCorrect="off"
+                    spellCheck={false}
+                    placeholder="Esim. 45:00 tai 01:15:00"
+                    value={durationDraft}
+                    onChange={(event) => {
+                      setDurationDraft(event.target.value);
+                      setDurationMessage("");
+                    }}
+                  />
+                  <p className="mt-2 text-xs text-[var(--text-subtle)]">
+                    Hyvaksyy muodot `mm:ss` ja `hh:mm:ss`.
+                  </p>
+                </div>
+                <Button
+                  type="button"
+                  variant={isDurationDirty ? "secondary" : "ghost"}
+                  disabled={!isDurationDirty}
+                  loading={isSavingDuration}
+                  loadingText="Tallennetaan kestoa..."
+                  className="w-full sm:w-auto"
+                  onClick={async () => {
+                    const parsedDuration = parseDurationInput(durationDraft);
+                    if (parsedDuration === null) {
+                      setDurationMessage("Anna kesto muodossa mm:ss tai hh:mm:ss.");
+                      return;
+                    }
 
-                setIsSavingDuration(true);
-                try {
-                  const result = await withMinimumDelay(onUpdateDuration(parsedDuration));
-                  setDurationMessage(result.ok ? "Kesto päivitetty." : result.message ?? "Keston päivitys epäonnistui.");
-                } finally {
-                  setIsSavingDuration(false);
-                }
-              }}
-            >
-              Tallenna kesto
-            </Button>
+                    setIsSavingDuration(true);
+                    try {
+                      const result = await withMinimumDelay(onUpdateDuration(parsedDuration));
+                      setDurationMessage(result.ok ? "Kesto päivitetty." : result.message ?? "Keston päivitys epäonnistui.");
+                    } finally {
+                      setIsSavingDuration(false);
+                    }
+                  }}
+                >
+                  Tallenna kesto
+                </Button>
+              </div>
+              <p
+                aria-live="polite"
+                className={`mt-3 text-sm ${
+                  !durationMessage
+                    ? "text-[var(--text-subtle)]"
+                    : durationMessage.includes("päivitetty") || durationMessage.includes("paivitetty")
+                      ? "text-[var(--success)]"
+                      : "text-[var(--danger)]"
+                }`}
+              >
+                {durationMessage || "Muokkaa treenin kokonaiskestoa, jos ajastin jäi liian pitkäksi tai lyhyeksi."}
+              </p>
+            </div>
           </div>
-          <p
-            aria-live="polite"
-            className={`mt-3 text-sm ${
-              !durationMessage
-                ? "text-[var(--text-subtle)]"
-                : durationMessage.includes("päivitetty") || durationMessage.includes("paivitetty")
-                  ? "text-[var(--success)]"
-                  : "text-[var(--danger)]"
-            }`}
-          >
-            {durationMessage || "Muokkaa treenin kokonaiskestoa, jos ajastin jäi liian pitkäksi tai lyhyeksi."}
-          </p>
         </div>
       ) : null}
       <p aria-live="polite" className="sr-only">
         {workoutMessage}
       </p>
+      {!readOnly && !hasSeenDragHint ? (
+        <div className="flex items-center justify-between gap-2 rounded-xl border border-[color-mix(in_srgb,var(--accent)_18%,var(--border))] bg-[color-mix(in_srgb,var(--accent)_6%,var(--surface))] px-3 py-2 text-xs text-[var(--text-subtle)]">
+          <span>Toisto- ja kuormakentissä voit painaa oikean reunan kahvaa ja vetää ylös tai alas muuttaaksesi arvoa.</span>
+          <GripVertical className="size-3.5 shrink-0 text-[var(--accent)]" aria-hidden="true" />
+        </div>
+      ) : null}
       {exerciseRenderBlocks.map((block) => {
         if (block.type === "single") {
           return renderExerciseGroupCard(block.groups[0]!);
@@ -1684,19 +1795,12 @@ export function AthleteSessionPanel({
               ) : null}
             </>
           ) : (
-            <div className="inline-flex items-center gap-1">
+            <div className="inline-flex items-center gap-1.5">
               {showBottomBackToList ? (
                 <Button onClick={onBackToList} type="button" variant="ghost">
-                  Takaisin treenilistaan
+                  {correctionMode ? "Valmis" : "Takaisin treenilistaan"}
                 </Button>
               ) : null}
-              <Button onClick={() => setCorrectionMode((value) => !value)} type="button" variant={correctionMode ? "secondary" : "ghost"}>
-                {correctionMode ? "Sulje muokkaus" : "Avaa muokkaus"}
-              </Button>
-              <InfoTooltip
-                side="top"
-                text="Muokkaustilassa voit päivittää valmiin treenin sarjamerkintöjä, muistiinpanoja ja kokonaiskestoa."
-              />
               {showDeleteAction ? (
                 <div className="relative" data-session-actions-menu-root="true">
                   <Button

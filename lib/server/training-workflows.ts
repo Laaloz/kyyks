@@ -1035,6 +1035,10 @@ export async function updateWorkoutSetOnServer({
     return { ok: false as const, message: "Treeniä ei löytynyt." };
   }
 
+  if (workout.status !== "in_progress" && workout.status !== "completed") {
+    return { ok: false as const, message: "Sarjoja voi muokata vain aktiivisesta tai valmiista treenistä." };
+  }
+
   const { data: targetLog } = await admin
     .from("workout_set_logs")
     .select("id, template_exercise_id, set_id, set_label, superset_group, target_reps, target_reps_min, target_load, actual_reps, actual_load, done")
@@ -1395,6 +1399,108 @@ export async function updateWorkoutDurationOnServer({
 
   if (error) {
     return { ok: false as const, message: "Treeniaikaa ei voitu päivittää." };
+  }
+
+  return { ok: true as const };
+}
+
+export async function updateWorkoutDateOnServer({
+  requester,
+  scheduledWorkoutId,
+  scheduledDate,
+}: {
+  requester: RequesterProfile;
+  scheduledWorkoutId: string;
+  scheduledDate: string;
+}) {
+  const match = scheduledDate.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (!match) {
+    return { ok: false as const, message: "Anna treenille kelvollinen päivämäärä." };
+  }
+
+  const admin = createSupabaseAdminClient();
+  if (!admin) {
+    return { ok: false as const, message: "Supabase admin -yhteys puuttuu. Tarkista service role -avain." };
+  }
+
+  const { data: workout } = await admin
+    .from("scheduled_workouts")
+    .select("id, athlete_id, scheduled_date, completed_at")
+    .eq("id", scheduledWorkoutId)
+    .maybeSingle<{
+      id: string;
+      athlete_id: string;
+      scheduled_date: string;
+      completed_at: string | null;
+    }>();
+
+  if (!workout || (!isAdminRole(requester.role) && workout.athlete_id !== requester.id)) {
+    return { ok: false as const, message: "Treeniä ei löytynyt." };
+  }
+
+  const { data: session } = await admin
+    .from("workout_sessions")
+    .select("id, started_at, completed_at, paused_at")
+    .eq("scheduled_workout_id", scheduledWorkoutId)
+    .maybeSingle<{
+      id: string;
+      started_at: string;
+      completed_at: string | null;
+      paused_at: string | null;
+    }>();
+
+  const referenceTimestamp = workout.completed_at ?? session?.completed_at ?? workout.scheduled_date;
+  const reference = new Date(referenceTimestamp);
+  if (!Number.isFinite(reference.getTime())) {
+    return { ok: false as const, message: "Treenipäivää ei voitu päivittää." };
+  }
+
+  const [, yearText, monthText, dayText] = match;
+  const shiftedReference = new Date(reference);
+  shiftedReference.setFullYear(Number(yearText), Number(monthText) - 1, Number(dayText));
+  const deltaMs = shiftedReference.getTime() - reference.getTime();
+  const updatedAt = nowIso();
+
+  const shiftTimestamp = (value: string | null) => {
+    if (!value) {
+      return value;
+    }
+
+    const timestamp = new Date(value).getTime();
+    if (!Number.isFinite(timestamp)) {
+      return value;
+    }
+
+    return new Date(timestamp + deltaMs).toISOString();
+  };
+
+  const workoutUpdate = await admin
+    .from("scheduled_workouts")
+    .update({
+      scheduled_date: shiftTimestamp(workout.scheduled_date),
+      completed_at: shiftTimestamp(workout.completed_at),
+      updated_at: updatedAt,
+    })
+    .eq("id", scheduledWorkoutId);
+
+  if (workoutUpdate.error) {
+    return { ok: false as const, message: "Treenipäivän päivitys epäonnistui." };
+  }
+
+  if (session) {
+    const sessionUpdate = await admin
+      .from("workout_sessions")
+      .update({
+        started_at: shiftTimestamp(session.started_at),
+        completed_at: shiftTimestamp(session.completed_at),
+        paused_at: shiftTimestamp(session.paused_at),
+        updated_at: updatedAt,
+      })
+      .eq("id", session.id);
+
+    if (sessionUpdate.error) {
+      return { ok: false as const, message: "Treenipäivän päivitys epäonnistui." };
+    }
   }
 
   return { ok: true as const };
