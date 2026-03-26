@@ -7,13 +7,13 @@ import { createSupabaseServerClient } from "@/lib/supabase/server";
 
 export async function GET(request: Request) {
   const timer = createRequestTimer("app-state");
-  const supabase = await createSupabaseServerClient();
+  const authorization = request.headers.get("authorization");
+  const accessToken = authorization?.startsWith("Bearer ") ? authorization.slice(7) : undefined;
+  const supabase = await createSupabaseServerClient({ accessToken });
   if (!supabase) {
     return timer.json({ message: "Supabase ei ole käytössä tässä ympäristössä." }, { status: 503 });
   }
 
-  const authorization = request.headers.get("authorization");
-  const accessToken = authorization?.startsWith("Bearer ") ? authorization.slice(7) : undefined;
   const {
     data: { user },
   } = accessToken ? await supabase.auth.getUser(accessToken) : await supabase.auth.getUser();

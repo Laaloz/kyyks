@@ -72,6 +72,7 @@ describe("GET /api/app-state", () => {
       }),
     );
 
+    expect(createSupabaseServerClientMock).toHaveBeenCalledWith({ accessToken: "token-123" });
     expect(getUser).toHaveBeenCalledWith("token-123");
     expect(ensureProfileForAuthenticatedUserOnServerMock).toHaveBeenCalledWith({
       authUserId: "user-1",
@@ -122,6 +123,7 @@ describe("GET /api/app-state", () => {
 
     const response = await GET(new Request("https://example.com/api/app-state"));
 
+    expect(createSupabaseServerClientMock).toHaveBeenCalledWith({ accessToken: undefined });
     expect(getUser).toHaveBeenCalledWith();
     expect(response.status).toBe(200);
   });

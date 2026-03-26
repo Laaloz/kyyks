@@ -2,7 +2,7 @@ import { createServerClient } from "@supabase/ssr";
 import { cookies } from "next/headers";
 import type { CookieOptions } from "@supabase/ssr";
 
-export async function createSupabaseServerClient() {
+export async function createSupabaseServerClient(options?: { accessToken?: string }) {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 
@@ -13,6 +13,13 @@ export async function createSupabaseServerClient() {
   const cookieStore = await cookies();
 
   return createServerClient(url, anonKey, {
+    global: options?.accessToken
+      ? {
+          headers: {
+            Authorization: `Bearer ${options.accessToken}`,
+          },
+        }
+      : undefined,
     cookies: {
       getAll() {
         return cookieStore.getAll();
