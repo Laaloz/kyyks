@@ -522,7 +522,7 @@ export function UserSettingsPanel({ adminOnly = false }: { adminOnly?: boolean }
           </form>
         </Card>
 
-        <Card>
+        <Card className="lg:hidden">
           <p className="text-xs font-semibold tracking-[0.04em] text-[var(--text-subtle)]">Kotivalikko</p>
           <CardTitle className="text-2xl">Lisää kotivalikkoon</CardTitle>
           <CardDescription className="mt-2">
@@ -549,10 +549,10 @@ export function UserSettingsPanel({ adminOnly = false }: { adminOnly?: boolean }
                     <p>{installHelp.text}</p>
                   </div>
                 ) : (
-                  <p>
+                  <p className="leading-6">
                     iPhone/iPad: paina Safarissa{" "}
-                    <span className="inline-flex items-center gap-1 align-middle font-medium text-[var(--text)]">
-                      <Share className="size-4 text-[var(--accent)]" />
+                    <span className="inline-flex items-center gap-1 align-baseline font-medium text-[var(--text)]">
+                      <Share className="size-[0.95rem] text-[var(--accent)]" />
                       Jaa
                     </span>{" "}
                     ja valitse Lisää kotivalikkoon.
