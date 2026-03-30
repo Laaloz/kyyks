@@ -11,6 +11,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardDescription, CardTitle } from "@/components/ui/card";
 import { Input, Label, Select } from "@/components/ui/field";
+import { OwnMeasurementsCard } from "@/components/workout/own-measurements-card";
 import { getAdminCoachingCoverage, getAdminOverviewAthleteGroups } from "@/lib/admin-overview";
 import { getInviteLifecycleLabel, getVisiblePendingInvites } from "@/lib/invite-status";
 import { withMinimumDelay } from "@/lib/min-delay";
@@ -20,9 +21,15 @@ import { formatDate } from "@/lib/utils";
 import { useAppState } from "@/providers/app-state-provider";
 
 import { inviteSchema } from "@/components/workout/schemas";
-import { MetricGrid, roleLabel, type WorkspaceView } from "@/components/workout/shared";
+import { MetricGrid, OwnTrainingOverviewCard, roleLabel, type WorkspaceView } from "@/components/workout/shared";
 
-export function AdminDashboard({ view }: { view: WorkspaceView }) {
+export function AdminDashboard({
+  view,
+  onOpenWorkoutLog,
+}: {
+  view: WorkspaceView;
+  onOpenWorkoutLog?: () => void;
+}) {
   const { currentUser, state, notify, createInvite, resendInvite } = useAppState();
   const formId = useId();
   const [inviteMessage, setInviteMessage] = useState<string>("");
@@ -176,6 +183,16 @@ export function AdminDashboard({ view }: { view: WorkspaceView }) {
     <div className="grid gap-6">
       {view === "overview" ? (
         <>
+          {currentUser ? (
+            <OwnTrainingOverviewCard
+              currentUser={currentUser}
+              state={state}
+              onOpenWorkoutLog={onOpenWorkoutLog}
+            />
+          ) : null}
+
+          <OwnMeasurementsCard />
+
           <MetricGrid
             metrics={[
               { label: "Vastuuhenkilöt", value: coaches.length, icon: ShieldCheck },

@@ -365,6 +365,7 @@ describe("shouldPreserveStoredSessionDuringSupabaseBootstrap", () => {
         email: "laaloceesay+test@gmail.com",
         default_dashboard_view: "athlete-log",
         email_notifications: false,
+        weekly_measurement_reminders: true,
         theme_mode: "light",
         load_increment_kg: 2.5,
         height_cm: 181,
@@ -463,6 +464,7 @@ describe("shouldPreserveStoredSessionDuringSupabaseBootstrap", () => {
           settings: {
             defaultDashboardView: "athlete-log",
             emailNotifications: false,
+            weeklyMeasurementReminders: true,
             themeMode: "light",
             loadIncrementKg: 2.5,
           },
@@ -530,6 +532,7 @@ describe("shouldPreserveStoredSessionDuringSupabaseBootstrap", () => {
           settings: {
             defaultDashboardView: "athlete-log",
             emailNotifications: false,
+            weeklyMeasurementReminders: true,
             themeMode: "light",
             loadIncrementKg: 2.5,
           },
@@ -577,6 +580,7 @@ describe("shouldPreserveStoredSessionDuringSupabaseBootstrap", () => {
         settings: {
           defaultDashboardView: "athlete-log",
           emailNotifications: false,
+          weeklyMeasurementReminders: true,
           themeMode: "light",
           loadIncrementKg: 2.5,
         },

@@ -1,7 +1,13 @@
 import type { ComponentType } from "react";
 
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
-import { PROGRAMS_DASHBOARD_VIEW, type DashboardHomeView, type Role } from "@/lib/types";
+import { CardDescription, CardTitle } from "@/components/ui/card";
+import { isProgramActive } from "@/lib/program-status";
+import { normalizeWorkoutHistoryTitle } from "@/lib/workout-history-title";
+import { formatDateWithWeekday } from "@/lib/utils";
+import { PROGRAMS_DASHBOARD_VIEW, type AppState, type DashboardHomeView, type Role, type UserProfile } from "@/lib/types";
 
 export const PROGRAMS_WORKSPACE_VIEW = PROGRAMS_DASHBOARD_VIEW;
 
@@ -79,5 +85,83 @@ export function MetricGrid({
         </Card>
       ))}
     </div>
+  );
+}
+
+export function OwnTrainingOverviewCard({
+  currentUser,
+  state,
+  onOpenWorkoutLog,
+}: {
+  currentUser: UserProfile;
+  state: AppState;
+  onOpenWorkoutLog?: () => void;
+}) {
+  const ownPrograms = state.plans.filter(
+    (plan) => plan.athleteId === currentUser.id && Boolean(plan.workouts?.length) && isProgramActive(plan),
+  );
+  const ownWorkouts = state.scheduledWorkouts.filter((workout) => workout.athleteId === currentUser.id);
+  const inProgressCount = ownWorkouts.filter((workout) => workout.status === "in_progress").length;
+  const completedLastWeekCount = ownWorkouts.filter((workout) => {
+    if (workout.status !== "completed") {
+      return false;
+    }
+
+    const completedMoment = Date.parse(workout.completedAt ?? workout.updatedAt);
+    return Number.isFinite(completedMoment) && Date.now() - completedMoment <= 7 * 24 * 60 * 60 * 1000;
+  }).length;
+  const latestCompletedWorkout = [...ownWorkouts]
+    .filter((workout) => workout.status === "completed")
+    .sort((left, right) =>
+      (right.completedAt ?? right.updatedAt).localeCompare(left.completedAt ?? left.updatedAt),
+    )[0];
+
+  return (
+    <Card className="border-[var(--border-strong)]">
+      <div className="grid gap-5 xl:grid-cols-[1.05fr_0.95fr] xl:items-end">
+        <div className="space-y-3">
+          <p className="text-xs font-semibold tracking-[0.04em] text-[var(--text-subtle)]">Oma treeniseuranta</p>
+          <CardTitle className="text-2xl">Pidä myös oma progressi näkyvissä</CardTitle>
+          <CardDescription className="max-w-3xl leading-6">
+            Treenit-workspacesta näet omat ohjelmat, käynnissä olevat treenit ja viimeisimmät toteutukset ilman että valmennus- tai hallintanäkymä katoaa ympäriltä.
+          </CardDescription>
+          <div className="flex flex-wrap items-center gap-3">
+            <Button type="button" variant="secondary" onClick={() => onOpenWorkoutLog?.()}>
+              Avaa omat treenit
+            </Button>
+            <Badge>{currentUser.fullName}</Badge>
+          </div>
+        </div>
+        <div className="grid gap-3 sm:grid-cols-3 xl:grid-cols-1 2xl:grid-cols-3">
+          <div className="rounded-xl border-2 border-[var(--border)] bg-[var(--surface-2)] px-4 py-4">
+            <p className="text-xs font-semibold tracking-[0.04em] text-[var(--text-subtle)]">Aktiiviset ohjelmat</p>
+            <p className="mt-2 text-2xl font-semibold text-[var(--text)]">{ownPrograms.length}</p>
+            <p className="mt-1 text-sm text-[var(--text-muted)]">omaan käyttöön rakennetut ohjelmat</p>
+          </div>
+          <div className="rounded-xl border-2 border-[var(--border)] bg-[var(--surface-2)] px-4 py-4">
+            <p className="text-xs font-semibold tracking-[0.04em] text-[var(--text-subtle)]">Kesken nyt</p>
+            <p className="mt-2 text-2xl font-semibold text-[var(--text)]">{inProgressCount}</p>
+            <p className="mt-1 text-sm text-[var(--text-muted)]">treeni odottaa jatkamista</p>
+          </div>
+          <div className="rounded-xl border-2 border-[var(--border)] bg-[var(--surface-2)] px-4 py-4">
+            <p className="text-xs font-semibold tracking-[0.04em] text-[var(--text-subtle)]">Valmiit 7 päivässä</p>
+            <p className="mt-2 text-2xl font-semibold text-[var(--text)]">{completedLastWeekCount}</p>
+            <p className="mt-1 text-sm text-[var(--text-muted)]">omaa toteutusta viime viikolta</p>
+          </div>
+        </div>
+      </div>
+
+      <div className="mt-5 rounded-2xl border border-[var(--border)] bg-[var(--surface-2)] p-4">
+        <p className="text-xs font-semibold tracking-[0.04em] text-[var(--text-subtle)]">Viimeisin valmis treeni</p>
+        <p className="mt-2 text-lg font-semibold text-[var(--text)]">
+          {latestCompletedWorkout ? normalizeWorkoutHistoryTitle(latestCompletedWorkout.title) : "Ei vielä valmiita omia treenejä"}
+        </p>
+        <p className="mt-1 text-sm text-[var(--text-muted)]">
+          {latestCompletedWorkout
+            ? formatDateWithWeekday(latestCompletedWorkout.completedAt ?? latestCompletedWorkout.updatedAt)
+            : "Kun teet oman treenin valmiiksi, viimeisin toteutus näkyy tässä automaattisesti."}
+        </p>
+      </div>
+    </Card>
   );
 }

@@ -15,7 +15,7 @@ import { InlineFeedback } from "@/components/workout/inline-feedback";
 import { bodyMeasurementSchema, userSettingsSchema } from "@/components/workout/schemas";
 import { roleLabel } from "@/components/workout/shared";
 import { withMinimumDelay } from "@/lib/min-delay";
-import { getDashboardViewsForRole, getDefaultDashboardView } from "@/lib/role-access";
+import { canTrackOwnTraining, getDashboardViewsForRole, getDefaultDashboardView } from "@/lib/role-access";
 import { PROGRAMS_DASHBOARD_VIEW, type DashboardHomeView, type Role, type ThemeMode } from "@/lib/types";
 import { useAppState } from "@/providers/app-state-provider";
 
@@ -97,6 +97,7 @@ export function UserSettingsPanel({ adminOnly = false }: { adminOnly?: boolean }
         currentUser?.settings?.defaultDashboardView,
       ),
       emailNotifications: currentUser?.settings?.emailNotifications ?? false,
+      weeklyMeasurementReminders: currentUser?.settings?.weeklyMeasurementReminders ?? true,
       themeMode: currentUser?.settings?.themeMode ?? "light",
       loadIncrementKg: currentUser?.settings?.loadIncrementKg ?? 2.5,
     },
@@ -118,6 +119,7 @@ export function UserSettingsPanel({ adminOnly = false }: { adminOnly?: boolean }
       fullName: currentUser.fullName,
       defaultDashboardView: resolveDefaultView(currentUser.role, currentUser.settings?.defaultDashboardView),
       emailNotifications: currentUser.settings?.emailNotifications ?? false,
+      weeklyMeasurementReminders: currentUser.settings?.weeklyMeasurementReminders ?? true,
       themeMode: currentUser.settings?.themeMode ?? "light",
       loadIncrementKg: currentUser.settings?.loadIncrementKg ?? 2.5,
     });
@@ -149,6 +151,7 @@ export function UserSettingsPanel({ adminOnly = false }: { adminOnly?: boolean }
   const settingsDefaultView = form.watch("defaultDashboardView");
   const settingsThemeMode = form.watch("themeMode");
   const settingsEmailNotifications = form.watch("emailNotifications");
+  const settingsWeeklyMeasurementReminders = form.watch("weeklyMeasurementReminders");
   const settingsLoadIncrementKg = form.watch("loadIncrementKg");
   const submitProfile = async () => {
     const trimmedFullName = profileName.trim();
@@ -176,6 +179,7 @@ export function UserSettingsPanel({ adminOnly = false }: { adminOnly?: boolean }
           fullName: trimmedFullName,
           defaultDashboardView: settingsDefaultView,
           emailNotifications: settingsEmailNotifications,
+          weeklyMeasurementReminders: settingsWeeklyMeasurementReminders,
           themeMode: settingsThemeMode,
           loadIncrementKg: settingsLoadIncrementKg,
         }),
@@ -356,14 +360,14 @@ export function UserSettingsPanel({ adminOnly = false }: { adminOnly?: boolean }
               step="0.5"
               placeholder="Esim. 178"
               value={heightCmDraft}
-              disabled={isSavingProfile || currentUser.role !== "athlete"}
+              disabled={isSavingProfile || !canTrackOwnTraining(currentUser.role)}
               onChange={(event) => {
                 setHeightCmDraft(event.target.value);
                 setProfileMessage("");
               }}
             />
             <p className="mt-2 text-xs text-[var(--text-subtle)]">
-              Pituus on pysyvä profiilitieto. Päivitä paino ja vyötärö edelleen yleiskuvan mittaseurannasta.
+              Pituus on pysyvä profiilitieto. Päivitä paino ja vyötärö edelleen yleiskuvan omasta mittaseurannasta.
             </p>
           </div>
 
@@ -473,6 +477,30 @@ export function UserSettingsPanel({ adminOnly = false }: { adminOnly?: boolean }
               <p className="mt-2 text-xs text-[var(--text-subtle)]">
                 Tätä askelta käytetään treenitaulukon kuorman vetosäädössä ja näppäimistöohjauksessa.
               </p>
+            </div>
+
+            <div
+              role="group"
+              aria-labelledby="settings-weekly-measurements-label"
+              className="space-y-3 rounded-xl border-2 border-[var(--border)] bg-[var(--surface-2)] p-4"
+            >
+              <p
+                id="settings-weekly-measurements-label"
+                className="text-xs font-semibold tracking-[0.03em] text-[var(--text-subtle)]"
+              >
+                Viikoittaiset mittausilmoitukset
+              </p>
+              <label className="flex items-center gap-3">
+                <input
+                  type="checkbox"
+                  className="size-4 accent-[var(--accent)]"
+                  disabled={isSavingSettings}
+                  {...form.register("weeklyMeasurementReminders")}
+                />
+                <span className="text-sm text-[var(--text-muted)]">
+                  Näytä perjantain viikkomuistutus painon ja vyötärön päivittämiseen
+                </span>
+              </label>
             </div>
 
             <div
@@ -658,6 +686,13 @@ export function UserSettingsPanel({ adminOnly = false }: { adminOnly?: boolean }
                 Ilmoitukset
               </span>
               <Badge>{currentUser.settings?.emailNotifications ? "Päällä" : "Pois"}</Badge>
+            </div>
+            <div className="flex items-center justify-between rounded-xl border-2 border-[var(--border)] bg-[var(--surface-2)] px-4 py-3">
+              <span className="inline-flex items-center gap-2 text-sm text-[var(--text-muted)]">
+                <Bell className="size-4 text-[var(--accent-secondary)]" />
+                Viikkomuistutus
+              </span>
+              <Badge>{currentUser.settings?.weeklyMeasurementReminders ?? true ? "Päällä" : "Pois"}</Badge>
             </div>
           </div>
         </Card>

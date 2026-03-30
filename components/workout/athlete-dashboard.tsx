@@ -24,6 +24,7 @@ import { estimateStrengthCalories, getLatestMeasurement, getMeasurementsForUser,
 import { calculateSessionDurationSeconds, getSessionProgress } from "@/lib/domain";
 import { withMinimumDelay } from "@/lib/min-delay";
 import { isProgramActive } from "@/lib/program-status";
+import { canTrackOwnTraining } from "@/lib/role-access";
 import { buildScheduledWorkoutExerciseOrder } from "@/lib/workout-exercise-order";
 import { buildWorkoutConversationContextOptions } from "@/lib/workout-conversation-context";
 import { buildWorkoutHistoryTitleMap, normalizeWorkoutHistoryTitle } from "@/lib/workout-history-title";
@@ -389,8 +390,9 @@ export function AthleteDashboard({
   };
   const nextWeightKg = parseMeasurementField(measurementDraft.weightKg);
   const nextWaistCm = parseMeasurementField(measurementDraft.waistCm);
+  const canTrackOwnMeasurements = canTrackOwnTraining(currentUser?.role);
   const isMeasurementDirty =
-    currentUser?.role === "athlete" &&
+    canTrackOwnMeasurements &&
     (currentUser.weightKg !== nextWeightKg ||
       currentUser.waistCm !== nextWaistCm);
   const weightTrendPoints = useMemo(
@@ -996,7 +998,7 @@ export function AthleteDashboard({
         </Card>
       )}
 
-      {view === "overview" && currentUser?.role === "athlete" ? (
+      {view === "overview" && canTrackOwnMeasurements ? (
         <div
           ref={measurementsSectionRef}
           id="overview-measurements"
@@ -1005,9 +1007,9 @@ export function AthleteDashboard({
             <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
               <div>
                 <p className="text-xs font-semibold tracking-[0.04em] text-[var(--text-subtle)]">Kehon seuranta</p>
-                <CardTitle className="mt-2 text-2xl">Mitat ja kehitys</CardTitle>
+                <CardTitle className="mt-2 text-2xl">Omat mitat ja kehitys</CardTitle>
                 <CardDescription className="mt-2 max-w-3xl">
-                  Näet tästä viimeisimmät mitat ja niiden kehityksen. Kun kirjaat uuden mittauksen, seuranta päivittyy automaattisesti.
+                  Näet tästä omat viimeisimmät mittasi ja niiden kehityksen. Kun kirjaat uuden mittauksen, seuranta päivittyy automaattisesti.
                 </CardDescription>
             </div>
             <div className="grid w-full gap-3 sm:grid-cols-2 xl:w-auto xl:min-w-[38rem] xl:grid-cols-4">
@@ -1022,7 +1024,7 @@ export function AthleteDashboard({
                   {currentUser.heightCm !== undefined ? `${currentUser.heightCm} cm` : "Ei asetettu"}
                 </p>
                 <p className="mt-2 text-xs text-[var(--text-subtle)]">
-                  Päivitä pituus tilin profiilista. Paino ja vyötärö kirjataan alle mittaseurantaan.
+                  Päivitä pituus tilin profiilista. Paino ja vyötärö kirjataan alle omaan mittaseurantaan.
                 </p>
               </div>
               <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface-2)] px-4 py-4">
@@ -1050,7 +1052,7 @@ export function AthleteDashboard({
               <div>
                 <p className="text-sm font-semibold text-[var(--text)]">Kirjaa uusi mittaus</p>
                 <p className="text-sm text-[var(--text-muted)]">
-                  Lisää tähän uusin mittaus, kun haluat päivittää seurannan. Voit täyttää vain ne kentät, joihin tuli muutos.
+                  Lisää tähän uusin mittaus, kun haluat päivittää oman seurannan. Voit täyttää vain ne kentät, joihin tuli muutos.
                 </p>
               </div>
             </div>

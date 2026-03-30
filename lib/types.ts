@@ -25,6 +25,7 @@ export type LoadIncrement = 1 | 2.5 | 5;
 export interface UserSettings {
   defaultDashboardView: DashboardHomeView;
   emailNotifications: boolean;
+  weeklyMeasurementReminders: boolean;
   themeMode: ThemeMode;
   loadIncrementKg: LoadIncrement;
 }

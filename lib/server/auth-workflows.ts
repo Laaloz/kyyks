@@ -69,6 +69,7 @@ function mapStoredProfileRecord(profile: {
   email: string;
   default_dashboard_view: string | null;
   email_notifications: boolean;
+  weekly_measurement_reminders: boolean;
   theme_mode: "light" | "dark";
   load_increment_kg: 1 | 2.5 | 5 | null;
   height_cm: number | null;
@@ -99,6 +100,7 @@ function mapStoredProfileRecord(profile: {
             ? "athlete-log"
             : "overview",
       emailNotifications: profile.email_notifications,
+      weeklyMeasurementReminders: profile.weekly_measurement_reminders,
       themeMode: profile.theme_mode,
       loadIncrementKg: profile.load_increment_kg ?? 2.5,
     },
@@ -150,6 +152,7 @@ async function upsertActiveProfileFromInvite({
       status: "active",
       default_dashboard_view: invite.role === "athlete" ? "athlete-log" : "overview",
       email_notifications: false,
+      weekly_measurement_reminders: true,
       theme_mode: "light",
       load_increment_kg: 2.5,
       created_at: createdAt,
@@ -671,7 +674,7 @@ export async function listVisiblePendingInvites({
   const { data: profiles, error: profilesError } = await admin
     .from("profiles")
     .select(
-      "id, role, status, full_name, email, default_dashboard_view, email_notifications, theme_mode, load_increment_kg, height_cm, weight_kg, waist_cm, created_at, updated_at",
+      "id, role, status, full_name, email, default_dashboard_view, email_notifications, weekly_measurement_reminders, theme_mode, load_increment_kg, height_cm, weight_kg, waist_cm, created_at, updated_at",
     )
     .eq("status", "active")
     .in("email", normalizedEmails);

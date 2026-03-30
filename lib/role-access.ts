@@ -24,6 +24,10 @@ export function canActAsCoach(role: Role | null | undefined) {
   return role === "admin" || role === "coach";
 }
 
+export function canTrackOwnTraining(role: Role | null | undefined) {
+  return role === "admin" || role === "coach" || role === "athlete";
+}
+
 export function isAdminRole(role: Role | null | undefined) {
   return role === "admin";
 }

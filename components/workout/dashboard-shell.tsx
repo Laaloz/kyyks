@@ -130,7 +130,10 @@ export function DashboardShell() {
   const activeTabId = `workspace-tab-${activePrimaryView}`;
   const activePanelId = `workspace-panel-${activePrimaryView}`;
   const measurementReminder = getMeasurementReminderState(state, currentUser);
-  const shouldShowMeasurementReminder = currentUser.role === "athlete" && (measurementReminder.isDue || isReminderPreviewMode);
+  const weeklyMeasurementRemindersEnabled = currentUser.settings?.weeklyMeasurementReminders ?? true;
+  const shouldShowMeasurementReminder =
+    weeklyMeasurementRemindersEnabled &&
+    (measurementReminder.isDue || isReminderPreviewMode);
   const weightReminderDue = measurementReminder.weightDue || isReminderPreviewMode;
   const waistReminderDue = measurementReminder.waistDue || isReminderPreviewMode;
   const adminConversationAthleteIds =
@@ -274,7 +277,7 @@ export function DashboardShell() {
       return;
     }
 
-    if (!measurementReminder.isDue || !measurementReminder.cycleKey || currentUser.role !== "athlete") {
+    if (!measurementReminder.isDue || !measurementReminder.cycleKey) {
       setIsMeasurementReminderOpen(false);
       return;
     }
@@ -290,7 +293,7 @@ export function DashboardShell() {
     }
 
     setIsMeasurementReminderOpen(true);
-  }, [currentUser.id, currentUser.role, isReminderPreviewMode, measurementReminder.cycleKey, measurementReminder.isDue]);
+  }, [currentUser.id, isReminderPreviewMode, measurementReminder.cycleKey, measurementReminder.isDue]);
 
   const handleNavKeyDown = (event: KeyboardEvent<HTMLButtonElement>, index: number) => {
     if (event.key !== "ArrowRight" && event.key !== "ArrowLeft" && event.key !== "Home" && event.key !== "End") {
@@ -556,11 +559,15 @@ export function DashboardShell() {
             ) : view === PROGRAMS_WORKSPACE_VIEW ||
               currentUser.role === "coach" ||
               (currentUser.role === "admin" && (view === "athletes" || view === "conversation")) ? (
-              <CoachDashboard view={view} onOpenConversation={() => setView("conversation")} />
+              <CoachDashboard
+                view={view}
+                onOpenConversation={() => setView("conversation")}
+                onOpenWorkoutLog={() => setView("athlete-log")}
+              />
             ) : currentUser.role === "admin" && view === "users" ? (
               <UserSettingsPanel adminOnly />
             ) : currentUser.role === "admin" ? (
-              <AdminDashboard view={view} />
+              <AdminDashboard view={view} onOpenWorkoutLog={() => setView("athlete-log")} />
             ) : (
               <AthleteDashboard
                 view={view}

@@ -20,6 +20,7 @@ create table if not exists public.profiles (
   email text not null,
   default_dashboard_view text,
   email_notifications boolean not null default false,
+  weekly_measurement_reminders boolean not null default true,
   theme_mode public.theme_mode not null default 'light',
   load_increment_kg numeric(4,2) not null default 2.5,
   height_cm numeric(5,2),
@@ -364,6 +365,7 @@ begin
     email,
     default_dashboard_view,
     email_notifications,
+    weekly_measurement_reminders,
     theme_mode,
     created_at,
     updated_at
@@ -376,6 +378,7 @@ begin
     normalized_email,
     case when invite_record.role = 'athlete' then 'athlete-log' else 'overview' end,
     false,
+    true,
     'light',
     resolved_created_at,
     now()

@@ -7,6 +7,7 @@ import {
   getDashboardViewsForRole,
   getDefaultDashboardView,
   canActAsCoach,
+  canTrackOwnTraining,
 } from "@/lib/role-access";
 import type { UserProfile } from "@/lib/types";
 
@@ -45,6 +46,13 @@ describe("role access helpers", () => {
     expect(canActAsCoach("admin")).toBe(true);
     expect(canActAsCoach("coach")).toBe(true);
     expect(canActAsCoach("athlete")).toBe(false);
+  });
+
+  it("allows every signed-in role to track their own training progress", () => {
+    expect(canTrackOwnTraining("admin")).toBe(true);
+    expect(canTrackOwnTraining("coach")).toBe(true);
+    expect(canTrackOwnTraining("athlete")).toBe(true);
+    expect(canTrackOwnTraining(null)).toBe(false);
   });
 
   it("exposes dedicated admin workspace views", () => {

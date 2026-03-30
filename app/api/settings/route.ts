@@ -7,8 +7,9 @@ import { createSupabaseServerClient } from "@/lib/supabase/server";
 
 const settingsSchema = z.object({
   fullName: z.string().trim().min(2),
-  defaultDashboardView: z.enum(["overview", "templates", "invites", "athlete-log", "conversation"]),
+  defaultDashboardView: z.enum(["overview", "templates", "invites", "athlete-log", "conversation", "athletes", "users"]),
   emailNotifications: z.boolean(),
+  weeklyMeasurementReminders: z.boolean(),
   themeMode: z.enum(["light", "dark"]),
   loadIncrementKg: z.union([z.literal(1), z.literal(2.5), z.literal(5)]),
 });
@@ -48,6 +49,7 @@ export async function PATCH(request: Request) {
       full_name: parsed.data.fullName,
       default_dashboard_view: parsed.data.defaultDashboardView,
       email_notifications: parsed.data.emailNotifications,
+      weekly_measurement_reminders: parsed.data.weeklyMeasurementReminders,
       theme_mode: parsed.data.themeMode,
       load_increment_kg: parsed.data.loadIncrementKg,
       updated_at: timestamp,

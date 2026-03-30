@@ -31,6 +31,7 @@ export const userSettingsSchema = z.object({
   fullName: z.string().trim().min(2, "Anna koko nimi."),
   defaultDashboardView: z.enum(["overview", "templates", "invites", "athlete-log", "conversation", "athletes", "users"]),
   emailNotifications: z.boolean(),
+  weeklyMeasurementReminders: z.boolean(),
   themeMode: z.enum(["light", "dark"]),
   loadIncrementKg: z.union([z.literal(1), z.literal(2.5), z.literal(5)]),
 });

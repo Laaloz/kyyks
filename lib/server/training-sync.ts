@@ -31,6 +31,7 @@ type ProfileRow = {
   email: string;
   default_dashboard_view: UserProfile["settings"] extends infer _ ? string | null : string | null;
   email_notifications: boolean;
+  weekly_measurement_reminders: boolean;
   theme_mode: "light" | "dark";
   load_increment_kg: 1 | 2.5 | 5 | null;
   height_cm: number | string | null;
@@ -202,6 +203,7 @@ function mapProfileRow(profile: ProfileRow): UserProfile {
             ? "athlete-log"
             : "overview",
       emailNotifications: profile.email_notifications,
+      weeklyMeasurementReminders: profile.weekly_measurement_reminders,
       themeMode: profile.theme_mode,
       loadIncrementKg: profile.load_increment_kg ?? 2.5,
     },
@@ -334,7 +336,7 @@ export async function loadVisibleSupabaseAppState(
     supabase
       .from("profiles")
       .select(
-        "id, role, status, full_name, email, default_dashboard_view, email_notifications, theme_mode, load_increment_kg, height_cm, weight_kg, waist_cm, created_at, updated_at",
+        "id, role, status, full_name, email, default_dashboard_view, email_notifications, weekly_measurement_reminders, theme_mode, load_increment_kg, height_cm, weight_kg, waist_cm, created_at, updated_at",
       )
       .order("created_at", { ascending: false }),
     supabase

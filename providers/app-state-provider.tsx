@@ -30,7 +30,14 @@ import {
 import { defaultGlobalExercises } from "@/lib/demo-data";
 import { getVisiblePendingInvites } from "@/lib/invite-status";
 import { getProgramStatus, isProgramActive } from "@/lib/program-status";
-import { canActAsCoach, canResendInvite, getDashboardViewsForRole, getDefaultDashboardView, isAdminRole } from "@/lib/role-access";
+import {
+  canActAsCoach,
+  canResendInvite,
+  canTrackOwnTraining,
+  getDashboardViewsForRole,
+  getDefaultDashboardView,
+  isAdminRole,
+} from "@/lib/role-access";
 import { createSupabaseBrowserClient } from "@/lib/supabase/client";
 import type {
   AppState,
@@ -296,6 +303,7 @@ function defaultUserSettings(role: Role) {
   return {
     defaultDashboardView: getDefaultDashboardView(role),
     emailNotifications: false,
+    weeklyMeasurementReminders: true,
     themeMode: "light" as const,
     loadIncrementKg: 2.5 as const,
   };
@@ -305,6 +313,7 @@ function normalizeUserSettings(role: Role, rawSettings: UserProfile["settings"] 
   const defaults = defaultUserSettings(role);
   return {
     emailNotifications: rawSettings?.emailNotifications ?? defaults.emailNotifications,
+    weeklyMeasurementReminders: rawSettings?.weeklyMeasurementReminders ?? defaults.weeklyMeasurementReminders,
     defaultDashboardView: normalizeDefaultDashboardView(role, rawSettings?.defaultDashboardView),
     themeMode: rawSettings?.themeMode ?? defaults.themeMode,
     loadIncrementKg:
@@ -647,6 +656,7 @@ type UserSettingsInput = {
   fullName: string;
   defaultDashboardView: DashboardHomeView;
   emailNotifications: boolean;
+  weeklyMeasurementReminders: boolean;
   themeMode: "light" | "dark";
   loadIncrementKg: 1 | 2.5 | 5;
 };
@@ -902,6 +912,7 @@ type SupabaseProfileRecord = {
   email: string;
   default_dashboard_view: DashboardHomeView | null;
   email_notifications: boolean;
+  weekly_measurement_reminders: boolean;
   theme_mode: "light" | "dark";
   load_increment_kg: 1 | 2.5 | 5 | null;
   height_cm: number | null;
@@ -959,6 +970,7 @@ function mapSupabaseProfileToUser(profile: SupabaseProfileRecord): UserProfile {
     settings: {
       defaultDashboardView: normalizeDefaultDashboardView(profile.role, profile.default_dashboard_view ?? undefined),
       emailNotifications: profile.email_notifications,
+      weeklyMeasurementReminders: profile.weekly_measurement_reminders,
       themeMode: profile.theme_mode,
       loadIncrementKg: profile.load_increment_kg ?? 2.5,
     },
@@ -1454,7 +1466,7 @@ async function fetchSupabaseProfile(supabase: NonNullable<ReturnType<typeof crea
   const { data, error } = await supabase
     .from("profiles")
     .select(
-      "id, role, status, full_name, email, default_dashboard_view, email_notifications, theme_mode, load_increment_kg, height_cm, weight_kg, waist_cm, created_at, updated_at",
+      "id, role, status, full_name, email, default_dashboard_view, email_notifications, weekly_measurement_reminders, theme_mode, load_increment_kg, height_cm, weight_kg, waist_cm, created_at, updated_at",
     )
     .eq("id", userId)
     .maybeSingle();
@@ -1773,6 +1785,14 @@ export function AppStateProvider({ children }: PropsWithChildren) {
       return;
     }
 
+    if (!supabase) {
+      return;
+    }
+
+    if (isSupabaseAuthResolved && didAttemptBootstrapRevalidation) {
+      return;
+    }
+
     const timeoutId = window.setTimeout(() => {
       setDidBootstrapTimeout(true);
       setIsSupabaseAuthResolved(true);
@@ -1781,7 +1801,7 @@ export function AppStateProvider({ children }: PropsWithChildren) {
     }, 9000);
 
     return () => window.clearTimeout(timeoutId);
-  }, [isStorageHydrated, supabase]);
+  }, [didAttemptBootstrapRevalidation, isStorageHydrated, isSupabaseAuthResolved, supabase]);
 
   useEffect(() => {
     if (isSupabaseAuthResolved && didAttemptBootstrapRevalidation) {
@@ -2365,6 +2385,7 @@ function findResolvedUserIdInSnapshot(
         const nextSettings = {
           defaultDashboardView: input.defaultDashboardView,
           emailNotifications: input.emailNotifications,
+          weeklyMeasurementReminders: input.weeklyMeasurementReminders,
           themeMode: input.themeMode,
           loadIncrementKg: input.loadIncrementKg,
         };
@@ -2373,6 +2394,7 @@ function findResolvedUserIdInSnapshot(
           currentUser.fullName !== fullName ||
           currentSettings.defaultDashboardView !== nextSettings.defaultDashboardView ||
           currentSettings.emailNotifications !== nextSettings.emailNotifications ||
+          currentSettings.weeklyMeasurementReminders !== nextSettings.weeklyMeasurementReminders ||
           currentSettings.themeMode !== nextSettings.themeMode;
 
         if (!hasChanges) {
@@ -2415,6 +2437,7 @@ function findResolvedUserIdInSnapshot(
                 fullName,
                 defaultDashboardView: input.defaultDashboardView,
                 emailNotifications: input.emailNotifications,
+                weeklyMeasurementReminders: input.weeklyMeasurementReminders,
                 themeMode: input.themeMode,
                 loadIncrementKg: input.loadIncrementKg,
               }),
@@ -2436,8 +2459,8 @@ function findResolvedUserIdInSnapshot(
         return { ok: true };
       },
       async updateCurrentUserMeasurements(input) {
-        if (!currentUser || currentUser.role !== "athlete") {
-          return { ok: false, message: "Mittatietoja voi päivittää vain treenaajan profiilille." };
+        if (!currentUser || !canTrackOwnTraining(currentUser.role)) {
+          return { ok: false, message: "Kirjaudu sisään ennen mittatietojen päivitystä." };
         }
 
         const timestamp = new Date().toISOString();

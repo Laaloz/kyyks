@@ -22,6 +22,7 @@ function ProgramWorkoutEditorHarness() {
       index={0}
       control={form.control}
       register={form.register}
+      setValue={form.setValue}
       watch={form.watch}
       exerciseOptions={[]}
       onRemove={() => undefined}
