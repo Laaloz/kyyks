@@ -19,7 +19,7 @@ import { InfoTooltip } from "@/components/ui/tooltip";
 import { InlineFeedback } from "@/components/workout/inline-feedback";
 import { numberOrUndefined } from "@/components/workout/schemas";
 import { withMinimumDelay } from "@/lib/min-delay";
-import { workoutStatusLabel } from "@/components/workout/shared";
+import { workoutStatusBadgeClass, workoutStatusLabel } from "@/components/workout/shared";
 import { calculateSessionDurationSeconds } from "@/lib/domain";
 import type { WorkoutSession } from "@/lib/types";
 import { formatDate } from "@/lib/utils";
@@ -1132,24 +1132,24 @@ export function AthleteSessionPanel({
     const cardToneClass = isComplete
       ? "border-[color-mix(in_srgb,var(--success)_30%,var(--border))] bg-[var(--surface)] shadow-[0_10px_24px_-22px_var(--success)]"
       : isStarted
-        ? "border-[color-mix(in_srgb,var(--accent)_30%,var(--border))] bg-[var(--surface)] shadow-[0_10px_24px_-22px_var(--accent)]"
+        ? "border-[color-mix(in_srgb,var(--warning)_30%,var(--border))] bg-[var(--surface)] shadow-[0_10px_24px_-22px_var(--warning)]"
         : supersetGroup
           ? "border-[color-mix(in_srgb,var(--accent)_22%,var(--border))] bg-[var(--surface)]"
           : "border-[var(--border)] bg-[var(--surface)]";
     const progressBadgeClass = isComplete
       ? "border-[var(--success)] bg-[var(--surface)] text-[var(--success)]"
       : isStarted
-        ? "border-[var(--accent)] bg-[var(--surface)] text-[var(--accent)]"
+        ? "border-[var(--warning)] bg-[var(--surface)] text-[var(--warning)]"
         : "border-[var(--border)] bg-[var(--surface)] text-[var(--text-subtle)]";
     const indicatorClass = isComplete
       ? "bg-[var(--success)]"
       : isStarted
-        ? "bg-[var(--accent)]"
+        ? "bg-[var(--warning)]"
         : "bg-[var(--border)]";
     const chevronClass = isComplete
       ? "border-[color-mix(in_srgb,var(--success)_35%,var(--border))] bg-[color-mix(in_srgb,var(--success)_12%,var(--surface))] text-[var(--success)] group-hover:border-[color-mix(in_srgb,var(--success)_45%,var(--border))] group-hover:bg-[color-mix(in_srgb,var(--success)_16%,var(--surface))]"
       : isStarted
-        ? "border-[color-mix(in_srgb,var(--accent)_30%,var(--border))] bg-[color-mix(in_srgb,var(--accent)_10%,var(--surface))] text-[var(--accent)] group-hover:border-[color-mix(in_srgb,var(--accent)_40%,var(--border))] group-hover:bg-[color-mix(in_srgb,var(--accent)_14%,var(--surface))]"
+        ? "border-[color-mix(in_srgb,var(--warning)_30%,var(--border))] bg-[color-mix(in_srgb,var(--warning)_10%,var(--surface))] text-[var(--warning)] group-hover:border-[color-mix(in_srgb,var(--warning)_40%,var(--border))] group-hover:bg-[color-mix(in_srgb,var(--warning)_14%,var(--surface))]"
         : "border-[var(--border)] bg-[var(--surface-2)] text-[var(--text-subtle)] group-hover:border-[var(--border-strong)] group-hover:bg-[var(--surface-3)] group-hover:text-[var(--text)]";
     return (
       <div
@@ -1406,7 +1406,7 @@ export function AthleteSessionPanel({
   return (
     <div className="mt-6 space-y-5">
       <div className="flex flex-wrap items-center gap-3">
-        <Badge>{workoutStatusLabel(status)}</Badge>
+        <Badge className={workoutStatusBadgeClass(status)}>{workoutStatusLabel(status)}</Badge>
         <p className="text-sm text-[var(--text-muted)]">Käynnistetty {formatDate(selectedSession.startedAt)}</p>
         <Badge className="border-[var(--accent)] bg-[var(--surface-3)] text-[var(--accent)]">
           Treeniaika {formatWorkoutDuration(elapsedSeconds)}

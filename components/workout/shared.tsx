@@ -48,6 +48,19 @@ export function workoutStatusLabel(status: string) {
   }
 }
 
+export function workoutStatusBadgeClass(status: string) {
+  switch (status) {
+    case "in_progress":
+      return "border-[color-mix(in_srgb,var(--warning)_40%,var(--border))] bg-[color:color-mix(in_srgb,var(--warning)_14%,var(--surface))] text-[var(--warning)]";
+    case "completed":
+      return "border-[color-mix(in_srgb,var(--success)_40%,var(--border))] bg-[color:color-mix(in_srgb,var(--success)_14%,var(--surface))] text-[var(--success)]";
+    case "cancelled":
+      return "border-[color-mix(in_srgb,var(--danger)_40%,var(--border))] bg-[color:color-mix(in_srgb,var(--danger)_12%,var(--surface))] text-[var(--danger)]";
+    default:
+      return "border-[var(--border-strong)] bg-[var(--surface-3)] text-[var(--text-subtle)]";
+  }
+}
+
 export function roleHeadline(role: Role) {
   switch (role) {
     case "admin":

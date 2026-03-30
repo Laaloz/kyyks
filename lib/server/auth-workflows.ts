@@ -71,7 +71,7 @@ function mapStoredProfileRecord(profile: {
   default_dashboard_view: string | null;
   email_notifications: boolean;
   weekly_measurement_reminders: boolean;
-  theme_mode: "light" | "dark";
+  theme_mode: "light" | "dark" | "mallu";
   load_increment_kg: 1 | 2.5 | 5 | null;
   height_cm: number | null;
   weight_kg: number | null;

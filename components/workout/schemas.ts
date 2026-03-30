@@ -32,7 +32,7 @@ export const userSettingsSchema = z.object({
   defaultDashboardView: z.enum(["overview", "templates", "invites", "athlete-log", "conversation", "athletes", "users"]),
   emailNotifications: z.boolean(),
   weeklyMeasurementReminders: z.boolean(),
-  themeMode: z.enum(["light", "dark"]),
+  themeMode: z.enum(["light", "dark", "mallu"]),
   loadIncrementKg: z.union([z.literal(1), z.literal(2.5), z.literal(5)]),
 });
 

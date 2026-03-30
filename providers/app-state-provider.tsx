@@ -664,7 +664,7 @@ type UserSettingsInput = {
   defaultDashboardView: DashboardHomeView;
   emailNotifications: boolean;
   weeklyMeasurementReminders: boolean;
-  themeMode: "light" | "dark";
+  themeMode: "light" | "dark" | "mallu";
   loadIncrementKg: 1 | 2.5 | 5;
 };
 
@@ -920,7 +920,7 @@ type SupabaseProfileRecord = {
   default_dashboard_view: DashboardHomeView | null;
   email_notifications: boolean;
   weekly_measurement_reminders: boolean;
-  theme_mode: "light" | "dark";
+  theme_mode: "light" | "dark" | "mallu";
   load_increment_kg: 1 | 2.5 | 5 | null;
   height_cm: number | null;
   weight_kg: number | null;
@@ -2244,9 +2244,15 @@ function findResolvedUserIdInSnapshot(
       return;
     }
 
-    const themeMode = currentUser?.settings?.themeMode === "dark" ? "dark" : "light";
+    const themeMode =
+      currentUser?.settings?.themeMode === "dark" || currentUser?.settings?.themeMode === "mallu"
+        ? currentUser.settings.themeMode
+        : "light";
     document.documentElement.dataset.theme = themeMode;
-    document.documentElement.style.colorScheme = themeMode;
+    document.documentElement.style.colorScheme = themeMode === "dark" ? "dark" : "light";
+    document
+      .querySelector('meta[name="theme-color"]')
+      ?.setAttribute("content", themeMode === "dark" ? "#08111f" : themeMode === "mallu" ? "#fff1ef" : "#f3f7fc");
   }, [currentUser?.settings?.themeMode, isHydrated]);
 
   const value = useMemo<AppStateContextValue>(() => {

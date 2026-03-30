@@ -32,6 +32,7 @@ const dashboardViewLabel: Record<DashboardHomeView, string> = {
 const themeModeLabel: Record<ThemeMode, string> = {
   light: "Vaalea",
   dark: "Tumma",
+  mallu: "Mallu",
 };
 
 const loadIncrementLabel: Record<1 | 2.5 | 5, string> = {

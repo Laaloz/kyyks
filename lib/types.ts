@@ -20,7 +20,7 @@ export type DashboardHomeView =
   | "athletes"
   | "users";
 export type MuscleGroupKey = "shoulders" | "arms" | "chest" | "abs" | "back" | "legs" | "other";
-export type ThemeMode = "light" | "dark";
+export type ThemeMode = "light" | "dark" | "mallu";
 export type LoadIncrement = 1 | 2.5 | 5;
 
 export interface UserSettings {

@@ -9,10 +9,20 @@ const themeInitScript = `
 (() => {
   const stateKey = "rooki-fit-state-v1";
   const sessionKey = "rooki-fit-session-v1";
+  const themeColorByTheme = {
+    light: "#f3f7fc",
+    dark: "#08111f",
+    mallu: "#fff1ef",
+  };
   const applyTheme = (themeMode) => {
-    const theme = themeMode === "dark" ? "dark" : "light";
+    const theme = themeMode === "dark" || themeMode === "mallu" ? themeMode : "light";
+    const colorScheme = theme === "dark" ? "dark" : "light";
     document.documentElement.dataset.theme = theme;
-    document.documentElement.style.colorScheme = theme;
+    document.documentElement.style.colorScheme = colorScheme;
+    const themeColorMeta = document.querySelector('meta[name="theme-color"]');
+    if (themeColorMeta) {
+      themeColorMeta.setAttribute("content", themeColorByTheme[theme]);
+    }
   };
 
   try {
@@ -72,6 +82,7 @@ export default function RootLayout({
   return (
     <html lang="fi" suppressHydrationWarning>
       <head>
+        <meta id="theme-color-meta" name="theme-color" content="#f3f7fc" />
         <Script id="theme-init" strategy="beforeInteractive">
           {themeInitScript}
         </Script>

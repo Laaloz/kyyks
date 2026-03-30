@@ -53,7 +53,7 @@ import {
   emptyProgramWorkout,
   programComposerSchema,
 } from "@/components/workout/schemas";
-import { OwnTrainingOverviewCard, PROGRAMS_WORKSPACE_VIEW, workoutStatusLabel, type WorkspaceView } from "@/components/workout/shared";
+import { OwnTrainingOverviewCard, PROGRAMS_WORKSPACE_VIEW, workoutStatusBadgeClass, workoutStatusLabel, type WorkspaceView } from "@/components/workout/shared";
 
 type CoachHistoryMuscleGroupKey = "shoulders" | "arms" | "chest" | "abs" | "back" | "legs" | "other";
 
@@ -1919,11 +1919,11 @@ function CoachAthleteInsights({
                                   </p>
                                 </div>
                                 {selectedRow.pendingSetCount > 0 ? (
-                                  <Badge className="border-[var(--danger)] bg-[var(--surface)] text-[var(--danger)]">
+                                  <Badge className="border-[color-mix(in_srgb,var(--warning)_40%,var(--border))] bg-[color:color-mix(in_srgb,var(--warning)_14%,var(--surface))] text-[var(--warning)]">
                                     Kesken {selectedRow.pendingSetCount} sarjaa
                                   </Badge>
                                 ) : (
-                                  <Badge className="border-[var(--accent-tertiary)] bg-[var(--surface)] text-[var(--accent-tertiary)]">
+                                  <Badge className="border-[color-mix(in_srgb,var(--success)_40%,var(--border))] bg-[color:color-mix(in_srgb,var(--success)_14%,var(--surface))] text-[var(--success)]">
                                     Kaikki sarjat valmiina
                                   </Badge>
                                 )}
@@ -2001,8 +2001,8 @@ function CoachAthleteInsights({
                                                   <span
                                                     className={
                                                       log.done
-                                                        ? "inline-flex items-center rounded-full border border-[var(--accent-tertiary)] px-2 py-0.5 text-[11px] font-semibold text-[var(--accent-tertiary)]"
-                                                        : "inline-flex items-center rounded-full border border-[var(--danger)] px-2 py-0.5 text-[11px] font-semibold text-[var(--danger)]"
+                                                        ? "inline-flex items-center rounded-full border border-[color-mix(in_srgb,var(--success)_40%,var(--border))] bg-[color:color-mix(in_srgb,var(--success)_14%,var(--surface))] px-2 py-0.5 text-[11px] font-semibold text-[var(--success)]"
+                                                        : "inline-flex items-center rounded-full border border-[color-mix(in_srgb,var(--warning)_40%,var(--border))] bg-[color:color-mix(in_srgb,var(--warning)_14%,var(--surface))] px-2 py-0.5 text-[11px] font-semibold text-[var(--warning)]"
                                                     }
                                                   >
                                                     {log.done ? "Valmis" : "Kesken"}
@@ -2156,9 +2156,9 @@ function CoachOverviewStat({
 }) {
   const toneClass =
     tone === "success"
-      ? "border-[var(--accent-tertiary)] bg-[var(--surface)]"
+      ? "border-[var(--success)] bg-[var(--surface)]"
       : tone === "warning"
-        ? "border-[var(--danger)] bg-[var(--surface)]"
+        ? "border-[var(--warning)] bg-[var(--surface)]"
         : "border-[var(--border)] bg-[var(--surface)]";
 
   return (
@@ -2307,8 +2307,8 @@ function PhaseBars({
             </div>
             <div className="flex h-3 overflow-hidden rounded-full border border-[var(--border)] bg-[var(--surface)]">
               <div className="bg-[var(--danger)]/80" style={{ width: `${cancelledWidth}%` }} />
-              <div className="bg-[var(--accent)]" style={{ width: `${inProgressWidth}%` }} />
-              <div className="bg-[var(--accent-tertiary)]" style={{ width: `${completedWidth}%` }} />
+              <div className="bg-[var(--warning)]" style={{ width: `${inProgressWidth}%` }} />
+              <div className="bg-[var(--success)]" style={{ width: `${completedWidth}%` }} />
             </div>
             <div className="flex flex-wrap gap-2 text-[11px] text-[var(--text-subtle)]">
               <span>Keskeytetty {bar.cancelled}</span>
@@ -2319,9 +2319,9 @@ function PhaseBars({
         );
       })}
       <div className="mt-1 flex flex-wrap gap-2 text-xs text-[var(--text-subtle)]">
-        <Badge className="border-[var(--danger)] bg-[var(--surface)] text-[var(--danger)]">Keskeytetty</Badge>
-        <Badge className="border-[var(--accent)] bg-[var(--surface)] text-[var(--accent)]">Kesken</Badge>
-        <Badge className="border-[var(--accent-tertiary)] bg-[var(--surface)] text-[var(--accent-tertiary)]">Valmis</Badge>
+        <Badge className="border-[color-mix(in_srgb,var(--danger)_40%,var(--border))] bg-[color:color-mix(in_srgb,var(--danger)_12%,var(--surface))] text-[var(--danger)]">Keskeytetty</Badge>
+        <Badge className="border-[color-mix(in_srgb,var(--warning)_40%,var(--border))] bg-[color:color-mix(in_srgb,var(--warning)_14%,var(--surface))] text-[var(--warning)]">Kesken</Badge>
+        <Badge className="border-[color-mix(in_srgb,var(--success)_40%,var(--border))] bg-[color:color-mix(in_srgb,var(--success)_14%,var(--surface))] text-[var(--success)]">Valmis</Badge>
       </div>
     </div>
   );
@@ -2599,19 +2599,7 @@ function addDays(date: Date, days: number) {
 }
 
 function coachStatusTone(status: ScheduledWorkoutStatus) {
-  if (status === "completed") {
-    return "border-[var(--accent-tertiary)] bg-[var(--surface)] text-[var(--accent-tertiary)]";
-  }
-
-  if (status === "in_progress") {
-    return "border-[var(--accent)] bg-[var(--surface)] text-[var(--accent)]";
-  }
-
-  if (status === "cancelled") {
-    return "border-[var(--danger)] bg-[var(--surface)] text-[var(--danger)]";
-  }
-
-  return "border-[var(--border-strong)] bg-[var(--surface)] text-[var(--text-subtle)]";
+  return workoutStatusBadgeClass(status);
 }
 
 function truncateText(value: string, length: number) {

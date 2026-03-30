@@ -25,6 +25,7 @@
   --shadow: #d4deea;
   --shadow-soft: #e0e8f3;
   --success: #0d7a3c;
+  --warning: #b76b00;
   --danger: #b42318;
   --font-display: "Manrope", "Segoe UI", "Helvetica Neue", sans-serif;
   --font-body: "Inter", "Segoe UI", "Helvetica Neue", sans-serif;
@@ -57,9 +58,41 @@
   --shadow: rgba(0, 0, 0, 0.5);
   --shadow-soft: rgba(8, 17, 31, 0.78);
   --success: #49bf79;
+  --warning: #f0b44b;
   --danger: #ff7a7a;
   --selection-background: #204c8f;
   color-scheme: dark;
+}
+
+:root[data-theme="mallu"] {
+  --background: #fff1ef;
+  --background-accent: #f4d0ca;
+  --background-glow-1: #fff8f6;
+  --background-glow-2: #ef9c93;
+  --surface: #fff8f7;
+  --surface-2: #ffe7e2;
+  --surface-3: #f8c9c0;
+  --surface-4: #efa89c;
+  --panel: #fff8f7;
+  --panel-soft: #ffe7e2;
+  --panel-strong: #f8c9c0;
+  --text: #2c0f10;
+  --text-muted: #7c3430;
+  --text-subtle: #9b4d45;
+  --accent: #b11f24;
+  --accent-strong: #8f171b;
+  --accent-contrast: #fff7f2;
+  --accent-secondary: #d53b35;
+  --accent-tertiary: #f05f43;
+  --border: #e3a39a;
+  --border-strong: #cf7367;
+  --shadow: rgba(120, 31, 25, 0.18);
+  --shadow-soft: rgba(177, 31, 36, 0.1);
+  --success: #0f7a45;
+  --warning: #d97706;
+  --danger: #b11f24;
+  --selection-background: #f3a093;
+  color-scheme: light;
 }
 
 * {

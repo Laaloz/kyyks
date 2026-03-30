@@ -34,7 +34,7 @@ import type { AppState, ConversationEntry, WorkoutSession } from "@/lib/types";
 import { formatDate, formatDateWithWeekday, formatRelativeDate } from "@/lib/utils";
 import { resolveBlockingWorkoutStart, useAppState } from "@/providers/app-state-provider";
 
-import { workoutStatusLabel, type WorkspaceView } from "@/components/workout/shared";
+import { workoutStatusBadgeClass, workoutStatusLabel, type WorkspaceView } from "@/components/workout/shared";
 
 type WorkoutSelectionPriority = 0 | 2 | 3;
 
@@ -1528,10 +1528,20 @@ export function AthleteDashboard({
                  Aloita treeni ohjelmastasi. Aiempien toteutusten tiedot löydät historiasta.
               </CardDescription>
               {blockingWorkout && !selectionTransitionMessage ? (
-                <div className="mt-4 rounded-2xl border border-[var(--accent)] bg-[color:color-mix(in_srgb,var(--accent)_10%,var(--surface))] px-4 py-4 text-sm text-[var(--text)] shadow-[0_10px_24px_-22px_var(--accent)]">
+                <div
+                  className={`mt-4 rounded-2xl border px-4 py-4 text-sm text-[var(--text)] ${
+                    blockingWorkout.status === "cancelled"
+                      ? "border-[var(--danger)] bg-[color:color-mix(in_srgb,var(--danger)_10%,var(--surface))] shadow-[0_10px_24px_-22px_var(--danger)]"
+                      : "border-[var(--warning)] bg-[color:color-mix(in_srgb,var(--warning)_10%,var(--surface))] shadow-[0_10px_24px_-22px_var(--warning)]"
+                  }`}
+                >
                   <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between sm:gap-4">
                     <div className="min-w-0">
-                      <p className="text-xs font-semibold tracking-[0.04em] text-[var(--accent)]">
+                      <p
+                        className={`text-xs font-semibold tracking-[0.04em] ${
+                          blockingWorkout.status === "cancelled" ? "text-[var(--danger)]" : "text-[var(--warning)]"
+                        }`}
+                      >
                         {blockingWorkout.status === "cancelled" ? "Keskeytetty treeni" : "Aktiivinen treeni kesken"}
                       </p>
                       <p className="mt-1 max-w-2xl leading-6 text-[var(--text-muted)]">
@@ -2482,16 +2492,7 @@ function formatEstimatedCaloriesValue(value: number) {
 }
 
 function statusTone(status: string) {
-  switch (status) {
-    case "completed":
-      return "border-[var(--accent-tertiary)] bg-[var(--surface-3)] text-[var(--accent-tertiary)]";
-    case "in_progress":
-      return "border-[var(--accent)] bg-[var(--surface-3)] text-[var(--accent)]";
-    case "cancelled":
-      return "border-[var(--danger)] bg-[var(--surface-3)] text-[var(--danger)]";
-    default:
-      return "border-[var(--border-strong)] bg-[var(--surface-3)] text-[var(--text-subtle)]";
-  }
+  return workoutStatusBadgeClass(status);
 }
 
 function HistoryMetric({ label, value }: { label: string; value: string }) {
