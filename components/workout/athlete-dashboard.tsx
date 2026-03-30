@@ -1747,7 +1747,7 @@ export function AthleteDashboard({
                   </p>
                 ) : (
                   <>
-                    <div className="mt-5 space-y-3">
+                    <div className="mt-5 grid gap-3 xl:grid-cols-2">
                       {groupedWorkoutHistory.map((group, index) => {
                         const selectedHistoryWorkout =
                           group.workouts.find((item) => item.workout.id === selectedHistoryWorkoutByGroup[group.key]) ??
