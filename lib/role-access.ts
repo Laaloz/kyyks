@@ -1,4 +1,4 @@
-import { PROGRAMS_DASHBOARD_VIEW, type DashboardHomeView, type Invite, type Role, type UserProfile } from "@/lib/types";
+import { PROGRAMS_DASHBOARD_VIEW, type AthleteRole, type DashboardHomeView, type Invite, type Role, type UserProfile } from "@/lib/types";
 
 const coachWorkspaceViews: DashboardHomeView[] = [
   "overview",
@@ -19,13 +19,26 @@ const adminWorkspaceViews: DashboardHomeView[] = [
 ];
 
 const athleteWorkspaceViews: DashboardHomeView[] = ["overview", "athlete-log", "conversation"];
+const independentAthleteWorkspaceViews: DashboardHomeView[] = ["overview", PROGRAMS_DASHBOARD_VIEW, "athlete-log", "conversation"];
+
+export function isAthleteRole(role: Role | null | undefined): role is AthleteRole {
+  return role === "athlete" || role === "independent_athlete";
+}
 
 export function canActAsCoach(role: Role | null | undefined) {
   return role === "admin" || role === "coach";
 }
 
+export function canManageOwnPrograms(role: Role | null | undefined) {
+  return role === "independent_athlete";
+}
+
+export function canManagePrograms(role: Role | null | undefined) {
+  return canActAsCoach(role) || canManageOwnPrograms(role);
+}
+
 export function canTrackOwnTraining(role: Role | null | undefined) {
-  return role === "admin" || role === "coach" || role === "athlete";
+  return role === "admin" || role === "coach" || isAthleteRole(role);
 }
 
 export function isAdminRole(role: Role | null | undefined) {
@@ -37,6 +50,10 @@ export function getDashboardViewsForRole(role: Role): DashboardHomeView[] {
     return athleteWorkspaceViews;
   }
 
+  if (role === "independent_athlete") {
+    return independentAthleteWorkspaceViews;
+  }
+
   if (role === "admin") {
     return adminWorkspaceViews;
   }
@@ -45,7 +62,11 @@ export function getDashboardViewsForRole(role: Role): DashboardHomeView[] {
 }
 
 export function getDefaultDashboardView(role: Role): DashboardHomeView {
-  return role === "athlete" ? "athlete-log" : "overview";
+  if (role === "athlete") {
+    return "athlete-log";
+  }
+
+  return "overview";
 }
 
 export function getCoachCapableUsers(users: UserProfile[]) {

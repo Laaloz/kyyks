@@ -6,7 +6,7 @@ Tämä tiedosto kuvaa tämänhetkisen tilanteen ilman vanhoja välivaiheita tai 
 Pidetään sovellus ajantasaisena, helposti käynnistettävänä ja julkaisukelpoisena ilman että dokumentaatio paisuu vanhoista välivaiheista.
 
 ## Nykyinen toteutettu scope
-- roolipohjainen käyttö admin-, coach- ja athlete-näkymillä
+- roolipohjainen käyttö admin-, coach-, athlete- ja independent athlete -näkymillä
 - Supabase-authiin nojaavat login-, invite accept- ja password reset -polut
 - ohjelmien luonti, päivitys, tilamuutokset ja treenin käynnistys API-routien kautta
 - athlete-loggaus: sarjat, kuormat, muistiinpanot ja kehonmittaukset

@@ -23,6 +23,7 @@ import { MetricTrendChart } from "@/components/workout/metric-trend-chart";
 import { estimateStrengthCalories, getLatestMeasurement, getMeasurementsForUser, getWeightAtMoment } from "@/lib/body-metrics";
 import { calculateSessionDurationSeconds, getSessionProgress } from "@/lib/domain";
 import { withMinimumDelay } from "@/lib/min-delay";
+import { deriveProgramWorkoutGuidance } from "@/lib/program-workout-guidance";
 import { isProgramActive } from "@/lib/program-status";
 import { canTrackOwnTraining } from "@/lib/role-access";
 import { buildScheduledWorkoutExerciseOrder } from "@/lib/workout-exercise-order";
@@ -323,6 +324,13 @@ export function AthleteDashboard({
         .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()),
     [currentUser?.id, state.conversationEntries],
   );
+  const adminConversationTarget = useMemo(
+    () =>
+      state.users
+        .filter((user) => user.role === "admin" && user.status === "active")
+        .sort((left, right) => left.fullName.localeCompare(right.fullName, "fi"))[0],
+    [state.users],
+  );
   const progress = selectedWorkout ? getSessionProgress(state, selectedWorkout.id) : null;
   const inProgressCount = workouts.filter((item) => item.status === "in_progress").length;
   useEffect(() => {
@@ -370,6 +378,15 @@ export function AthleteDashboard({
         ? buildScheduledWorkoutExerciseOrder(state, selectedWorkout)
         : new Map<string, number>(),
     [selectedWorkout, state],
+  );
+  const selectedProgramWorkout = useMemo(
+    () =>
+      selectedWorkout?.programWorkoutId
+        ? athletePrograms
+            .flatMap((program) => program.workouts ?? [])
+            .find((workout) => workout.id === selectedWorkout.programWorkoutId)
+        : undefined,
+    [athletePrograms, selectedWorkout?.programWorkoutId],
   );
   const workoutInsights = useMemo(() => buildWorkoutInsights(state), [state]);
   const sessionByWorkoutId = useMemo(
@@ -766,7 +783,18 @@ export function AthleteDashboard({
   }, [groupedWorkoutHistory]);
   const conversationContextOptions = useMemo(
     () => [
-      { id: "general", label: "Yleinen keskustelu", contextType: "general" as const },
+      { id: "general", label: "Yleinen keskustelu", contextType: "general" as const, recipientType: "coach" as const },
+      ...(adminConversationTarget
+        ? [
+            {
+              id: "admin-support",
+              label: "Admin: bugi tai ilmoitus",
+              contextType: "general" as const,
+              recipientType: "admin" as const,
+              recipientUserId: adminConversationTarget.id,
+            },
+          ]
+        : []),
       ...buildWorkoutConversationContextOptions({
         workouts,
         plans: athletePrograms,
@@ -778,9 +806,10 @@ export function AthleteDashboard({
         contextType: "program" as const,
         contextId: program.id,
         contextLabel: program.title,
+        recipientType: "coach" as const,
       })),
     ],
-    [athletePrograms, state.templates, workouts],
+    [adminConversationTarget, athletePrograms, state.templates, workouts],
   );
 
   useEffect(() => {
@@ -1263,7 +1292,7 @@ export function AthleteDashboard({
       {view === "conversation" && currentUser ? (
         <ConversationPanel
           heading="Yhteinen keskustelu"
-          description="Löydät yhdestä paikasta valmentajan kommentit ja omat viestisi."
+          description="Löydät yhdestä paikasta valmentajan viestit, omat kommenttisi ja adminille lähetetyt ilmoitukset."
           entries={athleteConversationEntries}
           users={state.users}
           currentRole={currentUser.role}
@@ -1273,6 +1302,8 @@ export function AthleteDashboard({
           occurrenceLabelByWorkoutId={workoutOccurrenceLabelById}
           onSend={(body, option) =>
             addConversationComment(body, {
+              type: option.recipientType === "admin" ? "admin_message" : "comment",
+              targetAdminUserId: option.recipientType === "admin" ? option.recipientUserId : undefined,
               scheduledWorkoutId: option.contextType === "workout" ? option.contextId : undefined,
               trainingPlanId: option.contextType === "program" ? option.contextId : undefined,
               contextLabel: option.contextLabel,
@@ -1340,6 +1371,7 @@ export function AthleteDashboard({
                 selectedSession={selectedSession}
                 scheduledWorkoutId={selectedWorkout.id}
                 scheduledWorkoutTitle={normalizeWorkoutHistoryTitle(selectedWorkout.title)}
+                scheduledWorkoutGuidance={selectedProgramWorkout ? deriveProgramWorkoutGuidance(selectedProgramWorkout) : undefined}
                 scheduledDate={selectedWorkout.completedAt ?? selectedSession?.completedAt ?? selectedWorkout.scheduledDate}
                 onStart={async () => {
                   const result = await startWorkout(selectedWorkout.id);
@@ -1488,7 +1520,7 @@ export function AthleteDashboard({
             )}
           </Card>
         ) : (
-          <div className="grid gap-6">
+          <div className="grid gap-6 xl:grid-cols-[minmax(0,1.08fr)_minmax(22rem,0.92fr)] xl:items-start">
             <Card>
               <p className="text-xs font-semibold tracking-[0.04em] text-[var(--text-subtle)]">Ohjelman treenit</p>
               <CardTitle className="text-2xl">Valitse seuraava treeni</CardTitle>
@@ -1561,7 +1593,7 @@ export function AthleteDashboard({
                       {program.description ? (
                         <p className="mt-2 max-w-3xl text-sm text-[var(--text-muted)]">{program.description}</p>
                       ) : null}
-                      <div className="mt-4 grid gap-3 md:grid-cols-2 lg:grid-cols-3">
+                      <div className="mt-4 grid gap-3 md:grid-cols-2 2xl:grid-cols-3">
                         {[...(program.workouts ?? [])]
                           .sort((a, b) => {
                             const aActiveScheduled = activeScheduledByProgramWorkoutId.get(a.id);
@@ -1658,6 +1690,9 @@ export function AthleteDashboard({
                                   <p className="mt-1 text-xs text-[var(--text-subtle)]">
                                     {workout.exercises.length} liikettä · {setCount} sarjaa · oletuslepo {workout.defaultRestSeconds}s
                                   </p>
+                                  <p className="mt-2 text-sm leading-6 text-[var(--text-muted)]">
+                                    {deriveProgramWorkoutGuidance(workout)}
+                                  </p>
                                 </div>
                                 {activeScheduled ? (
                                   <Badge className={statusTone(activeScheduledStatus ?? activeScheduled.status)}>
@@ -1747,7 +1782,7 @@ export function AthleteDashboard({
                   </p>
                 ) : (
                   <>
-                    <div className="mt-5 grid gap-3 xl:grid-cols-2">
+                    <div className="mt-5 space-y-3">
                       {groupedWorkoutHistory.map((group, index) => {
                         const selectedHistoryWorkout =
                           group.workouts.find((item) => item.workout.id === selectedHistoryWorkoutByGroup[group.key]) ??

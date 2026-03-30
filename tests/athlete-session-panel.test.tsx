@@ -42,6 +42,7 @@ describe("AthleteSessionPanel", () => {
       <AthleteSessionPanel
         scheduledWorkoutId="workout_1"
         scheduledWorkoutTitle="Penkkipäivä"
+        scheduledWorkoutGuidance="Aloita pääliikkeestä rauhassa ja jätä 1-2 toistoa varaa."
         selectedSession={buildSession()}
         note=""
         status="in_progress"
@@ -68,6 +69,7 @@ describe("AthleteSessionPanel", () => {
     );
 
     expect(screen.getByRole("button", { name: "Penkkipunnerrus ohje" })).toBeInTheDocument();
+    expect(screen.getByText("Aloita pääliikkeestä rauhassa ja jätä 1-2 toistoa varaa.")).toBeInTheDocument();
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
   });
 
@@ -79,6 +81,7 @@ describe("AthleteSessionPanel", () => {
       <AthleteSessionPanel
         scheduledWorkoutId="workout_1"
         scheduledWorkoutTitle="Penkkipäivä"
+        scheduledWorkoutGuidance="Pidä pääsarjat siisteinä."
         selectedSession={buildSession()}
         note=""
         status="in_progress"
@@ -129,6 +132,7 @@ describe("AthleteSessionPanel", () => {
       <AthleteSessionPanel
         scheduledWorkoutId="workout_1"
         scheduledWorkoutTitle="Penkkipäivä"
+        scheduledWorkoutGuidance="Pidä päivä hallittuna."
         selectedSession={session}
         note=""
         status="in_progress"
@@ -173,6 +177,7 @@ describe("AthleteSessionPanel", () => {
       <AthleteSessionPanel
         scheduledWorkoutId="workout_1"
         scheduledWorkoutTitle="Penkkipäivä"
+        scheduledWorkoutGuidance="Päivitä vain tarvittaessa."
         selectedSession={{ ...buildSession(), completedAt: "2026-03-24T09:00:00.000Z" }}
         note=""
         status="completed"

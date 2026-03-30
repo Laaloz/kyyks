@@ -44,4 +44,10 @@ describe("ProgramWorkoutEditor", () => {
 
     expect(screen.getByLabelText("Treenin nimi")).toBeInTheDocument();
   });
+
+  it("shows an editable short workout guidance field", () => {
+    render(<ProgramWorkoutEditorHarness />);
+
+    expect(screen.getByLabelText("Lyhyt treeniohje")).toBeInTheDocument();
+  });
 });

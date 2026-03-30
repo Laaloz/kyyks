@@ -27,6 +27,7 @@ import {
   shouldTreatInviteActivationLoginFailureAsPartialSuccess,
   shouldSyncSupabaseAuthEvent,
   preserveActiveWorkoutShells,
+  markVisibleConversationEntriesRead,
   resolveSupabaseAuthUserAfterPasswordSignIn,
 } from "@/providers/app-state-provider";
 
@@ -146,10 +147,74 @@ describe("shouldPreserveStoredSessionDuringSupabaseBootstrap", () => {
   it("keeps schema RLS access open for athlete conversations with admin coaches", () => {
     const schema = readFileSync(resolve(process.cwd(), "supabase/schema.sql"), "utf8");
 
+    expect(schema).toContain("'admin_message'");
     expect(schema).toContain("profile.role = 'admin'");
     expect(schema).toContain("role in ('coach', 'admin') and public.is_athlete_of(id)");
     expect(schema).toContain("from public.training_plans plan");
     expect(schema).toContain("from public.scheduled_workouts workout");
+  });
+
+  it("marks conversation entries as read per user without clearing another coach user's unread state", () => {
+    const state = cloneDemoState();
+
+    state.users = [
+      ...state.users.filter((user) => user.id !== "user_admin" && user.id !== "user_coach_1"),
+      {
+        id: "user_admin",
+        role: "admin",
+        fullName: "Admin",
+        email: "admin@example.com",
+        status: "active",
+        createdAt: "2026-03-24T08:00:00.000Z",
+        updatedAt: "2026-03-24T08:00:00.000Z",
+      },
+      {
+        id: "user_coach_1",
+        role: "coach",
+        fullName: "Coach One",
+        email: "coach@example.com",
+        status: "active",
+        createdAt: "2026-03-24T08:00:00.000Z",
+        updatedAt: "2026-03-24T08:00:00.000Z",
+      },
+    ];
+    state.assignments = [
+      {
+        id: "assignment_1",
+        coachId: "user_coach_1",
+        athleteId: "user_athlete_1",
+        active: true,
+        createdAt: "2026-03-24T08:00:00.000Z",
+      },
+    ];
+    state.conversationEntries = [
+      {
+        id: "conversation_1",
+        athleteId: "user_athlete_1",
+        coachId: "user_coach_1",
+        authorUserId: "user_athlete_1",
+        authorRole: "athlete",
+        type: "comment",
+        body: "Hei",
+        contextType: "general",
+        createdAt: "2026-03-30T08:00:00.000Z",
+        readByUserIds: ["user_athlete_1"],
+      },
+    ];
+
+    const admin = state.users.find((user) => user.id === "user_admin");
+    const coach = state.users.find((user) => user.id === "user_coach_1");
+
+    expect(admin).toBeTruthy();
+    expect(coach).toBeTruthy();
+
+    const afterAdminRead = markVisibleConversationEntriesRead(state, admin!, { athleteId: "user_athlete_1" }).state;
+    expect(afterAdminRead.conversationEntries[0]?.readByUserIds).toContain("user_admin");
+    expect(afterAdminRead.conversationEntries[0]?.readByUserIds).not.toContain("user_coach_1");
+
+    const afterCoachRead = markVisibleConversationEntriesRead(afterAdminRead, coach!, { athleteId: "user_athlete_1" }).state;
+    expect(afterCoachRead.conversationEntries[0]?.readByUserIds).toContain("user_admin");
+    expect(afterCoachRead.conversationEntries[0]?.readByUserIds).toContain("user_coach_1");
   });
 
   it("keeps newer local workout session data when an older snapshot arrives", () => {

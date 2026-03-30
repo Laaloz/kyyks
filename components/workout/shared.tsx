@@ -21,6 +21,7 @@ export function metricTone(role: Role | null) {
     case "coach":
       return "border-[var(--accent-tertiary)] text-[var(--accent-tertiary)]";
     case "athlete":
+    case "independent_athlete":
       return "border-[var(--accent)] text-[var(--accent)]";
     default:
       return "border-[var(--border-strong)] text-[var(--text)]";
@@ -30,6 +31,7 @@ export function metricTone(role: Role | null) {
 export function roleLabel(role: Role) {
   if (role === "admin") return "Admin";
   if (role === "coach") return "Valmentaja";
+  if (role === "independent_athlete") return "Itsenäinen treenaaja";
   return "Treenaaja";
 }
 
@@ -54,6 +56,8 @@ export function roleHeadline(role: Role) {
       return "Rakenna ohjelmat nopeasti ja seuraa kuka oikeasti etenee.";
     case "athlete":
       return "Pidä fokus toistoissa, voimassa ja jatkuvassa progressissa.";
+    case "independent_athlete":
+      return "Rakenna omat ohjelmat ja seuraa progressia ilman turhaa kitkaa.";
   }
 }
 

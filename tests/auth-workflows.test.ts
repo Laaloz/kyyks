@@ -28,7 +28,7 @@ type MockInvite = {
   id: string;
   token: string;
   email: string;
-  role: "coach" | "athlete";
+  role: "coach" | "athlete" | "independent_athlete";
   coach_id: string | null;
   status: "pending" | "accepted";
   expires_at: string;
@@ -37,7 +37,7 @@ type MockInvite = {
 
 type MockProfile = {
   id: string;
-  role: "admin" | "coach" | "athlete";
+  role: "admin" | "coach" | "athlete" | "independent_athlete";
   status: "active" | "invited";
   full_name: string;
   email: string;

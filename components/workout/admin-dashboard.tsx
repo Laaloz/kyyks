@@ -590,9 +590,10 @@ export function AdminDashboard({
                   <Select id={`${formId}-invite-role`} {...form.register("role")}>
                     <option value="coach">Valmentaja</option>
                     <option value="athlete">Treenaaja</option>
+                    <option value="independent_athlete">Itsenäinen treenaaja</option>
                   </Select>
                 </div>
-                {selectedRole === "athlete" ? (
+                {selectedRole === "athlete" || selectedRole === "independent_athlete" ? (
                   <div>
                     <Label htmlFor={`${formId}-invite-coach`}>Vastuuhenkilö</Label>
                     <Select

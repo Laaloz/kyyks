@@ -15,7 +15,7 @@ import { createProgramOnServer } from "@/lib/server/training-workflows";
 
 type MockProfile = {
   id: string;
-  role: "admin" | "coach" | "athlete";
+  role: "admin" | "coach" | "athlete" | "independent_athlete";
   email: string;
 };
 
@@ -183,6 +183,58 @@ describe("training workflows server", () => {
     expect(mock.state.insertedPlans).toContainEqual(
       expect.objectContaining({
         athlete_id: "e3cedd3c-c34a-4748-95a0-56a43f028ff8",
+      }),
+    );
+  });
+
+  it("allows an independent athlete to create a program only for themselves", async () => {
+    const mock = createMockAdminClient({
+      profiles: [
+        {
+          id: "independent-1",
+          role: "independent_athlete",
+          email: "solo@example.com",
+        },
+      ],
+    });
+
+    createSupabaseAdminClientMock.mockReturnValue(mock.client);
+
+    const result = await createProgramOnServer({
+      requester: {
+        id: "independent-1",
+        role: "independent_athlete",
+      },
+      payload: {
+        title: "Oma ohjelma",
+        athleteId: "independent-1",
+        athleteEmail: "solo@example.com",
+        workouts: [
+          {
+            splitType: "full_body",
+            defaultRestSeconds: 120,
+            exercises: [
+              {
+                exerciseId: "ex_squat",
+                exerciseName: "Kyykky",
+                instruction: "Pidä keskivartalo tiukkana.",
+                setCount: 3,
+                targetReps: 5,
+              },
+            ],
+          },
+        ],
+      },
+    });
+
+    expect(result).toEqual({
+      ok: true,
+      programId: "plan-created-1",
+    });
+    expect(mock.state.insertedPlans).toContainEqual(
+      expect.objectContaining({
+        coach_id: "independent-1",
+        athlete_id: "independent-1",
       }),
     );
   });

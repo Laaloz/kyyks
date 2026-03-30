@@ -2,6 +2,7 @@ import "server-only";
 
 import { addDaysIso, addMinutesIso, createSecureToken, hashToken, INVITE_EXPIRY_DAYS, RESET_TOKEN_EXPIRY_MINUTES } from "@/lib/auth-tokens";
 import { sendTransactionalEmail } from "@/lib/email";
+import { isAthleteRole } from "@/lib/role-access";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { PROGRAMS_DASHBOARD_VIEW, type Role, type UserProfile } from "@/lib/types";
 
@@ -16,13 +17,13 @@ type RequesterProfile = {
 
 type InvitePayload = {
   email: string;
-  role: "coach" | "athlete";
+  role: Exclude<Role, "admin">;
   coachId?: string;
 };
 
 type PublicInviteRecord = {
   email: string;
-  role: "coach" | "athlete";
+  role: Exclude<Role, "admin">;
   coachId: string | null;
   expiresAt: string;
   status: "pending" | "accepted";
@@ -32,7 +33,7 @@ type StoredInviteRecord = {
   id: string;
   token: string;
   email: string;
-  role: "coach" | "athlete";
+  role: Exclude<Role, "admin">;
   invited_by: string;
   coach_id: string | null;
   status: "pending" | "accepted";
@@ -96,7 +97,7 @@ function mapStoredProfileRecord(profile: {
         profile.default_dashboard_view === "athletes" ||
         profile.default_dashboard_view === "overview"
           ? profile.default_dashboard_view
-          : profile.role === "athlete"
+          : isAthleteRole(profile.role)
             ? "athlete-log"
             : "overview",
       emailNotifications: profile.email_notifications,
@@ -142,7 +143,6 @@ async function upsertActiveProfileFromInvite({
   const normalizedEmail = normalizeEmail(email);
   const resolvedFullName = resolveProfileFullName(fullName, normalizedEmail);
   const createdAt = new Date().toISOString();
-
   for (let attempt = 0; attempt < PROFILE_WRITE_ATTEMPTS; attempt += 1) {
     const { error: profileError } = await admin.from("profiles").upsert({
       id: authUserId,
@@ -210,7 +210,7 @@ async function ensureCoachAssignmentForInvite({
   invite: ActivationInviteRecord;
   createdAt: string;
 }) {
-  if (invite.role !== "athlete" || !invite.coach_id) {
+  if (!isAthleteRole(invite.role) || !invite.coach_id) {
     return { ok: true as const };
   }
 
@@ -357,7 +357,7 @@ export async function ensureProfileForAuthenticatedUserOnServer({
     .ilike("email", normalizedEmail)
     .order("created_at", { ascending: false })
     .limit(1)
-    .maybeSingle<{ id: string; email: string; role: "coach" | "athlete"; coach_id: string | null; status: "pending" | "accepted" }>();
+    .maybeSingle<{ id: string; email: string; role: Exclude<Role, "admin">; coach_id: string | null; status: "pending" | "accepted" }>();
 
   if (!invite) {
     return { ok: false as const, message: "Käyttäjäprofiilia ei löytynyt eikä sähköpostille löytynyt kutsua." };
@@ -385,7 +385,7 @@ async function sendInviteEmail({
   origin,
 }: {
   email: string;
-  role: "coach" | "athlete";
+  role: Exclude<Role, "admin">;
   token: string;
   origin: string;
 }) {
@@ -459,7 +459,7 @@ export async function createInviteAndSendEmail({
   }
 
   if (requester.role === "coach") {
-    if (payload.role !== "athlete") {
+    if (!isAthleteRole(payload.role)) {
       return { ok: false as const, message: "Valmentaja voi kutsua vain treenaajia." };
     }
     if (payload.coachId !== requester.id) {
@@ -467,11 +467,11 @@ export async function createInviteAndSendEmail({
     }
   }
 
-  if (payload.role === "athlete" && !payload.coachId) {
+  if (isAthleteRole(payload.role) && !payload.coachId) {
     return { ok: false as const, message: "Treenaajalle pitää valita vastuullinen valmentaja." };
   }
 
-  if (payload.role === "athlete" && payload.coachId) {
+  if (isAthleteRole(payload.role) && payload.coachId) {
     const { data: assignedCoach, error: coachError } = await admin
       .from("profiles")
       .select("id, role")

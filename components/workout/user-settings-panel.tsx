@@ -15,7 +15,7 @@ import { InlineFeedback } from "@/components/workout/inline-feedback";
 import { bodyMeasurementSchema, userSettingsSchema } from "@/components/workout/schemas";
 import { roleLabel } from "@/components/workout/shared";
 import { withMinimumDelay } from "@/lib/min-delay";
-import { canTrackOwnTraining, getDashboardViewsForRole, getDefaultDashboardView } from "@/lib/role-access";
+import { canTrackOwnTraining, getDashboardViewsForRole, getDefaultDashboardView, isAthleteRole } from "@/lib/role-access";
 import { PROGRAMS_DASHBOARD_VIEW, type DashboardHomeView, type Role, type ThemeMode } from "@/lib/types";
 import { useAppState } from "@/providers/app-state-provider";
 
@@ -622,7 +622,7 @@ export function UserSettingsPanel({ adminOnly = false }: { adminOnly?: boolean }
           </div>
         </Card>
 
-        {currentUser.role === "athlete" ? (
+        {isAthleteRole(currentUser.role) ? (
           <Card>
             <p className="text-xs font-semibold tracking-[0.04em] text-[var(--text-subtle)]">Mitat</p>
             <CardTitle className="text-2xl">Kehon seuranta</CardTitle>

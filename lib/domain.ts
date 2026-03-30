@@ -1,4 +1,5 @@
 import { demoState } from "@/lib/demo-data";
+import { isAthleteRole } from "@/lib/role-access";
 import { makeId } from "@/lib/utils";
 import type {
   AppState,
@@ -100,6 +101,7 @@ function buildProgramWorkouts(
     return {
       id: existingWorkout?.id ?? makeId("program_workout"),
       name: workout.nameOverride?.trim() || defaultWorkoutName(workout.splitType, workoutIndex),
+      guidance: workout.guidance?.trim() || undefined,
       splitType: workout.splitType,
       defaultRestSeconds: workout.defaultRestSeconds,
       exercises: workout.exercises.map((exercise, exerciseIndex) => {
@@ -318,7 +320,7 @@ export function isInviteExpired(expiresAt: string) {
 export function canCoachManageAthlete(state: AppState, coachId: string, athleteId: string) {
   const coach = state.users.find((user) => user.id === coachId);
   if (coach?.role === "admin") {
-    return state.users.some((user) => user.id === athleteId && user.role === "athlete");
+    return state.users.some((user) => user.id === athleteId && isAthleteRole(user.role));
   }
 
   return state.assignments.some(
@@ -773,7 +775,7 @@ export function getCoachAthletes(state: AppState, coachId: string) {
   const coach = state.users.find((user) => user.id === coachId);
   const athleteUsers = (() => {
     if (coach?.role === "admin") {
-      return state.users.filter((user) => user.role === "athlete");
+      return state.users.filter((user) => isAthleteRole(user.role));
     }
 
     const athleteIds = state.assignments
@@ -822,7 +824,7 @@ export function getCoachConversationAthletes(state: AppState, coachId: string) {
   });
 
   const athleteUsers = state.users.filter(
-    (user) => user.role === "athlete" && relatedAthleteIds.has(user.id),
+    (user) => isAthleteRole(user.role) && relatedAthleteIds.has(user.id),
   );
   const preferredAthletesByEmail = new Map<string, (typeof athleteUsers)[number]>();
 

@@ -25,6 +25,7 @@ export type ProgramComposerExerciseFormValues = {
 export type ProgramComposerWorkoutFormValues = {
   splitType: SplitType;
   nameOverride?: string;
+  guidance: string;
   defaultRestSeconds: number;
   exercises: ProgramComposerExerciseFormValues[];
 };

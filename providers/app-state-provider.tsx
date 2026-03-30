@@ -32,10 +32,13 @@ import { getVisiblePendingInvites } from "@/lib/invite-status";
 import { getProgramStatus, isProgramActive } from "@/lib/program-status";
 import {
   canActAsCoach,
+  canManageOwnPrograms,
+  canManagePrograms,
   canResendInvite,
   canTrackOwnTraining,
   getDashboardViewsForRole,
   getDefaultDashboardView,
+  isAthleteRole,
   isAdminRole,
 } from "@/lib/role-access";
 import { createSupabaseBrowserClient } from "@/lib/supabase/client";
@@ -335,11 +338,15 @@ function canManageProgramTarget(state: AppState, actor: UserProfile, athleteId: 
   }
 
   if (isAdminRole(actor.role)) {
-    return state.users.some((user) => user.id === resolvedAthleteId && user.role === "athlete");
+    return state.users.some((user) => user.id === resolvedAthleteId && isAthleteRole(user.role));
   }
 
   if (canActAsCoach(actor.role)) {
     return canCoachManageAthlete(state, actor.id, resolvedAthleteId);
+  }
+
+  if (canManageOwnPrograms(actor.role)) {
+    return resolvedAthleteId === actor.id;
   }
 
   return false;
@@ -466,7 +473,7 @@ function normalizeConversationEntries(raw: AppState & { workoutComments?: Legacy
       Boolean(entry.coachId) &&
       Boolean(entry.authorUserId) &&
       Boolean(entry.authorRole) &&
-      entry.type === "comment" &&
+      (entry.type === "comment" || entry.type === "admin_message") &&
       Boolean(entry.body) &&
       Boolean(entry.contextType) &&
       Boolean(entry.createdAt) &&
@@ -1158,7 +1165,7 @@ type SupabaseInviteDirectorySnapshot = {
     id: string;
     token: string;
     email: string;
-    role: "coach" | "athlete";
+    role: Exclude<Role, "admin">;
     invitedBy: string;
     coachId?: string | null;
     status: "pending" | "accepted";
@@ -1393,6 +1400,18 @@ export function applyAdminRoleUpdate(
     return withResolvedId;
   }
 
+  const nextAssignments = withResolvedId.assignments.filter((assignment) => {
+    if (role === "admin") {
+      return assignment.coachId !== targetUser.id && assignment.athleteId !== targetUser.id;
+    }
+
+    if (role === "coach") {
+      return assignment.athleteId !== targetUser.id;
+    }
+
+    return assignment.coachId !== targetUser.id;
+  });
+
   return {
     ...withResolvedId,
     users: withResolvedId.users.map((user) =>
@@ -1405,17 +1424,21 @@ export function applyAdminRoleUpdate(
           }
         : user,
     ),
-    assignments: withResolvedId.assignments.filter((assignment) => {
-      if (role === "admin") {
-        return assignment.coachId !== targetUser.id && assignment.athleteId !== targetUser.id;
-      }
-
-      if (role === "coach") {
-        return assignment.athleteId !== targetUser.id;
-      }
-
-      return assignment.coachId !== targetUser.id;
-    }),
+    assignments:
+      role === "independent_athlete"
+        ? [
+            ...nextAssignments.filter((assignment) => assignment.athleteId !== targetUser.id),
+            ...withResolvedId.users
+              .filter((user) => user.role === "admin" && user.id !== targetUser.id)
+              .map((user) => ({
+                id: makeId("assignment"),
+                coachId: user.id,
+                athleteId: targetUser.id,
+                active: true,
+                createdAt: updatedAt,
+              })),
+          ]
+        : nextAssignments,
   };
 }
 
@@ -1449,7 +1472,7 @@ export function applyAdminCoachAssignmentUpdate(
       })),
     ],
     invites: withResolvedId.invites.map((invite) =>
-      invite.role === "athlete" &&
+      isAthleteRole(invite.role) &&
       invite.email.toLowerCase() === athlete.email.toLowerCase() &&
       invite.status === "pending"
         ? { ...invite, coachId: updatedInviteCoachId ?? coachIds[0] }
@@ -1606,8 +1629,11 @@ function isConversationVisibleToUser(state: AppState, entry: ConversationEntry, 
     return true;
   }
 
-  if (user.role === "athlete") {
-    return entry.athleteId === user.id && (publicFacingCoachForConversation(state, entry) !== null || entry.authorRole === "athlete");
+  if (isAthleteRole(user.role)) {
+    return (
+      entry.athleteId === user.id &&
+      (publicFacingCoachForConversation(state, entry) !== null || isAthleteRole(entry.authorRole))
+    );
   }
 
   if (canActAsCoach(user.role)) {
@@ -1623,6 +1649,40 @@ function publicFacingCoachForConversation(state: AppState, entry: ConversationEn
   }
 
   return resolvePrimaryCoachIdForAthlete(state, entry.athleteId) ?? null;
+}
+
+export function markVisibleConversationEntriesRead(
+  previous: AppState,
+  currentUser: UserProfile,
+  options?: { athleteId?: string },
+) {
+  const targetAthleteId = options?.athleteId;
+  const changedEntryIds = previous.conversationEntries
+    .filter(
+      (entry) =>
+        isConversationVisibleToUser(previous, entry, currentUser) &&
+        (!targetAthleteId || entry.athleteId === targetAthleteId) &&
+        !entry.readByUserIds.includes(currentUser.id),
+    )
+    .map((entry) => entry.id);
+
+  if (!changedEntryIds.length) {
+    return { state: previous, changedEntryIds };
+  }
+
+  return {
+    state: {
+      ...previous,
+      conversationEntries: previous.conversationEntries.map((entry) =>
+        isConversationVisibleToUser(previous, entry, currentUser) &&
+        (!targetAthleteId || entry.athleteId === targetAthleteId) &&
+        !entry.readByUserIds.includes(currentUser.id)
+          ? { ...entry, readByUserIds: [...entry.readByUserIds, currentUser.id] }
+          : entry,
+      ),
+    },
+    changedEntryIds,
+  };
 }
 
 interface AppStateContextValue {
@@ -1659,9 +1719,16 @@ interface AppStateContextValue {
   startProgramWorkout: (programId: string, programWorkoutId: string) => Promise<ActionResult>;
   addConversationComment: (
     body: string,
-    options?: { scheduledWorkoutId?: string; trainingPlanId?: string; athleteId?: string; contextLabel?: string },
+    options?: {
+      type?: ConversationEntryType;
+      targetAdminUserId?: string;
+      scheduledWorkoutId?: string;
+      trainingPlanId?: string;
+      athleteId?: string;
+      contextLabel?: string;
+    },
   ) => Promise<ActionResult>;
-  markConversationRead: () => void;
+  markConversationRead: (options?: { athleteId?: string }) => void;
   startWorkout: (scheduledWorkoutId: string) => Promise<ActionResult>;
   updateWorkoutDate: (scheduledWorkoutId: string, scheduledDate: string) => Promise<ActionResult>;
   updateWorkoutDuration: (scheduledWorkoutId: string, durationSeconds: number) => Promise<ActionResult>;
@@ -2772,7 +2839,7 @@ function findResolvedUserIdInSnapshot(
             ok: true,
             message:
               payload?.message ??
-              `Rooli päivitettiin: ${targetUser.fullName} on nyt ${role === "admin" ? "admin" : role === "coach" ? "valmentaja" : "treenaaja"}.`,
+              `Rooli päivitettiin: ${targetUser.fullName} on nyt ${role === "admin" ? "admin" : role === "coach" ? "valmentaja" : role === "independent_athlete" ? "itsenäinen treenaaja" : "treenaaja"}.`,
           };
         }
 
@@ -2831,7 +2898,7 @@ function findResolvedUserIdInSnapshot(
 
         return {
           ok: true,
-          message: `Rooli päivitettiin: ${targetUser.fullName} on nyt ${role === "admin" ? "admin" : role === "coach" ? "valmentaja" : "treenaaja"}.`,
+          message: `Rooli päivitettiin: ${targetUser.fullName} on nyt ${role === "admin" ? "admin" : role === "coach" ? "valmentaja" : role === "independent_athlete" ? "itsenäinen treenaaja" : "treenaaja"}.`,
         };
       },
       async adminAssignAthleteCoaches(athleteId, coachIds) {
@@ -2840,7 +2907,7 @@ function findResolvedUserIdInSnapshot(
         }
 
         const athlete = state.users.find((user) => user.id === athleteId);
-        if (!athlete || athlete.role !== "athlete") {
+        if (!athlete || !isAthleteRole(athlete.role)) {
           return { ok: false, message: "Treenaajaa ei löytynyt." };
         }
 
@@ -2938,7 +3005,7 @@ function findResolvedUserIdInSnapshot(
             }),
           ],
           invites: previous.invites.map((invite) =>
-            invite.role === "athlete" &&
+            isAthleteRole(invite.role) &&
             invite.email.toLowerCase() === athlete.email.toLowerCase() &&
             invite.status === "pending"
               ? { ...invite, coachId: primaryCoachId }
@@ -3066,7 +3133,7 @@ function findResolvedUserIdInSnapshot(
         }
 
         if (currentUser.role === "coach") {
-          if (input.role !== "athlete") {
+          if (!isAthleteRole(input.role)) {
             return { ok: false, message: "Valmentaja voi kutsua vain treenaajia." };
           }
           if (input.coachId !== currentUser.id) {
@@ -3074,11 +3141,11 @@ function findResolvedUserIdInSnapshot(
           }
         }
 
-        if (input.role === "athlete" && !input.coachId) {
+        if (isAthleteRole(input.role) && !input.coachId) {
           return { ok: false, message: "Treenaajalle pitää valita vastuullinen valmentaja." };
         }
 
-        if (input.role === "athlete" && input.coachId) {
+        if (isAthleteRole(input.role) && input.coachId) {
           const assignedCoach = state.users.find((user) => user.id === input.coachId);
           if (!assignedCoach || !canActAsCoach(assignedCoach.role)) {
             return { ok: false, message: "Treenaajalle pitää valita valmennuskelpoinen vastuuhenkilö." };
@@ -3107,7 +3174,7 @@ function findResolvedUserIdInSnapshot(
               id: string;
               token: string;
               email: string;
-              role: "coach" | "athlete";
+              role: Exclude<Role, "admin">;
               invitedBy: string;
               coachId?: string | null;
               status: "pending" | "accepted";
@@ -3146,7 +3213,7 @@ function findResolvedUserIdInSnapshot(
                 ];
 
             const assignments =
-              invite.role === "athlete" && invite.coachId
+              isAthleteRole(invite.role) && invite.coachId
                 ? previous.assignments.some(
                     (assignment) =>
                       assignment.coachId === invite.coachId &&
@@ -3201,7 +3268,7 @@ function findResolvedUserIdInSnapshot(
               ];
 
           const assignments =
-            input.role === "athlete" && input.coachId
+            isAthleteRole(input.role) && input.coachId
               ? previous.assignments.some(
                   (assignment) =>
                     assignment.coachId === input.coachId &&
@@ -3257,7 +3324,7 @@ function findResolvedUserIdInSnapshot(
               id: string;
               token: string;
               email: string;
-              role: "coach" | "athlete";
+              role: Exclude<Role, "admin">;
               invitedBy: string;
               coachId?: string | null;
               status: "pending" | "accepted";
@@ -3284,7 +3351,7 @@ function findResolvedUserIdInSnapshot(
                 id: string;
                 token: string;
                 email: string;
-                role: "coach" | "athlete";
+                role: Exclude<Role, "admin">;
                 invitedBy: string;
                 coachId?: string | null;
                 status: "pending" | "accepted";
@@ -3453,7 +3520,7 @@ function findResolvedUserIdInSnapshot(
             item.id === invite.id ? { ...item, status: "accepted" } : item,
           ),
           assignments:
-            invite.role === "athlete" && invite.coachId
+            isAthleteRole(invite.role) && invite.coachId
               ? previous.assignments.some((assignment) => assignment.athleteId === userId)
                 ? previous.assignments
                 : [
@@ -3474,8 +3541,8 @@ function findResolvedUserIdInSnapshot(
         return { ok: true };
       },
       async createProgram(input) {
-        if (!currentUser || !canActAsCoach(currentUser.role)) {
-          return { ok: false, message: "Vain admin tai valmentaja voi luoda treeniohjelman." };
+        if (!currentUser || !canManagePrograms(currentUser.role)) {
+          return { ok: false, message: "Vain admin, valmentaja tai itsenäinen treenaaja voi luoda treeniohjelman." };
         }
 
         const resolvedTargetUser = resolveProgramTargetFromState(state, input.athleteId);
@@ -3546,8 +3613,8 @@ function findResolvedUserIdInSnapshot(
         return { ok: true, programId: createdProgram.id };
       },
       async updateProgram(programId, patch) {
-        if (!currentUser || !canActAsCoach(currentUser.role)) {
-          return { ok: false, message: "Vain admin tai valmentaja voi muokata treeniohjelmaa." };
+        if (!currentUser || !canManagePrograms(currentUser.role)) {
+          return { ok: false, message: "Vain admin, valmentaja tai itsenäinen treenaaja voi muokata treeniohjelmaa." };
         }
 
         const program = state.plans.find((item) => item.id === programId);
@@ -3631,8 +3698,8 @@ function findResolvedUserIdInSnapshot(
         return { ok: true };
       },
       async setProgramStatus(programId, status) {
-        if (!currentUser || !canActAsCoach(currentUser.role)) {
-          return { ok: false, message: "Vain admin tai valmentaja voi muuttaa ohjelman tilaa." };
+        if (!currentUser || !canManagePrograms(currentUser.role)) {
+          return { ok: false, message: "Vain admin, valmentaja tai itsenäinen treenaaja voi muuttaa ohjelman tilaa." };
         }
 
         const program = state.plans.find((item) => item.id === programId);
@@ -3673,8 +3740,8 @@ function findResolvedUserIdInSnapshot(
         return { ok: true };
       },
       async deleteProgram(programId) {
-        if (!currentUser || !canActAsCoach(currentUser.role)) {
-          return { ok: false, message: "Vain admin tai valmentaja voi poistaa treeniohjelman." };
+        if (!currentUser || !canManagePrograms(currentUser.role)) {
+          return { ok: false, message: "Vain admin, valmentaja tai itsenäinen treenaaja voi poistaa treeniohjelman." };
         }
 
         const program = state.plans.find((item) => item.id === programId);
@@ -3816,6 +3883,7 @@ function findResolvedUserIdInSnapshot(
         }
 
         const trimmedBody = body.trim();
+        const entryType = options?.type ?? "comment";
         if (!trimmedBody) {
           return { ok: false, message: "Kirjoita kommentti ennen lähettämistä." };
         }
@@ -3827,7 +3895,7 @@ function findResolvedUserIdInSnapshot(
           }
 
           const canCommentAsAthlete =
-            currentUser.role === "athlete" && workout.athleteId === currentUser.id;
+            isAthleteRole(currentUser.role) && workout.athleteId === currentUser.id;
           const canCommentAsCoach =
             isAdminRole(currentUser.role) ||
             (canActAsCoach(currentUser.role) && canCoachManageAthlete(state, currentUser.id, workout.athleteId));
@@ -3841,7 +3909,7 @@ function findResolvedUserIdInSnapshot(
             coachId: workout.coachId,
             authorUserId: currentUser.id,
             authorRole: currentUser.role,
-            type: "comment",
+            type: entryType,
             body: trimmedBody,
             contextType: "workout",
             contextId: workout.id,
@@ -3877,7 +3945,7 @@ function findResolvedUserIdInSnapshot(
           }
 
           const canCommentAsAthlete =
-            currentUser.role === "athlete" && plan.athleteId === currentUser.id;
+            isAthleteRole(currentUser.role) && plan.athleteId === currentUser.id;
           const canCommentAsCoach =
             isAdminRole(currentUser.role) ||
             (canActAsCoach(currentUser.role) && canCoachManageAthlete(state, currentUser.id, plan.athleteId));
@@ -3891,7 +3959,7 @@ function findResolvedUserIdInSnapshot(
             coachId: plan.coachId,
             authorUserId: currentUser.id,
             authorRole: currentUser.role,
-            type: "comment",
+            type: entryType,
             body: trimmedBody,
             contextType: "program",
             contextId: plan.id,
@@ -3920,7 +3988,47 @@ function findResolvedUserIdInSnapshot(
           return { ok: true };
         }
 
-        if (currentUser.role === "athlete") {
+        if (isAthleteRole(currentUser.role)) {
+          if (entryType === "admin_message") {
+            const targetAdmin = state.users.find(
+              (user) => user.id === options?.targetAdminUserId && user.role === "admin" && user.status === "active",
+            );
+            if (!targetAdmin) {
+              return { ok: false, message: "Admin-vastaanottajaa ei löytynyt." };
+            }
+
+            const entry = buildConversationEntry({
+              athleteId: currentUser.id,
+              coachId: targetAdmin.id,
+              authorUserId: currentUser.id,
+              authorRole: currentUser.role,
+              type: "admin_message",
+              body: trimmedBody,
+              contextType: "general",
+            });
+
+            setState((previous) => appendConversationEntry(previous, entry));
+
+            if (supabase) {
+              try {
+                await persistConversationEntry(supabase, entry);
+                await refreshSupabaseVisibleState();
+              } catch (error) {
+                setState((previous) => removeConversationEntry(previous, entry.id));
+                await refreshSupabaseVisibleState();
+                return {
+                  ok: false,
+                  message:
+                    error instanceof Error && error.message
+                      ? error.message
+                      : "Viestin tallennus epäonnistui. Yritä uudelleen.",
+                };
+              }
+            }
+
+            return { ok: true };
+          }
+
           const latestCoachId = resolvePrimaryCoachIdForAthlete(state, currentUser.id);
           if (!latestCoachId) {
             return { ok: false, message: "Keskustelu tarvitsee ensin aktiivisen valmentajasuhteen." };
@@ -3931,7 +4039,7 @@ function findResolvedUserIdInSnapshot(
             coachId: latestCoachId,
             authorUserId: currentUser.id,
             authorRole: currentUser.role,
-            type: "comment",
+            type: entryType,
             body: trimmedBody,
             contextType: "general",
           });
@@ -3973,7 +4081,7 @@ function findResolvedUserIdInSnapshot(
             coachId: resolvedCoachId,
             authorUserId: currentUser.id,
             authorRole: currentUser.role,
-            type: "comment",
+            type: entryType,
             body: trimmedBody,
             contextType: "general",
           });
@@ -4002,7 +4110,7 @@ function findResolvedUserIdInSnapshot(
 
         return { ok: false, message: "Yleinen keskustelu tarvitsee valitun treenaajan tai ohjelman." };
       },
-      markConversationRead() {
+      markConversationRead(options) {
         if (!currentUser) {
           return;
         }
@@ -4010,31 +4118,9 @@ function findResolvedUserIdInSnapshot(
         let changedEntryIds: string[] = [];
 
         setState((previous) => {
-          const hasUnread = previous.conversationEntries.some(
-            (entry) =>
-              isConversationVisibleToUser(previous, entry, currentUser) &&
-              !entry.readByUserIds.includes(currentUser.id),
-          );
-
-          if (!hasUnread) {
-            return previous;
-          }
-
-          changedEntryIds = previous.conversationEntries
-            .filter(
-              (entry) =>
-                isConversationVisibleToUser(previous, entry, currentUser) && !entry.readByUserIds.includes(currentUser.id),
-            )
-            .map((entry) => entry.id);
-
-          return {
-            ...previous,
-            conversationEntries: previous.conversationEntries.map((entry) =>
-              isConversationVisibleToUser(previous, entry, currentUser) && !entry.readByUserIds.includes(currentUser.id)
-                ? { ...entry, readByUserIds: [...entry.readByUserIds, currentUser.id] }
-                : entry,
-            ),
-          };
+          const next = markVisibleConversationEntriesRead(previous, currentUser, options);
+          changedEntryIds = next.changedEntryIds;
+          return next.state;
         });
 
         if (supabase && changedEntryIds.length > 0) {

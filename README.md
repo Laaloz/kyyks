@@ -5,7 +5,7 @@ Coach-first, mobile-first treenisovellus valmentajille ja treenaajille.
 ## Nykytila
 - `Next.js 16` + `React 19` + `TypeScript`
 - `Tailwind CSS 4` -pohjainen custom UI
-- Roolit: `admin`, `coach`, `athlete`
+- Roolit: `admin`, `coach`, `athlete`, `independent_athlete`
 - Supabase-pohjaiset auth- ja server-flowt tuotantopolulle
 - Demo-fallback localStoragella kehitystä ja nopeaa testausta varten
 

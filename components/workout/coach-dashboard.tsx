@@ -3,6 +3,7 @@
 import { zodResolver } from "@hookform/resolvers/zod";
 import {
   Activity,
+  Check,
   ChevronDown,
   ChevronUp,
   CircleCheckBig,
@@ -10,8 +11,9 @@ import {
   ClipboardPenLine,
   MoreHorizontal,
   Plus,
+  Search,
 } from "lucide-react";
-import { useEffect, useId, useMemo, useState } from "react";
+import { useEffect, useId, useMemo, useRef, useState } from "react";
 import { type Resolver, useFieldArray, useForm } from "react-hook-form";
 
 import { Badge } from "@/components/ui/badge";
@@ -31,14 +33,17 @@ import {
   type ProgramComposerValues,
 } from "@/components/workout/coach/program-composer";
 import { estimateStrengthCalories, getLatestMeasurement, getMeasurementsForUser, getWeightAtMoment } from "@/lib/body-metrics";
+import { isConversationEntryNotifiable } from "@/lib/conversation";
 import { calculateSessionDurationSeconds, getCoachConversationAthletes, splitLabel } from "@/lib/domain";
 import { withMinimumDelay } from "@/lib/min-delay";
+import { deriveProgramWorkoutGuidance } from "@/lib/program-workout-guidance";
 import { buildScheduledWorkoutExerciseOrder } from "@/lib/workout-exercise-order";
 import { buildWorkoutConversationContextOptions } from "@/lib/workout-conversation-context";
 import { buildWorkoutHistoryTitleMap } from "@/lib/workout-history-title";
 import { isProgramActive } from "@/lib/program-status";
 import { isAdminRole } from "@/lib/role-access";
 import type { AppState, ConversationEntry, Role, ScheduledWorkoutStatus, WorkoutSession } from "@/lib/types";
+import { cn } from "@/lib/utils";
 import { formatDate, formatDateWithWeekday } from "@/lib/utils";
 import { canDeleteProgramFromState, useAppState } from "@/providers/app-state-provider";
 
@@ -94,6 +99,132 @@ function getCoachWorkoutCompletedAt(
   return workout.completedAt ?? session?.completedAt ?? session?.startedAt ?? workout.scheduledDate;
 }
 
+function SearchableAthleteConversationSelect({
+  id,
+  selectedAthleteId,
+  athleteOptions,
+  onSelect,
+}: {
+  id: string;
+  selectedAthleteId: string;
+  athleteOptions: Array<{ id: string; fullName: string; unreadCount: number }>;
+  onSelect: (athleteId: string) => void;
+}) {
+  const [isOpen, setIsOpen] = useState(false);
+  const [query, setQuery] = useState("");
+  const rootRef = useRef<HTMLDivElement | null>(null);
+  const selectedAthlete = athleteOptions.find((athlete) => athlete.id === selectedAthleteId);
+
+  useEffect(() => {
+    if (!isOpen) {
+      return;
+    }
+
+    function handlePointerDown(event: MouseEvent) {
+      if (!rootRef.current?.contains(event.target as Node)) {
+        setIsOpen(false);
+      }
+    }
+
+    document.addEventListener("mousedown", handlePointerDown);
+    return () => document.removeEventListener("mousedown", handlePointerDown);
+  }, [isOpen, rootRef]);
+
+  useEffect(() => {
+    if (!isOpen) {
+      setQuery("");
+    }
+  }, [isOpen]);
+
+  const filteredAthletes = useMemo(() => {
+    const normalizedQuery = query.trim().toLowerCase();
+    if (!normalizedQuery) {
+      return athleteOptions;
+    }
+
+    return athleteOptions.filter((athlete) => athlete.fullName.toLowerCase().includes(normalizedQuery));
+  }, [athleteOptions, query]);
+
+  const triggerLabel = selectedAthlete
+    ? selectedAthlete.unreadCount > 0
+      ? `${selectedAthlete.fullName} (${selectedAthlete.unreadCount})`
+      : selectedAthlete.fullName
+    : "Valitse treenaaja";
+
+  return (
+    <div ref={rootRef} className="relative">
+      <button
+        id={id}
+        type="button"
+        className="flex w-full items-center justify-between rounded-xl border border-[var(--border)] bg-[var(--surface)] px-4 py-3 text-left text-base text-[var(--text)] outline-none transition focus:border-[var(--accent)] focus-visible:ring-2 focus-visible:ring-[var(--accent)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--background)]"
+        aria-expanded={isOpen}
+        aria-haspopup="listbox"
+        onClick={() => setIsOpen((current) => !current)}
+      >
+        <span className={cn("truncate", !selectedAthlete ? "text-[var(--text-subtle)]" : "")}>
+          {triggerLabel}
+        </span>
+        <ChevronDown className={cn("size-4 shrink-0 text-[var(--text-subtle)] transition", isOpen ? "rotate-180" : "")} />
+      </button>
+
+      {isOpen ? (
+        <div className="absolute left-0 right-0 top-[calc(100%+0.5rem)] z-20 overflow-hidden rounded-2xl border border-[var(--border)] bg-[var(--surface)] shadow-[0_18px_45px_-24px_var(--shadow)]">
+          <div className="border-b border-[var(--border)] p-3">
+            <div className="relative">
+              <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-[var(--text-subtle)]" />
+              <Input
+                value={query}
+                onChange={(event) => setQuery(event.target.value)}
+                placeholder="Hae treenaajaa"
+                className="pl-10"
+              />
+            </div>
+          </div>
+
+          <div className="max-h-72 overflow-y-auto p-2">
+            {filteredAthletes.length ? (
+              filteredAthletes.map((athlete) => (
+                <button
+                  key={athlete.id}
+                  type="button"
+                  className="flex w-full items-center justify-between rounded-xl px-3 py-3 text-left transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)] hover:bg-[var(--surface-2)]"
+                  onClick={() => {
+                    onSelect(athlete.id);
+                    setIsOpen(false);
+                  }}
+                >
+                  <span className="block min-w-0">
+                    <span className="block truncate text-sm font-semibold text-[var(--text)]">{athlete.fullName}</span>
+                    <span className="mt-1 block text-xs text-[var(--text-subtle)]">
+                      {athlete.unreadCount > 0
+                        ? `${athlete.unreadCount} uutta viestiä`
+                        : "Ei uusia viestejä"}
+                    </span>
+                  </span>
+                  <span className="ml-3 flex items-center gap-2">
+                    {athlete.unreadCount > 0 ? (
+                      <span className="inline-flex min-w-6 items-center justify-center rounded-full bg-[var(--accent)] px-2 py-1 text-xs font-semibold text-[var(--accent-contrast)]">
+                        {athlete.unreadCount}
+                      </span>
+                    ) : null}
+                    {selectedAthleteId === athlete.id ? (
+                      <Check className="size-4 shrink-0 text-[var(--accent-strong)]" aria-hidden="true" />
+                    ) : null}
+                  </span>
+                </button>
+              ))
+            ) : (
+              <div className="rounded-xl border border-dashed border-[var(--border)] bg-[var(--surface-2)] px-3 py-4 text-sm text-[var(--text-muted)]">
+                Hakusanalla ei löytynyt treenaajaa.
+              </div>
+            )}
+          </div>
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
 const coachHistoryMuscleGroups: Array<{ key: CoachHistoryMuscleGroupKey; label: string }> = [
   { key: "shoulders", label: "Olkapää" },
   { key: "arms", label: "Kädet" },
@@ -122,6 +253,7 @@ export function CoachDashboard({
     deleteProgram,
     addConversationComment,
     getCoachAthletes,
+    markConversationRead,
   } = useAppState();
   const formId = useId();
   const [programMessage, setProgramMessage] = useState<string>("");
@@ -353,6 +485,7 @@ export function CoachDashboard({
           currentRole={currentUser.role}
           currentUserId={currentUser.id}
           entries={state.conversationEntries}
+          markConversationRead={markConversationRead}
           onSend={addConversationComment}
           selectedAthleteId={selectedAthleteId}
           onSelectAthlete={setSelectedAthleteId}
@@ -1155,6 +1288,7 @@ function mapComposerWorkouts(workouts: ProgramComposerValues["workouts"]) {
   return workouts.map((workout) => ({
     splitType: workout.splitType,
     nameOverride: workout.nameOverride,
+    guidance: workout.guidance,
     defaultRestSeconds: workout.defaultRestSeconds,
     exercises: workout.exercises.map((exercise) => ({
       repMode: exercise.repMode,
@@ -1196,6 +1330,7 @@ function buildProgramComposerValues(
     workouts: (program.workouts ?? []).map((workout) => ({
       splitType: workout.splitType,
       nameOverride: workout.name,
+      guidance: workout.guidance ?? deriveProgramWorkoutGuidance(workout),
       defaultRestSeconds: workout.defaultRestSeconds,
       exercises: (workout.exercises.length ? workout.exercises : [null]).map((exerciseItem) => {
         if (!exerciseItem) {
@@ -2491,6 +2626,7 @@ function CoachConversationView({
   currentRole,
   currentUserId,
   entries,
+  markConversationRead,
   onSend,
   selectedAthleteId,
   onSelectAthlete,
@@ -2503,6 +2639,7 @@ function CoachConversationView({
   currentRole: Role;
   currentUserId: string;
   entries: AppState["conversationEntries"];
+  markConversationRead: (options?: { athleteId?: string }) => void;
   onSend: (
     body: string,
     options?: { scheduledWorkoutId?: string; trainingPlanId?: string; athleteId?: string; contextLabel?: string },
@@ -2514,6 +2651,53 @@ function CoachConversationView({
   templates: AppState["templates"];
   users: AppState["users"];
 }) {
+  const athleteSelectOptions = useMemo(() => {
+    const summaries = new Map<
+      string,
+      {
+        unreadCount: number;
+      }
+    >();
+
+    entries.forEach((entry) => {
+      const existing = summaries.get(entry.athleteId);
+      const unread =
+        isConversationEntryNotifiable(entry) &&
+        !entry.readByUserIds.includes(currentUserId) &&
+        currentRole !== entry.authorRole;
+
+      if (!existing) {
+        summaries.set(entry.athleteId, {
+          unreadCount: unread ? 1 : 0,
+        });
+        return;
+      }
+
+      if (unread) {
+        existing.unreadCount += 1;
+      }
+
+    });
+
+    return athletes.map((athlete) => {
+      const summary = summaries.get(athlete.id);
+      return {
+        ...athlete,
+        unreadCount: summary?.unreadCount ?? 0,
+      };
+    }).sort((left, right) => {
+      if (left.unreadCount !== right.unreadCount) {
+        return right.unreadCount - left.unreadCount;
+      }
+
+      return left.fullName.localeCompare(right.fullName, "fi");
+    });
+  }, [athletes, currentRole, currentUserId, entries]);
+  const totalUnreadCount = useMemo(
+    () => athleteSelectOptions.reduce((sum, athlete) => sum + athlete.unreadCount, 0),
+    [athleteSelectOptions],
+  );
+
   const filteredEntries = useMemo(
     () =>
       entries
@@ -2523,6 +2707,14 @@ function CoachConversationView({
         .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()),
     [entries, selectedAthleteId],
   );
+  useEffect(() => {
+    if (!selectedAthleteId) {
+      return;
+    }
+
+    markConversationRead({ athleteId: selectedAthleteId });
+  }, [markConversationRead, selectedAthleteId]);
+
   const contextOptions = useMemo(() => {
     const selectedAthletePlans = plans.filter((plan) => plan.athleteId === selectedAthleteId && isProgramActive(plan));
     const selectedAthleteWorkouts = scheduledWorkouts.filter(
@@ -2585,18 +2777,20 @@ function CoachConversationView({
       }
       headerSlot={
         <div className="w-full lg:w-72">
-          <Label htmlFor="coach-conversation-athlete-select">Treenaaja</Label>
-          <Select
+          <div className="mb-2 flex items-center justify-between gap-3">
+            <Label className="mb-0" htmlFor="coach-conversation-athlete-select">Viestit treenaajittain</Label>
+            {totalUnreadCount > 0 ? (
+              <span className="inline-flex min-w-7 items-center justify-center rounded-full bg-[var(--accent)] px-2 py-1 text-xs font-semibold text-[var(--accent-contrast)]">
+                {totalUnreadCount}
+              </span>
+            ) : null}
+          </div>
+          <SearchableAthleteConversationSelect
             id="coach-conversation-athlete-select"
-            value={selectedAthleteId}
-            onChange={(event) => onSelectAthlete(event.target.value)}
-          >
-            {athletes.map((athlete) => (
-              <option key={athlete.id} value={athlete.id}>
-                {athlete.fullName}
-              </option>
-            ))}
-          </Select>
+            selectedAthleteId={selectedAthleteId}
+            athleteOptions={athleteSelectOptions}
+            onSelect={onSelectAthlete}
+          />
         </div>
       }
     />

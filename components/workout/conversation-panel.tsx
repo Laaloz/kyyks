@@ -1,6 +1,6 @@
 "use client";
 
-import { MessageSquare } from "lucide-react";
+import { MessageSquare, Shield } from "lucide-react";
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 
 import { Badge } from "@/components/ui/badge";
@@ -21,6 +21,8 @@ type ConversationContextOption = {
   contextType: ConversationEntry["contextType"];
   contextId?: string;
   contextLabel?: string;
+  recipientType?: "coach" | "admin";
+  recipientUserId?: string;
 };
 
 type ActionResult =
@@ -98,6 +100,9 @@ export function ConversationPanel({
     }
   };
 
+  const helperText = getConversationComposerHelperText(currentRole, selectedContext);
+  const placeholder = getConversationComposerPlaceholder(currentRole, selectedContext);
+
   return (
     <Card className="border-[var(--border-strong)]">
       <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
@@ -133,9 +138,7 @@ export function ConversationPanel({
 
         <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface-2)] p-4">
           <p className="text-sm font-semibold text-[var(--text)]">Uusi viesti</p>
-          <p className="mt-1 text-xs text-[var(--text-subtle)]">
-            Jätä yleinen kommentti tai kohdista viesti suoraan treenialueeseen tai ohjelmaan.
-          </p>
+          <p className="mt-1 text-xs text-[var(--text-subtle)]">{helperText}</p>
           <div className="mt-4">
             <Label htmlFor="conversation-context">Kohde</Label>
             <Select
@@ -162,7 +165,7 @@ export function ConversationPanel({
                   setMessageTone(null);
                 }
               }}
-              placeholder="Kirjoita viesti valmennuksen etenemisestä, treenin kuormittavuudesta tai ohjelman muutostarpeesta."
+              placeholder={placeholder}
             />
           </div>
           <div className="mt-4 flex flex-wrap items-center gap-3">
@@ -207,7 +210,7 @@ function ConversationEntryCard({
     author?.fullName ??
     (entry.authorRole === "coach"
       ? "Valmentaja"
-      : entry.authorRole === "athlete"
+      : entry.authorRole === "athlete" || entry.authorRole === "independent_athlete"
         ? "Treenaaja"
         : "Käyttäjä");
   const unread =
@@ -252,15 +255,47 @@ function ConversationEntryCard({
 }
 
 function conversationLabel(type: ConversationEntry["type"]) {
-  return type === "comment" ? "Kommentti" : type;
+  return type === "admin_message" ? "Admin" : "Kommentti";
 }
 
 function conversationTone(type: ConversationEntry["type"]) {
-  return type === "comment"
-    ? "border-[var(--accent)] bg-[var(--surface)] text-[var(--accent)]"
-    : "border-[var(--border)] bg-[var(--surface)] text-[var(--text-subtle)]";
+  return type === "admin_message"
+    ? "border-[var(--accent-secondary)] bg-[var(--surface)] text-[var(--accent-secondary)]"
+    : "border-[var(--accent)] bg-[var(--surface)] text-[var(--accent)]";
 }
 
 function conversationIcon(type: ConversationEntry["type"]) {
-  return type === "comment" ? <MessageSquare className="size-4" aria-hidden="true" /> : null;
+  return type === "admin_message"
+    ? <Shield className="size-4" aria-hidden="true" />
+    : <MessageSquare className="size-4" aria-hidden="true" />;
+}
+
+function getConversationComposerHelperText(
+  currentRole: Role,
+  selectedContext: ConversationContextOption | undefined,
+) {
+  if (selectedContext?.recipientType === "admin") {
+    return "Lähetä adminille bugi-ilmoitus, käyttöongelma tai muu sovellukseen liittyvä huomio.";
+  }
+
+  if (currentRole === "coach" || currentRole === "admin") {
+    return "Kirjoita treenaajalle selkeä ohje, palaute tai tarkentava kysymys ja kohdista viesti tarvittaessa ohjelmaan tai treeniin.";
+  }
+
+  return "Kerro valmentajalle mitä treenissä, palautumisessa tai ohjelmassa tarvitsee huomioida. Voit myös kohdistaa viestin suoraan ohjelmaan tai treenialueeseen.";
+}
+
+function getConversationComposerPlaceholder(
+  currentRole: Role,
+  selectedContext: ConversationContextOption | undefined,
+) {
+  if (selectedContext?.recipientType === "admin") {
+    return "Kuvaa bugi tai ilmoitus selkeästi: mitä teit, mitä odotit tapahtuvan ja mitä oikeasti tapahtui.";
+  }
+
+  if (currentRole === "coach" || currentRole === "admin") {
+    return "Kirjoita treenaajalle selkeä ohje, palaute tai seuraava askel.";
+  }
+
+  return "Kirjoita viesti treenin etenemisestä, kuormittavuudesta, palautumisesta tai ohjelman muutostarpeesta.";
 }

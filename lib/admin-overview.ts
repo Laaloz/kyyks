@@ -1,8 +1,8 @@
-import { canActAsCoach } from "@/lib/role-access";
+import { canActAsCoach, isAthleteRole } from "@/lib/role-access";
 import type { AppState, UserProfile } from "@/lib/types";
 
 export function getAdminOverviewAthleteGroups(users: UserProfile[]) {
-  const athletes = users.filter((user) => user.role === "athlete");
+  const athletes = users.filter((user) => isAthleteRole(user.role));
 
   return {
     athletes,
@@ -18,7 +18,7 @@ export function getAdminCoachingCoverage({
   scheduledWorkouts,
 }: Pick<AppState, "users" | "assignments" | "plans" | "scheduledWorkouts">) {
   const activeAthleteIds = new Set(
-    users.filter((user) => user.role === "athlete" && user.status === "active").map((user) => user.id),
+    users.filter((user) => isAthleteRole(user.role) && user.status === "active").map((user) => user.id),
   );
   const coachIds = new Set(users.filter((user) => canActAsCoach(user.role)).map((user) => user.id));
   const athleteCoachIds = new Map<string, Set<string>>();

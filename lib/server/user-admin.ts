@@ -1,5 +1,6 @@
 import "server-only";
 
+import { isAthleteRole } from "@/lib/role-access";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import type { Role, UserStatus } from "@/lib/types";
 
@@ -37,6 +38,45 @@ async function resolveManagedProfile(
   }
 
   return targetProfile;
+}
+
+async function ensureAdminAssignmentsForIndependentAthlete(
+  admin: NonNullable<ReturnType<typeof createSupabaseAdminClient>>,
+  athleteId: string,
+  createdAt: string,
+) {
+  const { data: adminProfiles } = await admin
+    .from("profiles")
+    .select("id")
+    .eq("role", "admin");
+
+  const adminIds = Array.from(new Set((adminProfiles ?? []).map((profile) => profile.id)));
+  if (!adminIds.length) {
+    return { ok: true as const };
+  }
+
+  const { error: deleteError } = await admin
+    .from("coach_athlete_assignments")
+    .delete()
+    .eq("athlete_id", athleteId)
+    .eq("active", true);
+  if (deleteError) {
+    return { ok: false as const, message: "Itsenäisen treenaajan oletusvastuuhenkilöiden päivitys epäonnistui." };
+  }
+
+  const { error: insertError } = await admin.from("coach_athlete_assignments").insert(
+    adminIds.map((adminId) => ({
+      coach_id: adminId,
+      athlete_id: athleteId,
+      active: true,
+      created_at: createdAt,
+    })),
+  );
+  if (insertError) {
+    return { ok: false as const, message: "Itsenäisen treenaajan oletusvastuuhenkilöiden luonti epäonnistui." };
+  }
+
+  return { ok: true as const };
 }
 
 export async function deleteUserAccountOnServer({
@@ -183,7 +223,7 @@ export async function updateUserRoleOnServer({
     .update({
       role: nextRole,
       updated_at: updatedAt,
-      default_dashboard_view: nextRole === "athlete" ? "athlete-log" : "overview",
+      default_dashboard_view: isAthleteRole(nextRole) && nextRole !== "independent_athlete" ? "athlete-log" : "overview",
     })
     .eq("id", targetProfile.id);
 
@@ -206,6 +246,13 @@ export async function updateUserRoleOnServer({
       .from("coach_athlete_assignments")
       .delete()
       .eq("coach_id", targetProfile.id);
+  }
+
+  if (nextRole === "independent_athlete") {
+    const assignmentResult = await ensureAdminAssignmentsForIndependentAthlete(admin, targetProfile.id, updatedAt);
+    if (!assignmentResult.ok) {
+      return assignmentResult;
+    }
   }
 
   return {
@@ -236,7 +283,7 @@ export async function assignAthleteCoachesOnServer({
   }
 
   const athlete = await resolveManagedProfile(admin, athleteId, athleteEmail);
-  if (!athlete || athlete.role !== "athlete") {
+  if (!athlete || !isAthleteRole(athlete.role)) {
     return { ok: false as const, message: "Treenaajaa ei löytynyt." };
   }
 

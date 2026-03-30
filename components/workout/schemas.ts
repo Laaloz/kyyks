@@ -45,10 +45,10 @@ export const bodyMeasurementSchema = z.object({
 export const inviteSchema = z
   .object({
     email: z.string().email("Anna kelvollinen sähköposti."),
-    role: z.enum(["coach", "athlete"]),
+    role: z.enum(["coach", "athlete", "independent_athlete"]),
     coachId: z.string().optional(),
   })
-  .refine((value) => (value.role === "athlete" ? Boolean(value.coachId) : true), {
+  .refine((value) => (value.role === "athlete" || value.role === "independent_athlete" ? Boolean(value.coachId) : true), {
     message: "Treenaajalle pitää valita valmentaja.",
     path: ["coachId"],
   });
@@ -173,6 +173,7 @@ export const programWorkoutExerciseSchema = z
 export const programWorkoutSchema = z.object({
   splitType: z.enum(["upper", "lower", "full_body", "custom"]),
   nameOverride: z.string().optional(),
+  guidance: z.string().max(280, "Lyhyt treeniohje voi olla enintään 280 merkkiä."),
   defaultRestSeconds: z.coerce.number().min(15).max(600),
   exercises: z.array(programWorkoutExerciseSchema).min(1, "Lisää vähintään yksi liike harjoitukseen."),
 });
@@ -223,6 +224,7 @@ export function emptyProgramWorkout(
   return {
     splitType,
     nameOverride: "",
+    guidance: "",
     defaultRestSeconds,
     exercises: [emptyProgramWorkoutExercise(defaultRestSeconds)],
   };

@@ -35,6 +35,7 @@ const exerciseSchema = z.object({
 const workoutSchema = z.object({
   splitType: z.enum(["upper", "lower", "full_body", "custom"]),
   nameOverride: z.string().optional(),
+  guidance: z.string().optional(),
   defaultRestSeconds: z.number(),
   exercises: z.array(exerciseSchema),
 });

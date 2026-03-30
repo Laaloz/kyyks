@@ -1,7 +1,7 @@
 import "server-only";
 
 import { createProgram as domainCreateProgram, updateProgram as domainUpdateProgram } from "@/lib/domain";
-import { canActAsCoach, isAdminRole } from "@/lib/role-access";
+import { canManagePrograms, isAdminRole, isAthleteRole } from "@/lib/role-access";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import type {
   Exercise,
@@ -189,7 +189,7 @@ async function resolveManageableAthlete(requester: RequesterProfile, athleteId: 
   }
 
   if (isAdminRole(requester.role)) {
-    if (athlete.role !== "athlete") {
+    if (!isAthleteRole(athlete.role)) {
       return { ok: false as const, message: "Ohjelman voi kohdistaa vain treenaajalle." };
     }
 
@@ -528,8 +528,8 @@ export async function createProgramOnServer({
   payload: ProgramBuilderInput;
   customExercises?: Exercise[];
 }) {
-  if (!canActAsCoach(requester.role)) {
-    return { ok: false as const, message: "Vain admin tai valmentaja voi luoda treeniohjelman." };
+  if (!canManagePrograms(requester.role)) {
+    return { ok: false as const, message: "Vain admin, valmentaja tai itsenäinen treenaaja voi luoda treeniohjelman." };
   }
 
   const targetResult = await resolveManageableAthlete(requester, payload.athleteId, payload.athleteEmail);
@@ -593,8 +593,8 @@ export async function updateProgramOnServer({
   payload: ProgramUpdateInput;
   customExercises?: Exercise[];
 }) {
-  if (!canActAsCoach(requester.role)) {
-    return { ok: false as const, message: "Vain admin tai valmentaja voi muokata treeniohjelmaa." };
+  if (!canManagePrograms(requester.role)) {
+    return { ok: false as const, message: "Vain admin, valmentaja tai itsenäinen treenaaja voi muokata treeniohjelmaa." };
   }
 
   const admin = createSupabaseAdminClient();
@@ -677,8 +677,8 @@ export async function setProgramStatusOnServer({
   programId: string;
   status: ProgramStatus;
 }) {
-  if (!canActAsCoach(requester.role)) {
-    return { ok: false as const, message: "Vain admin tai valmentaja voi muuttaa ohjelman tilaa." };
+  if (!canManagePrograms(requester.role)) {
+    return { ok: false as const, message: "Vain admin, valmentaja tai itsenäinen treenaaja voi muuttaa ohjelman tilaa." };
   }
 
   const admin = createSupabaseAdminClient();
@@ -728,8 +728,8 @@ export async function deleteProgramOnServer({
   requester: RequesterProfile;
   programId: string;
 }) {
-  if (!canActAsCoach(requester.role)) {
-    return { ok: false as const, message: "Vain admin tai valmentaja voi poistaa treeniohjelman." };
+  if (!canManagePrograms(requester.role)) {
+    return { ok: false as const, message: "Vain admin, valmentaja tai itsenäinen treenaaja voi poistaa treeniohjelman." };
   }
 
   const admin = createSupabaseAdminClient();

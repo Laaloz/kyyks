@@ -211,37 +211,51 @@ export function ProgramWorkoutEditor({
       </legend>
 
       {showWorkoutMeta ? (
-        <div className="grid gap-4 [grid-template-columns:repeat(auto-fit,minmax(15rem,1fr))]">
-          <div>
-            <Label htmlFor={`workout-${index}-split`}>Treenialue</Label>
-            <Select id={`workout-${index}-split`} {...register(`workouts.${index}.splitType` as const)}>
-              <option value="upper">Yläkroppa</option>
-              <option value="lower">Alakroppa</option>
-              <option value="full_body">Koko kroppa</option>
-              <option value="custom">Muu</option>
-            </Select>
-          </div>
-          {selectedSplitType === "custom" ? (
+        <div className="space-y-4">
+          <div className="grid gap-4 [grid-template-columns:repeat(auto-fit,minmax(15rem,1fr))]">
             <div>
-              <Label htmlFor={`workout-${index}-name`}>Treenin nimi</Label>
+              <Label htmlFor={`workout-${index}-split`}>Treenialue</Label>
+              <Select id={`workout-${index}-split`} {...register(`workouts.${index}.splitType` as const)}>
+                <option value="upper">Yläkroppa</option>
+                <option value="lower">Alakroppa</option>
+                <option value="full_body">Koko kroppa</option>
+                <option value="custom">Muu</option>
+              </Select>
+            </div>
+            {selectedSplitType === "custom" ? (
+              <div>
+                <Label htmlFor={`workout-${index}-name`}>Treenin nimi</Label>
+                <Input
+                  id={`workout-${index}-name`}
+                  {...register(`workouts.${index}.nameOverride` as const)}
+                  placeholder="Esim. Penkki + yläselkä"
+                />
+              </div>
+            ) : null}
+            <div>
+              <div className="mb-1 flex items-center gap-1">
+                <Label className="mb-0" htmlFor={`workout-${index}-default-rest`}>Oletuslepo (s)</Label>
+                <InfoTooltip text="Tätä lepoa käytetään uuden liikkeen oletuksena. Voit säätää lepoa myös liikekohtaisesti." />
+              </div>
               <Input
-                id={`workout-${index}-name`}
-                {...register(`workouts.${index}.nameOverride` as const)}
-                placeholder="Esim. Penkki + yläselkä"
+                id={`workout-${index}-default-rest`}
+                type="number"
+                min={15}
+                max={600}
+                {...register(`workouts.${index}.defaultRestSeconds` as const)}
               />
             </div>
-          ) : null}
-          <div>
+          </div>
+          <div className="mt-4">
             <div className="mb-1 flex items-center gap-1">
-              <Label className="mb-0" htmlFor={`workout-${index}-default-rest`}>Oletuslepo (s)</Label>
-              <InfoTooltip text="Tätä lepoa käytetään uuden liikkeen oletuksena. Voit säätää lepoa myös liikekohtaisesti." />
+              <Label className="mb-0" htmlFor={`workout-${index}-guidance`}>Lyhyt treeniohje</Label>
+              <InfoTooltip text="Näkyy treenin yleisohjeena. Pidä tämä tiiviinä: fokus, tempo, varat tai tärkein muistettava asia." />
             </div>
-            <Input
-              id={`workout-${index}-default-rest`}
-              type="number"
-              min={15}
-              max={600}
-              {...register(`workouts.${index}.defaultRestSeconds` as const)}
+            <Textarea
+              id={`workout-${index}-guidance`}
+              {...register(`workouts.${index}.guidance` as const)}
+              placeholder="Esim. Tee pääliikkeet rauhassa ensin, pidä 1-2 toistoa varaa ja hae loppuun puhdas tuntuma."
+              rows={3}
             />
           </div>
         </div>

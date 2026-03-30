@@ -6,7 +6,7 @@ import { createSupabaseServerClient } from "@/lib/supabase/server";
 
 const requestSchema = z.object({
   email: z.string().email(),
-  role: z.enum(["coach", "athlete"]),
+  role: z.enum(["coach", "athlete", "independent_athlete"]),
   coachId: z.string().optional(),
 });
 

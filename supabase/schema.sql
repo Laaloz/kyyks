@@ -1,6 +1,6 @@
 create extension if not exists "pgcrypto";
 
-create type public.app_role as enum ('admin', 'coach', 'athlete');
+create type public.app_role as enum ('admin', 'coach', 'athlete', 'independent_athlete');
 create type public.user_status as enum ('active', 'invited');
 create type public.template_status as enum ('draft', 'published');
 create type public.scheduled_workout_status as enum ('in_progress', 'completed', 'cancelled');
@@ -8,7 +8,8 @@ create type public.invite_status as enum ('pending', 'accepted');
 create type public.exercise_scope as enum ('global', 'coach_custom');
 create type public.theme_mode as enum ('light', 'dark');
 create type public.conversation_entry_type as enum (
-  'comment'
+  'comment',
+  'admin_message'
 );
 create type public.conversation_context_type as enum ('general', 'workout', 'program');
 
@@ -392,7 +393,7 @@ begin
     default_dashboard_view = coalesce(public.profiles.default_dashboard_view, excluded.default_dashboard_view),
     updated_at = now();
 
-  if invite_record.role = 'athlete' and invite_record.coach_id is not null then
+  if invite_record.role in ('athlete', 'independent_athlete') and invite_record.coach_id is not null then
     insert into public.coach_athlete_assignments (
       coach_id,
       athlete_id,

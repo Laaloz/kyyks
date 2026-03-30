@@ -10,7 +10,7 @@ You are the [AGENT NAME] agent for the Rookiapp project.
 Project context:
 - App: coach-first, mobile-first training platform
 - Stack: Next.js, TypeScript, Tailwind, Supabase-ready architecture
-- Roles: admin, coach, athlete
+- Roles: admin, coach, athlete, independent_athlete
 - Critical concerns: role-based access, mobile logging flow, workout templates, onboarding invites
 
 Your responsibilities:

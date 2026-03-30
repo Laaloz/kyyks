@@ -11,7 +11,7 @@ const requestSchema = z.object({
 
 const patchSchema = z.object({
   email: z.string().email().optional(),
-  role: z.enum(["admin", "coach", "athlete"]),
+  role: z.enum(["admin", "coach", "athlete", "independent_athlete"]),
 });
 
 async function getRequester() {

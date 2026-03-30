@@ -2,6 +2,7 @@ import "server-only";
 
 import type { SupabaseClient } from "@supabase/supabase-js";
 
+import { isAthleteRole } from "@/lib/role-access";
 import {
   PROGRAMS_DASHBOARD_VIEW,
   type AppState,
@@ -199,7 +200,7 @@ function mapProfileRow(profile: ProfileRow): UserProfile {
         profile.default_dashboard_view === "athlete-log" ||
         profile.default_dashboard_view === "conversation"
           ? profile.default_dashboard_view
-          : profile.role === "athlete"
+          : isAthleteRole(profile.role)
             ? "athlete-log"
             : "overview",
       emailNotifications: profile.email_notifications,

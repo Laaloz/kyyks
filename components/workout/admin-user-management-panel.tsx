@@ -56,7 +56,7 @@ export function AdminUserManagementPanel() {
   );
   const selectedManagedAthleteCoachIds = useMemo(
     () =>
-      selectedManagedUser?.role === "athlete"
+      (selectedManagedUser?.role === "athlete" || selectedManagedUser?.role === "independent_athlete")
         ? state.assignments
             .filter((assignment) => assignment.athleteId === selectedManagedUser.id && assignment.active)
             .map((assignment) => assignment.coachId)
@@ -65,7 +65,7 @@ export function AdminUserManagementPanel() {
   );
   const isRoleDirty = Boolean(selectedManagedUser) && selectedManagedRole !== selectedManagedUser.role;
   const isCoachSelectionDirty =
-    selectedManagedUser?.role === "athlete" &&
+    (selectedManagedUser?.role === "athlete" || selectedManagedUser?.role === "independent_athlete") &&
     (selectedManagedCoachIds.length !== selectedManagedAthleteCoachIds.length ||
       selectedManagedCoachIds.some((coachId) => !selectedManagedAthleteCoachIds.includes(coachId)));
 
@@ -143,7 +143,7 @@ export function AdminUserManagementPanel() {
                   <div className="mt-2 flex flex-wrap gap-2">
                     <Badge>{roleLabel(selectedManagedUser.role)}</Badge>
                     <Badge>{selectedManagedUser.status === "active" ? "Aktiivinen" : "Kutsu odottaa"}</Badge>
-                    {selectedManagedUser.role === "athlete" && selectedManagedAthleteCoachIds.length > 0 ? (
+                    {(selectedManagedUser.role === "athlete" || selectedManagedUser.role === "independent_athlete") && selectedManagedAthleteCoachIds.length > 0 ? (
                       <Badge>Valmentajia: {selectedManagedAthleteCoachIds.length}</Badge>
                     ) : null}
                   </div>
@@ -192,6 +192,7 @@ export function AdminUserManagementPanel() {
                       <option value="admin">Admin</option>
                       <option value="coach">Valmentaja</option>
                       <option value="athlete">Treenaaja</option>
+                      <option value="independent_athlete">Itsenäinen treenaaja</option>
                     </Select>
                     <p className="mt-2 text-xs text-[var(--text-subtle)]">
                       Roolin vaihto siivoaa vain ristiriitaiset valmentaja-treenaaja-suhteet. Muu käyttäjädata säilyy.
@@ -199,7 +200,7 @@ export function AdminUserManagementPanel() {
                   </div>
                 </div>
 
-                {selectedManagedUser.role === "athlete" ? (
+                {selectedManagedUser.role === "athlete" || selectedManagedUser.role === "independent_athlete" ? (
                   <div className="grid gap-3 rounded-xl border border-[var(--border)] bg-[var(--surface)] p-3">
                     <div className="flex flex-wrap items-center justify-between gap-3">
                       <Label htmlFor="admin-managed-coaches" className="mb-0">

@@ -141,6 +141,7 @@ describe("domain helpers", () => {
           {
             splitType: "upper",
             nameOverride: "Upper Prime",
+            guidance: "Aloita penkistä ja vedoista ennen hartia- ja käsieristyksiä.",
             defaultRestSeconds: 90,
             exercises: [
               {
@@ -177,6 +178,7 @@ describe("domain helpers", () => {
     expect(program.workouts).toHaveLength(2);
     expect(program.status).toBe("active");
     expect(program.workouts?.[0]?.name).toBe("Upper Prime");
+    expect(program.workouts?.[0]?.guidance).toBe("Aloita penkistä ja vedoista ennen hartia- ja käsieristyksiä.");
     expect(program.workouts?.[0]?.exercises[0]?.exerciseName).toBe("Penkki kisastopilla");
     expect(program.workouts?.[1]?.name).toContain("Treeni");
     expect(program.weekCount).toBe(4);
@@ -370,6 +372,7 @@ describe("domain helpers", () => {
         {
           splitType: "upper",
           nameOverride: "Yläpäivä päivitetty",
+          guidance: "Pidä pääliikkeissä pitkät palautukset ja lopussa hyvä pumppi.",
           defaultRestSeconds: 105,
           exercises: [
             {
@@ -392,6 +395,7 @@ describe("domain helpers", () => {
 
     expect(updatedWorkout?.id).toBe(originalWorkoutId);
     expect(updatedExercise?.id).toBe(originalExerciseId);
+    expect(updatedWorkout?.guidance).toBe("Pidä pääliikkeissä pitkät palautukset ja lopussa hyvä pumppi.");
     expect(updatedSets[0]?.id).toBe(originalSetOneId);
     expect(updatedSets[1]?.id).toBe(originalSetTwoId);
     expect(updatedSets[2]?.id).toBeDefined();

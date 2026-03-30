@@ -1,4 +1,5 @@
-export type Role = "admin" | "coach" | "athlete";
+export type Role = "admin" | "coach" | "athlete" | "independent_athlete";
+export type AthleteRole = Extract<Role, "athlete" | "independent_athlete">;
 export type UserStatus = "active" | "invited";
 export type TemplateStatus = "draft" | "published";
 export type ProgramStatus = "active" | "archived";
@@ -136,6 +137,7 @@ export interface ProgramWorkoutExercise {
 export interface ProgramWorkout {
   id: string;
   name: string;
+  guidance?: string;
   splitType: SplitType;
   defaultRestSeconds: number;
   exercises: ProgramWorkoutExercise[];
@@ -214,7 +216,7 @@ export interface WorkoutNote {
   updatedAt: string;
 }
 
-export type ConversationEntryType = "comment";
+export type ConversationEntryType = "comment" | "admin_message";
 
 export type ConversationContextType = "general" | "workout" | "program";
 
@@ -324,6 +326,7 @@ export interface ProgramWorkoutExerciseInput {
 export interface ProgramWorkoutInput {
   splitType: SplitType;
   nameOverride?: string;
+  guidance?: string;
   defaultRestSeconds: number;
   exercises: ProgramWorkoutExerciseInput[];
 }

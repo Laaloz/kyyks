@@ -13,7 +13,8 @@ import { Button } from "@/components/ui/button";
 import { isConversationEntryNotifiable } from "@/lib/conversation";
 import { getCoachConversationAthletes } from "@/lib/domain";
 import { getMeasurementReminderState } from "@/lib/measurement-reminder";
-import { canActAsCoach, getDashboardViewsForRole, getDefaultDashboardView, isAdminRole } from "@/lib/role-access";
+import { canActAsCoach, getDashboardViewsForRole, getDefaultDashboardView, isAdminRole, isAthleteRole } from "@/lib/role-access";
+import type { Role } from "@/lib/types";
 import { useAppState } from "@/providers/app-state-provider";
 
 import { PROGRAMS_WORKSPACE_VIEW, roleLabel, type WorkspaceView } from "@/components/workout/shared";
@@ -23,11 +24,11 @@ type AthleteOverviewFocusTarget = "measurements";
 const MEASUREMENT_REMINDER_STORAGE_VERSION = "v2";
 const WORKSPACE_VIEW_STORAGE_VERSION = "v1";
 
-function navItemsForRole(role: "admin" | "coach" | "athlete"): PrimaryWorkspaceView[] {
+function navItemsForRole(role: Role): PrimaryWorkspaceView[] {
   return getDashboardViewsForRole(role);
 }
 
-function resolveInitialView(role: "admin" | "coach" | "athlete", preferredView: WorkspaceView | undefined) {
+function resolveInitialView(role: Role, preferredView: WorkspaceView | undefined) {
   const roleNavItems = navItemsForRole(role);
   if (preferredView && preferredView !== "settings" && roleNavItems.includes(preferredView)) {
     return preferredView;
@@ -42,7 +43,7 @@ function getWorkspaceViewStorageKey(userId: string) {
 
 function resolvePersistedWorkspaceView(
   userId: string,
-  role: "admin" | "coach" | "athlete",
+  role: Role,
   preferredView: WorkspaceView | undefined,
 ) {
   const fallbackView = resolveInitialView(role, preferredView);
@@ -141,7 +142,7 @@ export function DashboardShell() {
       ? new Set(getCoachConversationAthletes(state, currentUser.id).map((athlete) => athlete.id))
       : null;
   const unreadConversationCount = state.conversationEntries.filter((entry) => {
-    if (currentUser.role === "athlete") {
+    if (isAthleteRole(currentUser.role)) {
       if (entry.athleteId !== currentUser.id) {
         return false;
       }
@@ -224,10 +225,10 @@ export function DashboardShell() {
   }, [currentUser, view]);
 
   useEffect(() => {
-    if (view === "conversation") {
+    if (view === "conversation" && isAthleteRole(currentUser.role)) {
       markConversationRead();
     }
-  }, [markConversationRead, view]);
+  }, [currentUser.role, markConversationRead, view]);
 
   useEffect(() => {
     if (!isMobileActionsOpen) {

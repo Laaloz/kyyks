@@ -352,6 +352,7 @@ const loadTooltipText =
 export function AthleteSessionPanel({
   scheduledWorkoutId,
   scheduledWorkoutTitle,
+  scheduledWorkoutGuidance,
   selectedSession,
   note,
   status,
@@ -378,6 +379,7 @@ export function AthleteSessionPanel({
 }: {
   scheduledWorkoutId: string;
   scheduledWorkoutTitle: string;
+  scheduledWorkoutGuidance?: string;
   selectedSession?: WorkoutSession;
   note: string;
   status: string;
@@ -1381,6 +1383,9 @@ export function AthleteSessionPanel({
     return (
         <div className="mt-5 rounded-2xl border border-dashed border-[var(--border)] bg-[color:color-mix(in_srgb,var(--surface-2)_82%,var(--surface))] p-6 shadow-[0_10px_24px_-22px_var(--shadow)]">
         <p className="font-medium text-[var(--text)]">{scheduledWorkoutTitle}</p>
+        {scheduledWorkoutGuidance ? (
+          <p className="mt-2 max-w-3xl text-sm leading-6 text-[var(--text-muted)]">{scheduledWorkoutGuidance}</p>
+        ) : null}
         <p className="mt-2 text-sm leading-6 text-[var(--text-muted)]">
           Aloita treeni, niin sovellus luo sinulle sarjalokin automaattisesti ja tallentaa etenemisen jokaisen muutoksen jälkeen.
         </p>
@@ -1407,6 +1412,12 @@ export function AthleteSessionPanel({
           Treeniaika {formatWorkoutDuration(elapsedSeconds)}
         </Badge>
         {readOnly ? <Badge className="border-[var(--accent-secondary)] bg-[var(--surface-3)] text-[var(--accent-secondary)]">Lukittu</Badge> : null}
+      </div>
+      <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface-2)] p-4">
+        <p className="font-medium text-[var(--text)]">{scheduledWorkoutTitle}</p>
+        {scheduledWorkoutGuidance ? (
+          <p className="mt-2 max-w-3xl text-sm leading-6 text-[var(--text-muted)]">{scheduledWorkoutGuidance}</p>
+        ) : null}
       </div>
       {status === "completed" && correctionMode ? (
         <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface-2)] p-4">

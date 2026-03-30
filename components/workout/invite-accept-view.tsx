@@ -21,7 +21,7 @@ import { roleLabel } from "@/components/workout/shared";
 
 type InviteLookup = {
   email: string;
-  role: "coach" | "athlete";
+  role: "coach" | "athlete" | "independent_athlete";
   coachId?: string | null;
   expiresAt: string;
   status: "pending" | "accepted";
