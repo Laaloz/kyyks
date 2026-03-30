@@ -2,25 +2,33 @@
 
 Coach-first, mobile-first treenisovellus valmentajille ja treenaajille.
 
-## Mitä mukana
-- `Next.js` App Router + `TypeScript`
-- `Tailwind CSS` -pohjainen custom UI
-- Demo-tilassa toimiva localStorage-pohjainen data layer
-- Nykyiseen domain-malliin päivitetty Supabase-skeema ja RLS-lähtöpohja
+## Nykytila
+- `Next.js 16` + `React 19` + `TypeScript`
+- `Tailwind CSS 4` -pohjainen custom UI
 - Roolit: `admin`, `coach`, `athlete`
-- Flowt:
-  - login / kutsun hyväksyntä
-  - adminin lähettämät kutsut
-  - valmentajan ohjelmapohjien rakennus
-  - templatejen duplikointi
-  - ohjelmakokonaisuuksien rakentaminen ja treenin käynnistys ohjelmasta
-  - treenaajan setti-, kuorma-, RPE- ja muistiinpanologgaus
+- Supabase-pohjaiset auth- ja server-flowt tuotantopolulle
+- Demo-fallback localStoragella kehitystä ja nopeaa testausta varten
 
-## Demo-käyttäjät
+Sovellus tukee tällä hetkellä ainakin nämä ydinkäyttäjäpolut:
+- kirjautuminen, kutsun hyväksyntä ja salasanan nollaus
+- adminin käyttäjä- ja coach-athlete-hallinta
+- coachin ohjelmien rakennus, muokkaus, ajastus ja kutsujen hallinta
+- athlete-näkymän treenin käynnistys, sarjaloggaus, muistiinpanot ja mittaukset
+- roolipohjainen dashboard ja keskusteluketjut
+
+## Käyttötilat
+
+### 1. Demo-tila
+Jos Supabase-ympäristömuuttujia ei ole asetettu, sovellus käynnistyy demo-fallbackilla. Tämä on hyödyllinen UI- ja domain-kehityksessä.
+
+Demo-käyttäjät:
 - `admin@rooki.fit` / `demo123`
 - `coach@rooki.fit` / `demo123`
 - `sara@rooki.fit` / `demo123`
 - `elias@rooki.fit` / `demo123`
+
+### 2. Supabase-tila
+Kun Supabase on konfiguroitu, sovellus käyttää server routeja authiin, kutsuihin, salasanan nollaukseen ja näkyvän applikaatiotilan synkronointiin.
 
 ## Käynnistys
 1. `source ~/.nvm/nvm.sh`
@@ -29,13 +37,15 @@ Coach-first, mobile-first treenisovellus valmentajille ja treenaajille.
 4. `npm install`
 5. `npm run dev`
 
-Projektin suositeltu Node-versio on `22.x`. Sama linja kannattaa asettaa myös Vercel-projektiin.
+Suositeltu Node-versio on `22.x`.
 
-## Supabase tuotantopolku
-1. Luo Supabase-projekti.
-2. Käytä [`supabase/schema.sql`](/Users/laalo/Omat projektit/rookiapp/supabase/schema.sql) uuden ympäristön lähtöpohjana.
-3. Jos ympäristössä on vanha schema jo käytössä, aja migraatiot järjestyksessä kansiosta [`supabase/migrations`](/Users/laalo/Omat projektit/rookiapp/supabase/migrations).
-4. Lisää `.env.local`:
+## Ympäristömuuttujat
+
+### Vähintään demo-kehitykseen
+Ei pakollisia muuttujia.
+
+### Supabase- ja sähköpostiflowihin
+Lisää `.env.local`:
 
 ```bash
 NEXT_PUBLIC_SUPABASE_URL=...
@@ -47,25 +57,32 @@ RESEND_API_KEY=...
 EMAIL_FROM="rooki.fit <no-reply@rooki.fit>"
 ```
 
-5. Älä aja skeemaa sokkona olemassa olevaan tuotantotietokantaan, koska enum- ja taulurakenne ovat muuttuneet vanhasta template-ajastusmallista ohjelmapohjaiseen malliin.
-6. Invite- ja password reset -sähköpostit käyttävät palvelinpuolella Resendiä. Ilman `RESEND_API_KEY`- ja `EMAIL_FROM`-muuttujia oikeaa sähköpostia ei lähetetä.
-7. Julkinen salasanan nollaus käyttää palvelinpuolella hCaptcha-varmennusta, joten myös `HCAPTCHA_SECRET_KEY` pitää määrittää, jos captcha on käytössä.
-8. Demo-providerin muu sovellusdata on edelleen localStorage-pohjainen, joten laajempi tuotantomigraatio Supabaseen kannattaa tehdä vaiheittain tämän päälle.
-9. Säilytä domain-logiikka [`lib/domain.ts`](/Users/laalo/Omat projektit/rookiapp/lib/domain.ts):ssa ja kytke se tietokantakerrokseen.
+Huomiot:
+- `NEXT_PUBLIC_SUPABASE_URL` ja `NEXT_PUBLIC_SUPABASE_ANON_KEY` ottavat Supabase-tilan käyttöön.
+- `SUPABASE_SERVICE_ROLE_KEY` tarvitaan serveripuolen admin-operaatioihin.
+- `RESEND_API_KEY` ja `EMAIL_FROM` tarvitaan oikeisiin invite- ja password reset -sähköposteihin.
+- `HCAPTCHA_SECRET_KEY` tarvitaan julkisen salasanan nollauksen varmennukseen, jos captcha on käytössä.
 
-## Rakenne
-- [`app`](/Users/laalo/Omat projektit/rookiapp/app): App Router -näkymät, layout, PWA-manifesti
-- [`components/workout-app.tsx`](/Users/laalo/Omat projektit/rookiapp/components/workout-app.tsx): admin/coach/athlete UI-käyttäjäpolut
-- [`providers/app-state-provider.tsx`](/Users/laalo/Omat projektit/rookiapp/providers/app-state-provider.tsx): demo-auth + local state
-- [`lib/domain.ts`](/Users/laalo/Omat projektit/rookiapp/lib/domain.ts): liiketoimintasäännöt
-- [`supabase/schema.sql`](/Users/laalo/Omat projektit/rookiapp/supabase/schema.sql): relaatiomalli + RLS
-- [`supabase/migrations`](/Users/laalo/Omat projektit/rookiapp/supabase/migrations): vaiheistetut muutokset vanhasta skeemasta nykyiseen malliin
-- [`AGENTS.md`](/Users/laalo/Omat projektit/rookiapp/AGENTS.md): agenttiroolit, yhteistyöprotokolla ja julkaisukriteerit
-- [`docs/agent-checklists.md`](/Users/laalo/Omat projektit/rookiapp/docs/agent-checklists.md): käytännön tarkistuslistat
-- [`docs/agent-handoff-template.md`](/Users/laalo/Omat projektit/rookiapp/docs/agent-handoff-template.md): vakioitu handoff-pohja
-- [`docs/agent-prompts.md`](/Users/laalo/Omat projektit/rookiapp/docs/agent-prompts.md): valmiit promptipohjat kaikille agenteille
-- [`docs/agent-review-report.md`](/Users/laalo/Omat projektit/rookiapp/docs/agent-review-report.md): viimeisin moniroolinen review-kierros ja korjaukset
+## Supabase-skeema
+1. Luo Supabase-projekti.
+2. Käytä [`supabase/schema.sql`](/Users/laalo/Omat projektit/rookiapp/supabase/schema.sql) uuden ympäristön lähtöpohjana.
+3. Jos ympäristössä on vanhempi skeema, aja migraatiot järjestyksessä kansiosta [`supabase/migrations`](/Users/laalo/Omat projektit/rookiapp/supabase/migrations).
 
-## Testit
+Pidä domain-logiikka [`lib/domain.ts`](/Users/laalo/Omat projektit/rookiapp/lib/domain.ts):ssa ja serveri-integraatiot [`lib/server`](/Users/laalo/Omat projektit/rookiapp/lib/server):ssä.
+
+## Komennot
+- `npm run dev`
+- `npm run build`
 - `npm run typecheck`
 - `npm test`
+
+## Rakenne
+- [`app`](/Users/laalo/Omat projektit/rookiapp/app): App Router -sivut ja API-routet
+- [`components`](/Users/laalo/Omat projektit/rookiapp/components): käyttöliittymä ja roolikohtaiset näkymät
+- [`providers/app-state-provider.tsx`](/Users/laalo/Omat projektit/rookiapp/providers/app-state-provider.tsx): client state, demo-fallback ja Supabase-synkronointi
+- [`lib/domain.ts`](/Users/laalo/Omat projektit/rookiapp/lib/domain.ts): domain-säännöt
+- [`lib/server`](/Users/laalo/Omat projektit/rookiapp/lib/server): serveripuolen auth-, sync- ja training-workflowt
+- [`supabase`](/Users/laalo/Omat projektit/rookiapp/supabase): skeema ja migraatiot
+- [`tests`](/Users/laalo/Omat projektit/rookiapp/tests): Vitest-testit
+- [`docs/current-plan.md`](/Users/laalo/Omat projektit/rookiapp/docs/current-plan.md): nykytila ja seuraavat siivousaskeleet
+- [`AGENTS.md`](/Users/laalo/Omat projektit/rookiapp/AGENTS.md): projektin agenttimalli
