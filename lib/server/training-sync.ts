@@ -330,7 +330,6 @@ export async function loadVisibleSupabaseAppState(
     plansResult,
     scheduledWorkoutsResult,
     sessionsResult,
-    setLogsResult,
     notesResult,
     conversationEntriesResult,
   ] = await Promise.all([
@@ -368,13 +367,6 @@ export async function loadVisibleSupabaseAppState(
       .limit(lite ? 80 : isAdminViewer ? 500 : 200)
       .order("started_at", { ascending: false }),
     supabase
-      .from("workout_set_logs")
-      .select("id, session_id, scheduled_workout_id, template_exercise_id, set_id, exercise_id, exercise_name, muscle_group, superset_group, set_label, target_reps, target_reps_min, target_reps_max, target_load, target_rest_seconds, program_workout_id, actual_reps, actual_load, done")
-      .order("session_id", { ascending: true })
-      .order("template_exercise_id", { ascending: true })
-      .order("set_label", { ascending: true })
-      .limit(lite ? 320 : isAdminViewer ? 4000 : 1500),
-    supabase
       .from("workout_notes")
       .select("id, session_id, athlete_id, coach_id, body, created_at, updated_at")
       .limit(lite ? 40 : isAdminViewer ? 300 : 150)
@@ -394,9 +386,25 @@ export async function loadVisibleSupabaseAppState(
   throwIfQueryFailed("Training plans", plansResult);
   throwIfQueryFailed("Scheduled workouts", scheduledWorkoutsResult);
   throwIfQueryFailed("Workout sessions", sessionsResult);
-  throwIfQueryFailed("Workout set logs", setLogsResult);
   throwIfQueryFailed("Workout notes", notesResult);
   throwIfQueryFailed("Conversation entries", conversationEntriesResult);
+
+  const visibleSessionIds = ((sessionsResult.data ?? []) as WorkoutSessionRow[]).map((entry) => entry.id);
+  const setLogsResult =
+    visibleSessionIds.length > 0
+      ? await supabase
+          .from("workout_set_logs")
+          .select("id, session_id, scheduled_workout_id, template_exercise_id, set_id, exercise_id, exercise_name, muscle_group, superset_group, set_label, target_reps, target_reps_min, target_reps_max, target_load, target_rest_seconds, program_workout_id, actual_reps, actual_load, done")
+          .in("session_id", visibleSessionIds)
+          .order("session_id", { ascending: true })
+          .order("template_exercise_id", { ascending: true })
+          .order("set_label", { ascending: true })
+      : {
+          data: [] as WorkoutSetLogRow[],
+          error: null,
+        };
+
+  throwIfQueryFailed("Workout set logs", setLogsResult);
 
   const mappingStartedAt = performance.now();
 
