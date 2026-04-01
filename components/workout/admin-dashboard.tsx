@@ -191,7 +191,7 @@ export function AdminDashboard({
             />
           ) : null}
 
-          <OwnMeasurementsCard />
+          <OwnMeasurementsCard sectionId="overview-measurements" />
 
           <MetricGrid
             metrics={[

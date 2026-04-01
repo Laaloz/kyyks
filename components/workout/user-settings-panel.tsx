@@ -14,6 +14,7 @@ import { AdminUserManagementPanel } from "@/components/workout/admin-user-manage
 import { InlineFeedback } from "@/components/workout/inline-feedback";
 import { bodyMeasurementSchema, userSettingsSchema } from "@/components/workout/schemas";
 import { roleLabel } from "@/components/workout/shared";
+import { getMeasurementsForUser } from "@/lib/body-metrics";
 import { withMinimumDelay } from "@/lib/min-delay";
 import { canTrackOwnTraining, getDashboardViewsForRole, getDefaultDashboardView, isAthleteRole } from "@/lib/role-access";
 import { PROGRAMS_DASHBOARD_VIEW, type DashboardHomeView, type Role, type ThemeMode } from "@/lib/types";
@@ -71,6 +72,7 @@ function resolveDefaultView(role: Role, value: DashboardHomeView | undefined): D
 export function UserSettingsPanel({ adminOnly = false }: { adminOnly?: boolean }) {
   const {
     currentUser,
+    state,
     notify,
     updateCurrentUserSettings,
     updateCurrentUserMeasurements,
@@ -86,6 +88,13 @@ export function UserSettingsPanel({ adminOnly = false }: { adminOnly?: boolean }
   const [isSavingProfile, setIsSavingProfile] = useState(false);
   const [deferredInstallPrompt, setDeferredInstallPrompt] = useState<DeferredInstallPromptEvent | null>(null);
   const [isInstalledToHomeScreen, setIsInstalledToHomeScreen] = useState(false);
+  const latestOwnWaistCm = useMemo(
+    () =>
+      currentUser
+        ? getMeasurementsForUser(state, currentUser.id).find((entry) => entry.waistCm !== undefined)?.waistCm
+        : undefined,
+    [currentUser, state],
+  );
   const [isTriggeringInstallPrompt, setIsTriggeringInstallPrompt] = useState(false);
   const [heightCmDraft, setHeightCmDraft] = useState(currentUser?.heightCm !== undefined ? String(currentUser.heightCm) : "");
 
@@ -643,7 +652,7 @@ export function UserSettingsPanel({ adminOnly = false }: { adminOnly?: boolean }
                   <Ruler className="size-4 text-[var(--accent-tertiary)]" />
                   Vyötärö
                 </span>
-                <Badge>{currentUser.waistCm !== undefined ? `${currentUser.waistCm} cm` : "Ei asetettu"}</Badge>
+                <Badge>{latestOwnWaistCm !== undefined ? `${latestOwnWaistCm} cm` : "Ei asetettu"}</Badge>
               </div>
             </div>
           </Card>

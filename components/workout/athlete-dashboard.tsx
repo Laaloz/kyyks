@@ -1,6 +1,6 @@
 "use client";
 
-import { ChevronDown, ChevronUp, Flame, MoreHorizontal } from "lucide-react";
+import { ChevronDown, ChevronLeft, ChevronUp, Flame, MoreHorizontal } from "lucide-react";
 import {
   startTransition,
   useEffect,
@@ -20,7 +20,7 @@ import { InfoTooltip } from "@/components/ui/tooltip";
 import { AthleteSessionPanel } from "@/components/workout/athlete/session-panel";
 import { ConversationPanel } from "@/components/workout/conversation-panel";
 import { MetricTrendChart } from "@/components/workout/metric-trend-chart";
-import { estimateStrengthCalories, getLatestMeasurement, getMeasurementsForUser, getWeightAtMoment } from "@/lib/body-metrics";
+import { estimateStrengthCalories, getMeasurementsForUser, getWeightAtMoment } from "@/lib/body-metrics";
 import { calculateSessionDurationSeconds, getSessionProgress } from "@/lib/domain";
 import { withMinimumDelay } from "@/lib/min-delay";
 import { deriveProgramWorkoutGuidance } from "@/lib/program-workout-guidance";
@@ -165,11 +165,13 @@ function getFloatingMenuStyle(anchor: AnchorRect, menuElement: HTMLElement): CSS
 export function AthleteDashboard({
   view,
   onOpenWorkoutLog,
+  onWorkoutDetailModeChange,
   overviewFocusTarget,
   onOverviewFocusHandled,
 }: {
   view: WorkspaceView;
   onOpenWorkoutLog?: () => void;
+  onWorkoutDetailModeChange?: (isOpen: boolean) => void;
   overviewFocusTarget?: AthleteOverviewFocusTarget | null;
   onOverviewFocusHandled?: () => void;
 }) {
@@ -240,15 +242,23 @@ export function AthleteDashboard({
     setExpandedHistoryGroups({});
   }, [currentUser?.id]);
   useEffect(() => {
+    const latestWaistValue =
+      currentUser
+        ? getMeasurementsForUser(state, currentUser.id).find((entry) => entry.waistCm !== undefined)?.waistCm
+        : undefined;
+
     setMeasurementDraft({
       weightKg: currentUser?.weightKg !== undefined ? String(currentUser.weightKg) : "",
-      waistCm: currentUser?.waistCm !== undefined ? String(currentUser.waistCm) : "",
+      waistCm: latestWaistValue !== undefined ? String(latestWaistValue) : "",
     });
-  }, [currentUser?.id, currentUser?.weightKg, currentUser?.waistCm]);
+  }, [currentUser?.id, currentUser?.weightKg, state.bodyMeasurements]);
   useEffect(() => {
     setMeasurementMessage("");
     setMeasurementMessageTone("info");
   }, [currentUser?.id]);
+  useEffect(() => {
+    onWorkoutDetailModeChange?.(view === "athlete-log" && athleteLogMode === "workout");
+  }, [athleteLogMode, onWorkoutDetailModeChange, view]);
   useEffect(() => {
     if (view !== "overview" || overviewFocusTarget !== "measurements") {
       return;
@@ -396,7 +406,13 @@ export function AthleteDashboard({
   const resolveWorkoutStatus = (workout: (typeof workouts)[number]) => workout.status;
   const selectedWorkoutStatus = selectedWorkout ? resolveWorkoutStatus(selectedWorkout) : undefined;
   const selectedWorkoutInsight = selectedWorkout ? workoutInsights.get(selectedWorkout.id) : undefined;
-  const latestBodyMeasurement = currentUser ? getLatestMeasurement(state, currentUser.id) : undefined;
+  const bodyMeasurements = useMemo(
+    () => (currentUser ? getMeasurementsForUser(state, currentUser.id) : []),
+    [currentUser, state],
+  );
+  const latestBodyMeasurement = bodyMeasurements[0];
+  const latestWaistMeasurement = bodyMeasurements.find((entry) => entry.waistCm !== undefined);
+  const latestWaistCm = latestWaistMeasurement?.waistCm;
   const parseMeasurementField = (value: string) => {
     if (!value.trim()) {
       return undefined;
@@ -411,11 +427,11 @@ export function AthleteDashboard({
   const isMeasurementDirty =
     canTrackOwnMeasurements &&
     (currentUser.weightKg !== nextWeightKg ||
-      currentUser.waistCm !== nextWaistCm);
+      latestWaistCm !== nextWaistCm);
   const weightTrendPoints = useMemo(
     () =>
       currentUser
-        ? getMeasurementsForUser(state, currentUser.id)
+        ? bodyMeasurements
             .filter((entry) => entry.weightKg !== undefined)
             .slice(0, 12)
             .reverse()
@@ -424,12 +440,12 @@ export function AthleteDashboard({
               value: entry.weightKg as number,
             }))
         : [],
-    [currentUser, state],
+    [bodyMeasurements, currentUser],
   );
   const waistTrendPoints = useMemo(
     () =>
       currentUser
-        ? getMeasurementsForUser(state, currentUser.id)
+        ? bodyMeasurements
             .filter((entry) => entry.waistCm !== undefined)
             .slice(0, 12)
             .reverse()
@@ -438,7 +454,7 @@ export function AthleteDashboard({
               value: entry.waistCm as number,
             }))
         : [],
-    [currentUser, state],
+    [bodyMeasurements, currentUser],
   );
   const openWorkoutView = (scheduledWorkoutId: string, options?: { correctionMode?: boolean }) => {
     setDismissedActiveWorkoutId(null);
@@ -1065,7 +1081,7 @@ export function AthleteDashboard({
               <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface-2)] px-4 py-4">
                 <p className="text-xs font-semibold tracking-[0.04em] text-[var(--text-subtle)]">Vyötärö</p>
                 <p className="mt-2 text-lg font-semibold text-[var(--text)]">
-                  {currentUser.waistCm !== undefined ? `${currentUser.waistCm} cm` : "Ei asetettu"}
+                  {latestWaistCm !== undefined ? `${latestWaistCm} cm` : "Ei asetettu"}
                 </p>
               </div>
               <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface-2)] px-4 py-4">
@@ -1330,9 +1346,12 @@ export function AthleteDashboard({
               <Button
                 type="button"
                 variant="ghost"
+                className="gap-1.5"
                 onClick={closeWorkoutView}
               >
-                Takaisin treenilistaan
+                <ChevronLeft className="size-4" aria-hidden="true" />
+                <span className="sm:hidden">Takaisin</span>
+                <span className="hidden sm:inline">Takaisin treenilistaan</span>
               </Button>
             </div>
             {progress ? (

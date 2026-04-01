@@ -466,7 +466,7 @@ export function CoachDashboard({
         />
       ) : null}
 
-      {view === "overview" ? <OwnMeasurementsCard /> : null}
+      {view === "overview" ? <OwnMeasurementsCard sectionId="overview-measurements" /> : null}
 
       {view === "overview" || view === "athletes" ? (
         <CoachAthleteInsights

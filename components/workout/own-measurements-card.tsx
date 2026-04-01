@@ -6,7 +6,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardDescription, CardTitle } from "@/components/ui/card";
 import { Input, Label } from "@/components/ui/field";
-import { getLatestMeasurement, getMeasurementsForUser } from "@/lib/body-metrics";
+import { getMeasurementsForUser } from "@/lib/body-metrics";
 import { withMinimumDelay } from "@/lib/min-delay";
 import { canTrackOwnTraining } from "@/lib/role-access";
 import { formatDate } from "@/lib/utils";
@@ -17,7 +17,7 @@ import { bodyMeasurementSchema } from "@/components/workout/schemas";
 
 type MeasurementMessageTone = "info" | "success" | "error";
 
-export function OwnMeasurementsCard() {
+export function OwnMeasurementsCard({ sectionId = "overview-measurements" }: { sectionId?: string }) {
   const { currentUser, state, updateCurrentUserMeasurements } = useAppState();
   const [measurementDraft, setMeasurementDraft] = useState({
     weightKg: "",
@@ -28,11 +28,16 @@ export function OwnMeasurementsCard() {
   const [isSavingMeasurements, setIsSavingMeasurements] = useState(false);
 
   useEffect(() => {
+    const latestWaistValue =
+      currentUser
+        ? getMeasurementsForUser(state, currentUser.id).find((entry) => entry.waistCm !== undefined)?.waistCm
+        : undefined;
+
     setMeasurementDraft({
       weightKg: currentUser?.weightKg !== undefined ? String(currentUser.weightKg) : "",
-      waistCm: currentUser?.waistCm !== undefined ? String(currentUser.waistCm) : "",
+      waistCm: latestWaistValue !== undefined ? String(latestWaistValue) : "",
     });
-  }, [currentUser?.id, currentUser?.weightKg, currentUser?.waistCm]);
+  }, [currentUser?.id, currentUser?.weightKg, state.bodyMeasurements]);
 
   useEffect(() => {
     setMeasurementMessage("");
@@ -40,7 +45,13 @@ export function OwnMeasurementsCard() {
   }, [currentUser?.id]);
 
   const canTrackOwnMeasurements = canTrackOwnTraining(currentUser?.role);
-  const latestBodyMeasurement = currentUser ? getLatestMeasurement(state, currentUser.id) : undefined;
+  const bodyMeasurements = useMemo(
+    () => (currentUser ? getMeasurementsForUser(state, currentUser.id) : []),
+    [currentUser, state],
+  );
+  const latestBodyMeasurement = bodyMeasurements[0];
+  const latestWaistMeasurement = bodyMeasurements.find((entry) => entry.waistCm !== undefined);
+  const latestWaistCm = latestWaistMeasurement?.waistCm;
 
   const parseMeasurementField = (value: string) => {
     if (!value.trim()) {
@@ -56,12 +67,12 @@ export function OwnMeasurementsCard() {
   const isMeasurementDirty =
     Boolean(currentUser) &&
     canTrackOwnMeasurements &&
-    (currentUser.weightKg !== nextWeightKg || currentUser.waistCm !== nextWaistCm);
+    (currentUser.weightKg !== nextWeightKg || latestWaistCm !== nextWaistCm);
 
   const weightTrendPoints = useMemo(
     () =>
       currentUser
-        ? getMeasurementsForUser(state, currentUser.id)
+        ? bodyMeasurements
             .filter((entry) => entry.weightKg !== undefined)
             .slice(0, 12)
             .reverse()
@@ -70,13 +81,13 @@ export function OwnMeasurementsCard() {
               value: entry.weightKg as number,
             }))
         : [],
-    [currentUser, state],
+    [bodyMeasurements, currentUser],
   );
 
   const waistTrendPoints = useMemo(
     () =>
       currentUser
-        ? getMeasurementsForUser(state, currentUser.id)
+        ? bodyMeasurements
             .filter((entry) => entry.waistCm !== undefined)
             .slice(0, 12)
             .reverse()
@@ -85,7 +96,7 @@ export function OwnMeasurementsCard() {
               value: entry.waistCm as number,
             }))
         : [],
-    [currentUser, state],
+    [bodyMeasurements, currentUser],
   );
 
   if (!currentUser || !canTrackOwnMeasurements) {
@@ -93,7 +104,7 @@ export function OwnMeasurementsCard() {
   }
 
   return (
-    <Card className="border-[var(--border-strong)]">
+    <Card id={sectionId} className="scroll-mt-24 border-[var(--border-strong)]">
       <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
         <div>
           <p className="text-xs font-semibold tracking-[0.04em] text-[var(--text-subtle)]">Kehon seuranta</p>
@@ -126,7 +137,7 @@ export function OwnMeasurementsCard() {
           <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface-2)] px-4 py-4">
             <p className="text-xs font-semibold tracking-[0.04em] text-[var(--text-subtle)]">Vyötärö</p>
             <p className="mt-2 text-lg font-semibold text-[var(--text)]">
-              {currentUser.waistCm !== undefined ? `${currentUser.waistCm} cm` : "Ei asetettu"}
+              {latestWaistCm !== undefined ? `${latestWaistCm} cm` : "Ei asetettu"}
             </p>
           </div>
           <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface-2)] px-4 py-4">
