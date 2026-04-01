@@ -149,6 +149,7 @@ export function DashboardShell() {
   const activeTabId = `workspace-tab-${activePrimaryView}`;
   const activePanelId = `workspace-panel-${activePrimaryView}`;
   const activeViewLabel = navLabelByView[view];
+  const activeMobileViewLabel = mobileNavLabelByView[view];
   const shouldHideMobileBottomNav = isMobileWorkoutDetailOpen;
   const measurementReminder = getMeasurementReminderState(state, currentUser);
   const weeklyMeasurementRemindersEnabled = currentUser.settings?.weeklyMeasurementReminders ?? true;
@@ -391,7 +392,8 @@ export function DashboardShell() {
                       </h1>
                       <div className="mt-1 flex flex-wrap items-center gap-2">
                         <Badge className="border-[var(--accent)] bg-[var(--surface)] px-2.5 py-0.5 text-[11px] text-[var(--accent)]">
-                        {activeViewLabel}
+                          <span className="lg:hidden">{activeMobileViewLabel}</span>
+                          <span className="hidden lg:inline">{activeViewLabel}</span>
                         </Badge>
                       </div>
                     </div>
