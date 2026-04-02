@@ -307,14 +307,18 @@ begin
     return;
   end if;
 
-  update public.workout_sessions
-  set updated_at = v_timestamp
+  select *
+  into v_session
+  from public.workout_sessions
   where scheduled_workout_id = p_scheduled_workout_id
-    and updated_at = p_expected_session_updated_at
-  returning *
-  into v_session;
+  for update;
 
   if not found then
+    return query select false, 'stale_session', 'Treeni ehti muuttua ennen tallennusta.', null::timestamptz, null::uuid, null::integer, null::numeric, null::boolean;
+    return;
+  end if;
+
+  if v_session.updated_at <> p_expected_session_updated_at then
     return query select false, 'stale_session', 'Treeni ehti muuttua ennen tallennusta.', null::timestamptz, null::uuid, null::integer, null::numeric, null::boolean;
     return;
   end if;
@@ -343,6 +347,10 @@ begin
   if v_next_done and not p_has_actual_load and v_next_actual_load is null and coalesce(v_target_log.target_load, 0) > 0 then
     v_next_actual_load := v_target_log.target_load;
   end if;
+
+  update public.workout_sessions
+  set updated_at = v_timestamp
+  where id = v_session.id;
 
   update public.workout_set_logs
   set

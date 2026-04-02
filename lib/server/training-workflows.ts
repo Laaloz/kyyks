@@ -1033,10 +1033,25 @@ export async function updateWorkoutSetOnServer({
   const hasDone = Object.prototype.hasOwnProperty.call(patch, "done");
   const hasActualReps = Object.prototype.hasOwnProperty.call(patch, "actualReps");
   const hasActualLoad = Object.prototype.hasOwnProperty.call(patch, "actualLoad");
+  let resolvedLogId = logId;
+
+  if (patch.templateExerciseId && patch.setLabel) {
+    const { data: matchingLog, error: matchingLogError } = await admin
+      .from("workout_set_logs")
+      .select("id")
+      .eq("scheduled_workout_id", scheduledWorkoutId)
+      .eq("template_exercise_id", patch.templateExerciseId)
+      .eq("set_label", patch.setLabel)
+      .maybeSingle();
+
+    if (!matchingLogError && matchingLog?.id) {
+      resolvedLogId = matchingLog.id;
+    }
+  }
 
   const { data, error } = await admin.rpc("update_workout_set_log", {
     p_scheduled_workout_id: scheduledWorkoutId,
-    p_log_id: logId,
+    p_log_id: resolvedLogId,
     p_requester_id: requester.id,
     p_requester_role: requester.role,
     p_expected_session_updated_at: patch.expectedUpdatedAt,

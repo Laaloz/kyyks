@@ -36,12 +36,20 @@ type MockAssignment = {
 function createMockAdminClient({
   profiles,
   assignments,
+  workoutSetLogs,
 }: {
   profiles: MockProfile[];
   assignments?: MockAssignment[];
+  workoutSetLogs?: Array<{
+    id: string;
+    scheduled_workout_id: string;
+    template_exercise_id: string;
+    set_label: string;
+  }>;
 }) {
   const profileRows = [...profiles];
   const assignmentRows = [...(assignments ?? [])];
+  const workoutSetLogRows = [...(workoutSetLogs ?? [])];
   const insertedPlans: Array<Record<string, unknown>> = [];
 
   const createBuilder = (table: string) => {
@@ -64,6 +72,11 @@ function createMockAdminClient({
     const findAssignment = () =>
       assignmentRows.find((assignment) =>
         filters.every((filter) => assignment[filter.column as keyof MockAssignment] === filter.value),
+      ) ?? null;
+
+    const findWorkoutSetLog = () =>
+      workoutSetLogRows.find((log) =>
+        filters.every((filter) => log[filter.column as keyof (typeof workoutSetLogRows)[number]] === filter.value),
       ) ?? null;
 
     const builder = {
@@ -97,6 +110,10 @@ function createMockAdminClient({
 
         if (table === "coach_athlete_assignments") {
           return { data: findAssignment(), error: null };
+        }
+
+        if (table === "workout_set_logs") {
+          return { data: findWorkoutSetLog(), error: null };
         }
 
         return { data: null, error: null };
@@ -135,6 +152,11 @@ function createMockAdminClient({
 
 function createWorkoutSetRpcClient(result: Record<string, unknown>, options?: { error?: { message?: string } | null }) {
   return {
+    from: vi.fn(() => ({
+      select: vi.fn().mockReturnThis(),
+      eq: vi.fn().mockReturnThis(),
+      maybeSingle: vi.fn(async () => ({ data: null, error: null })),
+    })),
     rpc: vi.fn(async () => ({
       data: result,
       error: options?.error ?? null,
@@ -333,6 +355,87 @@ describe("training workflows server", () => {
       ok: false,
       code: "stale_session",
       message: "Treeni ehti muuttua ennen tallennusta.",
+    });
+  });
+
+  it("remaps stale client log ids from template exercise and set label before the rpc write", async () => {
+    const admin = {
+      from: vi.fn((table: string) => {
+        expect(table).toBe("workout_set_logs");
+        const builder = {
+          select: vi.fn(() => builder),
+          eq: vi.fn((column: string, value: unknown) => {
+            if (column === "scheduled_workout_id") {
+              expect(value).toBe("workout-1");
+            }
+            if (column === "template_exercise_id") {
+              expect(value).toBe("exercise-1");
+            }
+            if (column === "set_label") {
+              expect(value).toBe("2");
+            }
+            return builder;
+          }),
+          maybeSingle: vi.fn(async () => ({
+            data: { id: "server-log-2" },
+            error: null,
+          })),
+        };
+        return builder;
+      }),
+      rpc: vi.fn(async () => ({
+        data: {
+          ok: true,
+          session_updated_at: "2026-04-02T09:10:00.000Z",
+          log_id: "server-log-2",
+          actual_reps: 8,
+          actual_load: 100,
+          done: true,
+        },
+        error: null,
+      })),
+    };
+
+    createSupabaseAdminClientMock.mockReturnValue(admin);
+
+    const result = await updateWorkoutSetOnServer({
+      requester: {
+        id: "athlete-1",
+        role: "athlete",
+      },
+      scheduledWorkoutId: "workout-1",
+      logId: "stale-local-log",
+      patch: {
+        done: true,
+        actualReps: 8,
+        templateExerciseId: "exercise-1",
+        setLabel: "2",
+        expectedUpdatedAt: "2026-04-02T09:00:00.000Z",
+      },
+    });
+
+    expect(admin.rpc).toHaveBeenCalledWith("update_workout_set_log", {
+      p_scheduled_workout_id: "workout-1",
+      p_log_id: "server-log-2",
+      p_requester_id: "athlete-1",
+      p_requester_role: "athlete",
+      p_expected_session_updated_at: "2026-04-02T09:00:00.000Z",
+      p_has_done: true,
+      p_done: true,
+      p_has_actual_reps: true,
+      p_actual_reps: 8,
+      p_has_actual_load: false,
+      p_actual_load: null,
+    });
+    expect(result).toEqual({
+      ok: true,
+      sessionUpdatedAt: "2026-04-02T09:10:00.000Z",
+      setLog: {
+        id: "server-log-2",
+        actualReps: 8,
+        actualLoad: 100,
+        done: true,
+      },
     });
   });
 

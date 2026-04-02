@@ -10,6 +10,8 @@ const requestSchema = z.object({
   actualLoad: z.number().nullable().optional(),
   done: z.boolean().optional(),
   expectedUpdatedAt: z.string().datetime().optional(),
+  templateExerciseId: z.string().min(1).optional(),
+  setLabel: z.string().min(1).optional(),
 });
 
 export async function PATCH(request: Request, context: { params: Promise<{ scheduledWorkoutId: string; logId: string }> }) {

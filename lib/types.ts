@@ -350,4 +350,6 @@ export interface WorkoutUpdateInput {
   actualLoad?: number | null;
   done?: boolean;
   expectedUpdatedAt?: string;
+  templateExerciseId?: string;
+  setLabel?: string;
 }

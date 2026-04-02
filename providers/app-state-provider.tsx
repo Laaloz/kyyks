@@ -649,6 +649,8 @@ type WorkoutMutation =
       id: string;
       kind: "set";
       logId: string;
+      templateExerciseId?: string;
+      setLabel?: string;
       patch: WorkoutUpdateInput;
       debounceUntil?: number;
     }
@@ -679,6 +681,8 @@ type WorkoutMutationInput =
   | {
       kind: "set";
       logId: string;
+      templateExerciseId?: string;
+      setLabel?: string;
       patch: WorkoutUpdateInput;
     }
   | {
@@ -2458,47 +2462,88 @@ function findResolvedUserIdInSnapshot(
 
     switch (mutation.kind) {
       case "set": {
-        const expectedUpdatedAt =
-          queue.confirmedSessionUpdatedAt ?? getSessionUpdatedAtForWorkout(stateRef.current, queue.scheduledWorkoutId);
-        if (!expectedUpdatedAt) {
-          await resolveFailure("Sarjan päivitys epäonnistui.");
-          return;
-        }
+        let currentLogId = mutation.logId;
 
-        const response = await fetch(
-          `/api/workouts/${encodeURIComponent(queue.scheduledWorkoutId)}/sets/${encodeURIComponent(mutation.logId)}`,
-          {
-            method: "PATCH",
-            headers: {
-              "Content-Type": "application/json",
+        for (let attempt = 0; attempt < 2; attempt += 1) {
+          const expectedUpdatedAt =
+            queue.confirmedSessionUpdatedAt ?? getSessionUpdatedAtForWorkout(stateRef.current, queue.scheduledWorkoutId);
+          if (!expectedUpdatedAt) {
+            await resolveFailure("Sarjan päivitys epäonnistui.");
+            return;
+          }
+
+          const response = await fetch(
+            `/api/workouts/${encodeURIComponent(queue.scheduledWorkoutId)}/sets/${encodeURIComponent(currentLogId)}`,
+            {
+              method: "PATCH",
+              headers: {
+                "Content-Type": "application/json",
+              },
+              body: JSON.stringify({
+                ...mutation.patch,
+                templateExerciseId: mutation.templateExerciseId,
+                setLabel: mutation.setLabel,
+                expectedUpdatedAt,
+              }),
             },
-            body: JSON.stringify({
-              ...mutation.patch,
-              expectedUpdatedAt,
-            }),
-          },
-        ).catch(() => null);
+          ).catch(() => null);
 
-        const payload = (response
-          ? await response.json().catch(() => null)
-          : null) as
-          | {
-              message?: string;
-              sessionUpdatedAt?: string;
-              setLog?: { id: string; actualReps?: number; actualLoad?: number; done: boolean };
+          const payload = (response
+            ? await response.json().catch(() => null)
+            : null) as
+            | {
+                message?: string;
+                code?: string;
+                sessionUpdatedAt?: string;
+                setLog?: { id: string; actualReps?: number; actualLoad?: number; done: boolean };
+              }
+            | null;
+
+          if (response?.ok && payload?.sessionUpdatedAt && payload.setLog) {
+            queue.confirmedSessionUpdatedAt = payload.sessionUpdatedAt;
+            workoutConfirmedSessionUpdatedAtRef.current.set(queue.scheduledWorkoutId, payload.sessionUpdatedAt);
+            mutation.logId = payload.setLog.id;
+            setState((previous) =>
+              applyConfirmedWorkoutSetUpdate(previous, queue.scheduledWorkoutId, payload.sessionUpdatedAt!, payload.setLog!),
+            );
+            return;
+          }
+
+          if (payload?.code === "not_found" && attempt === 0 && mutation.templateExerciseId && mutation.setLabel) {
+            await refreshSupabaseVisibleState();
+            syncWorkoutMutationQueueVersionsFromState(queue.scheduledWorkoutId);
+            const refreshedSession = stateRef.current.sessions.find(
+              (session) => session.scheduledWorkoutId === queue.scheduledWorkoutId,
+            );
+            const remappedLog = refreshedSession?.setLogs.find(
+              (log) =>
+                log.templateExerciseId === mutation.templateExerciseId &&
+                log.setLabel === mutation.setLabel,
+            );
+
+            if (remappedLog) {
+              currentLogId = remappedLog.id;
+              mutation.logId = remappedLog.id;
+              continue;
             }
-          | null;
+          }
 
-        if (!response?.ok || !payload?.sessionUpdatedAt || !payload.setLog) {
+          console.warn("[workout-ui] set-mutation-failed", {
+            scheduledWorkoutId: queue.scheduledWorkoutId,
+            logId: currentLogId,
+            templateExerciseId: mutation.templateExerciseId,
+            setLabel: mutation.setLabel,
+            expectedUpdatedAt,
+            status: response?.status,
+            message: payload?.message,
+            code: payload?.code,
+          });
+
           await resolveFailure(payload?.message ?? "Sarjan päivitys epäonnistui.");
           return;
         }
 
-        queue.confirmedSessionUpdatedAt = payload.sessionUpdatedAt;
-        workoutConfirmedSessionUpdatedAtRef.current.set(queue.scheduledWorkoutId, payload.sessionUpdatedAt);
-        setState((previous) =>
-          applyConfirmedWorkoutSetUpdate(previous, queue.scheduledWorkoutId, payload.sessionUpdatedAt!, payload.setLog!),
-        );
+        await resolveFailure("Sarjan päivitys epäonnistui.");
         return;
       }
       case "note": {
@@ -4909,12 +4954,18 @@ function findResolvedUserIdInSnapshot(
           return;
         }
 
+        const targetLog = currentState.sessions
+          .find((session) => session.scheduledWorkoutId === scheduledWorkoutId)
+          ?.setLogs.find((log) => log.id === logId);
+
         setState((previous) => domainUpdateSessionSet(previous, scheduledWorkoutId, logId, patch));
 
         if (supabase) {
           enqueueWorkoutMutation(scheduledWorkoutId, {
             kind: "set",
             logId,
+            templateExerciseId: targetLog?.templateExerciseId,
+            setLabel: targetLog?.setLabel,
             patch,
           });
           return;
