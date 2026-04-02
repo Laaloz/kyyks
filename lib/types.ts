@@ -346,7 +346,8 @@ export interface InviteInput {
 }
 
 export interface WorkoutUpdateInput {
-  actualReps?: number;
-  actualLoad?: number;
+  actualReps?: number | null;
+  actualLoad?: number | null;
   done?: boolean;
+  expectedUpdatedAt?: string;
 }

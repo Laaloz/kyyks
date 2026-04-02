@@ -3,6 +3,12 @@ import { NextResponse } from "next/server";
 import { createRequestTimer } from "@/lib/server/request-timing";
 import { deleteWorkoutOnServer, updateWorkoutDurationOnServer } from "@/lib/server/training-workflows";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
+import { z } from "zod";
+
+const durationRequestSchema = z.object({
+  durationSeconds: z.number(),
+  expectedUpdatedAt: z.string().datetime(),
+});
 
 export async function PATCH(request: Request, context: { params: Promise<{ scheduledWorkoutId: string }> }) {
   const timer = createRequestTimer("workout-duration-patch");
@@ -29,20 +35,25 @@ export async function PATCH(request: Request, context: { params: Promise<{ sched
     return timer.json({ message: "Käyttäjäprofiilia ei löytynyt." }, { status: 403 });
   }
 
-  const payload = (await request.json().catch(() => null)) as { durationSeconds?: number } | null;
+  const body = await request.json().catch(() => null);
+  const parsed = durationRequestSchema.safeParse(body);
+  if (!parsed.success) {
+    return timer.json({ message: "Virheellinen treeniajan muokkauspyyntö." }, { status: 400 });
+  }
   const { scheduledWorkoutId } = await context.params;
   const result = await updateWorkoutDurationOnServer({
     requester,
     scheduledWorkoutId,
-    durationSeconds: payload?.durationSeconds ?? Number.NaN,
+    durationSeconds: parsed.data.durationSeconds,
+    expectedUpdatedAt: parsed.data.expectedUpdatedAt,
   });
 
   if (!result.ok) {
-    return timer.json({ message: result.message }, { status: 400 });
+    return timer.json({ message: result.message, code: result.code }, { status: result.code?.startsWith("stale") ? 409 : 400 });
   }
 
   timer.log({ userId: user.id, scheduledWorkoutId });
-  return timer.json({ ok: true });
+  return timer.json({ ok: true, updatedAt: result.updatedAt, completedAt: result.completedAt });
 }
 
 export async function DELETE(_request: Request, context: { params: Promise<{ scheduledWorkoutId: string }> }) {

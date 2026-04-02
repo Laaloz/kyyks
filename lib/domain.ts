@@ -602,6 +602,8 @@ export function updateSessionSet(
   patch: WorkoutUpdateInput,
 ): AppState {
   const updatedAt = nowIso();
+  const hasActualReps = Object.prototype.hasOwnProperty.call(patch, "actualReps");
+  const hasActualLoad = Object.prototype.hasOwnProperty.call(patch, "actualLoad");
 
   return {
     ...state,
@@ -618,12 +620,23 @@ export function updateSessionSet(
 
               return session.setLogs.map((log) => {
                 if (log.id === logId) {
-                  const nextLog = { ...log, ...patch };
+                  const nextLog = {
+                    ...log,
+                    ...(patch.done !== undefined ? { done: patch.done } : {}),
+                    ...(hasActualReps ? { actualReps: patch.actualReps ?? undefined } : {}),
+                    ...(hasActualLoad ? { actualLoad: patch.actualLoad ?? undefined } : {}),
+                  };
                   if (patch.done) {
                     return {
                       ...nextLog,
-                      actualReps: nextLog.actualReps ?? resolveDefaultActualReps(nextLog),
-                      actualLoad: nextLog.actualLoad ?? resolveDefaultActualLoad(nextLog),
+                      actualReps:
+                        hasActualReps && patch.actualReps === null
+                          ? undefined
+                          : nextLog.actualReps ?? resolveDefaultActualReps(nextLog),
+                      actualLoad:
+                        hasActualLoad && patch.actualLoad === null
+                          ? undefined
+                          : nextLog.actualLoad ?? resolveDefaultActualLoad(nextLog),
                     };
                   }
 

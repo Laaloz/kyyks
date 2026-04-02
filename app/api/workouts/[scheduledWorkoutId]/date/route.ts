@@ -6,6 +6,7 @@ import { createSupabaseServerClient } from "@/lib/supabase/server";
 
 const requestSchema = z.object({
   scheduledDate: z.string(),
+  expectedUpdatedAt: z.string().datetime(),
 });
 
 export async function PATCH(request: Request, context: { params: Promise<{ scheduledWorkoutId: string }> }) {
@@ -44,12 +45,13 @@ export async function PATCH(request: Request, context: { params: Promise<{ sched
     requester,
     scheduledWorkoutId,
     scheduledDate: parsed.data.scheduledDate,
+    expectedUpdatedAt: parsed.data.expectedUpdatedAt,
   });
 
   if (!result.ok) {
-    return timer.json({ message: result.message }, { status: 400 });
+    return timer.json({ message: result.message, code: result.code }, { status: result.code?.startsWith("stale") ? 409 : 400 });
   }
 
   timer.log({ userId: user.id, scheduledWorkoutId });
-  return timer.json({ ok: true });
+  return timer.json({ ok: true, updatedAt: result.updatedAt, completedAt: result.completedAt });
 }

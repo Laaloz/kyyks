@@ -6,9 +6,10 @@ import { updateWorkoutSetOnServer } from "@/lib/server/training-workflows";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 
 const requestSchema = z.object({
-  actualReps: z.number().optional(),
-  actualLoad: z.number().optional(),
+  actualReps: z.number().nullable().optional(),
+  actualLoad: z.number().nullable().optional(),
   done: z.boolean().optional(),
+  expectedUpdatedAt: z.string().datetime().optional(),
 });
 
 export async function PATCH(request: Request, context: { params: Promise<{ scheduledWorkoutId: string; logId: string }> }) {
@@ -51,9 +52,13 @@ export async function PATCH(request: Request, context: { params: Promise<{ sched
   });
 
   if (!result.ok) {
-    return timer.json({ message: result.message }, { status: 400 });
+    return timer.json({ message: result.message, code: result.code }, { status: result.code === "stale_session" ? 409 : 400 });
   }
 
   timer.log({ userId: user.id, scheduledWorkoutId, logId });
-  return timer.json({ ok: true });
+  return timer.json({
+    ok: true,
+    sessionUpdatedAt: result.sessionUpdatedAt,
+    setLog: result.setLog,
+  });
 }

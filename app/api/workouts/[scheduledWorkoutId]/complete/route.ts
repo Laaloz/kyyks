@@ -3,8 +3,13 @@ import { NextResponse } from "next/server";
 import { createRequestTimer } from "@/lib/server/request-timing";
 import { completeWorkoutOnServer } from "@/lib/server/training-workflows";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
+import { z } from "zod";
 
-export async function POST(_request: Request, context: { params: Promise<{ scheduledWorkoutId: string }> }) {
+const requestSchema = z.object({
+  expectedUpdatedAt: z.string().datetime(),
+});
+
+export async function POST(request: Request, context: { params: Promise<{ scheduledWorkoutId: string }> }) {
   const timer = createRequestTimer("workout-complete");
   const supabase = await createSupabaseServerClient();
   if (!supabase) {
@@ -29,10 +34,17 @@ export async function POST(_request: Request, context: { params: Promise<{ sched
     return timer.json({ message: "Käyttäjäprofiilia ei löytynyt." }, { status: 403 });
   }
 
+  const body = await request.json().catch(() => null);
+  const parsed = requestSchema.safeParse(body);
+  if (!parsed.success) {
+    return timer.json({ message: "Virheellinen treenin viimeistelypyyntö." }, { status: 400 });
+  }
+
   const { scheduledWorkoutId } = await context.params;
   const result = await completeWorkoutOnServer({
     requester,
     scheduledWorkoutId,
+    expectedUpdatedAt: parsed.data.expectedUpdatedAt,
   });
 
   console.info("[workout-action] complete", {
@@ -43,9 +55,9 @@ export async function POST(_request: Request, context: { params: Promise<{ sched
   });
 
   if (!result.ok) {
-    return timer.json({ message: result.message }, { status: 400 });
+    return timer.json({ message: result.message, code: result.code }, { status: result.code?.startsWith("stale") ? 409 : 400 });
   }
 
   timer.log({ userId: user.id, scheduledWorkoutId });
-  return timer.json({ ok: true });
+  return timer.json({ ok: true, updatedAt: result.updatedAt, completedAt: result.completedAt });
 }

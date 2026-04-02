@@ -17,7 +17,6 @@ import { Button } from "@/components/ui/button";
 import { Input, Label, Textarea } from "@/components/ui/field";
 import { InfoTooltip } from "@/components/ui/tooltip";
 import { InlineFeedback } from "@/components/workout/inline-feedback";
-import { numberOrUndefined } from "@/components/workout/schemas";
 import { withMinimumDelay } from "@/lib/min-delay";
 import { workoutStatusBadgeClass, workoutStatusLabel } from "@/components/workout/shared";
 import { calculateSessionDurationSeconds } from "@/lib/domain";
@@ -385,7 +384,7 @@ export function AthleteSessionPanel({
   status: string;
   scheduledDate?: string;
   onStart: () => void | Promise<void>;
-  onUpdate: (logId: string, patch: { actualReps?: number; actualLoad?: number; done?: boolean }) => void;
+  onUpdate: (logId: string, patch: { actualReps?: number | null; actualLoad?: number | null; done?: boolean }) => void;
   onUpdateDate: (scheduledDate: string) => Promise<{ ok: boolean; message?: string }>;
   onUpdateDuration: (durationSeconds: number) => Promise<{ ok: boolean; message?: string }>;
   onSaveNote: (body: string) => void;
@@ -854,14 +853,14 @@ export function AthleteSessionPanel({
 
   const handleLogUpdate = (
     log: WorkoutSession["setLogs"][number],
-    patch: { actualReps?: number; actualLoad?: number; done?: boolean },
+    patch: { actualReps?: number | null; actualLoad?: number | null; done?: boolean },
   ) => {
     onUpdate(log.id, patch);
   };
 
   const handleLogUpdateById = (
     logId: string,
-    patch: { actualReps?: number; actualLoad?: number; done?: boolean },
+    patch: { actualReps?: number | null; actualLoad?: number | null; done?: boolean },
   ) => {
     onUpdate(logId, patch);
   };
@@ -891,7 +890,7 @@ export function AthleteSessionPanel({
     }));
 
     if (rawValue.trim() === "") {
-      onUpdate(log.id, { actualLoad: undefined });
+      onUpdate(log.id, { actualLoad: null });
       return;
     }
 
@@ -1285,7 +1284,19 @@ export function AthleteSessionPanel({
                             aria-label={`${exerciseName} sarja ${log.setLabel} toteutuneet toistot`}
                             value={log.actualReps ?? ""}
                             disabled={readOnly}
-                            onChange={(event) => handleLogUpdate(log, { actualReps: numberOrUndefined(event.target.value) })}
+                            onChange={(event) => {
+                              const trimmed = event.target.value.trim();
+                              if (trimmed === "") {
+                                handleLogUpdate(log, { actualReps: null });
+                                return;
+                              }
+
+                              if (!/^\d+$/.test(trimmed)) {
+                                return;
+                              }
+
+                              handleLogUpdate(log, { actualReps: Number(trimmed) });
+                            }}
                             onKeyDown={(event) => handleWorkoutFieldEnter(event, logs, log, "reps")}
                           />
                           <div className="absolute inset-y-1 right-1 w-7 rounded-[0.6rem] bg-[color-mix(in_srgb,var(--border)_26%,transparent)] p-px">

@@ -11,7 +11,14 @@ vi.mock("@/lib/supabase/admin", () => ({
 }));
 vi.mock("server-only", () => ({}));
 
-import { createProgramOnServer } from "@/lib/server/training-workflows";
+import {
+  completeWorkoutOnServer,
+  createProgramOnServer,
+  saveWorkoutNoteOnServer,
+  updateWorkoutDateOnServer,
+  updateWorkoutDurationOnServer,
+  updateWorkoutSetOnServer,
+} from "@/lib/server/training-workflows";
 
 type MockProfile = {
   id: string;
@@ -126,6 +133,15 @@ function createMockAdminClient({
   };
 }
 
+function createWorkoutSetRpcClient(result: Record<string, unknown>, options?: { error?: { message?: string } | null }) {
+  return {
+    rpc: vi.fn(async () => ({
+      data: result,
+      error: options?.error ?? null,
+    })),
+  };
+}
+
 beforeEach(() => {
   createSupabaseAdminClientMock.mockReset();
 });
@@ -237,5 +253,190 @@ describe("training workflows server", () => {
         athlete_id: "independent-1",
       }),
     );
+  });
+
+  it("sends explicit null clears and optimistic concurrency metadata to the rpc write path", async () => {
+    const admin = createWorkoutSetRpcClient({
+      ok: true,
+      session_updated_at: "2026-04-02T09:10:00.000Z",
+      log_id: "log-1",
+      actual_reps: null,
+      actual_load: null,
+      done: true,
+    });
+
+    createSupabaseAdminClientMock.mockReturnValue(admin);
+
+    const result = await updateWorkoutSetOnServer({
+      requester: {
+        id: "athlete-1",
+        role: "athlete",
+      },
+      scheduledWorkoutId: "workout-1",
+      logId: "log-1",
+      patch: {
+        done: true,
+        actualReps: null,
+        actualLoad: null,
+        expectedUpdatedAt: "2026-04-02T09:00:00.000Z",
+      },
+    });
+
+    expect(admin.rpc).toHaveBeenCalledWith("update_workout_set_log", {
+      p_scheduled_workout_id: "workout-1",
+      p_log_id: "log-1",
+      p_requester_id: "athlete-1",
+      p_requester_role: "athlete",
+      p_expected_session_updated_at: "2026-04-02T09:00:00.000Z",
+      p_has_done: true,
+      p_done: true,
+      p_has_actual_reps: true,
+      p_actual_reps: null,
+      p_has_actual_load: true,
+      p_actual_load: null,
+    });
+    expect(result).toEqual({
+      ok: true,
+      sessionUpdatedAt: "2026-04-02T09:10:00.000Z",
+      setLog: {
+        id: "log-1",
+        actualReps: undefined,
+        actualLoad: undefined,
+        done: true,
+      },
+    });
+  });
+
+  it("returns a stale-session error when the rpc rejects an outdated set write", async () => {
+    const admin = createWorkoutSetRpcClient({
+      ok: false,
+      code: "stale_session",
+      message: "Treeni ehti muuttua ennen tallennusta.",
+    });
+
+    createSupabaseAdminClientMock.mockReturnValue(admin);
+
+    const result = await updateWorkoutSetOnServer({
+      requester: {
+        id: "athlete-1",
+        role: "athlete",
+      },
+      scheduledWorkoutId: "workout-1",
+      logId: "log-1",
+      patch: {
+        actualLoad: 102.5,
+        expectedUpdatedAt: "2026-04-02T09:00:00.000Z",
+      },
+    });
+
+    expect(result).toEqual({
+      ok: false,
+      code: "stale_session",
+      message: "Treeni ehti muuttua ennen tallennusta.",
+    });
+  });
+
+  it("sends duration updates through the atomic rpc with expected session version", async () => {
+    const admin = createWorkoutSetRpcClient({
+      ok: true,
+      updated_at: "2026-04-02T09:20:00.000Z",
+    });
+    createSupabaseAdminClientMock.mockReturnValue(admin);
+
+    const result = await updateWorkoutDurationOnServer({
+      requester: { id: "athlete-1", role: "athlete" },
+      scheduledWorkoutId: "workout-1",
+      durationSeconds: 3600,
+      expectedUpdatedAt: "2026-04-02T09:00:00.000Z",
+    });
+
+    expect(admin.rpc).toHaveBeenCalledWith("update_workout_duration_atomic", {
+      p_scheduled_workout_id: "workout-1",
+      p_requester_id: "athlete-1",
+      p_requester_role: "athlete",
+      p_expected_session_updated_at: "2026-04-02T09:00:00.000Z",
+      p_duration_seconds: 3600,
+    });
+    expect(result).toEqual({ ok: true, updatedAt: "2026-04-02T09:20:00.000Z" });
+  });
+
+  it("sends date updates through the atomic rpc with expected session version", async () => {
+    const admin = createWorkoutSetRpcClient({
+      ok: true,
+      updated_at: "2026-04-02T09:20:00.000Z",
+      completed_at: "2026-04-05T09:20:00.000Z",
+    });
+    createSupabaseAdminClientMock.mockReturnValue(admin);
+
+    const result = await updateWorkoutDateOnServer({
+      requester: { id: "athlete-1", role: "athlete" },
+      scheduledWorkoutId: "workout-1",
+      scheduledDate: "2026-04-05",
+      expectedUpdatedAt: "2026-04-02T09:00:00.000Z",
+    });
+
+    expect(admin.rpc).toHaveBeenCalledWith("update_workout_date_atomic", {
+      p_scheduled_workout_id: "workout-1",
+      p_requester_id: "athlete-1",
+      p_requester_role: "athlete",
+      p_expected_session_updated_at: "2026-04-02T09:00:00.000Z",
+      p_scheduled_date: "2026-04-05",
+    });
+    expect(result).toEqual({
+      ok: true,
+      updatedAt: "2026-04-02T09:20:00.000Z",
+      completedAt: "2026-04-05T09:20:00.000Z",
+    });
+  });
+
+  it("sends note saves through the atomic rpc with note version", async () => {
+    const admin = createWorkoutSetRpcClient({
+      ok: true,
+      note_updated_at: "2026-04-02T09:25:00.000Z",
+    });
+    createSupabaseAdminClientMock.mockReturnValue(admin);
+
+    const result = await saveWorkoutNoteOnServer({
+      requester: { id: "athlete-1", role: "athlete" },
+      scheduledWorkoutId: "workout-1",
+      body: "Hyva treeni",
+      expectedUpdatedAt: "2026-04-02T09:10:00.000Z",
+    });
+
+    expect(admin.rpc).toHaveBeenCalledWith("save_workout_note_entry", {
+      p_scheduled_workout_id: "workout-1",
+      p_requester_id: "athlete-1",
+      p_requester_role: "athlete",
+      p_body: "Hyva treeni",
+      p_expected_note_updated_at: "2026-04-02T09:10:00.000Z",
+    });
+    expect(result).toEqual({ ok: true, updatedAt: "2026-04-02T09:25:00.000Z" });
+  });
+
+  it("sends complete workout through the atomic rpc with expected session version", async () => {
+    const admin = createWorkoutSetRpcClient({
+      ok: true,
+      updated_at: "2026-04-02T09:30:00.000Z",
+      completed_at: "2026-04-02T09:30:00.000Z",
+    });
+    createSupabaseAdminClientMock.mockReturnValue(admin);
+
+    const result = await completeWorkoutOnServer({
+      requester: { id: "athlete-1", role: "athlete" },
+      scheduledWorkoutId: "workout-1",
+      expectedUpdatedAt: "2026-04-02T09:20:00.000Z",
+    });
+
+    expect(admin.rpc).toHaveBeenCalledWith("complete_workout_atomic", {
+      p_scheduled_workout_id: "workout-1",
+      p_requester_id: "athlete-1",
+      p_requester_role: "athlete",
+      p_expected_session_updated_at: "2026-04-02T09:20:00.000Z",
+    });
+    expect(result).toEqual({
+      ok: true,
+      updatedAt: "2026-04-02T09:30:00.000Z",
+      completedAt: "2026-04-02T09:30:00.000Z",
+    });
   });
 });

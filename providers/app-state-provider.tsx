@@ -54,6 +54,7 @@ import type {
   ProgramUpdateInput,
   Role,
   UserProfile,
+  WorkoutSession,
   WorkoutUpdateInput,
 } from "@/lib/types";
 import { makeId } from "@/lib/utils";
@@ -644,8 +645,19 @@ type CreateProgramResult =
   | { ok: false; message: string };
 
 type WorkoutSetRequestState = {
+  scheduledWorkoutId: string;
+  logId: string;
   revision: number;
-  patch: WorkoutUpdateInput;
+  pendingPatch?: WorkoutUpdateInput;
+  inFlight: boolean;
+  confirmedUpdatedAt?: string;
+};
+
+type WorkoutNoteRequestState = {
+  scheduledWorkoutId: string;
+  body?: string;
+  inFlight: boolean;
+  confirmedUpdatedAt?: string | null;
 };
 
 type PasswordResetRequestResult =
@@ -965,6 +977,101 @@ function createInitialAppState() {
   return normalizeState(isLocalDevelopmentHost() ? cloneDemoState() : createEmptyAppState());
 }
 
+function getSessionUpdatedAtForWorkout(state: AppState, scheduledWorkoutId: string) {
+  return state.sessions.find((session) => session.scheduledWorkoutId === scheduledWorkoutId)?.updatedAt
+    ?? state.scheduledWorkouts.find((workout) => workout.id === scheduledWorkoutId)?.updatedAt;
+}
+
+function getNoteForWorkout(state: AppState, scheduledWorkoutId: string) {
+  return state.notes.find((note) => {
+    const session = state.sessions.find((item) => item.id === note.sessionId);
+    return session?.scheduledWorkoutId === scheduledWorkoutId;
+  }) ?? null;
+}
+
+function collectPendingWorkoutSetRequests(requests?: ReadonlyMap<string, WorkoutSetRequestState>) {
+  const pendingWorkoutIds = new Set<string>();
+  const pendingLogIdsByWorkoutId = new Map<string, Set<string>>();
+
+  requests?.forEach((request) => {
+    if (!request.inFlight && !request.pendingPatch) {
+      return;
+    }
+
+    pendingWorkoutIds.add(request.scheduledWorkoutId);
+    const ids = pendingLogIdsByWorkoutId.get(request.scheduledWorkoutId) ?? new Set<string>();
+    ids.add(request.logId);
+    pendingLogIdsByWorkoutId.set(request.scheduledWorkoutId, ids);
+  });
+
+  return { pendingWorkoutIds, pendingLogIdsByWorkoutId };
+}
+
+function mergeSessionSetLogs(
+  localSession: WorkoutSession,
+  serverSession: WorkoutSession,
+  pendingLogIds: ReadonlySet<string>,
+) {
+  const localLogsById = new Map(localSession.setLogs.map((log) => [log.id, log]));
+  const mergedLogs = serverSession.setLogs.map((log) => {
+    if (!pendingLogIds.has(log.id)) {
+      return log;
+    }
+
+    return localLogsById.get(log.id) ?? log;
+  });
+
+  localSession.setLogs.forEach((log) => {
+    if (pendingLogIds.has(log.id) && !mergedLogs.some((candidate) => candidate.id === log.id)) {
+      mergedLogs.push(log);
+    }
+  });
+
+  return mergedLogs;
+}
+
+function applyConfirmedWorkoutSetUpdate(
+  previous: AppState,
+  scheduledWorkoutId: string,
+  sessionUpdatedAt: string,
+  setLog: {
+    id: string;
+    actualReps?: number;
+    actualLoad?: number;
+    done: boolean;
+  },
+) {
+  return {
+    ...previous,
+    sessions: previous.sessions.map((session) =>
+      session.scheduledWorkoutId === scheduledWorkoutId
+        ? {
+            ...session,
+            updatedAt: sessionUpdatedAt,
+            setLogs: session.setLogs.map((log) =>
+              log.id === setLog.id
+                ? {
+                    ...log,
+                    actualReps: setLog.actualReps,
+                    actualLoad: setLog.actualLoad,
+                    done: setLog.done,
+                  }
+                : log,
+            ),
+          }
+        : session,
+    ),
+    scheduledWorkouts: previous.scheduledWorkouts.map((workout) =>
+      workout.id === scheduledWorkoutId
+        ? {
+            ...workout,
+            updatedAt: sessionUpdatedAt,
+          }
+        : workout,
+    ),
+  };
+}
+
 function mapSupabaseProfileToUser(profile: SupabaseProfileRecord): UserProfile {
   return {
     id: profile.id,
@@ -1246,10 +1353,12 @@ export function reconcileSupabaseInviteDirectory(
 export function reconcileSupabaseVisibleState(
   previous: AppState,
   snapshot: SupabaseVisibleAppStateSnapshot,
+  pendingWorkoutSetRequests?: ReadonlyMap<string, WorkoutSetRequestState>,
 ) {
   const withOptimisticWorkouts = preserveActiveWorkoutShells(previous, snapshot);
   const previousScheduledWorkoutsById = new Map(previous.scheduledWorkouts.map((workout) => [workout.id, workout]));
   const previousSessionsById = new Map(previous.sessions.map((session) => [session.id, session]));
+  const { pendingWorkoutIds, pendingLogIdsByWorkoutId } = collectPendingWorkoutSetRequests(pendingWorkoutSetRequests);
   const activeServerEmails = new Set(
     snapshot.users
       .filter((user) => user.status === "active")
@@ -1293,6 +1402,10 @@ export function reconcileSupabaseVisibleState(
         return workout;
       }
 
+      if (pendingWorkoutIds.has(workout.id)) {
+        return localWorkout;
+      }
+
       const localUpdatedAt = Date.parse(localWorkout.updatedAt);
       const serverUpdatedAt = Date.parse(workout.updatedAt);
       return Number.isFinite(localUpdatedAt) && Number.isFinite(serverUpdatedAt) && localUpdatedAt > serverUpdatedAt
@@ -1303,6 +1416,15 @@ export function reconcileSupabaseVisibleState(
       const localSession = previousSessionsById.get(session.id);
       if (!localSession) {
         return session;
+      }
+
+      const pendingLogIds = pendingLogIdsByWorkoutId.get(session.scheduledWorkoutId) ?? new Set<string>();
+      if (pendingLogIds.size > 0) {
+        return {
+          ...session,
+          updatedAt: localSession.updatedAt,
+          setLogs: mergeSessionSetLogs(localSession, session, pendingLogIds),
+        };
       }
 
       const localUpdatedAt = Date.parse(localSession.updatedAt);
@@ -1754,8 +1876,10 @@ export function AppStateProvider({ children }: PropsWithChildren) {
   const [didBootstrapTimeout, setDidBootstrapTimeout] = useState(false);
   const [toast, setToast] = useState<{ id: number; tone: "success" | "danger" | "info"; message: string } | null>(null);
   const supabase = useMemo(() => createSupabaseBrowserClient(), []);
+  const stateRef = useRef(state);
   const refreshSupabaseVisibleStatePromiseRef = useRef<Promise<boolean> | null>(null);
   const workoutSetRequestStateRef = useRef<Map<string, WorkoutSetRequestState>>(new Map());
+  const workoutNoteRequestStateRef = useRef<Map<string, WorkoutNoteRequestState>>(new Map());
   const isHydrated =
     isStorageHydrated && (supabase ? (isSupabaseAuthResolved && didAttemptBootstrapRevalidation) || didBootstrapTimeout : true);
   const notify = useCallback((input: { tone: "success" | "danger" | "info"; message: string }) => {
@@ -1765,6 +1889,10 @@ export function AppStateProvider({ children }: PropsWithChildren) {
       message: input.message,
     });
   }, []);
+
+  useEffect(() => {
+    stateRef.current = state;
+  }, [state]);
 
   useEffect(() => {
     const rawState = window.localStorage.getItem(STATE_KEY);
@@ -1971,7 +2099,7 @@ export function AppStateProvider({ children }: PropsWithChildren) {
         }
 
         if (snapshot) {
-          setState((previous) => reconcileSupabaseVisibleState(previous, snapshot));
+          setState((previous) => reconcileSupabaseVisibleState(previous, snapshot, workoutSetRequestStateRef.current));
           resolvedUserId = findResolvedUserIdInSnapshot(snapshot, authUser);
         }
       }
@@ -2129,7 +2257,7 @@ function findResolvedUserIdInSnapshot(
       }
 
       try {
-        setState((previous) => reconcileSupabaseVisibleState(previous, payload));
+        setState((previous) => reconcileSupabaseVisibleState(previous, payload, workoutSetRequestStateRef.current));
         const authUser = await withTimeout(confirmCurrentSupabaseAuthUser(supabase), 4000, null);
         const resolvedSession = resolveSessionIdsFromSnapshot(
           state,
@@ -2204,6 +2332,153 @@ function findResolvedUserIdInSnapshot(
 
     void refreshSupabaseVisibleState();
   }, [authenticatedUserId, hasActiveWorkoutOpen, isHydrated, supabase]);
+
+  const flushQueuedWorkoutSetUpdate = useCallback(async (requestKey: string) => {
+    if (!supabase) {
+      workoutSetRequestStateRef.current.delete(requestKey);
+      return;
+    }
+
+    const currentRequest = workoutSetRequestStateRef.current.get(requestKey);
+    if (!currentRequest || currentRequest.inFlight || !currentRequest.pendingPatch) {
+      return;
+    }
+
+    const patch = currentRequest.pendingPatch;
+    const expectedUpdatedAt =
+      currentRequest.confirmedUpdatedAt
+      ?? getSessionUpdatedAtForWorkout(stateRef.current, currentRequest.scheduledWorkoutId);
+
+    if (!expectedUpdatedAt) {
+      workoutSetRequestStateRef.current.delete(requestKey);
+      await refreshSupabaseVisibleState();
+      return;
+    }
+
+    workoutSetRequestStateRef.current.set(requestKey, {
+      ...currentRequest,
+      inFlight: true,
+      pendingPatch: undefined,
+      confirmedUpdatedAt: expectedUpdatedAt,
+    });
+
+    const response = await fetch(
+      `/api/workouts/${encodeURIComponent(currentRequest.scheduledWorkoutId)}/sets/${encodeURIComponent(currentRequest.logId)}`,
+      {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          ...patch,
+          expectedUpdatedAt,
+        }),
+      },
+    ).catch(() => null);
+
+    const payload = (response
+      ? await response.json().catch(() => null)
+      : null) as
+      | {
+          message?: string;
+          code?: string;
+          sessionUpdatedAt?: string;
+          setLog?: { id: string; actualReps?: number; actualLoad?: number; done: boolean };
+        }
+      | null;
+
+    const latestRequest = workoutSetRequestStateRef.current.get(requestKey);
+    if (!latestRequest) {
+      return;
+    }
+
+    if (!response?.ok || !payload?.sessionUpdatedAt || !payload.setLog) {
+      workoutSetRequestStateRef.current.delete(requestKey);
+      await refreshSupabaseVisibleState();
+      return;
+    }
+
+    if (latestRequest.pendingPatch) {
+      workoutSetRequestStateRef.current.set(requestKey, {
+        ...latestRequest,
+        inFlight: false,
+        confirmedUpdatedAt: payload.sessionUpdatedAt,
+      });
+      void flushQueuedWorkoutSetUpdate(requestKey);
+      return;
+    }
+
+    workoutSetRequestStateRef.current.delete(requestKey);
+    const { sessionUpdatedAt, setLog } = payload;
+    setState((previous) =>
+      applyConfirmedWorkoutSetUpdate(previous, currentRequest.scheduledWorkoutId, sessionUpdatedAt, setLog),
+    );
+  }, [supabase]);
+
+  const flushQueuedWorkoutNoteSave = useCallback(async (scheduledWorkoutId: string) => {
+    if (!supabase) {
+      workoutNoteRequestStateRef.current.delete(scheduledWorkoutId);
+      return;
+    }
+
+    const currentRequest = workoutNoteRequestStateRef.current.get(scheduledWorkoutId);
+    if (!currentRequest || currentRequest.inFlight || currentRequest.body === undefined) {
+      return;
+    }
+
+    const body = currentRequest.body;
+    const expectedUpdatedAt =
+      currentRequest.confirmedUpdatedAt ?? getNoteForWorkout(stateRef.current, scheduledWorkoutId)?.updatedAt ?? null;
+
+    workoutNoteRequestStateRef.current.set(scheduledWorkoutId, {
+      scheduledWorkoutId,
+      body: undefined,
+      inFlight: true,
+      confirmedUpdatedAt: expectedUpdatedAt,
+    });
+
+    const response = await fetch(`/api/workouts/${encodeURIComponent(scheduledWorkoutId)}/note`, {
+      method: "PUT",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ body, expectedUpdatedAt }),
+    }).catch(() => null);
+
+    const payload = (response ? await response.json().catch(() => null) : null) as { updatedAt?: string } | { message?: string; code?: string } | null;
+    const latestRequest = workoutNoteRequestStateRef.current.get(scheduledWorkoutId);
+    if (!latestRequest) {
+      return;
+    }
+
+    if (!response?.ok || !payload || !("updatedAt" in payload) || typeof payload.updatedAt !== "string") {
+      workoutNoteRequestStateRef.current.delete(scheduledWorkoutId);
+      await refreshSupabaseVisibleState();
+      return;
+    }
+
+    if (latestRequest.body !== undefined) {
+      workoutNoteRequestStateRef.current.set(scheduledWorkoutId, {
+        ...latestRequest,
+        inFlight: false,
+        confirmedUpdatedAt: payload.updatedAt,
+      });
+      void flushQueuedWorkoutNoteSave(scheduledWorkoutId);
+      return;
+    }
+
+    workoutNoteRequestStateRef.current.delete(scheduledWorkoutId);
+    const confirmedUpdatedAt = payload.updatedAt;
+    setState((previous) => ({
+      ...previous,
+      notes: previous.notes.map((note) => {
+        const session = previous.sessions.find((item) => item.id === note.sessionId);
+        return session?.scheduledWorkoutId === scheduledWorkoutId
+          ? { ...note, updatedAt: confirmedUpdatedAt }
+          : note;
+      }),
+    }));
+  }, [supabase]);
 
   useEffect(() => {
     if (!isHydrated || !supabase || !authenticatedUser || !canActAsCoach(authenticatedUser.role)) {
@@ -2320,7 +2595,9 @@ function findResolvedUserIdInSnapshot(
         resolvedSnapshotUserId = latestSnapshot ? findResolvedUserIdInSnapshot(latestSnapshot, authUser) : null;
 
         if (latestSnapshot) {
-          setState((previous) => reconcileSupabaseVisibleState(previous, latestSnapshot as SupabaseVisibleAppStateSnapshot));
+          setState((previous) =>
+            reconcileSupabaseVisibleState(previous, latestSnapshot as SupabaseVisibleAppStateSnapshot, workoutSetRequestStateRef.current),
+          );
         }
 
         if (resolvedSnapshotUserId) {
@@ -4186,7 +4463,8 @@ function findResolvedUserIdInSnapshot(
           return { ok: false, message: "Anna treeniajalle vähintään 1 minuutti." };
         }
 
-        const workout = state.scheduledWorkouts.find((item) => item.id === scheduledWorkoutId);
+        const currentState = stateRef.current;
+        const workout = currentState.scheduledWorkouts.find((item) => item.id === scheduledWorkoutId);
         if (!workout || (!isAdminRole(currentUser.role) && workout.athleteId !== currentUser.id)) {
           return { ok: false, message: "Treeniä ei löytynyt." };
         }
@@ -4195,7 +4473,7 @@ function findResolvedUserIdInSnapshot(
           return { ok: false, message: "Treeniaikaa voi muokata vain valmiilta treeniltä." };
         }
 
-        const session = state.sessions.find((item) => item.scheduledWorkoutId === scheduledWorkoutId);
+        const session = currentState.sessions.find((item) => item.scheduledWorkoutId === scheduledWorkoutId);
         if (!session || !session.completedAt) {
           return { ok: false, message: "Valmiin treenin aikaa ei löytynyt muokattavaksi." };
         }
@@ -4209,7 +4487,11 @@ function findResolvedUserIdInSnapshot(
           completedAtMs - (durationSeconds + (session.pausedDurationSeconds ?? 0)) * 1000,
         ).toISOString();
 
-        const previousState = state;
+        const previousState = currentState;
+        const expectedUpdatedAt = getSessionUpdatedAtForWorkout(currentState, scheduledWorkoutId);
+        if (!expectedUpdatedAt) {
+          return { ok: false, message: "Treeniaikaa ei voitu päivittää." };
+        }
 
         setState((previous) => ({
           ...previous,
@@ -4218,6 +4500,7 @@ function findResolvedUserIdInSnapshot(
               ? {
                   ...item,
                   startedAt: nextStartedAt,
+                  updatedAt: expectedUpdatedAt,
                 }
               : item,
           ),
@@ -4229,16 +4512,26 @@ function findResolvedUserIdInSnapshot(
             headers: {
               "Content-Type": "application/json",
             },
-            body: JSON.stringify({ durationSeconds }),
+            body: JSON.stringify({ durationSeconds, expectedUpdatedAt }),
           });
-          const payload = (await response.json().catch(() => null)) as { message?: string } | null;
+          const payload = (await response.json().catch(() => null)) as { message?: string; updatedAt?: string } | null;
           if (!response.ok) {
             setState(previousState);
             await refreshSupabaseVisibleState();
             return { ok: false, message: payload?.message ?? "Treeniajan päivitys epäonnistui." };
           }
 
-          void refreshSupabaseVisibleState();
+          if (payload?.updatedAt) {
+            setState((previous) => ({
+              ...previous,
+              scheduledWorkouts: previous.scheduledWorkouts.map((item) =>
+                item.id === scheduledWorkoutId ? { ...item, updatedAt: payload.updatedAt! } : item,
+              ),
+              sessions: previous.sessions.map((item) =>
+                item.scheduledWorkoutId === scheduledWorkoutId ? { ...item, updatedAt: payload.updatedAt! } : item,
+              ),
+            }));
+          }
           return { ok: true };
         }
 
@@ -4249,12 +4542,13 @@ function findResolvedUserIdInSnapshot(
           return { ok: false, message: "Kirjaudu sisään ennen treenipäivän muokkausta." };
         }
 
-        const workout = state.scheduledWorkouts.find((item) => item.id === scheduledWorkoutId);
+        const currentState = stateRef.current;
+        const workout = currentState.scheduledWorkouts.find((item) => item.id === scheduledWorkoutId);
         if (!workout || (!isAdminRole(currentUser.role) && workout.athleteId !== currentUser.id)) {
           return { ok: false, message: "Treeniä ei löytynyt." };
         }
 
-        const session = state.sessions.find((item) => item.scheduledWorkoutId === scheduledWorkoutId);
+        const session = currentState.sessions.find((item) => item.scheduledWorkoutId === scheduledWorkoutId);
         const referenceTimestamp = workout.completedAt ?? session?.completedAt ?? workout.scheduledDate;
         const deltaMs = resolveWorkoutDateShiftDelta(referenceTimestamp, scheduledDate);
         if (deltaMs === null) {
@@ -4262,7 +4556,11 @@ function findResolvedUserIdInSnapshot(
         }
 
         const updatedAt = new Date().toISOString();
-        const previousState = state;
+        const previousState = currentState;
+        const expectedUpdatedAt = getSessionUpdatedAtForWorkout(currentState, scheduledWorkoutId);
+        if (!expectedUpdatedAt) {
+          return { ok: false, message: "Treenipäivän päivitys epäonnistui." };
+        }
 
         setState((previous) => ({
           ...previous,
@@ -4295,16 +4593,26 @@ function findResolvedUserIdInSnapshot(
             headers: {
               "Content-Type": "application/json",
             },
-            body: JSON.stringify({ scheduledDate }),
+            body: JSON.stringify({ scheduledDate, expectedUpdatedAt }),
           });
-          const payload = (await response.json().catch(() => null)) as { message?: string } | null;
+          const payload = (await response.json().catch(() => null)) as { message?: string; updatedAt?: string } | null;
           if (!response.ok) {
             setState(previousState);
             await refreshSupabaseVisibleState();
             return { ok: false, message: payload?.message ?? "Treenipäivän päivitys epäonnistui." };
           }
 
-          void refreshSupabaseVisibleState();
+          if (payload?.updatedAt) {
+            setState((previous) => ({
+              ...previous,
+              scheduledWorkouts: previous.scheduledWorkouts.map((item) =>
+                item.id === scheduledWorkoutId ? { ...item, updatedAt: payload.updatedAt! } : item,
+              ),
+              sessions: previous.sessions.map((item) =>
+                item.scheduledWorkoutId === scheduledWorkoutId ? { ...item, updatedAt: payload.updatedAt! } : item,
+              ),
+            }));
+          }
           return { ok: true };
         }
 
@@ -4315,7 +4623,8 @@ function findResolvedUserIdInSnapshot(
           return;
         }
 
-        const workout = state.scheduledWorkouts.find((item) => item.id === scheduledWorkoutId);
+        const currentState = stateRef.current;
+        const workout = currentState.scheduledWorkouts.find((item) => item.id === scheduledWorkoutId);
         if (!workout || workout.athleteId !== currentUser.id) {
           return;
         }
@@ -4326,38 +4635,26 @@ function findResolvedUserIdInSnapshot(
 
         const requestKey = `${scheduledWorkoutId}:${logId}`;
         const previousRequest = workoutSetRequestStateRef.current.get(requestKey);
+        const currentSessionUpdatedAt = getSessionUpdatedAtForWorkout(currentState, scheduledWorkoutId);
         const nextRevision = (previousRequest?.revision ?? 0) + 1;
         const mergedPatch = {
-          ...previousRequest?.patch,
+          ...previousRequest?.pendingPatch,
           ...patch,
         } satisfies WorkoutUpdateInput;
 
         workoutSetRequestStateRef.current.set(requestKey, {
+          scheduledWorkoutId,
+          logId,
           revision: nextRevision,
-          patch: mergedPatch,
+          pendingPatch: mergedPatch,
+          inFlight: previousRequest?.inFlight ?? false,
+          confirmedUpdatedAt: previousRequest?.confirmedUpdatedAt ?? currentSessionUpdatedAt,
         });
 
         setState((previous) => domainUpdateSessionSet(previous, scheduledWorkoutId, logId, mergedPatch));
 
         if (supabase) {
-          const response = await fetch(`/api/workouts/${encodeURIComponent(scheduledWorkoutId)}/sets/${encodeURIComponent(logId)}`, {
-            method: "PATCH",
-            headers: {
-              "Content-Type": "application/json",
-            },
-            body: JSON.stringify(mergedPatch),
-          }).catch(() => null);
-
-          const latestRequest = workoutSetRequestStateRef.current.get(requestKey);
-          if (!latestRequest || latestRequest.revision !== nextRevision) {
-            return;
-          }
-
-          workoutSetRequestStateRef.current.delete(requestKey);
-
-          if (!response?.ok) {
-            await refreshSupabaseVisibleState();
-          }
+          void flushQueuedWorkoutSetUpdate(requestKey);
           return;
         }
 
@@ -4368,16 +4665,14 @@ function findResolvedUserIdInSnapshot(
           return;
         }
 
-        const workout = state.scheduledWorkouts.find((item) => item.id === scheduledWorkoutId);
+        const currentState = stateRef.current;
+        const workout = currentState.scheduledWorkouts.find((item) => item.id === scheduledWorkoutId);
         if (!workout || workout.athleteId !== currentUser.id) {
           return;
         }
 
         const trimmedBody = body.trim();
-        const existingNote = state.notes.find((note) => {
-          const session = state.sessions.find((item) => item.id === note.sessionId);
-          return session?.scheduledWorkoutId === scheduledWorkoutId;
-        });
+        const existingNote = getNoteForWorkout(currentState, scheduledWorkoutId);
 
         if (existingNote?.body.trim() === trimmedBody) {
           return;
@@ -4386,20 +4681,14 @@ function findResolvedUserIdInSnapshot(
         setState((previous) => domainSaveSessionNote(previous, scheduledWorkoutId, body));
 
         if (supabase) {
-          void fetch(`/api/workouts/${encodeURIComponent(scheduledWorkoutId)}/note`, {
-            method: "PUT",
-            headers: {
-              "Content-Type": "application/json",
-            },
-            body: JSON.stringify({ body }),
-          })
-            .then((response) => {
-              if (!response.ok) {
-                return refreshSupabaseVisibleState();
-              }
-              return undefined;
-            })
-            .catch(() => refreshSupabaseVisibleState());
+          const previousRequest = workoutNoteRequestStateRef.current.get(scheduledWorkoutId);
+          workoutNoteRequestStateRef.current.set(scheduledWorkoutId, {
+            scheduledWorkoutId,
+            body,
+            inFlight: previousRequest?.inFlight ?? false,
+            confirmedUpdatedAt: previousRequest?.confirmedUpdatedAt ?? existingNote?.updatedAt ?? null,
+          });
+          void flushQueuedWorkoutNoteSave(scheduledWorkoutId);
         }
       },
       async completeWorkout(scheduledWorkoutId) {
@@ -4407,34 +4696,57 @@ function findResolvedUserIdInSnapshot(
           return { ok: false, message: "Kirjaudu sisään ennen treenin merkintää valmiiksi." };
         }
 
-        const workout = state.scheduledWorkouts.find((item) => item.id === scheduledWorkoutId);
+        const currentState = stateRef.current;
+        const workout = currentState.scheduledWorkouts.find((item) => item.id === scheduledWorkoutId);
         if (!workout || workout.athleteId !== currentUser.id) {
           return { ok: false, message: "Treeniä ei löytynyt." };
         }
 
-        const session = state.sessions.find((item) => item.scheduledWorkoutId === scheduledWorkoutId);
+        const session = currentState.sessions.find((item) => item.scheduledWorkoutId === scheduledWorkoutId);
         if (!session) {
           return { ok: false, message: "Aloita treeni ennen kuin merkitset sen valmiiksi." };
         }
 
-        if (!canCompleteSession(state, scheduledWorkoutId)) {
+        if (!canCompleteSession(currentState, scheduledWorkoutId)) {
           return { ok: false, message: "Treeniä ei voitu merkitä valmiiksi." };
         }
 
         if (supabase) {
-          const previousState = state;
+          const previousState = currentState;
+          const expectedUpdatedAt = getSessionUpdatedAtForWorkout(currentState, scheduledWorkoutId);
+          if (!expectedUpdatedAt) {
+            return { ok: false, message: "Treeniä ei voitu merkitä valmiiksi." };
+          }
           setState((current) => domainCompleteSession(current, scheduledWorkoutId));
           const response = await fetch(`/api/workouts/${encodeURIComponent(scheduledWorkoutId)}/complete`, {
             method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({ expectedUpdatedAt }),
           });
-          const payload = (await response.json().catch(() => null)) as { message?: string } | null;
+          const payload = (await response.json().catch(() => null)) as { message?: string; updatedAt?: string; completedAt?: string } | null;
           if (!response.ok) {
             setState(previousState);
             await refreshSupabaseVisibleState();
             return { ok: false, message: payload?.message ?? "Treeniä ei voitu merkitä valmiiksi." };
           }
 
-          void refreshSupabaseVisibleState();
+          if (payload?.updatedAt) {
+            setState((previous) => ({
+              ...previous,
+              scheduledWorkouts: previous.scheduledWorkouts.map((item) =>
+                item.id === scheduledWorkoutId
+                  ? { ...item, updatedAt: payload.updatedAt!, completedAt: payload.completedAt ?? item.completedAt, status: "completed" }
+                  : item,
+              ),
+              sessions: previous.sessions.map((item) =>
+                item.scheduledWorkoutId === scheduledWorkoutId
+                  ? { ...item, updatedAt: payload.updatedAt!, completedAt: payload.completedAt ?? item.completedAt, pausedAt: undefined }
+                  : item,
+              ),
+            }));
+          }
           return { ok: true };
         }
 

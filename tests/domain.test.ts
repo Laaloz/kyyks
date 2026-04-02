@@ -118,6 +118,28 @@ describe("domain helpers", () => {
     expect(corrected.scheduledWorkouts.find((item) => item.id === "scheduled_1")?.status).toBe("completed");
   });
 
+  it("allows clearing an actual load value explicitly with null", () => {
+    const state = cloneDemoState();
+    const session = state.sessions.find((item) => item.scheduledWorkoutId === "scheduled_1");
+    expect(session).toBeDefined();
+    if (!session) {
+      return;
+    }
+
+    const firstLog = session.setLogs[0];
+    expect(firstLog).toBeDefined();
+    if (!firstLog) {
+      return;
+    }
+
+    const cleared = updateSessionSet(state, "scheduled_1", firstLog.id, {
+      actualLoad: null,
+    });
+
+    expect(cleared.sessions.find((item) => item.id === session.id)?.setLogs[0]?.actualLoad).toBeUndefined();
+    expect(cleared.sessions.find((item) => item.id === session.id)?.setLogs[0]?.done).toBe(firstLog.done);
+  });
+
   it("creates pending invites for onboarding", () => {
     const invite = createInvite(
       {

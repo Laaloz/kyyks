@@ -22,6 +22,18 @@ type RequesterProfile = {
   full_name?: string;
 };
 
+type WorkoutSetMutationResult =
+  | { ok: true; sessionUpdatedAt: string; setLog: { id: string; actualReps?: number; actualLoad?: number; done: boolean } }
+  | { ok: false; message: string; code?: "stale_session" | "not_found" | "invalid_state" | "forbidden" };
+
+type WorkoutMutationResult =
+  | { ok: true; updatedAt: string; completedAt?: string }
+  | { ok: false; message: string; code?: "stale_session" | "stale_note" | "not_found" | "invalid_state" | "forbidden" };
+
+type WorkoutNoteMutationResult =
+  | { ok: true; updatedAt: string }
+  | { ok: false; message: string; code?: "stale_note" | "not_found" | "invalid_state" | "forbidden" };
+
 function createPhaseTimer(label: string) {
   const startedAt = performance.now();
   return {
@@ -1007,242 +1019,179 @@ export async function updateWorkoutSetOnServer({
   scheduledWorkoutId: string;
   logId: string;
   patch: WorkoutUpdateInput;
-}) {
+}): Promise<WorkoutSetMutationResult> {
   const admin = createSupabaseAdminClient();
   const timer = createPhaseTimer(`workout-set:${scheduledWorkoutId}`);
   if (!admin) {
     return { ok: false as const, message: "Supabase admin -yhteys puuttuu. Tarkista service role -avain." };
   }
 
-  const timestamp = nowIso();
-
-  const { data: workout } = await admin
-    .from("scheduled_workouts")
-    .select("id, athlete_id, status")
-    .eq("id", scheduledWorkoutId)
-    .maybeSingle<{ id: string; athlete_id: string; status: ScheduledWorkout["status"] }>();
-  timer.checkpoint("workout-query");
-
-  if (!workout || (!isAdminRole(requester.role) && workout.athlete_id !== requester.id)) {
-    return { ok: false as const, message: "Treeniä ei löytynyt." };
+  if (!patch.expectedUpdatedAt) {
+    return { ok: false as const, message: "Sarjan päivityksestä puuttuu versiotieto." };
   }
 
-  if (workout.status !== "in_progress" && workout.status !== "completed") {
-    return { ok: false as const, message: "Sarjoja voi muokata vain aktiivisesta tai valmiista treenistä." };
+  const hasDone = Object.prototype.hasOwnProperty.call(patch, "done");
+  const hasActualReps = Object.prototype.hasOwnProperty.call(patch, "actualReps");
+  const hasActualLoad = Object.prototype.hasOwnProperty.call(patch, "actualLoad");
+
+  const { data, error } = await admin.rpc("update_workout_set_log", {
+    p_scheduled_workout_id: scheduledWorkoutId,
+    p_log_id: logId,
+    p_requester_id: requester.id,
+    p_requester_role: requester.role,
+    p_expected_session_updated_at: patch.expectedUpdatedAt,
+    p_has_done: hasDone,
+    p_done: patch.done ?? false,
+    p_has_actual_reps: hasActualReps,
+    p_actual_reps: patch.actualReps ?? null,
+    p_has_actual_load: hasActualLoad,
+    p_actual_load: patch.actualLoad ?? null,
+  });
+  timer.checkpoint("rpc-write");
+
+  if (error) {
+    return { ok: false as const, message: "Sarjan päivitys epäonnistui." };
   }
 
-  const { data: targetLog } = await admin
-    .from("workout_set_logs")
-    .select("id, template_exercise_id, set_id, set_label, superset_group, target_reps, target_reps_min, target_load, actual_reps, actual_load, done")
-    .eq("id", logId)
-    .eq("scheduled_workout_id", scheduledWorkoutId)
-    .maybeSingle<{
-      id: string;
-      template_exercise_id: string;
-      set_id: string;
-      set_label: string;
-      superset_group: string | null;
-      target_reps: number;
-      target_reps_min: number | null;
-      target_load: number | string | null;
-      actual_reps: number | null;
-      actual_load: number | string | null;
-      done: boolean;
-    }>();
-  timer.checkpoint("target-log-query");
-
-  if (!targetLog) {
-    return { ok: false as const, message: "Sarjaa ei löytynyt." };
+  const payload = Array.isArray(data) ? data[0] : data;
+  if (!payload || typeof payload !== "object") {
+    return { ok: false as const, message: "Sarjan päivitys epäonnistui." };
   }
 
-  const nextDone = patch.done ?? targetLog.done;
-  const nextActualReps = patch.actualReps ?? targetLog.actual_reps ?? undefined;
-  const nextActualLoad = patch.actualLoad ?? toNumberOrUndefined(targetLog.actual_load);
-
-  const updatePayload = {
-    actual_reps:
-      nextDone ? (nextActualReps ?? resolveDefaultActualReps({ targetReps: targetLog.target_reps, targetRepsMin: targetLog.target_reps_min ?? undefined })) : nextActualReps ?? null,
-    actual_load:
-      nextDone ? (nextActualLoad ?? resolveDefaultActualLoad({ targetLoad: toNumberOrUndefined(targetLog.target_load) }) ?? null) : nextActualLoad ?? null,
-    done: nextDone,
-    updated_at: timestamp,
-  };
-
-  const updates: Array<PromiseLike<{ error: unknown }>> = [
-    admin
-      .from("workout_set_logs")
-      .update(updatePayload)
-      .eq("id", logId),
-  ];
-
-  if (patch.done !== undefined && targetLog.superset_group) {
-    const supersetUpdatePayload = {
-      done: patch.done,
-      updated_at: updatePayload.updated_at,
-      ...(patch.done
-        ? {
-            actual_reps: updatePayload.actual_reps,
-            actual_load: updatePayload.actual_load,
-          }
-        : {}),
+  if (!payload.ok) {
+    const code = typeof payload.code === "string" ? payload.code : undefined;
+    const message =
+      typeof payload.message === "string"
+        ? payload.message
+        : code === "stale_session"
+          ? "Treeni ehti muuttua ennen tallennusta. Päivitä näkymä ja yritä uudelleen."
+          : "Sarjan päivitys epäonnistui.";
+    return {
+      ok: false as const,
+      message,
+      code: code as "stale_session" | "not_found" | "invalid_state" | "forbidden" | undefined,
     };
-
-    updates.push(
-      admin
-        .from("workout_set_logs")
-        .update(supersetUpdatePayload)
-        .eq("scheduled_workout_id", scheduledWorkoutId)
-        .eq("superset_group", targetLog.superset_group)
-        .eq("set_label", targetLog.set_label)
-        .neq("id", logId),
-    );
   }
 
-  updates.push(
-    admin
-      .from("workout_sessions")
-      .update({ updated_at: updatePayload.updated_at })
-      .eq("scheduled_workout_id", scheduledWorkoutId),
-  );
-
-  if (workout.status !== "completed") {
-    updates.push(
-      admin
-        .from("scheduled_workouts")
-        .update({
-          status: "in_progress",
-          updated_at: updatePayload.updated_at,
-        })
-        .eq("id", scheduledWorkoutId)
-        .eq("status", "in_progress"),
-    );
-  }
-
-  const results = await Promise.all(updates);
-  timer.checkpoint("update-write-phase");
-
-  if (results.some((result) => Boolean(result.error))) {
+  const sessionUpdatedAt = typeof payload.session_updated_at === "string" ? payload.session_updated_at : null;
+  const setLogId = typeof payload.log_id === "string" ? payload.log_id : null;
+  if (!sessionUpdatedAt || !setLogId) {
     return { ok: false as const, message: "Sarjan päivitys epäonnistui." };
   }
 
   timer.checkpoint("done");
-  return { ok: true as const };
+  return {
+    ok: true as const,
+    sessionUpdatedAt,
+    setLog: {
+      id: setLogId,
+      actualReps: payload.actual_reps ?? undefined,
+      actualLoad: toNumberOrUndefined(payload.actual_load),
+      done: Boolean(payload.done),
+    },
+  };
 }
 
 export async function saveWorkoutNoteOnServer({
   requester,
   scheduledWorkoutId,
   body,
+  expectedUpdatedAt,
 }: {
   requester: RequesterProfile;
   scheduledWorkoutId: string;
   body: string;
-}) {
+  expectedUpdatedAt?: string | null;
+}): Promise<WorkoutNoteMutationResult> {
   const admin = createSupabaseAdminClient();
   if (!admin) {
     return { ok: false as const, message: "Supabase admin -yhteys puuttuu. Tarkista service role -avain." };
   }
 
-  const { data: workout } = await admin
-    .from("scheduled_workouts")
-    .select("id, athlete_id, coach_id")
-    .eq("id", scheduledWorkoutId)
-    .maybeSingle<{ id: string; athlete_id: string; coach_id: string }>();
-
-  if (!workout || (!isAdminRole(requester.role) && workout.athlete_id !== requester.id)) {
-    return { ok: false as const, message: "Treeniä ei löytynyt." };
-  }
-
-  const { data: session } = await admin
-    .from("workout_sessions")
-    .select("id")
-    .eq("scheduled_workout_id", scheduledWorkoutId)
-    .maybeSingle<{ id: string }>();
-
-  if (!session) {
-    return { ok: false as const, message: "Aloita treeni ennen muistiinpanon tallennusta." };
-  }
-
-  const timestamp = nowIso();
-  const { error } = await admin.from("workout_notes").upsert(
-    {
-      session_id: session.id,
-      athlete_id: workout.athlete_id,
-      coach_id: workout.coach_id,
-      body,
-      updated_at: timestamp,
-    },
-    { onConflict: "session_id" },
-  );
+  const { data, error } = await admin.rpc("save_workout_note_entry", {
+    p_scheduled_workout_id: scheduledWorkoutId,
+    p_requester_id: requester.id,
+    p_requester_role: requester.role,
+    p_body: body,
+    p_expected_note_updated_at: expectedUpdatedAt ?? null,
+  });
 
   if (error) {
     return { ok: false as const, message: "Muistiinpanon tallennus epäonnistui." };
   }
 
-  return { ok: true as const };
+  const payload = Array.isArray(data) ? data[0] : data;
+  if (!payload || typeof payload !== "object") {
+    return { ok: false as const, message: "Muistiinpanon tallennus epäonnistui." };
+  }
+
+  if (!payload.ok) {
+    const code = typeof payload.code === "string" ? payload.code : undefined;
+    return {
+      ok: false as const,
+      message: typeof payload.message === "string" ? payload.message : "Muistiinpanon tallennus epäonnistui.",
+      code: code as "stale_note" | "not_found" | "invalid_state" | "forbidden" | undefined,
+    };
+  }
+
+  if (typeof payload.note_updated_at !== "string") {
+    return { ok: false as const, message: "Muistiinpanon tallennus epäonnistui." };
+  }
+
+  return { ok: true as const, updatedAt: payload.note_updated_at };
 }
 
 export async function completeWorkoutOnServer({
   requester,
   scheduledWorkoutId,
+  expectedUpdatedAt,
 }: {
   requester: RequesterProfile;
   scheduledWorkoutId: string;
-}) {
+  expectedUpdatedAt?: string;
+}): Promise<WorkoutMutationResult> {
   const admin = createSupabaseAdminClient();
   const timer = createPhaseTimer(`workout-complete:${scheduledWorkoutId}`);
   if (!admin) {
     return { ok: false as const, message: "Supabase admin -yhteys puuttuu. Tarkista service role -avain." };
   }
 
-  const { data: workout } = await admin
-    .from("scheduled_workouts")
-    .select("id, athlete_id")
-    .eq("id", scheduledWorkoutId)
-    .maybeSingle<{ id: string; athlete_id: string }>();
-  timer.checkpoint("workout-query");
-
-  if (!workout || (!isAdminRole(requester.role) && workout.athlete_id !== requester.id)) {
-    return { ok: false as const, message: "Treeniä ei löytynyt." };
+  if (!expectedUpdatedAt) {
+    return { ok: false as const, message: "Treenin viimeistelystä puuttuu versiotieto." };
   }
 
-  const { count } = await admin
-    .from("workout_set_logs")
-    .select("id", { count: "exact", head: true })
-    .eq("scheduled_workout_id", scheduledWorkoutId);
-  timer.checkpoint("set-count-query");
+  const { data, error } = await admin.rpc("complete_workout_atomic", {
+    p_scheduled_workout_id: scheduledWorkoutId,
+    p_requester_id: requester.id,
+    p_requester_role: requester.role,
+    p_expected_session_updated_at: expectedUpdatedAt,
+  });
+  timer.checkpoint("rpc-complete");
 
-  if ((count ?? 0) === 0) {
+  if (error) {
     return { ok: false as const, message: "Treeniä ei voitu merkitä valmiiksi." };
   }
 
-  const completedAt = nowIso();
-  const [{ error: sessionError }, { error }] = await Promise.all([
-    admin
-      .from("workout_sessions")
-      .update({
-        completed_at: completedAt,
-        paused_at: null,
-        updated_at: completedAt,
-      })
-      .eq("scheduled_workout_id", scheduledWorkoutId),
-    admin
-      .from("scheduled_workouts")
-      .update({
-        status: "completed",
-        completed_at: completedAt,
-        updated_at: completedAt,
-      })
-      .eq("id", scheduledWorkoutId),
-  ]);
-  timer.checkpoint("complete-updates");
-
-  if (sessionError || error) {
+  const payload = Array.isArray(data) ? data[0] : data;
+  if (!payload || typeof payload !== "object") {
     return { ok: false as const, message: "Treeniä ei voitu merkitä valmiiksi." };
+  }
+
+  if (!payload.ok) {
+    const code = typeof payload.code === "string" ? payload.code : undefined;
+    return {
+      ok: false as const,
+      message: typeof payload.message === "string" ? payload.message : "Treeniä ei voitu merkitä valmiiksi.",
+      code: code as "stale_session" | "stale_note" | "not_found" | "invalid_state" | "forbidden" | undefined,
+    };
   }
 
   timer.checkpoint("done");
-  return { ok: true as const };
+  return {
+    ok: true as const,
+    updatedAt: String(payload.updated_at),
+    completedAt: typeof payload.completed_at === "string" ? payload.completed_at : undefined,
+  };
 }
 
 export async function cancelWorkoutOnServer({
@@ -1335,11 +1284,13 @@ export async function updateWorkoutDurationOnServer({
   requester,
   scheduledWorkoutId,
   durationSeconds,
+  expectedUpdatedAt,
 }: {
   requester: RequesterProfile;
   scheduledWorkoutId: string;
   durationSeconds: number;
-}) {
+  expectedUpdatedAt?: string;
+}): Promise<WorkoutMutationResult> {
   if (!Number.isFinite(durationSeconds) || durationSeconds < 60) {
     return { ok: false as const, message: "Anna treeniajalle vähintään 1 minuutti." };
   }
@@ -1349,62 +1300,50 @@ export async function updateWorkoutDurationOnServer({
     return { ok: false as const, message: "Supabase admin -yhteys puuttuu. Tarkista service role -avain." };
   }
 
-  const { data: workout } = await admin
-    .from("scheduled_workouts")
-    .select("id, athlete_id, status")
-    .eq("id", scheduledWorkoutId)
-    .maybeSingle<{ id: string; athlete_id: string; status: ScheduledWorkout["status"] }>();
-
-  if (!workout || (!isAdminRole(requester.role) && workout.athlete_id !== requester.id)) {
-    return { ok: false as const, message: "Treeniä ei löytynyt." };
+  if (!expectedUpdatedAt) {
+    return { ok: false as const, message: "Treeniajan muokkauksesta puuttuu versiotieto." };
   }
 
-  if (workout.status !== "completed") {
-    return { ok: false as const, message: "Treeniaikaa voi muokata vain valmiilta treeniltä." };
-  }
-
-  const { data: session } = await admin
-    .from("workout_sessions")
-    .select("id, completed_at, paused_duration_seconds")
-    .eq("scheduled_workout_id", scheduledWorkoutId)
-    .maybeSingle<{ id: string; completed_at: string | null; paused_duration_seconds: number | null }>();
-
-  if (!session?.completed_at) {
-    return { ok: false as const, message: "Valmiin treenin aikaa ei löytynyt muokattavaksi." };
-  }
-
-  const completedAtMs = new Date(session.completed_at).getTime();
-  if (!Number.isFinite(completedAtMs)) {
-    return { ok: false as const, message: "Treeniaikaa ei voitu päivittää." };
-  }
-
-  const startedAt = new Date(
-    completedAtMs - (durationSeconds + (session.paused_duration_seconds ?? 0)) * 1000,
-  ).toISOString();
-
-  const { error } = await admin
-    .from("workout_sessions")
-    .update({
-      started_at: startedAt,
-    })
-    .eq("scheduled_workout_id", scheduledWorkoutId);
+  const { data, error } = await admin.rpc("update_workout_duration_atomic", {
+    p_scheduled_workout_id: scheduledWorkoutId,
+    p_requester_id: requester.id,
+    p_requester_role: requester.role,
+    p_expected_session_updated_at: expectedUpdatedAt,
+    p_duration_seconds: durationSeconds,
+  });
 
   if (error) {
     return { ok: false as const, message: "Treeniaikaa ei voitu päivittää." };
   }
 
-  return { ok: true as const };
+  const payload = Array.isArray(data) ? data[0] : data;
+  if (!payload || typeof payload !== "object") {
+    return { ok: false as const, message: "Treeniaikaa ei voitu päivittää." };
+  }
+
+  if (!payload.ok) {
+    const code = typeof payload.code === "string" ? payload.code : undefined;
+    return {
+      ok: false as const,
+      message: typeof payload.message === "string" ? payload.message : "Treeniaikaa ei voitu päivittää.",
+      code: code as "stale_session" | "stale_note" | "not_found" | "invalid_state" | "forbidden" | undefined,
+    };
+  }
+
+  return { ok: true as const, updatedAt: String(payload.updated_at) };
 }
 
 export async function updateWorkoutDateOnServer({
   requester,
   scheduledWorkoutId,
   scheduledDate,
+  expectedUpdatedAt,
 }: {
   requester: RequesterProfile;
   scheduledWorkoutId: string;
   scheduledDate: string;
-}) {
+  expectedUpdatedAt?: string;
+}): Promise<WorkoutMutationResult> {
   const match = scheduledDate.match(/^(\d{4})-(\d{2})-(\d{2})$/);
   if (!match) {
     return { ok: false as const, message: "Anna treenille kelvollinen päivämäärä." };
@@ -1415,85 +1354,39 @@ export async function updateWorkoutDateOnServer({
     return { ok: false as const, message: "Supabase admin -yhteys puuttuu. Tarkista service role -avain." };
   }
 
-  const { data: workout } = await admin
-    .from("scheduled_workouts")
-    .select("id, athlete_id, scheduled_date, completed_at")
-    .eq("id", scheduledWorkoutId)
-    .maybeSingle<{
-      id: string;
-      athlete_id: string;
-      scheduled_date: string;
-      completed_at: string | null;
-    }>();
-
-  if (!workout || (!isAdminRole(requester.role) && workout.athlete_id !== requester.id)) {
-    return { ok: false as const, message: "Treeniä ei löytynyt." };
+  if (!expectedUpdatedAt) {
+    return { ok: false as const, message: "Treenipäivän muokkauksesta puuttuu versiotieto." };
   }
 
-  const { data: session } = await admin
-    .from("workout_sessions")
-    .select("id, started_at, completed_at, paused_at")
-    .eq("scheduled_workout_id", scheduledWorkoutId)
-    .maybeSingle<{
-      id: string;
-      started_at: string;
-      completed_at: string | null;
-      paused_at: string | null;
-    }>();
+  const { data, error } = await admin.rpc("update_workout_date_atomic", {
+    p_scheduled_workout_id: scheduledWorkoutId,
+    p_requester_id: requester.id,
+    p_requester_role: requester.role,
+    p_expected_session_updated_at: expectedUpdatedAt,
+    p_scheduled_date: scheduledDate,
+  });
 
-  const referenceTimestamp = workout.completed_at ?? session?.completed_at ?? workout.scheduled_date;
-  const reference = new Date(referenceTimestamp);
-  if (!Number.isFinite(reference.getTime())) {
-    return { ok: false as const, message: "Treenipäivää ei voitu päivittää." };
-  }
-
-  const [, yearText, monthText, dayText] = match;
-  const shiftedReference = new Date(reference);
-  shiftedReference.setFullYear(Number(yearText), Number(monthText) - 1, Number(dayText));
-  const deltaMs = shiftedReference.getTime() - reference.getTime();
-  const updatedAt = nowIso();
-
-  const shiftTimestamp = (value: string | null) => {
-    if (!value) {
-      return value;
-    }
-
-    const timestamp = new Date(value).getTime();
-    if (!Number.isFinite(timestamp)) {
-      return value;
-    }
-
-    return new Date(timestamp + deltaMs).toISOString();
-  };
-
-  const workoutUpdate = await admin
-    .from("scheduled_workouts")
-    .update({
-      scheduled_date: shiftTimestamp(workout.scheduled_date),
-      completed_at: shiftTimestamp(workout.completed_at),
-      updated_at: updatedAt,
-    })
-    .eq("id", scheduledWorkoutId);
-
-  if (workoutUpdate.error) {
+  if (error) {
     return { ok: false as const, message: "Treenipäivän päivitys epäonnistui." };
   }
 
-  if (session) {
-    const sessionUpdate = await admin
-      .from("workout_sessions")
-      .update({
-        started_at: shiftTimestamp(session.started_at),
-        completed_at: shiftTimestamp(session.completed_at),
-        paused_at: shiftTimestamp(session.paused_at),
-        updated_at: updatedAt,
-      })
-      .eq("id", session.id);
-
-    if (sessionUpdate.error) {
-      return { ok: false as const, message: "Treenipäivän päivitys epäonnistui." };
-    }
+  const payload = Array.isArray(data) ? data[0] : data;
+  if (!payload || typeof payload !== "object") {
+    return { ok: false as const, message: "Treenipäivän päivitys epäonnistui." };
   }
 
-  return { ok: true as const };
+  if (!payload.ok) {
+    const code = typeof payload.code === "string" ? payload.code : undefined;
+    return {
+      ok: false as const,
+      message: typeof payload.message === "string" ? payload.message : "Treenipäivän päivitys epäonnistui.",
+      code: code as "stale_session" | "stale_note" | "not_found" | "invalid_state" | "forbidden" | undefined,
+    };
+  }
+
+  return {
+    ok: true as const,
+    updatedAt: String(payload.updated_at),
+    completedAt: typeof payload.completed_at === "string" ? payload.completed_at : undefined,
+  };
 }
