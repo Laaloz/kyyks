@@ -650,6 +650,7 @@ type WorkoutMutation =
       kind: "set";
       logId: string;
       patch: WorkoutUpdateInput;
+      debounceUntil?: number;
     }
   | {
       id: string;
@@ -724,6 +725,8 @@ type PublicPasswordResetRequestInput = {
 
 const PUBLIC_PASSWORD_RESET_RESPONSE =
   "Jos sähköpostiosoite löytyy järjestelmästä, lähetämme salasanan nollauslinkin hetken kuluttua.";
+
+const WORKOUT_SET_SYNC_DEBOUNCE_MS = 700;
 
 type UserSettingsInput = {
   fullName: string;
@@ -1937,6 +1940,7 @@ export function AppStateProvider({ children }: PropsWithChildren) {
   const refreshSupabaseVisibleStatePromiseRef = useRef<Promise<boolean> | null>(null);
   const workoutMutationQueueRef = useRef<Map<string, WorkoutMutationQueueState>>(new Map());
   const workoutMutationRunnerRef = useRef<Map<string, Promise<void>>>(new Map());
+  const workoutMutationWakeTimeoutRef = useRef<Map<string, number>>(new Map());
   const workoutMutationIdRef = useRef(0);
   const workoutConfirmedSessionUpdatedAtRef = useRef<Map<string, string>>(new Map());
   const workoutConfirmedNoteUpdatedAtRef = useRef<Map<string, string | null>>(new Map());
@@ -2661,6 +2665,19 @@ function findResolvedUserIdInSnapshot(
         }
 
         const mutation = queue.pending[0]!;
+        if (mutation.kind === "set" && typeof mutation.debounceUntil === "number" && mutation.debounceUntil > Date.now()) {
+          const existingTimeout = workoutMutationWakeTimeoutRef.current.get(scheduledWorkoutId);
+          if (existingTimeout) {
+            window.clearTimeout(existingTimeout);
+          }
+          const wakeTimeout = window.setTimeout(() => {
+            workoutMutationWakeTimeoutRef.current.delete(scheduledWorkoutId);
+            void flushWorkoutMutationQueue(scheduledWorkoutId);
+          }, Math.max(0, mutation.debounceUntil - Date.now()));
+          workoutMutationWakeTimeoutRef.current.set(scheduledWorkoutId, wakeTimeout);
+          return;
+        }
+
         queue.inFlight = true;
         await runWorkoutMutation(queue, mutation);
 
@@ -2683,6 +2700,11 @@ function findResolvedUserIdInSnapshot(
       if (workoutMutationRunnerRef.current.get(scheduledWorkoutId) === runner) {
         workoutMutationRunnerRef.current.delete(scheduledWorkoutId);
       }
+      const wakeTimeout = workoutMutationWakeTimeoutRef.current.get(scheduledWorkoutId);
+      if (wakeTimeout && !workoutMutationQueueRef.current.get(scheduledWorkoutId)?.pending.length) {
+        window.clearTimeout(wakeTimeout);
+        workoutMutationWakeTimeoutRef.current.delete(scheduledWorkoutId);
+      }
     });
 
     workoutMutationRunnerRef.current.set(scheduledWorkoutId, runner);
@@ -2691,14 +2713,83 @@ function findResolvedUserIdInSnapshot(
 
   const enqueueWorkoutMutation = useCallback((scheduledWorkoutId: string, mutation: WorkoutMutationInput) => {
     const queue = ensureWorkoutMutationQueue(scheduledWorkoutId);
-    workoutMutationIdRef.current += 1;
-    const queuedMutation: WorkoutMutation = {
-      ...mutation,
-      id: `${scheduledWorkoutId}:${workoutMutationIdRef.current}`,
-    };
-    queue.pending.push(queuedMutation);
+    if (mutation.kind === "set") {
+      const existingPendingSet = [...queue.pending]
+        .reverse()
+        .find(
+          (pendingMutation): pendingMutation is Extract<WorkoutMutation, { kind: "set" }> =>
+            pendingMutation.kind === "set" && pendingMutation.logId === mutation.logId,
+        );
+
+      if (existingPendingSet) {
+        existingPendingSet.patch = {
+          ...existingPendingSet.patch,
+          ...mutation.patch,
+        };
+        existingPendingSet.debounceUntil = Date.now() + WORKOUT_SET_SYNC_DEBOUNCE_MS;
+      } else {
+        workoutMutationIdRef.current += 1;
+        queue.pending.push({
+          ...mutation,
+          id: `${scheduledWorkoutId}:${workoutMutationIdRef.current}`,
+          debounceUntil: Date.now() + WORKOUT_SET_SYNC_DEBOUNCE_MS,
+        });
+      }
+    } else {
+      workoutMutationIdRef.current += 1;
+      const queuedMutation: WorkoutMutation = {
+        ...mutation,
+        id: `${scheduledWorkoutId}:${workoutMutationIdRef.current}`,
+      };
+      queue.pending.push(queuedMutation);
+    }
+
+    const wakeTimeout = workoutMutationWakeTimeoutRef.current.get(scheduledWorkoutId);
+    if (wakeTimeout) {
+      window.clearTimeout(wakeTimeout);
+      workoutMutationWakeTimeoutRef.current.delete(scheduledWorkoutId);
+    }
+
+    const firstPendingMutation = queue.pending[0];
+    if (
+      firstPendingMutation?.kind === "set" &&
+      typeof firstPendingMutation.debounceUntil === "number" &&
+      firstPendingMutation.debounceUntil > Date.now()
+    ) {
+      const nextWakeTimeout = window.setTimeout(() => {
+        workoutMutationWakeTimeoutRef.current.delete(scheduledWorkoutId);
+        void flushWorkoutMutationQueue(scheduledWorkoutId);
+      }, Math.max(0, firstPendingMutation.debounceUntil - Date.now()));
+      workoutMutationWakeTimeoutRef.current.set(scheduledWorkoutId, nextWakeTimeout);
+      return;
+    }
+
     void flushWorkoutMutationQueue(scheduledWorkoutId);
   }, [ensureWorkoutMutationQueue, flushWorkoutMutationQueue]);
+
+  const flushPendingWorkoutSetMutations = useCallback(async (scheduledWorkoutId: string) => {
+    const queue = workoutMutationQueueRef.current.get(scheduledWorkoutId);
+    if (!queue) {
+      return;
+    }
+
+    queue.pending = queue.pending.map((mutation) =>
+      mutation.kind === "set"
+        ? {
+            ...mutation,
+            debounceUntil: undefined,
+          }
+        : mutation,
+    );
+
+    const wakeTimeout = workoutMutationWakeTimeoutRef.current.get(scheduledWorkoutId);
+    if (wakeTimeout) {
+      window.clearTimeout(wakeTimeout);
+      workoutMutationWakeTimeoutRef.current.delete(scheduledWorkoutId);
+    }
+
+    await flushWorkoutMutationQueue(scheduledWorkoutId);
+  }, [flushWorkoutMutationQueue]);
 
   useEffect(() => {
     if (!isHydrated || !supabase || !authenticatedUser || !canActAsCoach(authenticatedUser.role)) {
@@ -4864,6 +4955,13 @@ function findResolvedUserIdInSnapshot(
         }
 
         if (supabase) {
+          await flushPendingWorkoutSetMutations(scheduledWorkoutId);
+
+          const refreshedState = stateRef.current;
+          if (!canCompleteSession(refreshedState, scheduledWorkoutId)) {
+            return { ok: false, message: "Treeniä ei voitu merkitä valmiiksi." };
+          }
+
           setState((current) => domainCompleteSession(current, scheduledWorkoutId));
           return await new Promise<ActionResult>((resolve) => {
             enqueueWorkoutMutation(scheduledWorkoutId, {

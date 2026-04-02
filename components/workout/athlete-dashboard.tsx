@@ -1431,13 +1431,14 @@ export function AthleteDashboard({
                 scheduledWorkoutGuidance={selectedProgramWorkout ? deriveProgramWorkoutGuidance(selectedProgramWorkout) : undefined}
                 scheduledDate={selectedWorkout.completedAt ?? selectedSession?.completedAt ?? selectedWorkout.scheduledDate}
                 onStart={async () => {
+                  setSelectedWorkoutId(selectedWorkout.id);
                   const result = await startWorkout(selectedWorkout.id);
                   if (!result.ok) {
+                    setSelectedWorkoutId(null);
                     setWorkoutMessage(result.message);
                     return;
                   }
 
-                  setSelectedWorkoutId(selectedWorkout.id);
                   setWorkoutMessage("Treeni käynnistetty. Sarjaloki luotiin automaattisesti.");
                 }}
                 onUpdate={(logId, patch) => {
