@@ -197,6 +197,7 @@ export function AthleteDashboard({
   const [athleteLogMode, setAthleteLogMode] = useState<AthleteLogMode>("library");
   const [dismissedActiveWorkoutId, setDismissedActiveWorkoutId] = useState<string | null>(null);
   const [historyFocusWorkoutId, setHistoryFocusWorkoutId] = useState<string | null>(null);
+  const [pendingStartWorkoutId, setPendingStartWorkoutId] = useState<string | null>(null);
   const [correctionModeWorkoutId, setCorrectionModeWorkoutId] = useState<string | null>(null);
   const [openHistoryMenuWorkoutId, setOpenHistoryMenuWorkoutId] = useState<string | null>(null);
   const [historyMenuAnchorRect, setHistoryMenuAnchorRect] = useState<AnchorRect | null>(null);
@@ -1430,15 +1431,19 @@ export function AthleteDashboard({
                 scheduledWorkoutTitle={normalizeWorkoutHistoryTitle(selectedWorkout.title)}
                 scheduledWorkoutGuidance={selectedProgramWorkout ? deriveProgramWorkoutGuidance(selectedProgramWorkout) : undefined}
                 scheduledDate={selectedWorkout.completedAt ?? selectedSession?.completedAt ?? selectedWorkout.scheduledDate}
+                isSessionSyncing={pendingStartWorkoutId === selectedWorkout.id}
                 onStart={async () => {
                   setSelectedWorkoutId(selectedWorkout.id);
+                  setPendingStartWorkoutId(selectedWorkout.id);
                   const result = await startWorkout(selectedWorkout.id);
                   if (!result.ok) {
+                    setPendingStartWorkoutId(null);
                     setSelectedWorkoutId(null);
                     setWorkoutMessage(result.message);
                     return;
                   }
 
+                  setPendingStartWorkoutId(null);
                   setWorkoutMessage("Treeni käynnistetty. Sarjaloki luotiin automaattisesti.");
                 }}
                 onUpdate={(logId, patch) => {

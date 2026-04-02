@@ -383,6 +383,7 @@ export function AthleteSessionPanel({
   activeWorkoutCount,
   workoutMessage,
   isCompleting,
+  isSessionSyncing,
   loadIncrementKg,
 }: {
   scheduledWorkoutId: string;
@@ -410,6 +411,7 @@ export function AthleteSessionPanel({
   activeWorkoutCount?: number;
   workoutMessage: string;
   isCompleting: boolean;
+  isSessionSyncing?: boolean;
   loadIncrementKg: 1 | 2.5 | 5;
 }) {
   const [localNote, setLocalNote] = useState(note);
@@ -928,7 +930,7 @@ export function AthleteSessionPanel({
     });
   };
 
-  const readOnly = status === "completed" && !correctionMode;
+  const readOnly = (status === "completed" && !correctionMode) || Boolean(isSessionSyncing);
   const showCancelAction = status === "in_progress";
   const showResumeAction = status === "cancelled";
   const showDeleteAction = canDeleteWorkout;
@@ -1226,6 +1228,11 @@ export function AthleteSessionPanel({
         {status === "completed" && previous ? (
           <p className="mt-2 px-1 text-xs text-[var(--text-subtle)]">
             Tehty {previous.timesCompleted} kertaa · viimeksi {formatDate(previous.completedAt)} · {formatPreviousExerciseResult(previous)}
+          </p>
+        ) : null}
+        {isSessionSyncing ? (
+          <p className="mt-2 px-1 text-xs font-medium text-[var(--text-subtle)]">
+            Valmistellaan treeniä. Sarjojen merkkaus avautuu heti kun tiedot on synkattu palvelimelta.
           </p>
         ) : null}
         {isExpanded ? (
