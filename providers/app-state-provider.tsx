@@ -4746,18 +4746,18 @@ function findResolvedUserIdInSnapshot(
           return { ok: false, message: "Kirjaudu sisään ennen treenin merkintää valmiiksi." };
         }
 
-        const currentState = stateRef.current;
-        const workout = currentState.scheduledWorkouts.find((item) => item.id === scheduledWorkoutId);
+        const initialState = stateRef.current;
+        const workout = initialState.scheduledWorkouts.find((item) => item.id === scheduledWorkoutId);
         if (!workout || workout.athleteId !== currentUser.id) {
           return { ok: false, message: "Treeniä ei löytynyt." };
         }
 
-        const session = currentState.sessions.find((item) => item.scheduledWorkoutId === scheduledWorkoutId);
+        const session = initialState.sessions.find((item) => item.scheduledWorkoutId === scheduledWorkoutId);
         if (!session) {
           return { ok: false, message: "Aloita treeni ennen kuin merkitset sen valmiiksi." };
         }
 
-        if (!canCompleteSession(currentState, scheduledWorkoutId)) {
+        if (!canCompleteSession(initialState, scheduledWorkoutId)) {
           return { ok: false, message: "Treeniä ei voitu merkitä valmiiksi." };
         }
 
@@ -4775,7 +4775,11 @@ function findResolvedUserIdInSnapshot(
             return { ok: false, message: "Aloita treeni ennen kuin merkitset sen valmiiksi." };
           }
 
-          const previousState = currentState;
+          if (!canCompleteSession(refreshedState, scheduledWorkoutId)) {
+            return { ok: false, message: "Treeniä ei voitu merkitä valmiiksi." };
+          }
+
+          const previousState = refreshedState;
           const expectedUpdatedAt = getSessionUpdatedAtForWorkout(refreshedState, scheduledWorkoutId);
           if (!expectedUpdatedAt) {
             return { ok: false, message: "Treeniä ei voitu merkitä valmiiksi." };
