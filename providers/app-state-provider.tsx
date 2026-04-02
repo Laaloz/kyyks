@@ -4773,7 +4773,7 @@ function findResolvedUserIdInSnapshot(
             }));
           }
 
-          void refreshSupabaseVisibleState();
+          await refreshSupabaseVisibleState();
         }
 
         return { ok: true };
