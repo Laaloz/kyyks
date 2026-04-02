@@ -176,7 +176,13 @@ export const programWorkoutSchema = z.object({
   guidance: z.string().max(280, "Lyhyt treeniohje voi olla enintään 280 merkkiä."),
   defaultRestSeconds: z.coerce.number().min(15).max(600),
   exercises: z.array(programWorkoutExerciseSchema).min(1, "Lisää vähintään yksi liike harjoitukseen."),
-});
+}).refine(
+  (value) => value.splitType !== "custom" || Boolean(value.nameOverride?.trim()),
+  {
+    message: "Anna custom-treenille nimi.",
+    path: ["nameOverride"],
+  },
+);
 
 export const programComposerSchema = z.object({
   title: z.string().min(3, "Anna ohjelmalle nimi."),

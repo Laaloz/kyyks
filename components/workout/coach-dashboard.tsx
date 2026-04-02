@@ -76,6 +76,17 @@ type CoachExerciseSetGroup = {
   logs: WorkoutSession["setLogs"];
 };
 
+type ComposerIssue = {
+  id: string;
+  severity: "error";
+  label: string;
+  fieldPath: string;
+  workoutIndex?: number;
+  exerciseIndex?: number;
+};
+
+type ComposerView = "details" | "workouts" | "workout_editor" | "review";
+
 function getComposerWorkoutLabel(
   workout: ProgramComposerFormValues["workouts"][number] | null | undefined,
   index?: number,
@@ -86,6 +97,380 @@ function getComposerWorkoutLabel(
   }
 
   return typeof index === "number" ? `Treeni ${index + 1}` : "Nimeämätön treeni";
+}
+
+function getWorkoutExercisePreview(
+  workout: ProgramComposerFormValues["workouts"][number] | null | undefined,
+  exerciseNameById: Map<string, string>,
+  limit = 3,
+) {
+  const exercises = workout?.exercises ?? [];
+  const names = exercises
+    .map((exercise, index) => {
+      const isCustom = exercise.exerciseId === CUSTOM_EXERCISE_VALUE;
+      const customName = exercise.customExerciseName?.trim();
+      const overrideName = exercise.exerciseNameOverride?.trim();
+      if (overrideName) {
+        return overrideName;
+      }
+      if (isCustom) {
+        return customName || `Oma liike ${index + 1}`;
+      }
+      return exerciseNameById.get(exercise.exerciseId) || customName || `Liike ${index + 1}`;
+    })
+    .filter(Boolean);
+
+  if (!names.length) {
+    return { preview: "Ei liikkeitä vielä", extraCount: 0 };
+  }
+
+  return {
+    preview: names.slice(0, limit).join(", "),
+    extraCount: Math.max(0, names.length - limit),
+  };
+}
+
+function RequiredLabel({
+  htmlFor,
+  children,
+  optional = false,
+  className,
+}: {
+  htmlFor?: string;
+  children: string;
+  optional?: boolean;
+  className?: string;
+}) {
+  return (
+    <Label htmlFor={htmlFor} className={className}>
+      {children}
+      {optional ? " (valinnainen)" : " *"}
+    </Label>
+  );
+}
+
+function FieldError({
+  id,
+  message,
+}: {
+  id: string;
+  message?: string;
+}) {
+  if (!message) {
+    return null;
+  }
+
+  return (
+    <p id={id} className="mt-1 text-sm text-[var(--danger)]">
+      {message}
+    </p>
+  );
+}
+
+function mapComposerIssueLabel(path: string, message: string) {
+  if (path === "title") {
+    return "Anna ohjelmalle nimi.";
+  }
+
+  if (path === "athleteId") {
+    return "Valitse käyttäjä ohjelmalle.";
+  }
+
+  const workoutMatch = path.match(/^workouts\.(\d+)(?:\.(.*))?$/);
+  if (!workoutMatch) {
+    return message;
+  }
+
+  const workoutIndex = Number(workoutMatch[1]);
+  const restPath = workoutMatch[2] ?? "";
+  const workoutPrefix = `Treeni ${workoutIndex + 1}`;
+
+  if (restPath === "nameOverride") {
+    return `${workoutPrefix}: anna treenille nimi.`;
+  }
+
+  if (restPath === "defaultRestSeconds") {
+    return `${workoutPrefix}: lisää treenille oletuslepo.`;
+  }
+
+  if (restPath === "exercises") {
+    return `${workoutPrefix}: lisää vähintään yksi liike.`;
+  }
+
+  const exerciseMatch = restPath.match(/^exercises\.(\d+)\.(.*)$/);
+  if (!exerciseMatch) {
+    return `${workoutPrefix}: ${message}`;
+  }
+
+  const exerciseIndex = Number(exerciseMatch[1]);
+  const field = exerciseMatch[2];
+  const prefix = `${workoutPrefix} / liike ${exerciseIndex + 1}`;
+
+  const fieldLabels: Record<string, string> = {
+    exerciseId: "valitse liike",
+    customExerciseName: "anna custom-liikkeelle nimi",
+    customMuscleGroup: "valitse custom-liikkeelle lihasryhmä",
+    instruction: "anna valmennusohje",
+    setCount: "anna sarjamäärä",
+    repMode: "valitse toistotyyli",
+    targetReps: "anna toistot",
+    targetRepsMin: "anna min. toistot",
+    targetRepsMax: "anna max. toistot",
+    restSeconds: "anna lepo",
+  };
+
+  return fieldLabels[field]
+    ? `${prefix}: ${fieldLabels[field]}.`
+    : `${prefix}: ${message}`;
+}
+
+function buildComposerIssues(values: ProgramComposerFormValues): ComposerIssue[] {
+  const seen = new Set<string>();
+  const issues: ComposerIssue[] = [];
+
+  function pushIssue(
+    fieldPath: string,
+    message: string,
+    workoutIndex?: number,
+    exerciseIndex?: number,
+  ) {
+    const dedupeKey = `${fieldPath}:${message}`;
+    if (seen.has(dedupeKey)) {
+      return;
+    }
+    seen.add(dedupeKey);
+
+    issues.push({
+      id: dedupeKey,
+      severity: "error",
+      label: mapComposerIssueLabel(fieldPath, message),
+      fieldPath,
+      workoutIndex,
+      exerciseIndex,
+    });
+  }
+
+  if (values.title.trim().length < 3) {
+    pushIssue("title", "Anna ohjelmalle nimi.");
+  }
+
+  if (!values.athleteId) {
+    pushIssue("athleteId", "Valitse käyttäjä ohjelmalle.");
+  }
+
+  if (!values.workouts.length) {
+    pushIssue("workouts", "Lisää vähintään yksi harjoitus ohjelmaan.");
+  }
+
+  values.workouts.forEach((workout, workoutIndex) => {
+    if (workout.splitType === "custom" && !workout.nameOverride?.trim()) {
+      pushIssue(`workouts.${workoutIndex}.nameOverride`, "Anna custom-treenille nimi.", workoutIndex);
+    }
+
+    if (!Number.isFinite(Number(workout.defaultRestSeconds)) || Number(workout.defaultRestSeconds) < 15) {
+      pushIssue(`workouts.${workoutIndex}.defaultRestSeconds`, "Lisää treenille oletuslepo.", workoutIndex);
+    }
+
+    if (!workout.exercises.length) {
+      pushIssue(`workouts.${workoutIndex}.exercises`, "Lisää vähintään yksi liike harjoitukseen.", workoutIndex);
+    }
+
+    workout.exercises.forEach((exercise, exerciseIndex) => {
+      const issueBase = `workouts.${workoutIndex}.exercises.${exerciseIndex}`;
+
+      if (!exercise.exerciseId) {
+        pushIssue(`${issueBase}.exerciseId`, "Valitse liike tai lisää custom-liike.", workoutIndex, exerciseIndex);
+      }
+
+      if (!exercise.instruction.trim()) {
+        pushIssue(`${issueBase}.instruction`, "Anna lyhyt valmennusohje.", workoutIndex, exerciseIndex);
+      }
+
+      if (Number(exercise.setCount) < 1) {
+        pushIssue(`${issueBase}.setCount`, "Anna sarjamäärä.", workoutIndex, exerciseIndex);
+      }
+
+      if (!Number.isFinite(Number(exercise.restSeconds)) || Number(exercise.restSeconds) < 15) {
+        pushIssue(`${issueBase}.restSeconds`, "Anna lepo.", workoutIndex, exerciseIndex);
+      }
+
+      if (exercise.repMode === "range") {
+        if (Number(exercise.targetRepsMin) < 1) {
+          pushIssue(`${issueBase}.targetRepsMin`, "Anna min toistot toistoalueelle.", workoutIndex, exerciseIndex);
+        }
+        if (Number(exercise.targetRepsMax) < 1) {
+          pushIssue(`${issueBase}.targetRepsMax`, "Anna max toistot toistoalueelle.", workoutIndex, exerciseIndex);
+        }
+        if (
+          Number(exercise.targetRepsMin) >= 1 &&
+          Number(exercise.targetRepsMax) >= 1 &&
+          Number(exercise.targetRepsMin) > Number(exercise.targetRepsMax)
+        ) {
+          pushIssue(`${issueBase}.targetRepsMax`, "Min toistot ei voi olla suurempi kuin max toistot.", workoutIndex, exerciseIndex);
+        }
+      } else if (Number(exercise.targetReps) < 1) {
+        pushIssue(`${issueBase}.targetReps`, "Anna toistot.", workoutIndex, exerciseIndex);
+      }
+
+      if (exercise.exerciseId === CUSTOM_EXERCISE_VALUE) {
+        if (!exercise.customExerciseName.trim()) {
+          pushIssue(`${issueBase}.customExerciseName`, "Kirjoita custom-liikkeelle nimi.", workoutIndex, exerciseIndex);
+        }
+        if (!exercise.customMuscleGroup) {
+          pushIssue(`${issueBase}.customMuscleGroup`, "Valitse custom-liikkeelle lihasryhmä.", workoutIndex, exerciseIndex);
+        }
+      }
+    });
+  });
+
+  return issues;
+}
+
+function buildComposerRequiredStats(values: ProgramComposerFormValues) {
+  let total = 2;
+  let completed = 0;
+
+  if (values.title.trim().length >= 3) {
+    completed += 1;
+  }
+
+  if (Boolean(values.athleteId)) {
+    completed += 1;
+  }
+
+  values.workouts.forEach((workout) => {
+    total += 2;
+    if (Number.isFinite(Number(workout.defaultRestSeconds)) && Number(workout.defaultRestSeconds) >= 15) {
+      completed += 1;
+    }
+
+    if (workout.exercises.length > 0) {
+      completed += 1;
+    }
+
+    if (workout.splitType === "custom") {
+      total += 1;
+      if (Boolean(workout.nameOverride?.trim())) {
+        completed += 1;
+      }
+    }
+
+    workout.exercises.forEach((exercise) => {
+      total += 5;
+      if (Boolean(exercise.exerciseId)) {
+        completed += 1;
+      }
+      if (Boolean(exercise.instruction.trim())) {
+        completed += 1;
+      }
+      if (Number(exercise.setCount) >= 1) {
+        completed += 1;
+      }
+      if (Number(exercise.restSeconds) >= 15) {
+        completed += 1;
+      }
+      if (exercise.repMode === "range") {
+        total += 1;
+        if (Number(exercise.targetRepsMin) >= 1) {
+          completed += 1;
+        }
+        if (Number(exercise.targetRepsMax) >= 1) {
+          completed += 1;
+        }
+      } else if (Number(exercise.targetReps) >= 1) {
+        completed += 1;
+      }
+
+      if (exercise.exerciseId === CUSTOM_EXERCISE_VALUE) {
+        total += 2;
+        if (Boolean(exercise.customExerciseName.trim())) {
+          completed += 1;
+        }
+        if (Boolean(exercise.customMuscleGroup)) {
+          completed += 1;
+        }
+      }
+    });
+  });
+
+  return { total, completed };
+}
+
+function getComposerFieldElementId(fieldPath: string) {
+  if (fieldPath === "title") {
+    return "program-composer-title";
+  }
+
+  if (fieldPath === "athleteId") {
+    return "program-composer-athlete";
+  }
+
+  const workoutMatch = fieldPath.match(/^workouts\.(\d+)(?:\.(.*))?$/);
+  if (!workoutMatch) {
+    return null;
+  }
+
+  const workoutIndex = Number(workoutMatch[1]);
+  const restPath = workoutMatch[2] ?? "";
+
+  if (restPath === "nameOverride") {
+    return `workout-${workoutIndex}-name`;
+  }
+
+  if (restPath === "defaultRestSeconds") {
+    return `workout-${workoutIndex}-default-rest`;
+  }
+
+  if (restPath === "exercises") {
+    return `program-workout-${workoutIndex}`;
+  }
+
+  const exerciseMatch = restPath.match(/^exercises\.(\d+)\.(.*)$/);
+  if (!exerciseMatch) {
+    return `program-workout-${workoutIndex}`;
+  }
+
+  const exerciseIndex = Number(exerciseMatch[1]);
+  const field = exerciseMatch[2];
+  const prefix = `workout-${workoutIndex}`;
+
+  const ids: Record<string, string> = {
+    exerciseId: `${prefix}-exercise-${exerciseIndex}`,
+    customExerciseName: `${prefix}-custom-${exerciseIndex}`,
+    customMuscleGroup: `${prefix}-custom-muscle-${exerciseIndex}`,
+    instruction: `${prefix}-instruction-${exerciseIndex}`,
+    setCount: `${prefix}-sets-${exerciseIndex}`,
+    repMode: `${prefix}-rep-mode-${exerciseIndex}`,
+    targetReps: `${prefix}-reps-${exerciseIndex}`,
+    targetRepsMin: `${prefix}-reps-min-${exerciseIndex}`,
+    targetRepsMax: `${prefix}-reps-max-${exerciseIndex}`,
+    restSeconds: `${prefix}-rest-${exerciseIndex}`,
+  };
+
+  return ids[field] ?? `program-workout-${workoutIndex}`;
+}
+
+function getComposerViewForIssue(issue: ComposerIssue): ComposerView {
+  if (issue.fieldPath === "title" || issue.fieldPath === "athleteId" || issue.fieldPath === "description") {
+    return "details";
+  }
+
+  if (issue.fieldPath.includes(".exercise") || typeof issue.exerciseIndex === "number") {
+    return "workout_editor";
+  }
+
+  if (
+    issue.fieldPath.includes(".defaultRestSeconds") ||
+    issue.fieldPath.includes(".guidance") ||
+    issue.fieldPath.includes(".exerciseId") ||
+    issue.fieldPath.includes(".instruction") ||
+    issue.fieldPath.includes(".targetReps") ||
+    issue.fieldPath.includes(".setCount")
+  ) {
+    return "workout_editor";
+  }
+
+  return "workouts";
 }
 
 function compareCoachSetLabels(left: string, right: string) {
@@ -323,6 +708,10 @@ export function CoachDashboard({
       ).sort((a, b) => a.name.localeCompare(b.name, "fi")),
     [state.exercises, currentUser],
   );
+  const exerciseNameById = useMemo(
+    () => new Map(exerciseOptions.map((exercise) => [exercise.id, exercise.name])),
+    [exerciseOptions],
+  );
 
   const form = useForm<ProgramComposerFormValues, unknown, ProgramComposerValues>({
     resolver: zodResolver(programComposerSchema) as Resolver<
@@ -330,6 +719,7 @@ export function CoachDashboard({
       unknown,
       ProgramComposerValues
     >,
+    mode: "onChange",
     defaultValues: {
       title: "",
       description: "",
@@ -359,8 +749,9 @@ export function CoachDashboard({
 
   const isEditingProgram = Boolean(editingProgramId);
   const isSavingProgram = form.formState.isSubmitting;
-  const [composerStep, setComposerStep] = useState<0 | 1 | 2>(0);
+  const [composerView, setComposerView] = useState<ComposerView>("details");
   const [activeWorkoutIndex, setActiveWorkoutIndex] = useState(0);
+  const [activeExerciseIndex, setActiveExerciseIndex] = useState(0);
   const canEditProgramAthlete = !editingProgramId
     || !state.scheduledWorkouts.some((workout) => workout.trainingPlanId === editingProgramId);
   const editorTitle = isEditingProgram ? "Muokkaa treeniohjelmaa" : "Uusi treeniohjelma";
@@ -377,17 +768,15 @@ export function CoachDashboard({
   );
   const activeWorkout = watchedWorkouts[activeWorkoutIndex] ?? watchedWorkouts[0] ?? null;
   const activeAthleteName = programTargets.find((target) => target.id === watchedAthleteId)?.fullName ?? "Ei valittu";
-  const canGoToNextStep = composerStep === 0
-    ? Boolean(watchedProgramTitle?.trim()) && Boolean(watchedAthleteId)
-    : composerStep === 1
-      ? watchedWorkouts.length > 0
-      : false;
-  const canSaveProgram = programComposerSchema.safeParse({
+  const composerValues = {
     title: watchedProgramTitle,
     description: form.watch("description"),
     athleteId: watchedAthleteId,
     workouts: watchedWorkouts,
-  }).success;
+  };
+  const composerIssues = useMemo(() => buildComposerIssues(composerValues), [composerValues]);
+  const composerRequiredStats = useMemo(() => buildComposerRequiredStats(composerValues), [composerValues]);
+  const canSaveProgram = form.formState.isValid;
 
   const resetComposer = (athleteId: string) => {
     form.reset({
@@ -396,8 +785,9 @@ export function CoachDashboard({
       athleteId,
       workouts: [emptyProgramWorkout("custom")],
     });
-    setComposerStep(0);
+    setComposerView("details");
     setActiveWorkoutIndex(0);
+    setActiveExerciseIndex(0);
     setEditingProgramId(null);
   };
 
@@ -410,6 +800,7 @@ export function CoachDashboard({
   useEffect(() => {
     if (!watchedWorkouts.length) {
       setActiveWorkoutIndex(0);
+      setActiveExerciseIndex(0);
       return;
     }
 
@@ -417,43 +808,43 @@ export function CoachDashboard({
       setActiveWorkoutIndex(watchedWorkouts.length - 1);
     }
   }, [activeWorkoutIndex, watchedWorkouts.length]);
+  useEffect(() => {
+    const exerciseCount = activeWorkout?.exercises.length ?? 0;
+    if (!exerciseCount) {
+      setActiveExerciseIndex(0);
+      return;
+    }
 
-  const composerSteps = [
-    {
-      id: 0 as const,
-      shortLabel: "1/3",
-      title: "Perustiedot",
-      description: "Määrittele ohjelman kokonaisuus: kenelle se tehdään, minkä tyyppinen ohjelma on ja kuinka monta treeniä viikossa siihen kuuluu.",
-    },
-    {
-      id: 1 as const,
-      shortLabel: "2/3",
-      title: "Treenit",
-      description: "Suunnittele viikon treenijako. Määrittele mitä treenejä ohjelmaan kuuluu, kuten ylä, ala tai koko kroppa.",
-    },
-    {
-      id: 2 as const,
-      shortLabel: "3/3",
-      title: "Liikkeet",
-      description: "Määrittele mitä kuhunkin treeniin kuuluu. Tässä vaiheessa täytät valitun treenin liikkeet, sarjat ja toistot.",
-    },
+    if (activeExerciseIndex > exerciseCount - 1) {
+      setActiveExerciseIndex(exerciseCount - 1);
+    }
+  }, [activeExerciseIndex, activeWorkout]);
+
+  const composerSteps: Array<{ view: ComposerView; step: string; title: string; description: string }> = [
+    { view: "details", step: "1/4", title: "Perustiedot", description: "Kenelle ohjelma tehdään ja mikä sen nimi on." },
+    { view: "workouts", step: "2/4", title: "Treenit", description: "Luo ohjelman treenit yksi kerrallaan ja nimeä ne." },
+    { view: "workout_editor", step: "3/4", title: "Treenin sisältö", description: "Muokkaa yhden valitun treenin liikkeet ja treenikohtaiset asetukset." },
+    { view: "review", step: "4/4", title: "Tarkistus", description: "Tarkista kokonaisuus ennen tallennusta." },
   ];
+  const activeComposerStep = composerSteps.find((step) => step.view === composerView) ?? composerSteps[0];
 
-  async function goToNextComposerStep() {
-    if (composerStep === 0) {
-      const isValid = await form.trigger(["title", "athleteId", "description"]);
-      if (!isValid) {
-        return;
+  function openIssueLocation(issue: ComposerIssue) {
+    if (typeof issue.workoutIndex === "number") {
+      setActiveWorkoutIndex(issue.workoutIndex);
+    }
+    if (typeof issue.exerciseIndex === "number") {
+      setActiveExerciseIndex(issue.exerciseIndex);
+    }
+    setComposerView(getComposerViewForIssue(issue));
+
+    window.setTimeout(() => {
+      const elementId = getComposerFieldElementId(issue.fieldPath);
+      const element = elementId ? document.getElementById(elementId) : null;
+      element?.scrollIntoView({ behavior: "smooth", block: "center" });
+      if (element instanceof HTMLElement) {
+        element.focus();
       }
-    }
-
-    if (composerStep === 1) {
-      setActiveWorkoutIndex(0);
-    }
-
-    if (composerStep < 2) {
-      setComposerStep((current) => (current + 1) as 1 | 2);
-    }
+    }, 60);
   }
 
   return (
@@ -560,157 +951,213 @@ export function CoachDashboard({
                   return;
                 }
 
-                setProgramMessage(`Ohjelma "${values.title}" tallennettiin.`);
+                setProgramMessage(`Ohjelma "${values.title}" tallennettiin aktiiviseksi.`);
                 setProgramMessageTone("success");
                 resetComposer(values.athleteId);
+              }, async () => {
+                setProgramMessage(`Täydennä ${composerIssues.length} pakollista kohtaa ennen tallennusta.`);
+                setProgramMessageTone("danger");
+                const firstIssue = composerIssues[0];
+                if (!firstIssue) {
+                  return;
+                }
+                openIssueLocation(firstIssue);
               })}
             >
-              <div className="grid gap-3 sm:grid-cols-3">
-                {composerSteps.map((step) => {
-                  const isActive = composerStep === step.id;
-                  const isComplete = composerStep > step.id;
-
-                  return (
-                    <button
-                      key={step.id}
+              <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface-2)] p-4">
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <Badge>{activeComposerStep.step}</Badge>
+                      <p className="text-sm font-semibold text-[var(--text)]">{activeComposerStep.title}</p>
+                    </div>
+                    <p className="mt-2 text-sm text-[var(--text-muted)]">{activeComposerStep.description}</p>
+                  </div>
+                  {composerView !== "details" ? (
+                    <Button
                       type="button"
-                      className={`rounded-2xl border p-4 text-left transition ${
-                        isActive
-                          ? "border-[var(--accent-strong)] bg-[color:color-mix(in_oklab,var(--accent)_12%,var(--surface))]"
-                          : "border-[var(--border)] bg-[var(--surface-2)] hover:border-[var(--border-strong)]"
-                      }`}
+                      variant="secondary"
+                      className="w-full sm:w-auto"
                       onClick={() => {
-                        if (step.id <= composerStep) {
-                          setComposerStep(step.id);
+                        if (composerView === "workouts") {
+                          setComposerView("details");
+                          return;
                         }
+                        if (composerView === "workout_editor") {
+                          setComposerView("workouts");
+                          return;
+                        }
+                        setComposerView("workouts");
                       }}
                     >
-                      <div className="flex items-center gap-2">
-                        <Badge>{step.shortLabel}</Badge>
-                        {isComplete ? (
-                          <Badge className="border-[var(--accent-strong)] bg-[color:color-mix(in_oklab,var(--accent)_14%,var(--surface))] text-[var(--accent-strong)]">
-                            Valmis
-                          </Badge>
-                        ) : null}
-                      </div>
-                      <p className="mt-3 text-sm font-semibold text-[var(--text)]">{step.title}</p>
-                      <p className="mt-1 text-xs leading-5 text-[var(--text-subtle)]">{step.description}</p>
-                    </button>
-                  );
-                })}
-              </div>
-
-              <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface-2)] p-4">
-                <div className="flex flex-wrap items-center gap-2">
-                  <Badge>{composerSteps[composerStep].shortLabel}</Badge>
-                  <p className="text-sm font-semibold text-[var(--text)]">{composerSteps[composerStep].title}</p>
+                      Takaisin
+                    </Button>
+                  ) : null}
                 </div>
-                <p className="mt-2 text-sm text-[var(--text-muted)]">{composerSteps[composerStep].description}</p>
-                <p className="mt-3 text-xs text-[var(--text-subtle)]">
-                  Yhteenveto: {watchedProgramTitle?.trim() || "Nimeämätön ohjelma"}, {activeAthleteName}, {watchedWorkouts.length} treeniä, {totalExerciseCount} liikettä, {totalSetCount} sarjaa
+                <p className="mt-3 text-xs font-medium text-[var(--text-subtle)]">
+                  `*` merkityt kentät ovat pakollisia.
                 </p>
               </div>
 
-              {composerStep === 0 ? (
+              {composerView === "details" ? (
                 <fieldset className="space-y-4 rounded-xl border-2 border-[var(--border)] bg-[var(--surface-2)] p-4">
-                  <legend className="px-2 text-sm font-medium text-[var(--text-subtle)]">
-                    Ohjelman tiedot
-                  </legend>
-                  <div className="grid gap-4 md:grid-cols-2">
-                    <div>
-                      <Label htmlFor={`${formId}-title`}>Ohjelman nimi</Label>
-                      <Input id={`${formId}-title`} {...form.register("title")} placeholder="Esim. Ylä-ala-koko kroppa" />
+                    <legend className="px-2 text-sm font-medium text-[var(--text-subtle)]">
+                      1. Ohjelman tiedot
+                    </legend>
+                    <div className="grid gap-4 md:grid-cols-2">
+                      <div>
+                        <RequiredLabel htmlFor="program-composer-title">Ohjelman nimi</RequiredLabel>
+                        <Input
+                          id="program-composer-title"
+                          aria-invalid={Boolean(form.formState.errors.title)}
+                          aria-describedby={form.formState.errors.title ? "program-composer-title-error" : undefined}
+                          {...form.register("title")}
+                          placeholder="Esim. Ylä-ala-koko kroppa"
+                        />
+                        <FieldError id="program-composer-title-error" message={form.formState.errors.title?.message?.toString()} />
+                      </div>
+                      <div>
+                        <RequiredLabel htmlFor="program-composer-athlete">Käyttäjä</RequiredLabel>
+                        <Select
+                          id="program-composer-athlete"
+                          aria-invalid={Boolean(form.formState.errors.athleteId)}
+                          aria-describedby={form.formState.errors.athleteId ? "program-composer-athlete-error" : undefined}
+                          {...form.register("athleteId")}
+                          disabled={!canEditProgramAthlete}
+                        >
+                          <option value="">Valitse käyttäjä</option>
+                          {programTargets.map((target) => (
+                            <option key={target.id} value={target.id}>
+                              {target.fullName}
+                            </option>
+                          ))}
+                        </Select>
+                        <FieldError id="program-composer-athlete-error" message={form.formState.errors.athleteId?.message?.toString()} />
+                        {isEditingProgram ? (
+                          <p className="mt-1 text-xs text-[var(--text-subtle)]">
+                            {canEditProgramAthlete
+                              ? "Voit vielä vaihtaa käyttäjän, koska ohjelmasta ei ole käynnistetty treenejä."
+                              : "Käyttäjää ei voi enää vaihtaa, koska ohjelmasta on jo käynnistetty treenejä tai historiaa."}
+                          </p>
+                        ) : null}
+                      </div>
                     </div>
                     <div>
-                      <Label htmlFor={`${formId}-athlete`}>Käyttäjä</Label>
-                      <Select id={`${formId}-athlete`} {...form.register("athleteId")} disabled={!canEditProgramAthlete}>
-                        <option value="">Valitse käyttäjä</option>
-                        {programTargets.map((target) => (
-                          <option key={target.id} value={target.id}>
-                            {target.fullName}
-                          </option>
-                        ))}
-                      </Select>
-                      {isEditingProgram ? (
-                        <p className="mt-1 text-xs text-[var(--text-subtle)]">
-                          {canEditProgramAthlete
-                            ? "Voit vielä vaihtaa käyttäjän, koska ohjelmasta ei ole käynnistetty treenejä."
-                            : "Käyttäjää ei voi enää vaihtaa, koska ohjelmasta on jo käynnistetty treenejä tai historiaa."}
-                        </p>
-                      ) : null}
+                      <RequiredLabel htmlFor={`${formId}-description`} optional>Kuvaus ja lisätiedot</RequiredLabel>
+                      <Textarea
+                        id={`${formId}-description`}
+                        aria-invalid={Boolean(form.formState.errors.description)}
+                        aria-describedby={form.formState.errors.description ? `${formId}-description-error` : undefined}
+                        {...form.register("description")}
+                        placeholder="Esim. Pidä treenin lisäksi huoli, että saat viikossa keskimäärin 8000 askelta päivässä."
+                        className="min-h-24"
+                      />
+                      <FieldError id={`${formId}-description-error`} message={form.formState.errors.description?.message?.toString()} />
+                      <p className="mt-1 text-xs text-[var(--text-subtle)]">
+                        Tähän voit kirjoittaa ohjelman tavoitteen, arjen muistutukset tai muut tarkentavat huomiot treenaajalle.
+                      </p>
                     </div>
-                  </div>
-                  <div>
-                    <Label htmlFor={`${formId}-description`}>Kuvaus ja lisätiedot</Label>
-                    <Textarea
-                      id={`${formId}-description`}
-                      {...form.register("description")}
-                      placeholder="Esim. Pidä treenin lisäksi huoli, että saat viikossa keskimäärin 8000 askelta päivässä."
-                      className="min-h-24"
-                    />
-                    <p className="mt-1 text-xs text-[var(--text-subtle)]">
-                       Tähän voit kirjoittaa ohjelman tavoitteen, arjen muistutukset tai muut tarkentavat huomiot treenaajalle.
-                    </p>
-                  </div>
-                </fieldset>
+                  </fieldset>
               ) : null}
 
-              {composerStep === 1 ? (
-                <div className="space-y-4">
-                  <div className="rounded-xl border border-[var(--border)] bg-[var(--surface-2)] p-4">
-                    <p className="text-sm font-semibold text-[var(--text)]">Viikon treenisuunnitelma</p>
-                    <p className="mt-2 text-sm text-[var(--text-muted)]">
-                      Lisää tähän ohjelman viikoittaiset treenit ja nimeä ne selkeästi. Esimerkiksi yläkroppa, alakroppa ja koko kroppa.
-                    </p>
+              {composerView === "workouts" ? (
+                <div className="space-y-4 rounded-xl border-2 border-[var(--border)] bg-[var(--surface-2)] p-4">
+                  <div className="flex flex-wrap items-start justify-between gap-3">
+                    <div>
+                      <p className="text-sm font-medium text-[var(--text-subtle)]">2. Treenit</p>
+                      <p className="mt-1 text-sm text-[var(--text-muted)]">
+                        Lisää treenit yksi kerrallaan. Tässä vaiheessa päätetään treenityyppi ja nimi. Kun treeni on luotu, paina `Muokkaa treeniä` lisätäksesi liikkeet ja rakentaaksesi sisällön.
+                      </p>
+                    </div>
+                    <Button
+                      type="button"
+                      variant="secondary"
+                      className="w-full sm:w-auto"
+                      onClick={() => {
+                        workoutFields.append(emptyProgramWorkout("custom"));
+                        setActiveWorkoutIndex(workoutFields.fields.length);
+                        setActiveExerciseIndex(0);
+                      }}
+                    >
+                      <Plus className="mr-2 size-4" />
+                      Lisää treeni
+                    </Button>
                   </div>
                   <div className="grid gap-3">
                     {workoutFields.fields.map((field, index) => {
                       const workout = watchedWorkouts[index];
                       const workoutExerciseCount = workout?.exercises.length ?? 0;
-                      const workoutSetCount = workout?.exercises.reduce(
-                        (sum, exercise) => sum + Number(exercise.setCount || 0),
-                        0,
-                      ) ?? 0;
                       const workoutName = getComposerWorkoutLabel(workout, index);
-                      const isSelected = activeWorkoutIndex === index;
                       const workoutSplit = workout?.splitType ?? "custom";
-                      const workoutDefaultRest = workout?.defaultRestSeconds ?? 180;
+                      const workoutIssueCount = composerIssues.filter((issue) => issue.workoutIndex === index).length;
+                      const exercisePreview = getWorkoutExercisePreview(workout, exerciseNameById);
 
                       return (
                         <div
                           key={field.id}
-                          className={`rounded-2xl border p-4 ${
-                            isSelected
-                              ? "border-[var(--accent-strong)] bg-[color:color-mix(in_oklab,var(--accent)_10%,var(--surface))]"
-                              : "border-[var(--border)] bg-[var(--surface)]"
-                          }`}
+                          id={`program-workout-${index}`}
+                          className="rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-4"
                         >
-                          <div className="flex items-start justify-between gap-3">
-                            <div>
+                          <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                            <div className="min-w-0">
                               <div className="flex flex-wrap items-center gap-2">
                                 <p className="text-base font-semibold text-[var(--text)]">Treeni {index + 1}</p>
                                 <Badge>{workoutName}</Badge>
+                                <Badge className={cn(
+                                  workoutIssueCount
+                                    ? "border-[color:color-mix(in_oklab,var(--danger)_35%,var(--border))] bg-[color:color-mix(in_oklab,var(--danger)_10%,var(--surface))] text-[var(--danger)]"
+                                    : "border-[color:color-mix(in_oklab,var(--success)_35%,var(--border))] bg-[color:color-mix(in_oklab,var(--success)_10%,var(--surface))] text-[var(--success)]",
+                                )}>
+                                  {workoutIssueCount ? `Puuttuu ${workoutIssueCount} kohtaa` : "Valmis"}
+                                </Badge>
                               </div>
                               <p className="mt-2 text-sm text-[var(--text-muted)]">
-                                {workoutExerciseCount} liikettä, {workoutSetCount} sarjaa
+                                {workoutExerciseCount} liikettä
+                              </p>
+                              <p className="mt-2 text-sm text-[var(--text)]">
+                                {exercisePreview.preview}
+                                {exercisePreview.extraCount > 0 ? ` +${exercisePreview.extraCount}` : ""}
                               </p>
                             </div>
-                            <Button
-                              type="button"
-                              variant="secondary"
-                              onClick={() => {
-                                setActiveWorkoutIndex(index);
-                                setComposerStep(2);
-                              }}
-                            >
-                              Muokkaa liikkeitä
-                            </Button>
+                            <div className="flex flex-wrap gap-2">
+                              <Button
+                                type="button"
+                                variant="secondary"
+                                className="w-full sm:w-auto"
+                                onClick={() => {
+                                  setActiveWorkoutIndex(index);
+                                  setActiveExerciseIndex(0);
+                                  setComposerView("workout_editor");
+                                }}
+                              >
+                                Muokkaa treeniä
+                              </Button>
+                              {!isEditingProgram && workoutFields.fields.length > 1 ? (
+                                <Button
+                                  type="button"
+                                  variant="ghost"
+                                  className="w-full sm:w-auto"
+                                  onClick={() => {
+                                    workoutFields.remove(index);
+                                    if (activeWorkoutIndex >= index) {
+                                      setActiveWorkoutIndex((current) => Math.max(0, current - 1));
+                                    }
+                                    setActiveExerciseIndex(0);
+                                  }}
+                                >
+                                  Poista
+                                </Button>
+                              ) : null}
+                            </div>
                           </div>
-                          <div className={`mt-4 grid gap-4 ${workoutSplit === "custom" ? "md:grid-cols-3" : "md:grid-cols-2"}`}>
+
+                          <div className={cn("mt-4 grid gap-4", workoutSplit === "custom" ? "md:grid-cols-2" : "md:grid-cols-2")}>
                             <div>
-                              <Label htmlFor={`step2-workout-${index}-split`}>Treenialue</Label>
+                              <RequiredLabel htmlFor={`workout-${index}-split`}>Treenialue</RequiredLabel>
                               <Select
-                                id={`step2-workout-${index}-split`}
+                                id={`workout-${index}-split`}
+                                aria-invalid={Boolean(form.formState.errors.workouts?.[index]?.splitType)}
+                                aria-describedby={form.formState.errors.workouts?.[index]?.splitType ? `workout-${index}-split-error` : undefined}
                                 value={workoutSplit}
                                 onChange={(event) => {
                                   const nextSplit = event.target.value as ProgramComposerFormValues["workouts"][number]["splitType"];
@@ -731,12 +1178,18 @@ export function CoachDashboard({
                                 <option value="full_body">Koko kroppa</option>
                                 <option value="custom">Muu</option>
                               </Select>
+                              <FieldError
+                                id={`workout-${index}-split-error`}
+                                message={form.formState.errors.workouts?.[index]?.splitType?.message?.toString()}
+                              />
                             </div>
                             {workoutSplit === "custom" ? (
                               <div>
-                                <Label htmlFor={`step2-workout-${index}-name`}>Treenin nimi</Label>
+                                <RequiredLabel htmlFor={`workout-${index}-name`}>Treenin nimi</RequiredLabel>
                                 <Input
-                                  id={`step2-workout-${index}-name`}
+                                  id={`workout-${index}-name`}
+                                  aria-invalid={Boolean(form.formState.errors.workouts?.[index]?.nameOverride)}
+                                  aria-describedby={form.formState.errors.workouts?.[index]?.nameOverride ? `workout-${index}-name-error` : undefined}
                                   value={workout?.nameOverride ?? ""}
                                   onChange={(event) => {
                                     form.setValue(`workouts.${index}.nameOverride`, event.target.value, {
@@ -745,6 +1198,10 @@ export function CoachDashboard({
                                     });
                                   }}
                                   placeholder="Esim. Penkki + yläselkä"
+                                />
+                                <FieldError
+                                  id={`workout-${index}-name-error`}
+                                  message={form.formState.errors.workouts?.[index]?.nameOverride?.message?.toString()}
                                 />
                               </div>
                             ) : (
@@ -756,146 +1213,34 @@ export function CoachDashboard({
                                 </p>
                               </div>
                             )}
-                            <div>
-                              <div className="mb-1 flex items-center gap-1">
-                                <Label className="mb-0" htmlFor={`step2-workout-${index}-rest`}>Oletuslepo (s)</Label>
-                                <InfoTooltip text="Tätä lepoa käytetään uuden liikkeen oletuksena tässä treenissä." />
-                              </div>
-                              <Input
-                                id={`step2-workout-${index}-rest`}
-                                type="number"
-                                min={15}
-                                max={600}
-                                value={workoutDefaultRest}
-                                onChange={(event) => {
-                                  form.setValue(
-                                    `workouts.${index}.defaultRestSeconds`,
-                                    Number(event.target.value || 0),
-                                    { shouldDirty: true, shouldValidate: true },
-                                  );
-                                }}
-                              />
-                            </div>
                           </div>
-                          {!isEditingProgram && workoutFields.fields.length > 1 ? (
-                            <div className="mt-4">
-                              <Button
-                                type="button"
-                                variant="ghost"
-                                onClick={() => {
-                                  workoutFields.remove(index);
-                                  if (activeWorkoutIndex >= index) {
-                                    setActiveWorkoutIndex((current) => Math.max(0, current - 1));
-                                  }
-                                }}
-                              >
-                                Poista treeni
-                              </Button>
-                            </div>
-                          ) : null}
                         </div>
                       );
                     })}
                   </div>
-
-                  <div className="rounded-xl border-2 border-dashed border-[var(--border)] bg-[var(--surface-2)] p-4">
-                    <p className="text-sm text-[var(--text-muted)]">
-                      Lisää uusi treeni ohjelman loppuun. Sen liikkeet täytetään vasta seuraavassa vaiheessa.
-                    </p>
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      className="mt-3"
-                      onClick={() => {
-                        workoutFields.append(emptyProgramWorkout("custom"));
-                        setActiveWorkoutIndex(workoutFields.fields.length);
-                      }}
-                    >
-                      <Plus className="mr-2 size-4" />
-                      Lisää treeni
-                    </Button>
-                    {isEditingProgram ? (
-                      <p className="mt-2 text-xs text-[var(--text-subtle)]">
-                        Muokkaustilassa poistot ovat pois päältä, jotta aiemmat treeniviittaukset säilyvät ehjinä.
-                      </p>
-                    ) : null}
-                  </div>
                 </div>
               ) : null}
 
-              {composerStep === 2 ? (
-                <div className="space-y-4">
-                  <div className="rounded-xl border border-[var(--border)] bg-[var(--surface-2)] p-4">
-                    <p className="text-sm font-semibold text-[var(--text)]">Treenin sisältö</p>
-                    <p className="mt-2 text-sm text-[var(--text-muted)]">
-                      Valitse yllä treeni, jota haluat täydentää. Tässä vaiheessa määritellään mitä kyseinen treeni sisältää, esimerkiksi mitä kuuluu yläkroppatreeniin.
-                    </p>
-                  </div>
-                  <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-[var(--border)] bg-[var(--surface-2)] p-4">
+              {composerView === "workout_editor" ? (
+                <div className="space-y-4 rounded-xl border-2 border-[var(--border)] bg-[var(--surface-2)] p-4">
+                  <div className="flex flex-wrap items-center justify-between gap-3">
                     <div>
-                      <p className="text-sm font-semibold text-[var(--text)]">
-                        Muokattava treeni: {activeWorkoutIndex + 1}
-                      </p>
+                      <p className="text-sm font-medium text-[var(--text-subtle)]">3. Treenin sisältö</p>
                       <p className="mt-1 text-sm text-[var(--text-muted)]">
-                        {getComposerWorkoutLabel(activeWorkout, activeWorkoutIndex)}
+                        Muokkaat nyt vain yhtä treeniä kerrallaan. Lisää treenin yleisohje, lepo ja liikkeet tähän näkymään.
+                      </p>
+                      <p className="mt-2 text-xs font-semibold text-[var(--text-subtle)]">
+                        Ohjelma &gt; Treeni {activeWorkoutIndex + 1} / {getComposerWorkoutLabel(activeWorkout, activeWorkoutIndex)}
                       </p>
                     </div>
-                    <div className="flex flex-wrap gap-2">
-                      {watchedWorkouts.map((workout, index) => (
-                        <Button
-                          key={`workout-tab-${index}`}
-                          type="button"
-                          variant={activeWorkoutIndex === index ? "primary" : "secondary"}
-                          onClick={() => setActiveWorkoutIndex(index)}
-                        >
-                          {getComposerWorkoutLabel(workout, index)}
-                        </Button>
-                      ))}
-                      <Button
-                        type="button"
-                        variant="secondary"
-                        onClick={() => {
-                          workoutFields.append(emptyProgramWorkout("custom"));
-                          setActiveWorkoutIndex(watchedWorkouts.length);
-                          setComposerStep(1);
-                        }}
-                      >
-                        <Plus className="mr-2 size-4" />
-                        Lisää treeni
-                      </Button>
-                      {workoutFields.fields.length > 1 && !isEditingProgram ? (
-                        <details className="relative">
-                          <summary className="inline-flex list-none items-center justify-center rounded-xl border border-[var(--border)] bg-[var(--surface)] px-3 py-2 text-[var(--text-muted)] shadow-[0_1px_0_0_var(--shadow-soft)] transition hover:border-[var(--border-strong)] hover:bg-[var(--surface-2)] hover:text-[var(--text)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--surface)]">
-                            <MoreHorizontal className="size-4" aria-hidden="true" />
-                            <span className="sr-only">Avaa treenin lisätoiminnot</span>
-                          </summary>
-                          <div className="absolute right-0 top-[calc(100%+0.5rem)] z-10 min-w-48 rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-2 shadow-[0_18px_45px_-24px_var(--shadow)]">
-                            <button
-                              type="button"
-                              className="flex w-full items-center rounded-xl px-3 py-2 text-left text-sm font-semibold text-[var(--danger)] transition hover:bg-[var(--surface-2)]"
-                              onClick={() => {
-                                const workoutName = getComposerWorkoutLabel(activeWorkout, activeWorkoutIndex);
-                                const confirmDelete = window.confirm(
-                                  `Poistetaanko treeni "${workoutName}" ohjelmasta?`,
-                                );
-                                if (!confirmDelete) {
-                                  return;
-                                }
-
-                                workoutFields.remove(activeWorkoutIndex);
-                                setActiveWorkoutIndex((current) => Math.max(0, current - 1));
-                                setComposerStep(1);
-                              }}
-                            >
-                              Poista treeni
-                            </button>
-                            <p className="px-3 pb-1 pt-2 text-xs leading-5 text-[var(--text-subtle)]">
-                              Piilotettu valikko vähentää riskiä sekoittaa tämä yksittäisen liikkeen poistoon.
-                            </p>
-                          </div>
-                        </details>
-                      ) : null}
-                    </div>
+                    <Button
+                      type="button"
+                      variant="secondary"
+                      className="w-full sm:w-auto"
+                      onClick={() => setComposerView("workouts")}
+                    >
+                      Takaisin treeneihin
+                    </Button>
                   </div>
 
                   {workoutFields.fields[activeWorkoutIndex] ? (
@@ -904,6 +1249,7 @@ export function CoachDashboard({
                       fieldId={workoutFields.fields[activeWorkoutIndex].id}
                       index={activeWorkoutIndex}
                       control={form.control}
+                      errors={form.formState.errors.workouts}
                       register={form.register}
                       setValue={form.setValue}
                       watch={form.watch}
@@ -911,63 +1257,254 @@ export function CoachDashboard({
                       onRemove={() => {
                         workoutFields.remove(activeWorkoutIndex);
                         setActiveWorkoutIndex((current) => Math.max(0, current - 1));
-                        setComposerStep(1);
+                        setActiveExerciseIndex(0);
+                        setComposerView("workouts");
                       }}
                       removable={workoutFields.fields.length > 1 && !isEditingProgram}
                       allowExerciseRemoval={!isEditingProgram}
-                      showWorkoutMeta={false}
+                      showWorkoutMeta
+                      activeExerciseIndex={activeExerciseIndex}
+                      onActiveExerciseIndexChange={setActiveExerciseIndex}
                     />
                   ) : null}
                 </div>
               ) : null}
 
+              {composerView === "review" ? (
+                <div className="space-y-5">
+                  <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface-2)] p-4">
+                    <p className="text-sm font-semibold text-[var(--text)]">Ennen tallennusta</p>
+                    <p className="mt-2 text-sm text-[var(--text-muted)]">
+                      Nyt näet koko ohjelman yhdellä kertaa. Korjaa puutteet tarvittaessa ennen tallennusta.
+                    </p>
+                    <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+                      <div className="rounded-xl border border-[var(--border)] bg-[var(--surface)] p-3">
+                        <p className="text-xs font-semibold text-[var(--text-subtle)]">Pakolliset kentät</p>
+                        <p className="mt-2 text-lg font-semibold text-[var(--text)]">
+                          {composerRequiredStats.completed}/{composerRequiredStats.total}
+                        </p>
+                      </div>
+                      <div className="rounded-xl border border-[var(--border)] bg-[var(--surface)] p-3">
+                        <p className="text-xs font-semibold text-[var(--text-subtle)]">Treenejä</p>
+                        <p className="mt-2 text-lg font-semibold text-[var(--text)]">{watchedWorkouts.length}</p>
+                      </div>
+                      <div className="rounded-xl border border-[var(--border)] bg-[var(--surface)] p-3">
+                        <p className="text-xs font-semibold text-[var(--text-subtle)]">Liikkeitä</p>
+                        <p className="mt-2 text-lg font-semibold text-[var(--text)]">{totalExerciseCount}</p>
+                      </div>
+                      <div className="rounded-xl border border-[var(--border)] bg-[var(--surface)] p-3">
+                        <p className="text-xs font-semibold text-[var(--text-subtle)]">Virheitä</p>
+                        <p className={cn("mt-2 text-lg font-semibold", composerIssues.length ? "text-[var(--danger)]" : "text-[var(--success)]")}>
+                          {composerIssues.length}
+                        </p>
+                      </div>
+                    </div>
+                    <p className="mt-4 text-xs text-[var(--text-subtle)]">
+                      Yhteenveto: {watchedProgramTitle?.trim() || "Nimeämätön ohjelma"}, {activeAthleteName}, {watchedWorkouts.length} treeniä, {totalExerciseCount} liikettä, {totalSetCount} sarjaa. Kuvaus, liikkeen lempinimi, kuorma ja lisämuistiinpanot ovat valinnaisia. Tallennettu ohjelma aktivoituu heti.
+                    </p>
+                  </div>
+
+                  <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface-2)] p-4">
+                    <div className="flex flex-wrap items-center justify-between gap-3">
+                      <div className="flex items-center gap-2">
+                        <ClipboardList className="size-4 text-[var(--text-subtle)]" />
+                        <p className="text-sm font-semibold text-[var(--text)]">Tarkistuslista</p>
+                      </div>
+                      <span className={cn(
+                        "rounded-full px-2.5 py-1 text-xs font-semibold",
+                        composerIssues.length
+                          ? "bg-[color:color-mix(in_oklab,var(--danger)_10%,var(--surface))] text-[var(--danger)]"
+                          : "bg-[color:color-mix(in_oklab,var(--success)_10%,var(--surface))] text-[var(--success)]",
+                      )}>
+                        {composerIssues.length ? `${composerIssues.length} puutetta` : "Valmis"}
+                      </span>
+                    </div>
+                    <p className="mt-2 text-sm text-[var(--text-muted)]">
+                      Klikkaa puutetta niin siirryt suoraan oikeaan kohtaan.
+                    </p>
+                    <div className="mt-4 space-y-2">
+                      {composerIssues.length ? (
+                        composerIssues.map((issue) => (
+                          <button
+                            key={issue.id}
+                            type="button"
+                            className="w-full rounded-xl border border-[var(--border)] bg-[var(--surface)] px-3 py-3 text-left text-sm text-[var(--text)] transition hover:border-[var(--border-strong)] hover:bg-[var(--surface-2)]"
+                            onClick={() => openIssueLocation(issue)}
+                          >
+                            {issue.label}
+                          </button>
+                        ))
+                      ) : (
+                        <div className="rounded-xl border border-[color:color-mix(in_oklab,var(--success)_30%,var(--border))] bg-[color:color-mix(in_oklab,var(--success)_10%,var(--surface))] px-3 py-4 text-sm text-[var(--success)]">
+                          Kaikki pakolliset kohdat ovat kunnossa. Ohjelma on valmis tallennettavaksi.
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface-2)] p-4">
+                    <p className="text-sm font-semibold text-[var(--text)]">Treenien sisältö</p>
+                    <p className="mt-2 text-sm text-[var(--text-muted)]">
+                      Näet tästä nopeasti mitä liikkeitä kuhunkin treeniin on lisätty ennen tallennusta.
+                    </p>
+                    <div className="mt-4 space-y-3">
+                      {watchedWorkouts.map((workout, index) => {
+                        const workoutIssues = composerIssues.filter((issue) => issue.workoutIndex === index).length;
+
+                        return (
+                          <div
+                            key={`review-workout-${index}`}
+                            className="rounded-xl border border-[var(--border)] bg-[var(--surface)] p-4"
+                          >
+                            <div className="flex flex-wrap items-center gap-2">
+                              <p className="text-sm font-semibold text-[var(--text)]">
+                                Treeni {index + 1}: {getComposerWorkoutLabel(workout, index)}
+                              </p>
+                              <Badge>{splitLabel(workout?.splitType)}</Badge>
+                              <Badge className={cn(
+                                workoutIssues
+                                  ? "border-[color:color-mix(in_oklab,var(--danger)_35%,var(--border))] bg-[color:color-mix(in_oklab,var(--danger)_10%,var(--surface))] text-[var(--danger)]"
+                                  : "border-[color:color-mix(in_oklab,var(--success)_35%,var(--border))] bg-[color:color-mix(in_oklab,var(--success)_10%,var(--surface))] text-[var(--success)]",
+                              )}>
+                                {workoutIssues ? `Puuttuu ${workoutIssues} kohtaa` : "Valmis"}
+                              </Badge>
+                            </div>
+                            {workout?.guidance?.trim() ? (
+                              <p className="mt-2 text-sm text-[var(--text-muted)]">{workout.guidance.trim()}</p>
+                            ) : null}
+                            {workout?.exercises.length ? (
+                              <div className="mt-3 space-y-2">
+                                {workout.exercises.map((exercise, exerciseIndex) => {
+                                  const isCustom = exercise.exerciseId === CUSTOM_EXERCISE_VALUE;
+                                  const exerciseName =
+                                    exercise.exerciseNameOverride?.trim() ||
+                                    (isCustom
+                                      ? exercise.customExerciseName?.trim()
+                                      : exerciseNameById.get(exercise.exerciseId)) ||
+                                    `Liike ${exerciseIndex + 1}`;
+                                  const repsLabel = exercise.repMode === "range"
+                                    ? `${exercise.targetRepsMin || "?"}-${exercise.targetRepsMax || "?"}`
+                                    : `${exercise.targetReps || "?"}`;
+
+                                  return (
+                                    <div
+                                      key={`review-workout-${index}-exercise-${exerciseIndex}`}
+                                      className="rounded-xl border border-[var(--border)] bg-[var(--surface-2)] px-3 py-3"
+                                    >
+                                      <div className="flex flex-wrap items-center gap-2">
+                                        <p className="text-sm font-medium text-[var(--text)]">
+                                          {exerciseIndex + 1}. {exerciseName}
+                                        </p>
+                                        <span className="rounded-full border border-[var(--border)] bg-[var(--surface)] px-2.5 py-1 text-xs font-semibold text-[var(--text-subtle)]">
+                                          {exercise.setCount || "?"} sarjaa
+                                        </span>
+                                        <span className="rounded-full border border-[var(--border)] bg-[var(--surface)] px-2.5 py-1 text-xs font-semibold text-[var(--text-subtle)]">
+                                          {repsLabel} toistoa
+                                        </span>
+                                        <span className="rounded-full border border-[var(--border)] bg-[var(--surface)] px-2.5 py-1 text-xs font-semibold text-[var(--text-subtle)]">
+                                          {exercise.restSeconds || "?"} s lepo
+                                        </span>
+                                      </div>
+                                      {exercise.instruction?.trim() ? (
+                                        <p className="mt-2 text-sm text-[var(--text-muted)]">{exercise.instruction.trim()}</p>
+                                      ) : null}
+                                    </div>
+                                  );
+                                })}
+                              </div>
+                            ) : (
+                              <p className="mt-3 text-sm text-[var(--text-muted)]">Ei liikkeitä vielä.</p>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                </div>
+              ) : null}
+
               <InlineFeedback message={programMessage} tone={programMessageTone} className="min-h-5 text-sm" />
               <div className="sticky bottom-3 z-10 rounded-2xl border border-[var(--border)] bg-[color:color-mix(in_oklab,var(--surface)_92%,white)] p-3 shadow-[0_16px_40px_-28px_var(--shadow)] backdrop-blur">
-                <div className="flex flex-wrap gap-3">
-                  {composerStep > 0 ? (
-                    <Button
-                      type="button"
-                      variant="secondary"
-                      className="w-full sm:w-auto"
-                      onClick={() => setComposerStep((current) => (current - 1) as 0 | 1)}
-                    >
-                      Edellinen
-                    </Button>
-                  ) : null}
-                  {composerStep < 2 ? (
-                    <Button
-                      type="button"
-                      className="w-full sm:w-auto"
-                      disabled={!canGoToNextStep}
-                      onClick={() => {
-                        void goToNextComposerStep();
-                      }}
-                    >
-                      Seuraava
-                    </Button>
-                  ) : (
-                    <Button
-                      type="submit"
-                      className="w-full sm:w-auto"
-                      disabled={!canSaveProgram}
-                      loading={isSavingProgram}
-                      loadingText={isEditingProgram ? "Tallennetaan muutoksia..." : "Tallennetaan ohjelmaa..."}
-                    >
-                      {isEditingProgram ? "Tallenna muutokset" : "Tallenna ohjelma"}
-                    </Button>
-                  )}
-                {isEditingProgram ? (
-                  <Button
-                    type="button"
-                    variant="secondary"
-                    className="w-full sm:w-auto"
-                    onClick={() => {
-                      closeProgramEditing("Muokkaustila suljettiin.");
-                    }}
-                  >
-                    Sulje muokkaus
-                  </Button>
-                ) : null}
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <p className={cn("text-sm", composerView === "review" && canSaveProgram ? "text-[var(--success)]" : "text-[var(--text-subtle)]")}>
+                    {composerView === "details"
+                      ? "Aloita ohjelman perustiedoista."
+                      : composerView === "workouts"
+                        ? "Luo ohjelman treenit yksi kerrallaan."
+                        : composerView === "workout_editor"
+                          ? "Muokkaa valitun treenin sisältö valmiiksi."
+                          : canSaveProgram
+                            ? "Ohjelma on valmis tallennettavaksi."
+                            : `Täydennä ${composerIssues.length} pakollista kohtaa ennen tallennusta.`}
+                  </p>
+                  <div className="flex flex-wrap gap-3">
+                    {composerView === "details" ? (
+                      <Button
+                        type="button"
+                        className="w-full sm:w-auto"
+                        onClick={async () => {
+                          const valid = await form.trigger(["title", "athleteId", "description"]);
+                          if (!valid) {
+                            const firstIssue = composerIssues[0];
+                            if (firstIssue) {
+                              openIssueLocation(firstIssue);
+                            }
+                            return;
+                          }
+                          setComposerView("workouts");
+                        }}
+                      >
+                        Jatka treeneihin
+                      </Button>
+                    ) : null}
+                    {composerView === "workouts" ? (
+                      <Button
+                        type="button"
+                        className="w-full sm:w-auto"
+                        onClick={() => {
+                          if (!watchedWorkouts.length) {
+                            setProgramMessage("Lisää vähintään yksi treeni ennen tarkistusta.");
+                            setProgramMessageTone("danger");
+                            return;
+                          }
+                          setComposerView("review");
+                        }}
+                      >
+                        Siirry tarkistukseen
+                      </Button>
+                    ) : null}
+                    {composerView === "workout_editor" ? (
+                      <Button
+                        type="button"
+                        className="w-full sm:w-auto"
+                        onClick={() => setComposerView("workouts")}
+                      >
+                        Valmis, palaa treeneihin
+                      </Button>
+                    ) : null}
+                    {composerView === "review" ? (
+                      <Button
+                        type="submit"
+                        className="w-full sm:w-auto"
+                        loading={isSavingProgram}
+                        loadingText={isEditingProgram ? "Tallennetaan muutoksia..." : "Tallennetaan ohjelmaa..."}
+                      >
+                        {isEditingProgram ? "Tallenna muutokset" : "Tallenna ohjelma"}
+                      </Button>
+                    ) : null}
+                    {isEditingProgram ? (
+                      <Button
+                        type="button"
+                        variant="secondary"
+                        className="w-full sm:w-auto"
+                        onClick={() => {
+                          closeProgramEditing("Muokkaustila suljettiin.");
+                        }}
+                      >
+                        Sulje muokkaus
+                      </Button>
+                    ) : null}
+                  </div>
                 </div>
               </div>
             </form>
@@ -1037,6 +1574,9 @@ export function CoachDashboard({
                                   }
                                   form.reset(buildProgramComposerValues(program, state.exercises));
                                   setEditingProgramId(program.id);
+                                  setComposerView("details");
+                                  setActiveWorkoutIndex(0);
+                                  setActiveExerciseIndex(0);
                                   setProgramMessage("");
                                   window.requestAnimationFrame(() => {
                                     const composer = document.getElementById("coach-program-composer");
@@ -1200,6 +1740,9 @@ export function CoachDashboard({
                                   }
                                   form.reset(buildProgramComposerValues(program, state.exercises));
                                   setEditingProgramId(program.id);
+                                  setComposerView("details");
+                                  setActiveWorkoutIndex(0);
+                                  setActiveExerciseIndex(0);
                                   setProgramMessage("");
                                   setProgramMessageTone(null);
                                   window.requestAnimationFrame(() => {

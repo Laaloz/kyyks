@@ -1,7 +1,7 @@
 "use client";
 
 import { Check, ChevronDown, ChevronUp, Plus, Search } from "lucide-react";
-import { useFieldArray, type Control, type UseFormRegister, type UseFormSetValue, type UseFormWatch } from "react-hook-form";
+import { useFieldArray, type Control, type FieldErrors, type UseFormRegister, type UseFormSetValue, type UseFormWatch } from "react-hook-form";
 import { useEffect, useMemo, useRef, useState } from "react";
 
 import { Button } from "@/components/ui/button";
@@ -21,6 +21,43 @@ import {
   type ProgramComposerFormValues,
   type ProgramComposerValues,
 } from "@/components/workout/coach/program-composer";
+
+function RequiredLabel({
+  htmlFor,
+  children,
+  optional = false,
+  className,
+}: {
+  htmlFor?: string;
+  children: string;
+  optional?: boolean;
+  className?: string;
+}) {
+  return (
+    <Label htmlFor={htmlFor} className={className}>
+      {children}
+      {optional ? " (valinnainen)" : " *"}
+    </Label>
+  );
+}
+
+function FieldError({
+  id,
+  message,
+}: {
+  id: string;
+  message?: string;
+}) {
+  if (!message) {
+    return null;
+  }
+
+  return (
+    <p id={id} className="mt-1 text-sm text-[var(--danger)]">
+      {message}
+    </p>
+  );
+}
 
 function SearchableExerciseSelect({
   id,
@@ -160,6 +197,7 @@ export function ProgramWorkoutEditor({
   fieldId,
   index,
   control,
+  errors,
   register,
   setValue,
   watch,
@@ -168,10 +206,13 @@ export function ProgramWorkoutEditor({
   removable,
   allowExerciseRemoval,
   showWorkoutMeta = true,
+  activeExerciseIndex,
+  onActiveExerciseIndexChange,
 }: {
   fieldId: string;
   index: number;
   control: Control<ProgramComposerFormValues, unknown, ProgramComposerValues>;
+  errors?: FieldErrors<ProgramComposerFormValues>["workouts"];
   register: UseFormRegister<ProgramComposerFormValues>;
   setValue: UseFormSetValue<ProgramComposerFormValues>;
   watch: UseFormWatch<ProgramComposerFormValues>;
@@ -180,6 +221,8 @@ export function ProgramWorkoutEditor({
   removable: boolean;
   allowExerciseRemoval: boolean;
   showWorkoutMeta?: boolean;
+  activeExerciseIndex?: number;
+  onActiveExerciseIndexChange?: (nextIndex: number) => void;
 }) {
   const exerciseFields = useFieldArray({
     control,
@@ -187,8 +230,17 @@ export function ProgramWorkoutEditor({
   });
   const defaultRestSeconds = watch(`workouts.${index}.defaultRestSeconds` as const);
   const selectedSplitType = watch(`workouts.${index}.splitType` as const);
-  const [expandedExerciseIndex, setExpandedExerciseIndex] = useState<number>(-1);
+  const [internalExpandedExerciseIndex, setInternalExpandedExerciseIndex] = useState<number>(-1);
   const previousExerciseCountRef = useRef(exerciseFields.fields.length);
+  const workoutErrors = errors?.[index];
+  const expandedExerciseIndex = activeExerciseIndex ?? internalExpandedExerciseIndex;
+
+  const setExpandedExerciseIndex = (nextIndex: number) => {
+    onActiveExerciseIndexChange?.(nextIndex);
+    if (activeExerciseIndex === undefined) {
+      setInternalExpandedExerciseIndex(nextIndex);
+    }
+  };
 
   useEffect(() => {
     if (exerciseFields.fields.length > previousExerciseCountRef.current) {
@@ -214,27 +266,42 @@ export function ProgramWorkoutEditor({
         <div className="space-y-4">
           <div className="grid gap-4 [grid-template-columns:repeat(auto-fit,minmax(15rem,1fr))]">
             <div>
-              <Label htmlFor={`workout-${index}-split`}>Treenialue</Label>
-              <Select id={`workout-${index}-split`} {...register(`workouts.${index}.splitType` as const)}>
+              <RequiredLabel htmlFor={`workout-${index}-split`}>Treenialue</RequiredLabel>
+              <Select
+                id={`workout-${index}-split`}
+                aria-invalid={Boolean(workoutErrors?.splitType)}
+                aria-describedby={workoutErrors?.splitType ? `workout-${index}-split-error` : undefined}
+                {...register(`workouts.${index}.splitType` as const)}
+              >
                 <option value="upper">Yläkroppa</option>
                 <option value="lower">Alakroppa</option>
                 <option value="full_body">Koko kroppa</option>
                 <option value="custom">Muu</option>
               </Select>
+              <FieldError
+                id={`workout-${index}-split-error`}
+                message={workoutErrors?.splitType?.message?.toString()}
+              />
             </div>
             {selectedSplitType === "custom" ? (
               <div>
-                <Label htmlFor={`workout-${index}-name`}>Treenin nimi</Label>
+                <RequiredLabel htmlFor={`workout-${index}-name`}>Treenin nimi</RequiredLabel>
                 <Input
                   id={`workout-${index}-name`}
+                  aria-invalid={Boolean(workoutErrors?.nameOverride)}
+                  aria-describedby={workoutErrors?.nameOverride ? `workout-${index}-name-error` : undefined}
                   {...register(`workouts.${index}.nameOverride` as const)}
                   placeholder="Esim. Penkki + yläselkä"
+                />
+                <FieldError
+                  id={`workout-${index}-name-error`}
+                  message={workoutErrors?.nameOverride?.message?.toString()}
                 />
               </div>
             ) : null}
             <div>
               <div className="mb-1 flex items-center gap-1">
-                <Label className="mb-0" htmlFor={`workout-${index}-default-rest`}>Oletuslepo (s)</Label>
+                <RequiredLabel className="mb-0" htmlFor={`workout-${index}-default-rest`}>Oletuslepo (s)</RequiredLabel>
                 <InfoTooltip text="Tätä lepoa käytetään uuden liikkeen oletuksena. Voit säätää lepoa myös liikekohtaisesti." />
               </div>
               <Input
@@ -242,20 +309,32 @@ export function ProgramWorkoutEditor({
                 type="number"
                 min={15}
                 max={600}
+                aria-invalid={Boolean(workoutErrors?.defaultRestSeconds)}
+                aria-describedby={workoutErrors?.defaultRestSeconds ? `workout-${index}-default-rest-error` : undefined}
                 {...register(`workouts.${index}.defaultRestSeconds` as const)}
+              />
+              <FieldError
+                id={`workout-${index}-default-rest-error`}
+                message={workoutErrors?.defaultRestSeconds?.message?.toString()}
               />
             </div>
           </div>
           <div className="mt-4">
             <div className="mb-1 flex items-center gap-1">
-              <Label className="mb-0" htmlFor={`workout-${index}-guidance`}>Lyhyt treeniohje</Label>
+              <RequiredLabel className="mb-0" htmlFor={`workout-${index}-guidance`} optional>Treenin yleisohje</RequiredLabel>
               <InfoTooltip text="Näkyy treenin yleisohjeena. Pidä tämä tiiviinä: fokus, tempo, varat tai tärkein muistettava asia." />
             </div>
             <Textarea
               id={`workout-${index}-guidance`}
+              aria-invalid={Boolean(workoutErrors?.guidance)}
+              aria-describedby={workoutErrors?.guidance ? `workout-${index}-guidance-error` : undefined}
               {...register(`workouts.${index}.guidance` as const)}
               placeholder="Esim. Tee pääliikkeet rauhassa ensin, pidä 1-2 toistoa varaa ja hae loppuun puhdas tuntuma."
               rows={3}
+            />
+            <FieldError
+              id={`workout-${index}-guidance-error`}
+              message={workoutErrors?.guidance?.message?.toString()}
             />
           </div>
         </div>
@@ -302,6 +381,22 @@ export function ProgramWorkoutEditor({
             ? `${targetRepsMin || "?"}-${targetRepsMax || "?"}`
             : `${targetReps || "?"}`;
           const isExpanded = expandedExerciseIndex === exerciseIndex;
+          const exerciseErrors = workoutErrors?.exercises?.[exerciseIndex];
+          const exerciseIssueCount = [
+            exerciseErrors?.exerciseId,
+            exerciseErrors?.customExerciseName,
+            exerciseErrors?.customMuscleGroup,
+            exerciseErrors?.instruction,
+            exerciseErrors?.setCount,
+            exerciseErrors?.repMode,
+            exerciseErrors?.targetReps,
+            exerciseErrors?.targetRepsMin,
+            exerciseErrors?.targetRepsMax,
+            exerciseErrors?.restSeconds,
+          ].filter(Boolean).length;
+          const exerciseStateLabel = exerciseIssueCount
+            ? `Puuttuu ${exerciseIssueCount} kohtaa`
+            : "Valmis";
 
           return (
             <div
@@ -331,6 +426,14 @@ export function ProgramWorkoutEditor({
                     <p className="text-sm font-semibold text-[var(--text)]">Liike {exerciseIndex + 1}</p>
                     <p className="mt-1 text-sm text-[var(--text-muted)]">{resolvedExerciseLabel}</p>
                     <div className="mt-3 flex flex-wrap gap-2">
+                      <span className={cn(
+                        "rounded-full border px-2.5 py-1 text-xs font-semibold",
+                        exerciseIssueCount
+                          ? "border-[color:color-mix(in_oklab,var(--danger)_35%,var(--border))] bg-[color:color-mix(in_oklab,var(--danger)_10%,var(--surface))] text-[var(--danger)]"
+                          : "border-[color:color-mix(in_oklab,var(--success)_35%,var(--border))] bg-[color:color-mix(in_oklab,var(--success)_10%,var(--surface))] text-[var(--success)]",
+                      )}>
+                        {exerciseStateLabel}
+                      </span>
                       <span className="rounded-full border border-[var(--border)] bg-[var(--surface-2)] px-2.5 py-1 text-xs font-semibold text-[var(--text-subtle)]">
                         {setCount || "?"} sarjaa
                       </span>
@@ -382,7 +485,7 @@ export function ProgramWorkoutEditor({
                     className="grid gap-4 p-4 md:grid-cols-2"
                   >
                     <div>
-                      <Label htmlFor={`workout-${index}-exercise-${exerciseIndex}`}>Liike</Label>
+                      <RequiredLabel htmlFor={`workout-${index}-exercise-${exerciseIndex}`}>Liike</RequiredLabel>
                       <SearchableExerciseSelect
                         id={`workout-${index}-exercise-${exerciseIndex}`}
                         selectedExerciseId={selectedExerciseId}
@@ -394,22 +497,34 @@ export function ProgramWorkoutEditor({
                           });
                         }}
                       />
+                      <FieldError
+                        id={`workout-${index}-exercise-${exerciseIndex}-error`}
+                        message={exerciseErrors?.exerciseId?.message?.toString()}
+                      />
                     </div>
 
                     {selectedExerciseId === CUSTOM_EXERCISE_VALUE ? (
                       <div className="grid gap-4">
                         <div>
-                          <Label htmlFor={`workout-${index}-custom-${exerciseIndex}`}>Oman liikkeen nimi</Label>
+                          <RequiredLabel htmlFor={`workout-${index}-custom-${exerciseIndex}`}>Oman liikkeen nimi</RequiredLabel>
                           <Input
                             id={`workout-${index}-custom-${exerciseIndex}`}
+                            aria-invalid={Boolean(exerciseErrors?.customExerciseName)}
+                            aria-describedby={exerciseErrors?.customExerciseName ? `workout-${index}-custom-${exerciseIndex}-error` : undefined}
                             {...register(`workouts.${index}.exercises.${exerciseIndex}.customExerciseName` as const)}
                             placeholder="Esim. Landmine-punnerrus"
                           />
+                          <FieldError
+                            id={`workout-${index}-custom-${exerciseIndex}-error`}
+                            message={exerciseErrors?.customExerciseName?.message?.toString()}
+                          />
                         </div>
                         <div>
-                          <Label htmlFor={`workout-${index}-custom-muscle-${exerciseIndex}`}>Lihasryhmä</Label>
+                          <RequiredLabel htmlFor={`workout-${index}-custom-muscle-${exerciseIndex}`}>Lihasryhmä</RequiredLabel>
                           <Select
                             id={`workout-${index}-custom-muscle-${exerciseIndex}`}
+                            aria-invalid={Boolean(exerciseErrors?.customMuscleGroup)}
+                            aria-describedby={exerciseErrors?.customMuscleGroup ? `workout-${index}-custom-muscle-${exerciseIndex}-error` : undefined}
                             {...register(`workouts.${index}.exercises.${exerciseIndex}.customMuscleGroup` as const)}
                           >
                             <option value="">Valitse lihasryhmä</option>
@@ -419,13 +534,17 @@ export function ProgramWorkoutEditor({
                               </option>
                             ))}
                           </Select>
+                          <FieldError
+                            id={`workout-${index}-custom-muscle-${exerciseIndex}-error`}
+                            message={exerciseErrors?.customMuscleGroup?.message?.toString()}
+                          />
                         </div>
                       </div>
                     ) : selectedExerciseId ? (
                       <div>
-                        <Label htmlFor={`workout-${index}-nickname-${exerciseIndex}`}>
-                          Liikkeen lempinimi (valinnainen)
-                        </Label>
+                        <RequiredLabel htmlFor={`workout-${index}-nickname-${exerciseIndex}`} optional>
+                          Liikkeen lempinimi
+                        </RequiredLabel>
                         <Input
                           id={`workout-${index}-nickname-${exerciseIndex}`}
                           {...register(
@@ -438,28 +557,40 @@ export function ProgramWorkoutEditor({
                   </div>
 
                   <div className="mt-4 px-4">
-                    <Label htmlFor={`workout-${index}-instruction-${exerciseIndex}`}>Valmennusohje</Label>
+                    <RequiredLabel htmlFor={`workout-${index}-instruction-${exerciseIndex}`}>Valmennusohje</RequiredLabel>
                     <Textarea
                       id={`workout-${index}-instruction-${exerciseIndex}`}
+                      aria-invalid={Boolean(exerciseErrors?.instruction)}
+                      aria-describedby={exerciseErrors?.instruction ? `workout-${index}-instruction-${exerciseIndex}-error` : undefined}
                       {...register(`workouts.${index}.exercises.${exerciseIndex}.instruction` as const)}
                       placeholder="Mitä treenaajan pitää muistaa tässä liikkeessä?"
+                    />
+                    <FieldError
+                      id={`workout-${index}-instruction-${exerciseIndex}-error`}
+                      message={exerciseErrors?.instruction?.message?.toString()}
                     />
                   </div>
 
                   <div className="mt-4 grid gap-4 px-4 [grid-template-columns:repeat(auto-fit,minmax(13rem,1fr))]">
                     <div>
-                      <Label htmlFor={`workout-${index}-sets-${exerciseIndex}`}>Sarjat</Label>
+                      <RequiredLabel htmlFor={`workout-${index}-sets-${exerciseIndex}`}>Sarjat</RequiredLabel>
                       <Input
                         id={`workout-${index}-sets-${exerciseIndex}`}
                         type="number"
                         min={1}
                         max={10}
+                        aria-invalid={Boolean(exerciseErrors?.setCount)}
+                        aria-describedby={exerciseErrors?.setCount ? `workout-${index}-sets-${exerciseIndex}-error` : undefined}
                         {...register(`workouts.${index}.exercises.${exerciseIndex}.setCount` as const)}
+                      />
+                      <FieldError
+                        id={`workout-${index}-sets-${exerciseIndex}-error`}
+                        message={exerciseErrors?.setCount?.message?.toString()}
                       />
                     </div>
                     <div>
                       <div className="mb-1 flex items-center gap-1">
-                        <Label className="mb-0" htmlFor={`workout-${index}-superset-${exerciseIndex}`}>Superset</Label>
+                        <RequiredLabel className="mb-0" htmlFor={`workout-${index}-superset-${exerciseIndex}`} optional>Superset</RequiredLabel>
                         <InfoTooltip text="Anna sama kirjain liikkeille, jotka tehdään putkeen ilman pitkää lepoa." />
                       </div>
                       <Select
@@ -476,22 +607,28 @@ export function ProgramWorkoutEditor({
                     </div>
                     <div>
                       <div className="mb-1 flex items-center gap-1">
-                        <Label className="mb-0" htmlFor={`workout-${index}-rep-mode-${exerciseIndex}`}>Toistotyyli</Label>
+                        <RequiredLabel className="mb-0" htmlFor={`workout-${index}-rep-mode-${exerciseIndex}`}>Toistotyyli</RequiredLabel>
                         <InfoTooltip text="Tarkka määrä = esimerkiksi 8 toistoa. Toistoalue = esimerkiksi 6-8 toistoa." />
                       </div>
                       <Select
                         id={`workout-${index}-rep-mode-${exerciseIndex}`}
+                        aria-invalid={Boolean(exerciseErrors?.repMode)}
+                        aria-describedby={exerciseErrors?.repMode ? `workout-${index}-rep-mode-${exerciseIndex}-error` : undefined}
                         {...register(`workouts.${index}.exercises.${exerciseIndex}.repMode` as const)}
                       >
                         <option value="exact">Tarkka määrä</option>
                         <option value="range">Toistoalue</option>
                       </Select>
+                      <FieldError
+                        id={`workout-${index}-rep-mode-${exerciseIndex}-error`}
+                        message={exerciseErrors?.repMode?.message?.toString()}
+                      />
                     </div>
                     {repMode === "range" ? (
                       <>
                         <div>
                           <div className="mb-1 flex items-center gap-1">
-                            <Label className="mb-0" htmlFor={`workout-${index}-reps-min-${exerciseIndex}`}>Min. toistot</Label>
+                            <RequiredLabel className="mb-0" htmlFor={`workout-${index}-reps-min-${exerciseIndex}`}>Min. toistot</RequiredLabel>
                             <InfoTooltip text="Alaraja toistoalueelle. Esim. 6-8 tarkoittaa että minimi on 6." />
                           </div>
                           <Input
@@ -499,12 +636,18 @@ export function ProgramWorkoutEditor({
                             type="number"
                             min={1}
                             max={50}
+                            aria-invalid={Boolean(exerciseErrors?.targetRepsMin)}
+                            aria-describedby={exerciseErrors?.targetRepsMin ? `workout-${index}-reps-min-${exerciseIndex}-error` : undefined}
                             {...register(`workouts.${index}.exercises.${exerciseIndex}.targetRepsMin` as const)}
+                          />
+                          <FieldError
+                            id={`workout-${index}-reps-min-${exerciseIndex}-error`}
+                            message={exerciseErrors?.targetRepsMin?.message?.toString()}
                           />
                         </div>
                         <div>
                           <div className="mb-1 flex items-center gap-1">
-                            <Label className="mb-0" htmlFor={`workout-${index}-reps-max-${exerciseIndex}`}>Max. toistot</Label>
+                            <RequiredLabel className="mb-0" htmlFor={`workout-${index}-reps-max-${exerciseIndex}`}>Max. toistot</RequiredLabel>
                             <InfoTooltip text="Yläraja toistoalueelle. Kun kaikki sarjat osuvat maksimiin, kuormaa voidaan nostaa." />
                           </div>
                           <Input
@@ -512,25 +655,37 @@ export function ProgramWorkoutEditor({
                             type="number"
                             min={1}
                             max={50}
+                            aria-invalid={Boolean(exerciseErrors?.targetRepsMax)}
+                            aria-describedby={exerciseErrors?.targetRepsMax ? `workout-${index}-reps-max-${exerciseIndex}-error` : undefined}
                             {...register(`workouts.${index}.exercises.${exerciseIndex}.targetRepsMax` as const)}
+                          />
+                          <FieldError
+                            id={`workout-${index}-reps-max-${exerciseIndex}-error`}
+                            message={exerciseErrors?.targetRepsMax?.message?.toString()}
                           />
                         </div>
                       </>
                     ) : (
                       <div>
-                        <Label htmlFor={`workout-${index}-reps-${exerciseIndex}`}>Toistot</Label>
+                        <RequiredLabel htmlFor={`workout-${index}-reps-${exerciseIndex}`}>Toistot</RequiredLabel>
                         <Input
                           id={`workout-${index}-reps-${exerciseIndex}`}
                           type="number"
                           min={1}
                           max={50}
+                          aria-invalid={Boolean(exerciseErrors?.targetReps)}
+                          aria-describedby={exerciseErrors?.targetReps ? `workout-${index}-reps-${exerciseIndex}-error` : undefined}
                           {...register(`workouts.${index}.exercises.${exerciseIndex}.targetReps` as const)}
+                        />
+                        <FieldError
+                          id={`workout-${index}-reps-${exerciseIndex}-error`}
+                          message={exerciseErrors?.targetReps?.message?.toString()}
                         />
                       </div>
                     )}
                     <div>
                       <div className="mb-1 flex items-center gap-1">
-                        <Label className="mb-0" htmlFor={`workout-${index}-load-${exerciseIndex}`}>Kuorma (kg)</Label>
+                        <RequiredLabel className="mb-0" htmlFor={`workout-${index}-load-${exerciseIndex}`} optional>Kuorma (kg)</RequiredLabel>
                         <InfoTooltip text="Suosituslähtökuorma sarjalle. Treenaaja voi kirjata toteutuneen kuorman erikseen." />
                       </div>
                       <Input
@@ -543,7 +698,7 @@ export function ProgramWorkoutEditor({
                     </div>
                     <div>
                       <div className="mb-1 flex items-center gap-1">
-                        <Label className="mb-0" htmlFor={`workout-${index}-rest-${exerciseIndex}`}>Lepo (s)</Label>
+                        <RequiredLabel className="mb-0" htmlFor={`workout-${index}-rest-${exerciseIndex}`}>Lepo (s)</RequiredLabel>
                         <InfoTooltip text="Lepo sarjojen välissä sekunteina. Ajastin käynnistyy treenaajalla sarjan kuittauksen jälkeen." />
                       </div>
                       <Input
@@ -551,7 +706,13 @@ export function ProgramWorkoutEditor({
                         type="number"
                         min={15}
                         max={600}
+                        aria-invalid={Boolean(exerciseErrors?.restSeconds)}
+                        aria-describedby={exerciseErrors?.restSeconds ? `workout-${index}-rest-${exerciseIndex}-error` : undefined}
                         {...register(`workouts.${index}.exercises.${exerciseIndex}.restSeconds` as const)}
+                      />
+                      <FieldError
+                        id={`workout-${index}-rest-${exerciseIndex}-error`}
+                        message={exerciseErrors?.restSeconds?.message?.toString()}
                       />
                     </div>
                   </div>
