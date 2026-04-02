@@ -660,6 +660,24 @@ type WorkoutNoteRequestState = {
   confirmedUpdatedAt?: string | null;
 };
 
+export function collectPendingWorkoutSetRequestKeysForWorkout(
+  requests: ReadonlyMap<
+    string,
+    {
+      scheduledWorkoutId: string;
+      pendingPatch?: WorkoutUpdateInput;
+      inFlight: boolean;
+    }
+  >,
+  scheduledWorkoutId: string,
+) {
+  return Array.from(requests.entries())
+    .filter(([, request]) =>
+      request.scheduledWorkoutId === scheduledWorkoutId && (request.inFlight || request.pendingPatch !== undefined),
+    )
+    .map(([requestKey]) => requestKey);
+}
+
 type PasswordResetRequestResult =
   | { ok: true; message: string; previewUrl?: string }
   | { ok: false; message: string };
@@ -1879,6 +1897,7 @@ export function AppStateProvider({ children }: PropsWithChildren) {
   const stateRef = useRef(state);
   const refreshSupabaseVisibleStatePromiseRef = useRef<Promise<boolean> | null>(null);
   const workoutSetRequestStateRef = useRef<Map<string, WorkoutSetRequestState>>(new Map());
+  const workoutSetFlushPromiseRef = useRef<Map<string, Promise<void>>>(new Map());
   const workoutNoteRequestStateRef = useRef<Map<string, WorkoutNoteRequestState>>(new Map());
   const isHydrated =
     isStorageHydrated && (supabase ? (isSupabaseAuthResolved && didAttemptBootstrapRevalidation) || didBootstrapTimeout : true);
@@ -2333,87 +2352,118 @@ function findResolvedUserIdInSnapshot(
     void refreshSupabaseVisibleState();
   }, [authenticatedUserId, hasActiveWorkoutOpen, isHydrated, supabase]);
 
-  const flushQueuedWorkoutSetUpdate = useCallback(async (requestKey: string) => {
+  const flushQueuedWorkoutSetUpdate = useCallback((requestKey: string): Promise<void> => {
     if (!supabase) {
       workoutSetRequestStateRef.current.delete(requestKey);
-      return;
+      return Promise.resolve();
     }
 
-    const currentRequest = workoutSetRequestStateRef.current.get(requestKey);
-    if (!currentRequest || currentRequest.inFlight || !currentRequest.pendingPatch) {
-      return;
+    const existingPromise = workoutSetFlushPromiseRef.current.get(requestKey);
+    if (existingPromise) {
+      return existingPromise;
     }
 
-    const patch = currentRequest.pendingPatch;
-    const expectedUpdatedAt =
-      currentRequest.confirmedUpdatedAt
-      ?? getSessionUpdatedAtForWorkout(stateRef.current, currentRequest.scheduledWorkoutId);
+    const flushPromise = (async () => {
+      while (true) {
+        const currentRequest = workoutSetRequestStateRef.current.get(requestKey);
+        if (!currentRequest || currentRequest.inFlight || !currentRequest.pendingPatch) {
+          return;
+        }
 
-    if (!expectedUpdatedAt) {
-      workoutSetRequestStateRef.current.delete(requestKey);
-      await refreshSupabaseVisibleState();
-      return;
-    }
+        const patch = currentRequest.pendingPatch;
+        const expectedUpdatedAt =
+          currentRequest.confirmedUpdatedAt
+          ?? getSessionUpdatedAtForWorkout(stateRef.current, currentRequest.scheduledWorkoutId);
 
-    workoutSetRequestStateRef.current.set(requestKey, {
-      ...currentRequest,
-      inFlight: true,
-      pendingPatch: undefined,
-      confirmedUpdatedAt: expectedUpdatedAt,
+        if (!expectedUpdatedAt) {
+          workoutSetRequestStateRef.current.delete(requestKey);
+          await refreshSupabaseVisibleState();
+          return;
+        }
+
+        workoutSetRequestStateRef.current.set(requestKey, {
+          ...currentRequest,
+          inFlight: true,
+          pendingPatch: undefined,
+          confirmedUpdatedAt: expectedUpdatedAt,
+        });
+
+        const response = await fetch(
+          `/api/workouts/${encodeURIComponent(currentRequest.scheduledWorkoutId)}/sets/${encodeURIComponent(currentRequest.logId)}`,
+          {
+            method: "PATCH",
+            headers: {
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({
+              ...patch,
+              expectedUpdatedAt,
+            }),
+          },
+        ).catch(() => null);
+
+        const payload = (response
+          ? await response.json().catch(() => null)
+          : null) as
+          | {
+              message?: string;
+              code?: string;
+              sessionUpdatedAt?: string;
+              setLog?: { id: string; actualReps?: number; actualLoad?: number; done: boolean };
+            }
+          | null;
+
+        const latestRequest = workoutSetRequestStateRef.current.get(requestKey);
+        if (!latestRequest) {
+          return;
+        }
+
+        if (!response?.ok || !payload?.sessionUpdatedAt || !payload.setLog) {
+          workoutSetRequestStateRef.current.delete(requestKey);
+          await refreshSupabaseVisibleState();
+          return;
+        }
+
+        if (latestRequest.pendingPatch) {
+          workoutSetRequestStateRef.current.set(requestKey, {
+            ...latestRequest,
+            inFlight: false,
+            confirmedUpdatedAt: payload.sessionUpdatedAt,
+          });
+          continue;
+        }
+
+        workoutSetRequestStateRef.current.delete(requestKey);
+        const { sessionUpdatedAt, setLog } = payload;
+        setState((previous) =>
+          applyConfirmedWorkoutSetUpdate(previous, currentRequest.scheduledWorkoutId, sessionUpdatedAt, setLog),
+        );
+        return;
+      }
+    })().finally(() => {
+      if (workoutSetFlushPromiseRef.current.get(requestKey) === flushPromise) {
+        workoutSetFlushPromiseRef.current.delete(requestKey);
+      }
     });
 
-    const response = await fetch(
-      `/api/workouts/${encodeURIComponent(currentRequest.scheduledWorkoutId)}/sets/${encodeURIComponent(currentRequest.logId)}`,
-      {
-        method: "PATCH",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          ...patch,
-          expectedUpdatedAt,
-        }),
-      },
-    ).catch(() => null);
-
-    const payload = (response
-      ? await response.json().catch(() => null)
-      : null) as
-      | {
-          message?: string;
-          code?: string;
-          sessionUpdatedAt?: string;
-          setLog?: { id: string; actualReps?: number; actualLoad?: number; done: boolean };
-        }
-      | null;
-
-    const latestRequest = workoutSetRequestStateRef.current.get(requestKey);
-    if (!latestRequest) {
-      return;
-    }
-
-    if (!response?.ok || !payload?.sessionUpdatedAt || !payload.setLog) {
-      workoutSetRequestStateRef.current.delete(requestKey);
-      await refreshSupabaseVisibleState();
-      return;
-    }
-
-    if (latestRequest.pendingPatch) {
-      workoutSetRequestStateRef.current.set(requestKey, {
-        ...latestRequest,
-        inFlight: false,
-        confirmedUpdatedAt: payload.sessionUpdatedAt,
-      });
-      void flushQueuedWorkoutSetUpdate(requestKey);
-      return;
-    }
-
-    workoutSetRequestStateRef.current.delete(requestKey);
-    const { sessionUpdatedAt, setLog } = payload;
-    setState((previous) =>
-      applyConfirmedWorkoutSetUpdate(previous, currentRequest.scheduledWorkoutId, sessionUpdatedAt, setLog),
-    );
+    workoutSetFlushPromiseRef.current.set(requestKey, flushPromise);
+    return flushPromise;
   }, [supabase]);
+
+  const flushPendingWorkoutSetUpdatesForWorkout = useCallback(async (scheduledWorkoutId: string) => {
+    while (true) {
+      const requestKeys = collectPendingWorkoutSetRequestKeysForWorkout(
+        workoutSetRequestStateRef.current,
+        scheduledWorkoutId,
+      );
+
+      if (!requestKeys.length) {
+        return;
+      }
+
+      await Promise.all(requestKeys.map((requestKey) => flushQueuedWorkoutSetUpdate(requestKey)));
+    }
+  }, [flushQueuedWorkoutSetUpdate]);
 
   const flushQueuedWorkoutNoteSave = useCallback(async (scheduledWorkoutId: string) => {
     if (!supabase) {
@@ -4712,8 +4762,21 @@ function findResolvedUserIdInSnapshot(
         }
 
         if (supabase) {
+          await flushPendingWorkoutSetUpdatesForWorkout(scheduledWorkoutId);
+
+          const refreshedState = stateRef.current;
+          const refreshedWorkout = refreshedState.scheduledWorkouts.find((item) => item.id === scheduledWorkoutId);
+          if (!refreshedWorkout || refreshedWorkout.athleteId !== currentUser.id) {
+            return { ok: false, message: "Treeniä ei löytynyt." };
+          }
+
+          const refreshedSession = refreshedState.sessions.find((item) => item.scheduledWorkoutId === scheduledWorkoutId);
+          if (!refreshedSession) {
+            return { ok: false, message: "Aloita treeni ennen kuin merkitset sen valmiiksi." };
+          }
+
           const previousState = currentState;
-          const expectedUpdatedAt = getSessionUpdatedAtForWorkout(currentState, scheduledWorkoutId);
+          const expectedUpdatedAt = getSessionUpdatedAtForWorkout(refreshedState, scheduledWorkoutId);
           if (!expectedUpdatedAt) {
             return { ok: false, message: "Treeniä ei voitu merkitä valmiiksi." };
           }

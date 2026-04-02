@@ -342,6 +342,15 @@ function formatExerciseTargetSummary(logs: WorkoutSession["setLogs"]) {
   return parts.join(" · ");
 }
 
+function isBelowTargetRepMinimum(log: WorkoutSession["setLogs"][number]) {
+  if (log.actualReps === undefined || log.actualReps === null) {
+    return false;
+  }
+
+  const targetMinimum = log.targetRepsMin ?? log.targetReps;
+  return log.actualReps < targetMinimum;
+}
+
 const repsTooltipText =
   "Kirjaa tähän toteutuneet toistot. Jos teit enemmän tai vähemmän kuin suunnitelmassa, merkitse tähän oikea määrä.";
 
@@ -1250,12 +1259,16 @@ export function AthleteSessionPanel({
                 </thead>
                 <tbody>
                 {logs.map((log) => {
+                   const isBelowTarget = log.done && isBelowTargetRepMinimum(log);
                    const rowToneClass = log.done
                      ? "bg-[color-mix(in_srgb,var(--success)_10%,var(--surface))]"
                      : "bg-transparent";
                    const inputToneClass = log.done
                      ? "border-[color-mix(in_srgb,var(--success)_40%,var(--border))] bg-[color-mix(in_srgb,var(--success)_12%,var(--surface))] text-[var(--text)]"
                     : "border-[var(--border)] bg-[var(--surface-2)] text-[var(--text)]";
+                  const repsInputToneClass = isBelowTarget
+                    ? "border-[color-mix(in_srgb,var(--warning)_55%,var(--border))] bg-[color-mix(in_srgb,var(--warning)_14%,var(--surface))] text-[var(--text)]"
+                    : inputToneClass;
                   const setLabelToneClass = log.done
                     ? "text-[var(--success)] md:border-[color-mix(in_srgb,var(--success)_35%,var(--border))] md:bg-[color-mix(in_srgb,var(--success)_12%,var(--surface))]"
                     : "text-[var(--text-subtle)] md:border-[var(--border)] md:bg-[var(--surface-2)]";
@@ -1275,7 +1288,7 @@ export function AthleteSessionPanel({
                       <td className="px-1 py-2.5 align-middle md:px-3">
                         <div className="relative">
                           <Input
-                            className={`h-9 min-w-0 rounded-xl px-2 py-1 pr-9 text-center text-sm font-medium shadow-[inset_0_1px_0_0_var(--shadow-soft)] md:h-10 md:px-3 md:pr-10 ${inputToneClass}`}
+                            className={`h-9 min-w-0 rounded-xl px-2 py-1 pr-9 text-center text-sm font-medium shadow-[inset_0_1px_0_0_var(--shadow-soft)] md:h-10 md:px-3 md:pr-10 ${repsInputToneClass}`}
                             id={getWorkoutFieldId(scheduledWorkoutId, log.id, "reps")}
                             type="text"
                             inputMode="numeric"
@@ -1283,6 +1296,7 @@ export function AthleteSessionPanel({
                             placeholder="0"
                             aria-label={`${exerciseName} sarja ${log.setLabel} toteutuneet toistot`}
                             value={log.actualReps ?? ""}
+                            data-below-target={isBelowTarget ? "true" : undefined}
                             disabled={readOnly}
                             onChange={(event) => {
                               const trimmed = event.target.value.trim();
@@ -1368,10 +1382,19 @@ export function AthleteSessionPanel({
                               ? "border-[var(--success)] bg-[var(--success)] text-white hover:border-[var(--success)] hover:bg-[var(--success)] hover:text-white"
                               : "border-[var(--border-strong)] bg-[var(--surface)] text-[var(--text-subtle)] hover:border-[var(--border-strong)] hover:bg-[var(--surface)] hover:text-[var(--text-subtle)]"
                           }`}
+                          data-state={log.done ? "done" : "pending"}
                           disabled={readOnly}
                           aria-pressed={log.done}
-                          aria-label={log.done ? "Kumoa kuittaus" : "Merkitse tehdyksi"}
-                          title={log.done ? "Kumoa kuittaus" : "Merkitse tehdyksi"}
+                          aria-label={
+                            log.done
+                              ? "Kumoa kuittaus"
+                              : "Merkitse tehdyksi"
+                          }
+                          title={
+                            log.done
+                              ? "Kumoa kuittaus"
+                              : "Merkitse tehdyksi"
+                          }
                           onClick={() => handleDoneUpdate(log, !log.done)}
                         >
                           <Check className="size-4 shrink-0 stroke-[2.5]" aria-hidden="true" />

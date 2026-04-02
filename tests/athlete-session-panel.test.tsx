@@ -170,6 +170,54 @@ describe("AthleteSessionPanel", () => {
     await vi.waitFor(() => expect(nextRepsInput).toHaveFocus());
   });
 
+  it("uses warning state on the reps input when reps stay below target minimum", () => {
+    const session = buildSession();
+    session.setLogs = [
+      {
+        ...session.setLogs[0]!,
+        targetReps: 6,
+        targetRepsMin: 6,
+        targetRepsMax: 8,
+        actualReps: 5,
+        done: true,
+      },
+    ];
+
+    render(
+      <AthleteSessionPanel
+        scheduledWorkoutId="workout_1"
+        scheduledWorkoutTitle="Penkkipäivä"
+        scheduledWorkoutGuidance="Pidä päivä hallittuna."
+        selectedSession={session}
+        note=""
+        status="in_progress"
+        scheduledDate="2026-03-24T08:00:00.000Z"
+        onStart={() => undefined}
+        onUpdate={() => undefined}
+        onUpdateDate={async () => ({ ok: true })}
+        onUpdateDuration={async () => ({ ok: true })}
+        onSaveNote={() => undefined}
+        onComplete={() => undefined}
+        onCancel={() => undefined}
+        onDelete={() => undefined}
+        onBackToList={() => undefined}
+        canDeleteWorkout
+        initialCorrectionMode={false}
+        progress={{ totalSets: 1, completedSets: 1, percent: 100, allDone: true }}
+        previousExerciseResults={new Map()}
+        exerciseInstructions={new Map()}
+        exerciseOrder={new Map([["exercise_group_1", 0]])}
+        loadIncrementKg={2.5}
+        workoutMessage=""
+        isCompleting={false}
+      />,
+    );
+
+    const repsInput = screen.getByLabelText("Penkkipunnerrus sarja 1 toteutuneet toistot");
+    expect(repsInput).toHaveAttribute("data-below-target", "true");
+    expect(repsInput.className).toContain("border-[color-mix(in_srgb,var(--warning)_55%,var(--border))]");
+  });
+
   it("starts completed workout in edit mode without toggle and allows date save", async () => {
     const onUpdateDate = vi.fn(async () => ({ ok: true }));
 

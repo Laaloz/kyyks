@@ -13,6 +13,7 @@ import {
   applyAdminRoleUpdate,
   canDeleteProgramFromState,
   canRetargetProgramInState,
+  collectPendingWorkoutSetRequestKeysForWorkout,
   rekeyOptimisticWorkoutArtifacts,
   reconcileSupabaseInviteDirectory,
   reconcileSupabaseVisibleState,
@@ -30,6 +31,48 @@ import {
   markVisibleConversationEntriesRead,
   resolveSupabaseAuthUserAfterPasswordSignIn,
 } from "@/providers/app-state-provider";
+
+describe("collectPendingWorkoutSetRequestKeysForWorkout", () => {
+  it("returns only the target workout's queued or in-flight set writes", () => {
+    const requests = new Map([
+      [
+        "workout-1:log-1",
+        {
+          scheduledWorkoutId: "workout-1",
+          pendingPatch: { actualReps: 5 },
+          inFlight: false,
+        },
+      ],
+      [
+        "workout-1:log-2",
+        {
+          scheduledWorkoutId: "workout-1",
+          inFlight: true,
+        },
+      ],
+      [
+        "workout-1:log-3",
+        {
+          scheduledWorkoutId: "workout-1",
+          inFlight: false,
+        },
+      ],
+      [
+        "workout-2:log-1",
+        {
+          scheduledWorkoutId: "workout-2",
+          pendingPatch: { done: true },
+          inFlight: false,
+        },
+      ],
+    ]);
+
+    expect(collectPendingWorkoutSetRequestKeysForWorkout(requests, "workout-1")).toEqual([
+      "workout-1:log-1",
+      "workout-1:log-2",
+    ]);
+  });
+});
 
 describe("shouldPreserveStoredSessionDuringSupabaseBootstrap", () => {
   it("does not preserve a stale local session during bootstrap null-state checks", () => {
