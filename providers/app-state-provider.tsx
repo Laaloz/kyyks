@@ -1938,6 +1938,8 @@ export function AppStateProvider({ children }: PropsWithChildren) {
   const workoutMutationQueueRef = useRef<Map<string, WorkoutMutationQueueState>>(new Map());
   const workoutMutationRunnerRef = useRef<Map<string, Promise<void>>>(new Map());
   const workoutMutationIdRef = useRef(0);
+  const workoutConfirmedSessionUpdatedAtRef = useRef<Map<string, string>>(new Map());
+  const workoutConfirmedNoteUpdatedAtRef = useRef<Map<string, string | null>>(new Map());
   const isHydrated =
     isStorageHydrated && (supabase ? (isSupabaseAuthResolved && didAttemptBootstrapRevalidation) || didBootstrapTimeout : true);
   const notify = useCallback((input: { tone: "success" | "danger" | "info"; message: string }) => {
@@ -2398,12 +2400,19 @@ function findResolvedUserIdInSnapshot(
     }
 
     const currentState = stateRef.current;
+    const confirmedSessionUpdatedAt =
+      workoutConfirmedSessionUpdatedAtRef.current.get(scheduledWorkoutId)
+      ?? getSessionUpdatedAtForWorkout(currentState, scheduledWorkoutId);
+    const confirmedNoteUpdatedAt =
+      workoutConfirmedNoteUpdatedAtRef.current.get(scheduledWorkoutId)
+      ?? getNoteForWorkout(currentState, scheduledWorkoutId)?.updatedAt
+      ?? null;
     const nextQueue: WorkoutMutationQueueState = {
       scheduledWorkoutId,
       pending: [],
       inFlight: false,
-      confirmedSessionUpdatedAt: getSessionUpdatedAtForWorkout(currentState, scheduledWorkoutId),
-      confirmedNoteUpdatedAt: getNoteForWorkout(currentState, scheduledWorkoutId)?.updatedAt ?? null,
+      confirmedSessionUpdatedAt,
+      confirmedNoteUpdatedAt,
     };
     workoutMutationQueueRef.current.set(scheduledWorkoutId, nextQueue);
     return nextQueue;
@@ -2417,9 +2426,14 @@ function findResolvedUserIdInSnapshot(
 
     const currentState = stateRef.current;
     queue.confirmedSessionUpdatedAt =
-      getSessionUpdatedAtForWorkout(currentState, scheduledWorkoutId) ?? queue.confirmedSessionUpdatedAt;
+      workoutConfirmedSessionUpdatedAtRef.current.get(scheduledWorkoutId)
+      ?? getSessionUpdatedAtForWorkout(currentState, scheduledWorkoutId)
+      ?? queue.confirmedSessionUpdatedAt;
     queue.confirmedNoteUpdatedAt =
-      getNoteForWorkout(currentState, scheduledWorkoutId)?.updatedAt ?? queue.confirmedNoteUpdatedAt ?? null;
+      workoutConfirmedNoteUpdatedAtRef.current.get(scheduledWorkoutId)
+      ?? getNoteForWorkout(currentState, scheduledWorkoutId)?.updatedAt
+      ?? queue.confirmedNoteUpdatedAt
+      ?? null;
   }, []);
 
   const runWorkoutMutation = useCallback(async (queue: WorkoutMutationQueueState, mutation: WorkoutMutation) => {
@@ -2477,6 +2491,7 @@ function findResolvedUserIdInSnapshot(
         }
 
         queue.confirmedSessionUpdatedAt = payload.sessionUpdatedAt;
+        workoutConfirmedSessionUpdatedAtRef.current.set(queue.scheduledWorkoutId, payload.sessionUpdatedAt);
         setState((previous) =>
           applyConfirmedWorkoutSetUpdate(previous, queue.scheduledWorkoutId, payload.sessionUpdatedAt!, payload.setLog!),
         );
@@ -2501,6 +2516,7 @@ function findResolvedUserIdInSnapshot(
         }
 
         queue.confirmedNoteUpdatedAt = payload.updatedAt;
+        workoutConfirmedNoteUpdatedAtRef.current.set(queue.scheduledWorkoutId, payload.updatedAt);
         const confirmedUpdatedAt = payload.updatedAt;
         setState((previous) => ({
           ...previous,
@@ -2536,6 +2552,7 @@ function findResolvedUserIdInSnapshot(
         }
 
         queue.confirmedSessionUpdatedAt = payload.updatedAt;
+        workoutConfirmedSessionUpdatedAtRef.current.set(queue.scheduledWorkoutId, payload.updatedAt);
         setState((previous) => ({
           ...previous,
           scheduledWorkouts: previous.scheduledWorkouts.map((item) =>
@@ -2571,6 +2588,7 @@ function findResolvedUserIdInSnapshot(
         }
 
         queue.confirmedSessionUpdatedAt = payload.updatedAt;
+        workoutConfirmedSessionUpdatedAtRef.current.set(queue.scheduledWorkoutId, payload.updatedAt);
         setState((previous) => ({
           ...previous,
           scheduledWorkouts: previous.scheduledWorkouts.map((item) =>
@@ -2606,6 +2624,7 @@ function findResolvedUserIdInSnapshot(
         }
 
         queue.confirmedSessionUpdatedAt = payload.updatedAt;
+        workoutConfirmedSessionUpdatedAtRef.current.set(queue.scheduledWorkoutId, payload.updatedAt);
         setState((previous) => ({
           ...previous,
           scheduledWorkouts: previous.scheduledWorkouts.map((item) =>
