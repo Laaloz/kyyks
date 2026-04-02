@@ -13,7 +13,7 @@ import {
   applyAdminRoleUpdate,
   canDeleteProgramFromState,
   canRetargetProgramInState,
-  collectPendingWorkoutSetRequestKeysForWorkout,
+  collectPendingWorkoutMutationKinds,
   rekeyOptimisticWorkoutArtifacts,
   reconcileSupabaseInviteDirectory,
   reconcileSupabaseVisibleState,
@@ -32,45 +32,15 @@ import {
   resolveSupabaseAuthUserAfterPasswordSignIn,
 } from "@/providers/app-state-provider";
 
-describe("collectPendingWorkoutSetRequestKeysForWorkout", () => {
-  it("returns only the target workout's queued or in-flight set writes", () => {
-    const requests = new Map([
-      [
-        "workout-1:log-1",
-        {
-          scheduledWorkoutId: "workout-1",
-          pendingPatch: { actualReps: 5 },
-          inFlight: false,
-        },
-      ],
-      [
-        "workout-1:log-2",
-        {
-          scheduledWorkoutId: "workout-1",
-          inFlight: true,
-        },
-      ],
-      [
-        "workout-1:log-3",
-        {
-          scheduledWorkoutId: "workout-1",
-          inFlight: false,
-        },
-      ],
-      [
-        "workout-2:log-1",
-        {
-          scheduledWorkoutId: "workout-2",
-          pendingPatch: { done: true },
-          inFlight: false,
-        },
-      ],
-    ]);
-
-    expect(collectPendingWorkoutSetRequestKeysForWorkout(requests, "workout-1")).toEqual([
-      "workout-1:log-1",
-      "workout-1:log-2",
-    ]);
+describe("collectPendingWorkoutMutationKinds", () => {
+  it("returns queued mutation kinds in the original order", () => {
+    expect(
+      collectPendingWorkoutMutationKinds([
+        { kind: "set" },
+        { kind: "note" },
+        { kind: "complete" },
+      ]),
+    ).toEqual(["set", "note", "complete"]);
   });
 });
 
@@ -399,13 +369,20 @@ describe("shouldPreserveStoredSessionDuringSupabaseBootstrap", () => {
       },
       new Map([
         [
-          "workout_local:log_local",
+          "workout_local",
           {
             scheduledWorkoutId: "workout_local",
-            logId: "log_local",
-            revision: 2,
+            pending: [
+              {
+                id: "workout_local:1",
+                kind: "set",
+                logId: "log_local",
+                patch: { done: true, actualReps: 5, actualLoad: 100 },
+              },
+            ],
             inFlight: true,
-            confirmedUpdatedAt: "2026-03-24T08:10:00.000Z",
+            confirmedSessionUpdatedAt: "2026-03-24T08:10:00.000Z",
+            confirmedNoteUpdatedAt: null,
           },
         ],
       ]),
