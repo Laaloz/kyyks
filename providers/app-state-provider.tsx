@@ -353,7 +353,7 @@ function canManageProgramTarget(state: AppState, actor: UserProfile, athleteId: 
 }
 
 export function canDeleteProgramFromState(state: AppState, programId: string) {
-  return !state.scheduledWorkouts.some((workout) => workout.trainingPlanId === programId);
+  return state.plans.some((plan) => plan.id === programId && getProgramStatus(plan) !== "removed");
 }
 
 export function canRetargetProgramInState(state: AppState, programId: string) {
@@ -363,7 +363,7 @@ export function canRetargetProgramInState(state: AppState, programId: string) {
 export function applyProgramStatusUpdate(
   state: AppState,
   programId: string,
-  nextStatus: "active" | "archived",
+  nextStatus: "active" | "archived" | "removed",
 ) {
   const targetProgram = state.plans.find((plan) => plan.id === programId);
   if (!targetProgram) {
@@ -377,7 +377,11 @@ export function applyProgramStatusUpdate(
         return { ...plan, status: nextStatus };
       }
 
-      if (nextStatus === "active" && plan.athleteId === targetProgram.athleteId) {
+      if (
+        nextStatus === "active" &&
+        plan.athleteId === targetProgram.athleteId &&
+        getProgramStatus(plan) !== "removed"
+      ) {
         return { ...plan, status: "archived" as const };
       }
 
@@ -387,10 +391,7 @@ export function applyProgramStatusUpdate(
 }
 
 export function applyProgramDeletion(state: AppState, programId: string) {
-  return {
-    ...state,
-    plans: state.plans.filter((plan) => plan.id !== programId),
-  };
+  return applyProgramStatusUpdate(state, programId, "removed");
 }
 
 export function resolvePrimaryCoachIdForAthlete(state: AppState, athleteId: string) {
@@ -1714,7 +1715,7 @@ interface AppStateContextValue {
   acceptInvite: (token: string, fullName: string, password: string, options?: { captchaToken?: string }) => Promise<LoginResult>;
   createProgram: (input: ProgramBuilderInput) => Promise<CreateProgramResult>;
   updateProgram: (programId: string, patch: ProgramUpdateInput) => Promise<ActionResult>;
-  setProgramStatus: (programId: string, status: "active" | "archived") => Promise<ActionResult>;
+  setProgramStatus: (programId: string, status: "active" | "archived" | "removed") => Promise<ActionResult>;
   deleteProgram: (programId: string) => Promise<ActionResult>;
   startProgramWorkout: (programId: string, programWorkoutId: string) => Promise<ActionResult>;
   addConversationComment: (
@@ -3762,7 +3763,7 @@ function findResolvedUserIdInSnapshot(
         if (!canDeleteProgramFromState(state, programId)) {
           return {
             ok: false,
-            message: "Ohjelmaa ei voi poistaa, koska siitä on jo käynnistetty treenejä tai historiaa.",
+            message: "Ohjelmaa ei voi enää poistaa näkyvistä.",
           };
         }
 
@@ -3776,7 +3777,7 @@ function findResolvedUserIdInSnapshot(
           if (!response.ok) {
             setState(previousState);
             await refreshSupabaseVisibleState();
-            return { ok: false, message: payload?.message ?? "Treeniohjelman poisto epäonnistui." };
+            return { ok: false, message: payload?.message ?? "Treeniohjelman poistaminen näkyvistä epäonnistui." };
           }
 
           void refreshSupabaseVisibleState();
@@ -3797,7 +3798,7 @@ function findResolvedUserIdInSnapshot(
         }
 
         if (!isProgramActive(program)) {
-          return { ok: false, message: "Ohjelma on arkistoitu eikä siitä voi käynnistää uutta treeniä." };
+          return { ok: false, message: "Ohjelma ei ole aktiivinen eikä siitä voi käynnistää uutta treeniä." };
         }
 
         const existingActive = state.scheduledWorkouts.find(

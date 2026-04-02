@@ -40,7 +40,7 @@ import { deriveProgramWorkoutGuidance } from "@/lib/program-workout-guidance";
 import { buildScheduledWorkoutExerciseOrder } from "@/lib/workout-exercise-order";
 import { buildWorkoutConversationContextOptions } from "@/lib/workout-conversation-context";
 import { buildWorkoutHistoryTitleMap } from "@/lib/workout-history-title";
-import { isProgramActive } from "@/lib/program-status";
+import { getProgramStatus, isProgramActive } from "@/lib/program-status";
 import { isAdminRole } from "@/lib/role-access";
 import type { AppState, ConversationEntry, Role, ScheduledWorkoutStatus, WorkoutSession } from "@/lib/types";
 import { cn } from "@/lib/utils";
@@ -668,7 +668,10 @@ export function CoachDashboard({
     () =>
       state.plans
         .filter(
-          (plan) => Boolean(plan.workouts?.length) && (isAdminRole(currentUser?.role) || plan.coachId === currentUser?.id),
+          (plan) =>
+            Boolean(plan.workouts?.length) &&
+            getProgramStatus(plan) !== "removed" &&
+            (isAdminRole(currentUser?.role) || plan.coachId === currentUser?.id),
         )
         .sort((left, right) => {
           const leftActive = isProgramActive(left) ? 1 : 0;
@@ -686,7 +689,7 @@ export function CoachDashboard({
     [coachPrograms],
   );
   const archivedCoachPrograms = useMemo(
-    () => coachPrograms.filter((program) => !isProgramActive(program)),
+    () => coachPrograms.filter((program) => getProgramStatus(program) === "archived"),
     [coachPrograms],
   );
 
@@ -1618,7 +1621,7 @@ export function CoachDashboard({
                                         return;
                                       }
                                       const confirmDelete = window.confirm(
-                                        `Poistetaanko ohjelma "${program.title}"?`,
+                                        `Poistetaanko ohjelma "${program.title}" näkyvistä? Historia säilyy edelleen autofillia ja aiempia treenitietoja varten.`,
                                       );
                                       if (!confirmDelete) {
                                         return;
@@ -1634,24 +1637,19 @@ export function CoachDashboard({
                                       if (isActiveEditorTarget) {
                                         resetComposer(form.getValues("athleteId"));
                                       }
-                                      setProgramMessage(`Ohjelma "${program.title}" poistettiin.`);
+                                      setProgramMessage(
+                                        `Ohjelma "${program.title}" poistettiin näkyvistä. Historia säilyy edelleen uusien ohjelmien taustalla.`,
+                                      );
                                       setProgramMessageTone("success");
                                     }}
                                   >
-                                    Poista ohjelma
+                                    Poista näkyvistä
                                   </button>
-                                  {!canDeleteProgram ? (
-                                    <p className="px-3 pb-1 pt-2 text-xs leading-5 text-[var(--text-subtle)]">
-                                      Poisto ei ole enää mahdollinen, koska ohjelmasta on jo käynnistetty treenejä tai historiaa.
-                                    </p>
-                                  ) : null}
                                 </div>
                               </details>
                             </div>
                             <p className="mt-3 text-xs text-[var(--text-subtle)]">
-                              {canDeleteProgram
-                                ? "Voit vielä poistaa ohjelman, koska siitä ei ole käynnistetty treenejä."
-                                : "Ohjelma säilyy lukittuna historiassa, koska siitä on jo käynnistetty treenejä."}
+                              Poista näkyvistä piilottaa ohjelman listoilta, mutta säilyttää treenihistorian uusien ohjelmien autofillia varten.
                             </p>
                           </div>
                         );
@@ -1768,7 +1766,7 @@ export function CoachDashboard({
                                         return;
                                       }
                                       const confirmDelete = window.confirm(
-                                        `Poistetaanko ohjelma "${program.title}"?`,
+                                        `Poistetaanko ohjelma "${program.title}" näkyvistä? Historia säilyy edelleen autofillia ja aiempia treenitietoja varten.`,
                                       );
                                       if (!confirmDelete) {
                                         return;
@@ -1784,24 +1782,19 @@ export function CoachDashboard({
                                       if (isActiveEditorTarget) {
                                         resetComposer(form.getValues("athleteId"));
                                       }
-                                      setProgramMessage(`Ohjelma "${program.title}" poistettiin.`);
+                                      setProgramMessage(
+                                        `Ohjelma "${program.title}" poistettiin näkyvistä. Historia säilyy edelleen uusien ohjelmien taustalla.`,
+                                      );
                                       setProgramMessageTone("success");
                                     }}
                                   >
-                                    Poista ohjelma
+                                    Poista näkyvistä
                                   </button>
-                                  {!canDeleteProgram ? (
-                                    <p className="px-3 pb-1 pt-2 text-xs leading-5 text-[var(--text-subtle)]">
-                                      Poisto ei ole enää mahdollinen, koska ohjelmasta on jo käynnistetty treenejä tai historiaa.
-                                    </p>
-                                  ) : null}
                                 </div>
                               </details>
                             </div>
                             <p className="mt-3 text-xs text-[var(--text-subtle)]">
-                              {canDeleteProgram
-                                ? "Arkistoidun ohjelman voi vielä poistaa, jos siitä ei ole käynnistetty treenejä."
-                                : "Arkistoitu ohjelma säilyy historiassa, koska siitä on jo käynnistetty treenejä."}
+                              Poista näkyvistä piilottaa myös arkistoidun ohjelman listoilta, mutta säilyttää historian uusien ohjelmien autofillia varten.
                             </p>
                           </div>
                         );

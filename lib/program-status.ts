@@ -1,7 +1,15 @@
 import type { ProgramStatus, TrainingPlan } from "@/lib/types";
 
 export function getProgramStatus(plan: Pick<TrainingPlan, "status"> | null | undefined): ProgramStatus {
-  return plan?.status === "archived" ? "archived" : "active";
+  if (plan?.status === "archived") {
+    return "archived";
+  }
+
+  if (plan?.status === "removed") {
+    return "removed";
+  }
+
+  return "active";
 }
 
 export function isProgramActive(plan: Pick<TrainingPlan, "status"> | null | undefined) {
@@ -9,5 +17,13 @@ export function isProgramActive(plan: Pick<TrainingPlan, "status"> | null | unde
 }
 
 export function getProgramStatusLabel(status: ProgramStatus) {
-  return status === "active" ? "Aktiivinen" : "Arkistoitu";
+  if (status === "active") {
+    return "Aktiivinen";
+  }
+
+  if (status === "archived") {
+    return "Arkistoitu";
+  }
+
+  return "Poistettu näkyvistä";
 }

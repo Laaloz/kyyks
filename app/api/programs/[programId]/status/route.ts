@@ -5,7 +5,7 @@ import { setProgramStatusOnServer } from "@/lib/server/training-workflows";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 
 const requestSchema = z.object({
-  status: z.enum(["active", "archived"]),
+  status: z.enum(["active", "archived", "removed"]),
 });
 
 export async function POST(request: Request, context: { params: Promise<{ programId: string }> }) {

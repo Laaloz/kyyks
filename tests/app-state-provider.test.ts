@@ -783,20 +783,14 @@ describe("shouldPreserveStoredSessionDuringSupabaseBootstrap", () => {
     ).toHaveLength(2);
   });
 
-  it("allows deleting a program only when it has no started workouts linked to it", () => {
+  it("marks a program removed instead of deleting its history", () => {
     const state = cloneDemoState();
 
-    expect(canDeleteProgramFromState(state, "plan_1")).toBe(false);
+    expect(canDeleteProgramFromState(state, "plan_1")).toBe(true);
 
-    const removableState = {
-      ...state,
-      scheduledWorkouts: state.scheduledWorkouts.filter((workout) => workout.trainingPlanId !== "plan_1"),
-    };
-
-    expect(canDeleteProgramFromState(removableState, "plan_1")).toBe(true);
-
-    const nextState = applyProgramDeletion(removableState, "plan_1");
-    expect(nextState.plans.some((plan) => plan.id === "plan_1")).toBe(false);
+    const nextState = applyProgramDeletion(state, "plan_1");
+    expect(nextState.plans.find((plan) => plan.id === "plan_1")?.status).toBe("removed");
+    expect(canDeleteProgramFromState(nextState, "plan_1")).toBe(false);
   });
 
   it("allows retargeting a program only before workouts have been started from it", () => {
@@ -838,12 +832,24 @@ describe("shouldPreserveStoredSessionDuringSupabaseBootstrap", () => {
         weekCount: 4,
         createdAt: "2026-03-24T08:10:00.000Z",
       },
+      {
+        id: "plan_c",
+        coachId: "user_admin",
+        athleteId: "user_athlete_1",
+        title: "Ohjelma C",
+        status: "removed",
+        workouts: [],
+        startDate: "2026-03-24",
+        weekCount: 4,
+        createdAt: "2026-03-24T08:20:00.000Z",
+      },
     ];
 
     const nextState = applyProgramStatusUpdate(state, "plan_b", "active");
 
     expect(nextState.plans.find((plan) => plan.id === "plan_a")?.status).toBe("archived");
     expect(nextState.plans.find((plan) => plan.id === "plan_b")?.status).toBe("active");
+    expect(nextState.plans.find((plan) => plan.id === "plan_c")?.status).toBe("removed");
   });
 });
 

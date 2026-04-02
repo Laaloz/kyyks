@@ -148,7 +148,7 @@ create table if not exists public.training_plans (
   title text not null,
   description text,
   status text not null default 'active'
-    check (status in ('active', 'archived')),
+    check (status in ('active', 'archived', 'removed')),
   start_date date not null,
   week_count int not null default 4 check (week_count > 0),
   workouts jsonb not null default '[]'::jsonb,

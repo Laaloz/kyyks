@@ -706,6 +706,7 @@ export async function setProgramStatusOnServer({
       .from("training_plans")
       .update({ status: "archived", updated_at: updatedAt })
       .eq("athlete_id", targetProgram.athlete_id)
+      .in("status", ["active", "archived"])
       .neq("id", targetProgram.id);
   }
 
@@ -751,21 +752,12 @@ export async function deleteProgramOnServer({
     return { ok: false as const, message: "Voit poistaa vain omia ohjelmiasi." };
   }
 
-  const { count } = await admin
-    .from("scheduled_workouts")
-    .select("id", { count: "exact", head: true })
-    .eq("training_plan_id", programId);
-
-  if ((count ?? 0) > 0) {
-    return {
-      ok: false as const,
-      message: "Ohjelmaa ei voi poistaa, koska siitä on jo käynnistetty treenejä tai historiaa.",
-    };
-  }
-
-  const { error } = await admin.from("training_plans").delete().eq("id", programId);
+  const { error } = await admin
+    .from("training_plans")
+    .update({ status: "removed", updated_at: nowIso() })
+    .eq("id", programId);
   if (error) {
-    return { ok: false as const, message: "Treeniohjelman poisto epäonnistui." };
+    return { ok: false as const, message: "Treeniohjelman poistaminen näkyvistä epäonnistui." };
   }
 
   return { ok: true as const };
