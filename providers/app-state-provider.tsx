@@ -4753,11 +4753,24 @@ function findResolvedUserIdInSnapshot(
           const response = await fetch(`/api/workouts/${encodeURIComponent(scheduledWorkoutId)}/start`, {
             method: "POST",
           });
-          const payload = (await response.json().catch(() => null)) as { message?: string } | null;
+          const payload = (await response.json().catch(() => null)) as { message?: string; updatedAt?: string } | null;
           if (!response.ok) {
             setState(previousState);
             await refreshSupabaseVisibleState();
             return { ok: false, message: payload?.message ?? "Treeniä ei voitu käynnistää." };
+          }
+
+          if (payload?.updatedAt) {
+            workoutConfirmedSessionUpdatedAtRef.current.set(scheduledWorkoutId, payload.updatedAt);
+            setState((previous) => ({
+              ...previous,
+              scheduledWorkouts: previous.scheduledWorkouts.map((item) =>
+                item.id === scheduledWorkoutId ? { ...item, updatedAt: payload.updatedAt! } : item,
+              ),
+              sessions: previous.sessions.map((item) =>
+                item.scheduledWorkoutId === scheduledWorkoutId ? { ...item, updatedAt: payload.updatedAt! } : item,
+              ),
+            }));
           }
 
           void refreshSupabaseVisibleState();

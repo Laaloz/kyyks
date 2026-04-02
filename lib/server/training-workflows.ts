@@ -506,8 +506,8 @@ async function createSessionWithLogs(params: {
       updated_at: timestamp,
       paused_duration_seconds: 0,
     })
-    .select("id")
-    .single<{ id: string }>();
+    .select("id, updated_at")
+    .single<{ id: string; updated_at: string }>();
 
   if (sessionError || !session) {
     return { ok: false as const, message: "Treenisession luonti epäonnistui." };
@@ -528,7 +528,7 @@ async function createSessionWithLogs(params: {
     }
   }
 
-  return { ok: true as const, sessionId: session.id };
+  return { ok: true as const, sessionId: session.id, updatedAt: session.updated_at };
 }
 
 export async function createProgramOnServer({
@@ -920,13 +920,13 @@ export async function startScheduledWorkoutOnServer({
 
   const { data: existingSession } = await admin
     .from("workout_sessions")
-    .select("id, paused_at, paused_duration_seconds")
+    .select("id, paused_at, paused_duration_seconds, updated_at")
     .eq("scheduled_workout_id", scheduledWorkoutId)
-    .maybeSingle<{ id: string; paused_at: string | null; paused_duration_seconds: number | null }>();
+    .maybeSingle<{ id: string; paused_at: string | null; paused_duration_seconds: number | null; updated_at: string }>();
 
   if (existingSession) {
     if (workout.status === "completed" || workout.status === "in_progress") {
-      return { ok: true as const, scheduledWorkoutId };
+      return { ok: true as const, scheduledWorkoutId, updatedAt: existingSession.updated_at };
     }
 
     const resumedAt = nowIso();
@@ -958,7 +958,7 @@ export async function startScheduledWorkoutOnServer({
       })
       .eq("id", scheduledWorkoutId);
 
-    return { ok: true as const, scheduledWorkoutId };
+    return { ok: true as const, scheduledWorkoutId, updatedAt: resumedAt };
   }
 
   let setLogs: Array<Record<string, unknown>> | null = null;
@@ -1006,7 +1006,7 @@ export async function startScheduledWorkoutOnServer({
     return sessionResult;
   }
 
-  return { ok: true as const, scheduledWorkoutId };
+  return { ok: true as const, scheduledWorkoutId, updatedAt: sessionResult.updatedAt };
 }
 
 export async function updateWorkoutSetOnServer({

@@ -37,5 +37,5 @@ export async function POST(_request: Request, context: { params: Promise<{ sched
     return NextResponse.json({ message: result.message }, { status: 400 });
   }
 
-  return NextResponse.json({ ok: true, scheduledWorkoutId });
+  return NextResponse.json({ ok: true, scheduledWorkoutId, updatedAt: result.updatedAt });
 }
