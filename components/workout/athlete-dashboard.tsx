@@ -210,6 +210,7 @@ export function AthleteDashboard({
   const [measurementMessage, setMeasurementMessage] = useState("");
   const [measurementMessageTone, setMeasurementMessageTone] = useState<MeasurementMessageTone>("info");
   const [isSavingMeasurements, setIsSavingMeasurements] = useState(false);
+  const [isMeasurementFormExpanded, setIsMeasurementFormExpanded] = useState(false);
   const [isCompletingWorkout, setIsCompletingWorkout] = useState(false);
   const [pendingWorkoutTransition, setPendingWorkoutTransition] = useState<
     | { type: "open"; scheduledWorkoutId: string; workoutName: string; sourceKey: string }
@@ -257,12 +258,17 @@ export function AthleteDashboard({
     setMeasurementMessageTone("info");
   }, [currentUser?.id]);
   useEffect(() => {
+    setIsMeasurementFormExpanded(false);
+  }, [currentUser?.id]);
+  useEffect(() => {
     onWorkoutDetailModeChange?.(view === "athlete-log" && athleteLogMode === "workout");
   }, [athleteLogMode, onWorkoutDetailModeChange, view]);
   useEffect(() => {
     if (view !== "overview" || overviewFocusTarget !== "measurements") {
       return;
     }
+
+    setIsMeasurementFormExpanded(true);
 
     const node = measurementsSectionRef.current;
     if (!node) {
@@ -428,6 +434,8 @@ export function AthleteDashboard({
     canTrackOwnMeasurements &&
     (currentUser.weightKg !== nextWeightKg ||
       latestWaistCm !== nextWaistCm);
+  const measurementDisclosureButtonId = "overview-measurements-disclosure";
+  const measurementDisclosurePanelId = "overview-measurements-panel";
   const weightTrendPoints = useMemo(
     () =>
       currentUser
@@ -1092,103 +1100,133 @@ export function AthleteDashboard({
               </div>
             </div>
           </div>
-          <div className="mt-5 rounded-2xl border border-[var(--border)] bg-[var(--surface-2)] p-4">
-            <div className="flex flex-col gap-2">
-              <div>
-                <p className="text-sm font-semibold text-[var(--text)]">Kirjaa uusi mittaus</p>
-                <p className="text-sm text-[var(--text-muted)]">
-                  Lisää tähän uusin mittaus, kun haluat päivittää oman seurannan. Voit täyttää vain ne kentät, joihin tuli muutos.
-                </p>
-              </div>
-            </div>
-            <div className="mt-4 grid gap-3 md:grid-cols-2">
-              <div>
-                <Label htmlFor="overview-weight-kg">Paino (kg, valinnainen)</Label>
-                <Input
-                  id="overview-weight-kg"
-                  type="number"
-                  inputMode="decimal"
-                  min={20}
-                  max={350}
-                  step="0.1"
-                  placeholder="Esim. 72.4"
-                  value={measurementDraft.weightKg}
-                  onChange={(event) => {
-                    setMeasurementDraft((previous) => ({ ...previous, weightKg: event.target.value }));
-                    setMeasurementMessage("");
-                    setMeasurementMessageTone("info");
-                  }}
-                />
-              </div>
-              <div>
-                <Label htmlFor="overview-waist-cm">Vyötärö (cm, valinnainen)</Label>
-                <Input
-                  id="overview-waist-cm"
-                  type="number"
-                  inputMode="decimal"
-                  min={30}
-                  max={250}
-                  step="0.5"
-                  placeholder="Esim. 81"
-                  value={measurementDraft.waistCm}
-                  onChange={(event) => {
-                    setMeasurementDraft((previous) => ({ ...previous, waistCm: event.target.value }));
-                    setMeasurementMessage("");
-                    setMeasurementMessageTone("info");
-                  }}
-                />
-              </div>
-            </div>
-            <div className="mt-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-              <p
-                aria-live="polite"
-                className={`min-h-5 text-sm ${
-                  !measurementMessage
-                    ? "text-[var(--text-subtle)]"
-                    : measurementMessageTone === "success"
-                      ? "text-[var(--success)]"
-                      : measurementMessageTone === "error"
-                        ? "text-[var(--danger)]"
-                        : "text-[var(--text-subtle)]"
-                }`}
-              >
-                {measurementMessage ||
-                  (isMeasurementDirty
-                    ? "Tallennus päivittää viimeisimmän mittauksen ja trendit."
-                    : "Täytä yksi tai useampi kenttä, kun haluat tallentaa uuden mittauksen.")}
-              </p>
-              <Button
+          <div className="mt-5 overflow-hidden rounded-2xl border border-[var(--border)] bg-[var(--surface-2)]">
+            <div className="flex items-start gap-2 p-4">
+              <button
                 type="button"
-                variant={isMeasurementDirty ? "primary" : "secondary"}
-                disabled={!isMeasurementDirty}
-                loading={isSavingMeasurements}
-                loadingText="Tallennetaan mittatietoja..."
-                className="w-full sm:w-auto"
-                onClick={async () => {
-                    const parsed = bodyMeasurementSchema.safeParse({
-                      heightCm: "",
-                      weightKg: measurementDraft.weightKg,
-                      waistCm: measurementDraft.waistCm,
-                    });
-                  if (!parsed.success) {
-                    setMeasurementMessage(parsed.error.issues[0]?.message ?? "Tarkista mittatiedot ja yritä uudelleen.");
-                    setMeasurementMessageTone("error");
-                    return;
-                  }
-
-                  setIsSavingMeasurements(true);
-                  try {
-                    const result = await withMinimumDelay(updateCurrentUserMeasurements(parsed.data));
-                    setMeasurementMessage(result.ok ? "Mittatiedot tallennettu." : result.message);
-                    setMeasurementMessageTone(result.ok ? "success" : "error");
-                  } finally {
-                    setIsSavingMeasurements(false);
-                  }
-                }}
+                id={measurementDisclosureButtonId}
+                aria-expanded={isMeasurementFormExpanded}
+                aria-controls={measurementDisclosurePanelId}
+                className="group min-w-0 flex-1 rounded-[1rem] py-0 text-left text-inherit transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--background)]"
+                onClick={() => setIsMeasurementFormExpanded((current) => !current)}
               >
-                Tallenna mittatiedot
-              </Button>
+                <span className="block text-sm font-semibold text-[var(--text)]">Kirjaa uusi mittaus</span>
+                <span className="mt-1 block text-sm text-[var(--text-muted)]">
+                  Lisää tähän uusin mittaus, kun haluat päivittää oman seurannan. Voit täyttää vain ne kentät, joihin tuli muutos.
+                </span>
+              </button>
+              <button
+                type="button"
+                className="grid size-8.5 shrink-0 place-items-center rounded-full border border-[var(--border)] bg-[var(--surface)] text-[var(--text-subtle)] transition hover:border-[var(--border-strong)] hover:bg-[var(--surface-3)] hover:text-[var(--text)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--background)]"
+                aria-label={isMeasurementFormExpanded ? "Sulje uusi mittaus" : "Avaa uusi mittaus"}
+                aria-expanded={isMeasurementFormExpanded}
+                aria-controls={measurementDisclosurePanelId}
+                onClick={() => setIsMeasurementFormExpanded((current) => !current)}
+              >
+                {isMeasurementFormExpanded ? (
+                  <ChevronUp className="size-4" aria-hidden="true" />
+                ) : (
+                  <ChevronDown className="size-4" aria-hidden="true" />
+                )}
+              </button>
             </div>
+            {isMeasurementFormExpanded ? (
+              <div
+                id={measurementDisclosurePanelId}
+                role="region"
+                aria-labelledby={measurementDisclosureButtonId}
+                className="border-t border-[var(--border)] px-4 pb-4 pt-4"
+              >
+                <div className="grid gap-3 md:grid-cols-2">
+                  <div>
+                    <Label htmlFor="overview-weight-kg">Paino (kg, valinnainen)</Label>
+                    <Input
+                      id="overview-weight-kg"
+                      type="number"
+                      inputMode="decimal"
+                      min={20}
+                      max={350}
+                      step="0.1"
+                      placeholder="Esim. 72.4"
+                      value={measurementDraft.weightKg}
+                      onChange={(event) => {
+                        setMeasurementDraft((previous) => ({ ...previous, weightKg: event.target.value }));
+                        setMeasurementMessage("");
+                        setMeasurementMessageTone("info");
+                      }}
+                    />
+                  </div>
+                  <div>
+                    <Label htmlFor="overview-waist-cm">Vyötärö (cm, valinnainen)</Label>
+                    <Input
+                      id="overview-waist-cm"
+                      type="number"
+                      inputMode="decimal"
+                      min={30}
+                      max={250}
+                      step="0.5"
+                      placeholder="Esim. 81"
+                      value={measurementDraft.waistCm}
+                      onChange={(event) => {
+                        setMeasurementDraft((previous) => ({ ...previous, waistCm: event.target.value }));
+                        setMeasurementMessage("");
+                        setMeasurementMessageTone("info");
+                      }}
+                    />
+                  </div>
+                </div>
+                <div className="mt-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                  <p
+                    aria-live="polite"
+                    className={`min-h-5 text-sm ${
+                      !measurementMessage
+                        ? "text-[var(--text-subtle)]"
+                        : measurementMessageTone === "success"
+                          ? "text-[var(--success)]"
+                          : measurementMessageTone === "error"
+                            ? "text-[var(--danger)]"
+                            : "text-[var(--text-subtle)]"
+                    }`}
+                  >
+                    {measurementMessage ||
+                      (isMeasurementDirty
+                        ? "Tallennus päivittää viimeisimmän mittauksen ja trendit."
+                        : "Täytä yksi tai useampi kenttä, kun haluat tallentaa uuden mittauksen.")}
+                  </p>
+                  <Button
+                    type="button"
+                    variant={isMeasurementDirty ? "primary" : "secondary"}
+                    disabled={!isMeasurementDirty}
+                    loading={isSavingMeasurements}
+                    loadingText="Tallennetaan mittatietoja..."
+                    className="w-full sm:w-auto"
+                    onClick={async () => {
+                      const parsed = bodyMeasurementSchema.safeParse({
+                        heightCm: "",
+                        weightKg: measurementDraft.weightKg,
+                        waistCm: measurementDraft.waistCm,
+                      });
+                      if (!parsed.success) {
+                        setMeasurementMessage(parsed.error.issues[0]?.message ?? "Tarkista mittatiedot ja yritä uudelleen.");
+                        setMeasurementMessageTone("error");
+                        return;
+                      }
+
+                      setIsSavingMeasurements(true);
+                      try {
+                        const result = await withMinimumDelay(updateCurrentUserMeasurements(parsed.data));
+                        setMeasurementMessage(result.ok ? "Mittatiedot tallennettu." : result.message);
+                        setMeasurementMessageTone(result.ok ? "success" : "error");
+                      } finally {
+                        setIsSavingMeasurements(false);
+                      }
+                    }}
+                  >
+                    Tallenna mittatiedot
+                  </Button>
+                </div>
+              </div>
+            ) : null}
           </div>
           <div className="mt-5 grid gap-4 xl:grid-cols-2">
             <div>
@@ -2538,7 +2576,7 @@ function ProgressRing({ percent, label }: { percent: number; label: string }) {
         }}
       >
         <div className="flex size-28 flex-col items-center justify-center gap-1 rounded-full border border-[var(--border)] bg-[var(--surface)]">
-          <Flame className="size-6 text-[var(--accent)]" />
+          <Flame className="size-8 text-[var(--accent)]" />
           <p className="font-[family-name:var(--font-display)] text-3xl font-semibold leading-none text-[var(--text)]">{percent}%</p>
         </div>
       </div>
