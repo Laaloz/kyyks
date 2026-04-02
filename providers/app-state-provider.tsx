@@ -2404,6 +2404,16 @@ function findResolvedUserIdInSnapshot(
   const ensureWorkoutMutationQueue = useCallback((scheduledWorkoutId: string) => {
     const existing = workoutMutationQueueRef.current.get(scheduledWorkoutId);
     if (existing) {
+      const currentState = stateRef.current;
+      existing.confirmedSessionUpdatedAt =
+        workoutConfirmedSessionUpdatedAtRef.current.get(scheduledWorkoutId)
+        ?? getSessionUpdatedAtForWorkout(currentState, scheduledWorkoutId)
+        ?? existing.confirmedSessionUpdatedAt;
+      existing.confirmedNoteUpdatedAt =
+        workoutConfirmedNoteUpdatedAtRef.current.get(scheduledWorkoutId)
+        ?? getNoteForWorkout(currentState, scheduledWorkoutId)?.updatedAt
+        ?? existing.confirmedNoteUpdatedAt
+        ?? null;
       return existing;
     }
 
@@ -2466,7 +2476,9 @@ function findResolvedUserIdInSnapshot(
 
         for (let attempt = 0; attempt < 2; attempt += 1) {
           const expectedUpdatedAt =
-            queue.confirmedSessionUpdatedAt ?? getSessionUpdatedAtForWorkout(stateRef.current, queue.scheduledWorkoutId);
+            workoutConfirmedSessionUpdatedAtRef.current.get(queue.scheduledWorkoutId)
+            ?? queue.confirmedSessionUpdatedAt
+            ?? getSessionUpdatedAtForWorkout(stateRef.current, queue.scheduledWorkoutId);
           if (!expectedUpdatedAt) {
             await resolveFailure("Sarjan päivitys epäonnistui.");
             return;
@@ -4807,6 +4819,10 @@ function findResolvedUserIdInSnapshot(
 
           if (payload?.updatedAt) {
             workoutConfirmedSessionUpdatedAtRef.current.set(scheduledWorkoutId, payload.updatedAt);
+            const existingQueue = workoutMutationQueueRef.current.get(scheduledWorkoutId);
+            if (existingQueue) {
+              existingQueue.confirmedSessionUpdatedAt = payload.updatedAt;
+            }
             setState((previous) => ({
               ...previous,
               scheduledWorkouts: previous.scheduledWorkouts.map((item) =>
@@ -4819,6 +4835,7 @@ function findResolvedUserIdInSnapshot(
           }
 
           await refreshSupabaseVisibleState();
+          syncWorkoutMutationQueueVersionsFromState(scheduledWorkoutId);
         }
 
         return { ok: true };
