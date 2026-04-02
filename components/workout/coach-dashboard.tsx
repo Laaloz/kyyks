@@ -830,6 +830,15 @@ export function CoachDashboard({
     { view: "review", step: "4/4", title: "Tarkistus", description: "Tarkista kokonaisuus ennen tallennusta." },
   ];
   const activeComposerStep = composerSteps.find((step) => step.view === composerView) ?? composerSteps[0];
+  const composerCardRef = useRef<HTMLDivElement | null>(null);
+  const previousComposerViewRef = useRef<ComposerView>(composerView);
+  const previousWorkoutCountRef = useRef(watchedWorkouts.length);
+
+  const scrollComposerIntoView = (behavior: ScrollBehavior = "smooth") => {
+    window.requestAnimationFrame(() => {
+      composerCardRef.current?.scrollIntoView({ behavior, block: "start" });
+    });
+  };
 
   function openIssueLocation(issue: ComposerIssue) {
     if (typeof issue.workoutIndex === "number") {
@@ -849,6 +858,28 @@ export function CoachDashboard({
       }
     }, 60);
   }
+
+  useEffect(() => {
+    if (previousComposerViewRef.current !== composerView) {
+      scrollComposerIntoView();
+    }
+
+    previousComposerViewRef.current = composerView;
+  }, [composerView]);
+
+  useEffect(() => {
+    const previousWorkoutCount = previousWorkoutCountRef.current;
+    const currentWorkoutCount = watchedWorkouts.length;
+
+    if (composerView === "workouts" && currentWorkoutCount > previousWorkoutCount) {
+      window.requestAnimationFrame(() => {
+        const element = document.getElementById(`program-workout-${currentWorkoutCount - 1}`);
+        element?.scrollIntoView({ behavior: "smooth", block: "start" });
+      });
+    }
+
+    previousWorkoutCountRef.current = currentWorkoutCount;
+  }, [composerView, watchedWorkouts.length]);
 
   return (
     <div className="grid gap-6">
@@ -892,7 +923,8 @@ export function CoachDashboard({
 
       {view === PROGRAMS_WORKSPACE_VIEW && (
         <div className="grid gap-6 xl:grid-cols-[1.08fr_0.92fr]">
-          <Card className="border-[var(--border-strong)]" id="coach-program-composer">
+          <div ref={composerCardRef}>
+            <Card className="border-[var(--border-strong)]" id="coach-program-composer">
               <p className="text-xs font-semibold text-[var(--text-subtle)]">Ohjelman rakentaja</p>
               <CardTitle className="text-2xl">{editorTitle}</CardTitle>
               <CardDescription className="mt-2">{editorDescription}</CardDescription>
@@ -1003,10 +1035,10 @@ export function CoachDashboard({
               </div>
 
               {composerView === "details" ? (
-                <fieldset className="space-y-4 rounded-xl border-2 border-[var(--border)] bg-[var(--surface-2)] p-4">
-                    <legend className="px-2 text-sm font-medium text-[var(--text-subtle)]">
+                <div className="space-y-4 rounded-xl border-2 border-[var(--border)] bg-[var(--surface-2)] p-4">
+                    <p className="text-[0.875rem] font-medium text-[var(--text-subtle)]">
                       1. Ohjelman tiedot
-                    </legend>
+                    </p>
                     <div className="grid gap-4 md:grid-cols-2">
                       <div>
                         <RequiredLabel htmlFor="program-composer-title">Ohjelman nimi</RequiredLabel>
@@ -1060,14 +1092,16 @@ export function CoachDashboard({
                         Tähän voit kirjoittaa ohjelman tavoitteen, arjen muistutukset tai muut tarkentavat huomiot treenaajalle.
                       </p>
                     </div>
-                  </fieldset>
+                  </div>
               ) : null}
 
               {composerView === "workouts" ? (
                 <div className="space-y-4 rounded-xl border-2 border-[var(--border)] bg-[var(--surface-2)] p-4">
+                  <p className="text-[0.875rem] font-medium text-[var(--text-subtle)]">
+                    2. Treenit
+                  </p>
                   <div className="flex flex-wrap items-start justify-between gap-3">
                     <div>
-                      <p className="text-sm font-medium text-[var(--text-subtle)]">2. Treenit</p>
                       <p className="mt-1 text-sm text-[var(--text-muted)]">
                         Lisää treenit yksi kerrallaan. Tässä vaiheessa päätetään treenityyppi ja nimi. Kun treeni on luotu, paina `Muokkaa treeniä` lisätäksesi liikkeet ja rakentaaksesi sisällön.
                       </p>
@@ -1226,9 +1260,11 @@ export function CoachDashboard({
 
               {composerView === "workout_editor" ? (
                 <div className="space-y-4 rounded-xl border-2 border-[var(--border)] bg-[var(--surface-2)] p-4">
+                  <p className="text-[0.875rem] font-medium text-[var(--text-subtle)]">
+                    3. Treenin sisältö
+                  </p>
                   <div className="flex flex-wrap items-center justify-between gap-3">
                     <div>
-                      <p className="text-sm font-medium text-[var(--text-subtle)]">3. Treenin sisältö</p>
                       <p className="mt-1 text-sm text-[var(--text-muted)]">
                         Muokkaat nyt vain yhtä treeniä kerrallaan. Lisää treenin yleisohje, lepo ja liikkeet tähän näkymään.
                       </p>
@@ -1274,7 +1310,10 @@ export function CoachDashboard({
               ) : null}
 
               {composerView === "review" ? (
-                <div className="space-y-5">
+                <div className="space-y-5 rounded-xl border-2 border-[var(--border)] bg-[var(--surface-2)] p-4">
+                  <p className="text-[0.875rem] font-medium text-[var(--text-subtle)]">
+                    4. Tarkistus
+                  </p>
                   <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface-2)] p-4">
                     <p className="text-sm font-semibold text-[var(--text)]">Ennen tallennusta</p>
                     <p className="mt-2 text-sm text-[var(--text-muted)]">
@@ -1427,7 +1466,7 @@ export function CoachDashboard({
               ) : null}
 
               <InlineFeedback message={programMessage} tone={programMessageTone} className="min-h-5 text-sm" />
-              <div className="sticky bottom-3 z-10 rounded-2xl border border-[var(--border)] bg-[color:color-mix(in_oklab,var(--surface)_92%,white)] p-3 shadow-[0_16px_40px_-28px_var(--shadow)] backdrop-blur">
+              <div className="sticky bottom-3 z-10 rounded-2xl border border-[var(--border)] bg-[color:color-mix(in_oklab,var(--surface)_92%,var(--background))] p-3 shadow-[0_16px_40px_-28px_var(--shadow)] backdrop-blur">
                 <div className="flex flex-wrap items-center justify-between gap-3">
                   <p className={cn("text-sm", composerView === "review" && canSaveProgram ? "text-[var(--success)]" : "text-[var(--text-subtle)]")}>
                     {composerView === "details"
@@ -1511,7 +1550,8 @@ export function CoachDashboard({
                 </div>
               </div>
             </form>
-          </Card>
+            </Card>
+          </div>
 
           <div className="grid gap-6">
             <Card>

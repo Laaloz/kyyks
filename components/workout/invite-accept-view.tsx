@@ -130,7 +130,7 @@ export function InviteAcceptView({ token, initialInvite }: { token: string; init
             })}
           >
             <fieldset className="space-y-4 rounded-xl border-2 border-[var(--border)] bg-[var(--surface-2)] p-4">
-              <legend className="px-2 text-xs font-semibold tracking-[0.03em] text-[var(--text-subtle)]">Perustiedot</legend>
+              <legend className="px-2 text-sm font-semibold tracking-[0.03em] text-[var(--text-subtle)]">Perustiedot</legend>
               <div>
                 <Label htmlFor={`${formId}-full-name`}>Koko nimi</Label>
                 <Input id={`${formId}-full-name`} autoComplete="name" {...form.register("fullName")} />

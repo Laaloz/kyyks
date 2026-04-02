@@ -584,7 +584,7 @@ export function AdminDashboard({
                 ) : null}
               </div>
               <fieldset className="grid gap-4 rounded-xl border-2 border-[var(--border)] bg-[var(--surface-2)] p-4 md:grid-cols-2">
-                <legend className="px-2 text-xs font-semibold tracking-[0.03em] text-[var(--text-subtle)]">Rooliasetukset</legend>
+                <legend className="px-2 text-sm font-semibold tracking-[0.03em] text-[var(--text-subtle)]">Rooliasetukset</legend>
                 <div>
                   <Label htmlFor={`${formId}-invite-role`}>Rooli</Label>
                   <Select id={`${formId}-invite-role`} {...form.register("role")}>

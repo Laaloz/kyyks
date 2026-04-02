@@ -57,7 +57,7 @@ export function ResetPasswordView({ token }: { token: string }) {
           })}
         >
           <fieldset className="space-y-4 rounded-xl border-2 border-[var(--border)] bg-[var(--surface-2)] p-4">
-            <legend className="px-2 text-xs font-semibold tracking-[0.03em] text-[var(--text-subtle)]">
+            <legend className="px-2 text-sm font-semibold tracking-[0.03em] text-[var(--text-subtle)]">
               Uusi salasana
             </legend>
             <div>
