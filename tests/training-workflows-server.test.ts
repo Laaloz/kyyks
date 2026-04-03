@@ -15,6 +15,7 @@ import {
   completeWorkoutOnServer,
   createProgramOnServer,
   saveWorkoutNoteOnServer,
+  startProgramWorkoutOnServer,
   updateWorkoutDateOnServer,
   updateWorkoutDurationOnServer,
   updateWorkoutSetOnServer,
@@ -425,6 +426,107 @@ describe("training workflows server", () => {
         done: true,
       });
     }
+  });
+
+  it("does not reopen a workout as active when its session is already completed", async () => {
+    const admin = {
+      from: vi.fn((table: string) => {
+        const builder = {
+          select: vi.fn(() => builder),
+          eq: vi.fn(() => builder),
+          in: vi.fn(() => builder),
+          neq: vi.fn(() => builder),
+          not: vi.fn(() => builder),
+          order: vi.fn(() => builder),
+          insert: vi.fn(() => builder),
+          maybeSingle: vi.fn(async () => {
+            if (table === "training_plans") {
+              return {
+                data: {
+                  id: "plan-1",
+                  coach_id: "coach-1",
+                  athlete_id: "athlete-1",
+                  title: "Plan",
+                  description: null,
+                  status: "active",
+                  start_date: "2026-04-01",
+                  week_count: 4,
+                  workouts: [
+                    {
+                      id: "program-workout-1",
+                      name: "Penkki",
+                      splitType: "upper",
+                      defaultRestSeconds: 120,
+                      exercises: [],
+                    },
+                  ],
+                  created_at: "2026-04-01T08:00:00.000Z",
+                  updated_at: "2026-04-01T08:00:00.000Z",
+                },
+                error: null,
+              };
+            }
+
+            if (table === "scheduled_workouts") {
+              return {
+                data: {
+                  id: "old-workout",
+                  title: "Penkki",
+                },
+                error: null,
+              };
+            }
+
+            if (table === "workout_sessions") {
+              return {
+                data: {
+                  completed_at: "2026-04-03T08:00:00.000Z",
+                },
+                error: null,
+              };
+            }
+
+            return { data: null, error: null };
+          }),
+          single: vi.fn(async () => {
+            if (table === "scheduled_workouts") {
+              return {
+                data: { id: "new-workout" },
+                error: null,
+              };
+            }
+
+            if (table === "workout_sessions") {
+              return {
+                data: { id: "new-session", updated_at: "2026-04-03T08:10:00.000Z" },
+                error: null,
+              };
+            }
+
+            return { data: null, error: null };
+          }),
+          then: (resolve: (value: { data: unknown; error: null }) => unknown, reject?: (reason: unknown) => unknown) =>
+            Promise.resolve({ data: [], error: null }).then(resolve, reject),
+        };
+        return builder;
+      }),
+    };
+
+    createSupabaseAdminClientMock.mockReturnValue(admin);
+
+    const result = await startProgramWorkoutOnServer({
+      requester: {
+        id: "athlete-1",
+        role: "athlete",
+      },
+      programId: "plan-1",
+      programWorkoutId: "program-workout-1",
+    });
+
+    expect(result).toEqual({
+      ok: true,
+      scheduledWorkoutId: "new-workout",
+    });
   });
 
   it("sends duration updates through the atomic rpc with expected session version", async () => {

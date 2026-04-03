@@ -827,12 +827,29 @@ export async function startProgramWorkoutOnServer({
   ]);
   timer.checkpoint("existing-active-query");
 
-  if (existingActive.data?.id) {
+  const [existingActiveSession, blockingWorkoutSession] = await Promise.all([
+    existingActive.data?.id
+      ? admin
+          .from("workout_sessions")
+          .select("completed_at")
+          .eq("scheduled_workout_id", existingActive.data.id)
+          .maybeSingle<{ completed_at: string | null }>()
+      : Promise.resolve({ data: null, error: null }),
+    blockingWorkout.data?.id
+      ? admin
+          .from("workout_sessions")
+          .select("completed_at")
+          .eq("scheduled_workout_id", blockingWorkout.data.id)
+          .maybeSingle<{ completed_at: string | null }>()
+      : Promise.resolve({ data: null, error: null }),
+  ]);
+
+  if (existingActive.data?.id && !existingActiveSession.data?.completed_at) {
     return { ok: true as const, scheduledWorkoutId: existingActive.data.id };
   }
   timer.checkpoint("blocking-query");
 
-  if (blockingWorkout.data) {
+  if (blockingWorkout.data && !blockingWorkoutSession.data?.completed_at) {
     return {
       ok: false as const,
       message: `Sinulla on kesken oleva treeni "${displayWorkoutTitle(blockingWorkout.data.title)}". Jatka se ensin.`,
