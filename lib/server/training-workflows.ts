@@ -1026,13 +1026,7 @@ export async function updateWorkoutSetOnServer({
     return { ok: false as const, message: "Supabase admin -yhteys puuttuu. Tarkista service role -avain." };
   }
 
-  if (!patch.expectedUpdatedAt) {
-    return { ok: false as const, message: "Sarjan päivityksestä puuttuu versiotieto." };
-  }
-
-  const hasDone = Object.prototype.hasOwnProperty.call(patch, "done");
-  const hasActualReps = Object.prototype.hasOwnProperty.call(patch, "actualReps");
-  const hasActualLoad = Object.prototype.hasOwnProperty.call(patch, "actualLoad");
+  const timestamp = nowIso();
   let resolvedLogId = logId;
 
   if (patch.templateExerciseId && patch.setLabel) {
@@ -1049,60 +1043,134 @@ export async function updateWorkoutSetOnServer({
     }
   }
 
-  const { data, error } = await admin.rpc("update_workout_set_log", {
-    p_scheduled_workout_id: scheduledWorkoutId,
-    p_log_id: resolvedLogId,
-    p_requester_id: requester.id,
-    p_requester_role: requester.role,
-    p_expected_session_updated_at: patch.expectedUpdatedAt,
-    p_has_done: hasDone,
-    p_done: patch.done ?? false,
-    p_has_actual_reps: hasActualReps,
-    p_actual_reps: patch.actualReps ?? null,
-    p_has_actual_load: hasActualLoad,
-    p_actual_load: patch.actualLoad ?? null,
-  });
-  timer.checkpoint("rpc-write");
+  const { data: workout } = await admin
+    .from("scheduled_workouts")
+    .select("id, athlete_id, status")
+    .eq("id", scheduledWorkoutId)
+    .maybeSingle<{ id: string; athlete_id: string; status: ScheduledWorkout["status"] }>();
+  timer.checkpoint("workout-query");
 
-  if (error) {
-    return { ok: false as const, message: "Sarjan päivitys epäonnistui." };
+  if (!workout || (!isAdminRole(requester.role) && workout.athlete_id !== requester.id)) {
+    return { ok: false as const, message: "Treeniä ei löytynyt.", code: "forbidden" };
   }
 
-  const payload = Array.isArray(data) ? data[0] : data;
-  if (!payload || typeof payload !== "object") {
-    return { ok: false as const, message: "Sarjan päivitys epäonnistui." };
-  }
-
-  if (!payload.ok) {
-    const code = typeof payload.code === "string" ? payload.code : undefined;
-    const message =
-      typeof payload.message === "string"
-        ? payload.message
-        : code === "stale_session"
-          ? "Treeni ehti muuttua ennen tallennusta. Päivitä näkymä ja yritä uudelleen."
-          : "Sarjan päivitys epäonnistui.";
+  if (workout.status !== "in_progress" && workout.status !== "completed") {
     return {
       ok: false as const,
-      message,
-      code: code as "stale_session" | "not_found" | "invalid_state" | "forbidden" | undefined,
+      message: "Sarjoja voi muokata vain aktiivisesta tai valmiista treenistä.",
+      code: "invalid_state",
     };
   }
 
-  const sessionUpdatedAt = typeof payload.session_updated_at === "string" ? payload.session_updated_at : null;
-  const setLogId = typeof payload.log_id === "string" ? payload.log_id : null;
-  if (!sessionUpdatedAt || !setLogId) {
+  const { data: targetLog } = await admin
+    .from("workout_set_logs")
+    .select("id, template_exercise_id, set_id, set_label, superset_group, target_reps, target_reps_min, target_load, actual_reps, actual_load, done")
+    .eq("id", resolvedLogId)
+    .eq("scheduled_workout_id", scheduledWorkoutId)
+    .maybeSingle<{
+      id: string;
+      template_exercise_id: string;
+      set_id: string;
+      set_label: string;
+      superset_group: string | null;
+      target_reps: number;
+      target_reps_min: number | null;
+      target_load: number | string | null;
+      actual_reps: number | null;
+      actual_load: number | string | null;
+      done: boolean;
+    }>();
+  timer.checkpoint("target-log-query");
+
+  if (!targetLog) {
+    return { ok: false as const, message: "Sarjaa ei löytynyt.", code: "not_found" };
+  }
+
+  const hasActualReps = Object.prototype.hasOwnProperty.call(patch, "actualReps");
+  const hasActualLoad = Object.prototype.hasOwnProperty.call(patch, "actualLoad");
+  const nextDone = patch.done ?? targetLog.done;
+  const nextActualReps = hasActualReps ? patch.actualReps ?? undefined : targetLog.actual_reps ?? undefined;
+  const nextActualLoad = hasActualLoad ? patch.actualLoad ?? undefined : toNumberOrUndefined(targetLog.actual_load);
+
+  const updatePayload = {
+    actual_reps: nextDone
+      ? (nextActualReps ??
+          resolveDefaultActualReps({
+            targetReps: targetLog.target_reps,
+            targetRepsMin: targetLog.target_reps_min ?? undefined,
+          }) ??
+          null)
+      : nextActualReps ?? null,
+    actual_load: nextDone
+      ? (nextActualLoad ?? resolveDefaultActualLoad({ targetLoad: toNumberOrUndefined(targetLog.target_load) }) ?? null)
+      : nextActualLoad ?? null,
+    done: nextDone,
+    updated_at: timestamp,
+  };
+
+  const updates: Array<PromiseLike<{ error: unknown }>> = [
+    admin.from("workout_set_logs").update(updatePayload).eq("id", resolvedLogId),
+  ];
+
+  if (patch.done !== undefined && targetLog.superset_group) {
+    const supersetUpdatePayload = {
+      done: patch.done,
+      updated_at: updatePayload.updated_at,
+      ...(patch.done
+        ? {
+            actual_reps: updatePayload.actual_reps,
+            actual_load: updatePayload.actual_load,
+          }
+        : {}),
+    };
+
+    updates.push(
+      admin
+        .from("workout_set_logs")
+        .update(supersetUpdatePayload)
+        .eq("scheduled_workout_id", scheduledWorkoutId)
+        .eq("superset_group", targetLog.superset_group)
+        .eq("set_label", targetLog.set_label)
+        .neq("id", resolvedLogId),
+    );
+  }
+
+  updates.push(
+    admin
+      .from("workout_sessions")
+      .update({ updated_at: updatePayload.updated_at })
+      .eq("scheduled_workout_id", scheduledWorkoutId),
+  );
+
+  if (workout.status !== "completed") {
+    updates.push(
+      admin
+        .from("scheduled_workouts")
+        .update({
+          status: "in_progress",
+          updated_at: updatePayload.updated_at,
+        })
+        .eq("id", scheduledWorkoutId)
+        .eq("status", "in_progress"),
+    );
+  }
+
+  const results = await Promise.all(updates);
+  timer.checkpoint("update-write-phase");
+
+  if (results.some((result) => Boolean(result.error))) {
     return { ok: false as const, message: "Sarjan päivitys epäonnistui." };
   }
 
   timer.checkpoint("done");
   return {
     ok: true as const,
-    sessionUpdatedAt,
+    sessionUpdatedAt: timestamp,
     setLog: {
-      id: setLogId,
-      actualReps: payload.actual_reps ?? undefined,
-      actualLoad: toNumberOrUndefined(payload.actual_load),
-      done: Boolean(payload.done),
+      id: resolvedLogId,
+      actualReps: updatePayload.actual_reps ?? undefined,
+      actualLoad: toNumberOrUndefined(updatePayload.actual_load),
+      done: updatePayload.done,
     },
   };
 }

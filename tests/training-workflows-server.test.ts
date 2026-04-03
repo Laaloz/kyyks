@@ -277,15 +277,49 @@ describe("training workflows server", () => {
     );
   });
 
-  it("sends explicit null clears and optimistic concurrency metadata to the rpc write path", async () => {
-    const admin = createWorkoutSetRpcClient({
-      ok: true,
-      session_updated_at: "2026-04-02T09:10:00.000Z",
-      log_id: "log-1",
-      actual_reps: null,
-      actual_load: null,
-      done: true,
-    });
+  it("updates the set log and session timestamp through direct writes", async () => {
+    const admin = {
+      from: vi.fn((table: string) => {
+        const builder = {
+          select: vi.fn(() => builder),
+          eq: vi.fn(() => builder),
+          neq: vi.fn(() => builder),
+          maybeSingle: vi.fn(async () => {
+            if (table === "scheduled_workouts") {
+              return {
+                data: { id: "workout-1", athlete_id: "athlete-1", status: "in_progress" },
+                error: null,
+              };
+            }
+
+            if (table === "workout_set_logs") {
+              return {
+                data: {
+                  id: "log-1",
+                  template_exercise_id: "exercise-1",
+                  set_id: "set-1",
+                  set_label: "1",
+                  superset_group: null,
+                  target_reps: 8,
+                  target_reps_min: 6,
+                  target_load: 100,
+                  actual_reps: null,
+                  actual_load: null,
+                  done: false,
+                },
+                error: null,
+              };
+            }
+
+            return { data: null, error: null };
+          }),
+          update: vi.fn(() => builder),
+          then: (resolve: (value: { data: unknown; error: null }) => unknown, reject?: (reason: unknown) => unknown) =>
+            Promise.resolve({ data: {}, error: null }).then(resolve, reject),
+        };
+        return builder;
+      }),
+    };
 
     createSupabaseAdminClientMock.mockReturnValue(admin);
 
@@ -300,100 +334,69 @@ describe("training workflows server", () => {
         done: true,
         actualReps: null,
         actualLoad: null,
-        expectedUpdatedAt: "2026-04-02T09:00:00.000Z",
       },
     });
 
-    expect(admin.rpc).toHaveBeenCalledWith("update_workout_set_log", {
-      p_scheduled_workout_id: "workout-1",
-      p_log_id: "log-1",
-      p_requester_id: "athlete-1",
-      p_requester_role: "athlete",
-      p_expected_session_updated_at: "2026-04-02T09:00:00.000Z",
-      p_has_done: true,
-      p_done: true,
-      p_has_actual_reps: true,
-      p_actual_reps: null,
-      p_has_actual_load: true,
-      p_actual_load: null,
-    });
-    expect(result).toEqual({
-      ok: true,
-      sessionUpdatedAt: "2026-04-02T09:10:00.000Z",
-      setLog: {
+    expect(admin.from).toHaveBeenCalledWith("scheduled_workouts");
+    expect(admin.from).toHaveBeenCalledWith("workout_set_logs");
+    expect(admin.from).toHaveBeenCalledWith("workout_sessions");
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.setLog).toEqual({
         id: "log-1",
-        actualReps: undefined,
-        actualLoad: undefined,
+        actualReps: 6,
+        actualLoad: 100,
         done: true,
-      },
-    });
+      });
+      expect(result.sessionUpdatedAt).toBeTruthy();
+    }
   });
 
-  it("returns a stale-session error when the rpc rejects an outdated set write", async () => {
-    const admin = createWorkoutSetRpcClient({
-      ok: false,
-      code: "stale_session",
-      message: "Treeni ehti muuttua ennen tallennusta.",
-    });
-
-    createSupabaseAdminClientMock.mockReturnValue(admin);
-
-    const result = await updateWorkoutSetOnServer({
-      requester: {
-        id: "athlete-1",
-        role: "athlete",
-      },
-      scheduledWorkoutId: "workout-1",
-      logId: "log-1",
-      patch: {
-        actualLoad: 102.5,
-        expectedUpdatedAt: "2026-04-02T09:00:00.000Z",
-      },
-    });
-
-    expect(result).toEqual({
-      ok: false,
-      code: "stale_session",
-      message: "Treeni ehti muuttua ennen tallennusta.",
-    });
-  });
-
-  it("remaps stale client log ids from template exercise and set label before the rpc write", async () => {
+  it("remaps stale client log ids from template exercise and set label before the set write", async () => {
     const admin = {
       from: vi.fn((table: string) => {
-        expect(table).toBe("workout_set_logs");
         const builder = {
           select: vi.fn(() => builder),
           eq: vi.fn((column: string, value: unknown) => {
-            if (column === "scheduled_workout_id") {
+            if (table === "workout_set_logs" && column === "scheduled_workout_id") {
               expect(value).toBe("workout-1");
             }
-            if (column === "template_exercise_id") {
+            if (table === "workout_set_logs" && column === "template_exercise_id") {
               expect(value).toBe("exercise-1");
             }
-            if (column === "set_label") {
+            if (table === "workout_set_logs" && column === "set_label") {
               expect(value).toBe("2");
             }
             return builder;
           }),
+          neq: vi.fn(() => builder),
           maybeSingle: vi.fn(async () => ({
-            data: { id: "server-log-2" },
+            data:
+              table === "scheduled_workouts"
+                ? { id: "workout-1", athlete_id: "athlete-1", status: "in_progress" }
+                : table === "workout_set_logs"
+                  ? {
+                      id: "server-log-2",
+                      template_exercise_id: "exercise-1",
+                      set_id: "set-2",
+                      set_label: "2",
+                      superset_group: null,
+                      target_reps: 8,
+                      target_reps_min: 6,
+                      target_load: 100,
+                      actual_reps: null,
+                      actual_load: null,
+                      done: false,
+                    }
+                  : null,
             error: null,
           })),
+          update: vi.fn(() => builder),
+          then: (resolve: (value: { data: unknown; error: null }) => unknown, reject?: (reason: unknown) => unknown) =>
+            Promise.resolve({ data: {}, error: null }).then(resolve, reject),
         };
         return builder;
       }),
-      rpc: vi.fn(async () => ({
-        data: {
-          ok: true,
-          session_updated_at: "2026-04-02T09:10:00.000Z",
-          log_id: "server-log-2",
-          actual_reps: 8,
-          actual_load: 100,
-          done: true,
-        },
-        error: null,
-      })),
     };
 
     createSupabaseAdminClientMock.mockReturnValue(admin);
@@ -410,33 +413,18 @@ describe("training workflows server", () => {
         actualReps: 8,
         templateExerciseId: "exercise-1",
         setLabel: "2",
-        expectedUpdatedAt: "2026-04-02T09:00:00.000Z",
       },
     });
 
-    expect(admin.rpc).toHaveBeenCalledWith("update_workout_set_log", {
-      p_scheduled_workout_id: "workout-1",
-      p_log_id: "server-log-2",
-      p_requester_id: "athlete-1",
-      p_requester_role: "athlete",
-      p_expected_session_updated_at: "2026-04-02T09:00:00.000Z",
-      p_has_done: true,
-      p_done: true,
-      p_has_actual_reps: true,
-      p_actual_reps: 8,
-      p_has_actual_load: false,
-      p_actual_load: null,
-    });
-    expect(result).toEqual({
-      ok: true,
-      sessionUpdatedAt: "2026-04-02T09:10:00.000Z",
-      setLog: {
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.setLog).toEqual({
         id: "server-log-2",
         actualReps: 8,
         actualLoad: 100,
         done: true,
-      },
-    });
+      });
+    }
   });
 
   it("sends duration updates through the atomic rpc with expected session version", async () => {
