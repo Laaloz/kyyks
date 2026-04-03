@@ -15,6 +15,7 @@ import {
   completeWorkoutOnServer,
   createProgramOnServer,
   saveWorkoutNoteOnServer,
+  syncWorkoutSetDraftsOnServer,
   startProgramWorkoutOnServer,
   updateWorkoutDateOnServer,
   updateWorkoutDurationOnServer,
@@ -425,6 +426,106 @@ describe("training workflows server", () => {
         actualLoad: 100,
         done: true,
       });
+    }
+  });
+
+  it("syncs multiple dirty workout sets in a single batch", async () => {
+    const admin = {
+      from: vi.fn((table: string) => {
+        const builder = {
+          select: vi.fn(() => builder),
+          eq: vi.fn(() => builder),
+          neq: vi.fn(() => builder),
+          maybeSingle: vi.fn(async () => ({
+            data: table === "scheduled_workouts" ? { id: "workout-1", athlete_id: "athlete-1", status: "in_progress" } : null,
+            error: null,
+          })),
+          update: vi.fn(() => builder),
+          then: (resolve: (value: { data: unknown; error: null }) => unknown, reject?: (reason: unknown) => unknown) =>
+            Promise.resolve({
+              data:
+                table === "workout_set_logs"
+                  ? [
+                      {
+                        id: "log-1",
+                        template_exercise_id: "exercise-1",
+                        set_id: "set-1",
+                        set_label: "1",
+                        superset_group: null,
+                        target_reps: 8,
+                        target_reps_min: 6,
+                        target_load: 100,
+                        actual_reps: null,
+                        actual_load: null,
+                        done: false,
+                      },
+                      {
+                        id: "log-2",
+                        template_exercise_id: "exercise-1",
+                        set_id: "set-2",
+                        set_label: "2",
+                        superset_group: null,
+                        target_reps: 8,
+                        target_reps_min: 6,
+                        target_load: 110,
+                        actual_reps: null,
+                        actual_load: null,
+                        done: false,
+                      },
+                    ]
+                  : {},
+              error: null,
+            }).then(resolve, reject),
+        };
+
+        return builder;
+      }),
+    };
+
+    createSupabaseAdminClientMock.mockReturnValue(admin);
+
+    const result = await syncWorkoutSetDraftsOnServer({
+      requester: {
+        id: "athlete-1",
+        role: "athlete",
+      },
+      scheduledWorkoutId: "workout-1",
+      sets: [
+        {
+          templateExerciseId: "exercise-1",
+          setLabel: "1",
+          done: true,
+        },
+        {
+          templateExerciseId: "exercise-1",
+          setLabel: "2",
+          actualReps: 7,
+          actualLoad: 112.5,
+          done: true,
+        },
+      ],
+    });
+
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.setLogs).toEqual([
+        {
+          id: "log-1",
+          templateExerciseId: "exercise-1",
+          setLabel: "1",
+          actualReps: 6,
+          actualLoad: 100,
+          done: true,
+        },
+        {
+          id: "log-2",
+          templateExerciseId: "exercise-1",
+          setLabel: "2",
+          actualReps: 7,
+          actualLoad: 112.5,
+          done: true,
+        },
+      ]);
     }
   });
 

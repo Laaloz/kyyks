@@ -353,3 +353,28 @@ export interface WorkoutUpdateInput {
   templateExerciseId?: string;
   setLabel?: string;
 }
+
+export interface WorkoutSetDraftPatch {
+  logId?: string;
+  templateExerciseId?: string;
+  setLabel?: string;
+  actualReps?: number | null;
+  actualLoad?: number | null;
+  done?: boolean;
+}
+
+export interface WorkoutBatchSetSyncInput {
+  sets: WorkoutSetDraftPatch[];
+}
+
+export interface WorkoutBatchSetSyncResult {
+  updatedAt: string;
+  setLogs: Array<{
+    id: string;
+    templateExerciseId?: string;
+    setLabel?: string;
+    actualReps?: number;
+    actualLoad?: number;
+    done: boolean;
+  }>;
+}

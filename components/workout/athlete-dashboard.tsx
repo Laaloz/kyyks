@@ -1435,7 +1435,10 @@ export function AthleteDashboard({
                 onStart={async () => {
                   setSelectedWorkoutId(selectedWorkout.id);
                   setPendingStartWorkoutId(selectedWorkout.id);
-                  const result = await startWorkout(selectedWorkout.id);
+                  const result =
+                    selectedWorkout.status === "completed" && selectedWorkout.trainingPlanId && selectedWorkout.programWorkoutId
+                      ? await startProgramWorkout(selectedWorkout.trainingPlanId, selectedWorkout.programWorkoutId)
+                      : await startWorkout(selectedWorkout.id);
                   if (!result.ok) {
                     setPendingStartWorkoutId(null);
                     setSelectedWorkoutId(null);

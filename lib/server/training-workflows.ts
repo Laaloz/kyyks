@@ -11,6 +11,8 @@ import type {
   Role,
   ScheduledWorkout,
   TrainingPlan,
+  WorkoutBatchSetSyncResult,
+  WorkoutSetDraftPatch,
   WorkoutSession,
   WorkoutUpdateInput,
 } from "@/lib/types";
@@ -25,6 +27,10 @@ type RequesterProfile = {
 type WorkoutSetMutationResult =
   | { ok: true; sessionUpdatedAt: string; setLog: { id: string; actualReps?: number; actualLoad?: number; done: boolean } }
   | { ok: false; message: string; code?: "stale_session" | "not_found" | "invalid_state" | "forbidden" };
+
+type WorkoutBatchSetMutationResult =
+  | { ok: true; updatedAt: string; setLogs: WorkoutBatchSetSyncResult["setLogs"] }
+  | { ok: false; message: string; code?: "not_found" | "invalid_state" | "forbidden" };
 
 type WorkoutMutationResult =
   | { ok: true; updatedAt: string; completedAt?: string }
@@ -142,6 +148,18 @@ function resolveDefaultActualLoad(target: { targetLoad?: number }) {
   }
 
   return target.targetLoad;
+}
+
+function buildWorkoutSetDraftKey(patch: {
+  logId?: string;
+  templateExerciseId?: string;
+  setLabel?: string;
+}) {
+  if (patch.templateExerciseId && patch.setLabel) {
+    return `${patch.templateExerciseId}::${patch.setLabel}`;
+  }
+
+  return patch.logId ? `log::${patch.logId}` : null;
 }
 
 function mapPlanRow(row: PlanRow): TrainingPlan {
@@ -1189,6 +1207,202 @@ export async function updateWorkoutSetOnServer({
       actualLoad: toNumberOrUndefined(updatePayload.actual_load),
       done: updatePayload.done,
     },
+  };
+}
+
+export async function syncWorkoutSetDraftsOnServer({
+  requester,
+  scheduledWorkoutId,
+  sets,
+}: {
+  requester: RequesterProfile;
+  scheduledWorkoutId: string;
+  sets: WorkoutSetDraftPatch[];
+}): Promise<WorkoutBatchSetMutationResult> {
+  const admin = createSupabaseAdminClient();
+  const timer = createPhaseTimer(`workout-set-sync:${scheduledWorkoutId}`);
+  if (!admin) {
+    return { ok: false as const, message: "Supabase admin -yhteys puuttuu. Tarkista service role -avain." };
+  }
+
+  if (!sets.length) {
+    return { ok: true as const, updatedAt: nowIso(), setLogs: [] };
+  }
+
+  const dedupedSetPatches = new Map<string, WorkoutSetDraftPatch>();
+  sets.forEach((setPatch) => {
+    const key = buildWorkoutSetDraftKey(setPatch);
+    if (key) {
+      dedupedSetPatches.set(key, setPatch);
+    }
+  });
+
+  if (!dedupedSetPatches.size) {
+    return { ok: false as const, message: "Sarjapäivityksistä puuttuu tunniste.", code: "not_found" };
+  }
+
+  const { data: workout } = await admin
+    .from("scheduled_workouts")
+    .select("id, athlete_id, status")
+    .eq("id", scheduledWorkoutId)
+    .maybeSingle<{ id: string; athlete_id: string; status: ScheduledWorkout["status"] }>();
+  timer.checkpoint("workout-query");
+
+  if (!workout || (!isAdminRole(requester.role) && workout.athlete_id !== requester.id)) {
+    return { ok: false as const, message: "Treeniä ei löytynyt.", code: "forbidden" };
+  }
+
+  if (workout.status !== "in_progress" && workout.status !== "completed") {
+    return {
+      ok: false as const,
+      message: "Sarjoja voi muokata vain aktiivisesta tai valmiista treenistä.",
+      code: "invalid_state",
+    };
+  }
+
+  const { data: targetLogs } = await admin
+    .from("workout_set_logs")
+    .select("id, template_exercise_id, set_id, set_label, superset_group, target_reps, target_reps_min, target_load, actual_reps, actual_load, done")
+    .eq("scheduled_workout_id", scheduledWorkoutId);
+  timer.checkpoint("target-logs-query");
+
+  if (!targetLogs?.length) {
+    return { ok: false as const, message: "Sarjoja ei löytynyt.", code: "not_found" };
+  }
+
+  type TargetLog = NonNullable<typeof targetLogs>[number];
+  const workingLogs = new Map<string, TargetLog>(targetLogs.map((log) => [log.id, { ...log }]));
+  const logsByDraftKey = new Map<string, TargetLog>();
+  targetLogs.forEach((log) => {
+    if (log.template_exercise_id && log.set_label) {
+      logsByDraftKey.set(`${log.template_exercise_id}::${log.set_label}`, log);
+    }
+    logsByDraftKey.set(`log::${log.id}`, log);
+  });
+
+  const changedLogIds = new Set<string>();
+
+  for (const setPatch of dedupedSetPatches.values()) {
+    const key = buildWorkoutSetDraftKey(setPatch);
+    const targetLog = key ? logsByDraftKey.get(key) : null;
+    if (!targetLog) {
+      return { ok: false as const, message: "Sarjaa ei löytynyt.", code: "not_found" };
+    }
+
+    const currentLog = workingLogs.get(targetLog.id) ?? targetLog;
+    const hasActualReps = Object.prototype.hasOwnProperty.call(setPatch, "actualReps");
+    const hasActualLoad = Object.prototype.hasOwnProperty.call(setPatch, "actualLoad");
+    const nextDone = setPatch.done ?? currentLog.done;
+    const nextActualReps = hasActualReps ? setPatch.actualReps ?? undefined : currentLog.actual_reps ?? undefined;
+    const nextActualLoad = hasActualLoad ? setPatch.actualLoad ?? undefined : toNumberOrUndefined(currentLog.actual_load);
+
+    const updatePayload = {
+      actual_reps: nextDone
+        ? (nextActualReps ??
+            resolveDefaultActualReps({
+              targetReps: currentLog.target_reps,
+              targetRepsMin: currentLog.target_reps_min ?? undefined,
+            }) ??
+            null)
+        : nextActualReps ?? null,
+      actual_load: nextDone
+        ? (nextActualLoad ?? resolveDefaultActualLoad({ targetLoad: toNumberOrUndefined(currentLog.target_load) }) ?? null)
+        : nextActualLoad ?? null,
+      done: nextDone,
+    };
+
+    workingLogs.set(targetLog.id, {
+      ...currentLog,
+      actual_reps: updatePayload.actual_reps,
+      actual_load: updatePayload.actual_load,
+      done: updatePayload.done,
+    });
+    changedLogIds.add(targetLog.id);
+
+    if (setPatch.done !== undefined && currentLog.superset_group) {
+      targetLogs.forEach((candidate) => {
+        if (
+          candidate.id === targetLog.id ||
+          candidate.superset_group !== currentLog.superset_group ||
+          candidate.set_label !== currentLog.set_label
+        ) {
+          return;
+        }
+
+        const siblingCurrent = workingLogs.get(candidate.id) ?? candidate;
+        workingLogs.set(candidate.id, {
+          ...siblingCurrent,
+          done: setPatch.done ?? siblingCurrent.done,
+          actual_reps: setPatch.done ? updatePayload.actual_reps : siblingCurrent.actual_reps,
+          actual_load: setPatch.done ? updatePayload.actual_load : siblingCurrent.actual_load,
+        });
+        changedLogIds.add(candidate.id);
+      });
+    }
+  }
+
+  const timestamp = nowIso();
+  const updates: Array<PromiseLike<{ error: unknown }>> = [];
+  changedLogIds.forEach((logId) => {
+    const currentLog = workingLogs.get(logId);
+    if (!currentLog) {
+      return;
+    }
+
+    updates.push(
+      admin
+        .from("workout_set_logs")
+        .update({
+          actual_reps: currentLog.actual_reps,
+          actual_load: currentLog.actual_load,
+          done: currentLog.done,
+          updated_at: timestamp,
+        })
+        .eq("id", logId),
+    );
+  });
+
+  updates.push(
+    admin
+      .from("workout_sessions")
+      .update({ updated_at: timestamp })
+      .eq("scheduled_workout_id", scheduledWorkoutId),
+  );
+
+  if (workout.status !== "completed") {
+    updates.push(
+      admin
+        .from("scheduled_workouts")
+        .update({
+          status: "in_progress",
+          updated_at: timestamp,
+        })
+        .eq("id", scheduledWorkoutId),
+        );
+  }
+
+  const results = await Promise.all(updates);
+  timer.checkpoint("update-write-phase");
+
+  if (results.some((result) => Boolean(result.error))) {
+    return { ok: false as const, message: "Sarjojen tallennus epäonnistui." };
+  }
+
+  timer.checkpoint("done");
+  return {
+    ok: true as const,
+    updatedAt: timestamp,
+    setLogs: Array.from(changedLogIds).map((logId) => {
+      const currentLog = workingLogs.get(logId)!;
+      return {
+        id: currentLog.id,
+        templateExerciseId: currentLog.template_exercise_id ?? undefined,
+        setLabel: currentLog.set_label ?? undefined,
+        actualReps: currentLog.actual_reps ?? undefined,
+        actualLoad: toNumberOrUndefined(currentLog.actual_load),
+        done: currentLog.done,
+      };
+    }),
   };
 }
 

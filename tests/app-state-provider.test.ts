@@ -11,11 +11,11 @@ import {
   applyProgramStatusUpdate,
   applyAdminCoachAssignmentUpdate,
   applyAdminRoleUpdate,
+  buildWorkoutSetDraftKey,
   canDeleteProgramFromState,
   canRetargetProgramInState,
   collectPendingWorkoutMutationKinds,
-  enqueueSetMutationForWorkoutQueue,
-  overlayPendingSetMutationPatch,
+  mergeWorkoutSetDraftPatch,
   rekeyOptimisticWorkoutArtifacts,
   reconcileSupabaseInviteDirectory,
   reconcileSupabaseVisibleState,
@@ -38,113 +38,50 @@ describe("collectPendingWorkoutMutationKinds", () => {
   it("returns queued mutation kinds in the original order", () => {
     expect(
       collectPendingWorkoutMutationKinds([
-        { kind: "set" },
         { kind: "note" },
         { kind: "complete" },
+        { kind: "duration" },
       ]),
-    ).toEqual(["set", "note", "complete"]);
+    ).toEqual(["note", "complete", "duration"]);
   });
 });
 
-describe("enqueueSetMutationForWorkoutQueue", () => {
-  it("merges into the latest pending set mutation for the same log when nothing is in flight", () => {
-    const queue = {
-      scheduledWorkoutId: "workout_1",
-      pending: [
-        {
-          id: "workout_1:1",
-          kind: "set" as const,
-          logId: "log_1",
-          patch: { actualReps: 5 },
-          debounceUntil: 100,
-        },
-      ],
-      inFlight: false,
-      confirmedSessionUpdatedAt: "2026-03-24T08:00:00.000Z",
-      confirmedNoteUpdatedAt: null,
-    };
-
-    enqueueSetMutationForWorkoutQueue(
-      queue,
-      {
-        kind: "set",
-        logId: "log_1",
-        patch: { actualReps: 6 },
-      },
-      "workout_1:2",
-      200,
-    );
-
-    expect(queue.pending).toHaveLength(1);
-    expect(queue.pending[0]).toMatchObject({
-      id: "workout_1:1",
-      patch: { actualReps: 6 },
-      debounceUntil: 900,
-    });
-  });
-
-  it("queues a new set mutation after the in-flight one instead of mutating the already sent request", () => {
-    const queue = {
-      scheduledWorkoutId: "workout_1",
-      pending: [
-        {
-          id: "workout_1:1",
-          kind: "set" as const,
-          logId: "log_1",
-          patch: { actualReps: 5 },
-          debounceUntil: 100,
-        },
-      ],
-      inFlight: true,
-      confirmedSessionUpdatedAt: "2026-03-24T08:00:00.000Z",
-      confirmedNoteUpdatedAt: null,
-    };
-
-    enqueueSetMutationForWorkoutQueue(
-      queue,
-      {
-        kind: "set",
-        logId: "log_1",
-        patch: { actualReps: 6 },
-      },
-      "workout_1:2",
-      200,
-    );
-
-    expect(queue.pending).toHaveLength(2);
-    expect(queue.pending[0]).toMatchObject({
-      id: "workout_1:1",
-      patch: { actualReps: 5 },
-    });
-    expect(queue.pending[1]).toMatchObject({
-      id: "workout_1:2",
-      patch: { actualReps: 6 },
-      debounceUntil: 900,
-    });
-  });
-});
-
-describe("overlayPendingSetMutationPatch", () => {
-  it("preserves newer local fields when an older server confirmation arrives for the same set", () => {
+describe("mergeWorkoutSetDraftPatch", () => {
+  it("merges partial edits into one draft patch and keeps stable identifiers", () => {
     expect(
-      overlayPendingSetMutationPatch(
+      mergeWorkoutSetDraftPatch(
         {
-          id: "log_1",
-          actualReps: 6,
-          actualLoad: 80,
-          done: true,
+          logId: "log_1",
+          templateExerciseId: "exercise_1",
+          setLabel: "1",
+          actualReps: 5,
         },
         {
           actualLoad: 82.5,
-          done: false,
+          done: true,
         },
       ),
     ).toEqual({
-      id: "log_1",
-      actualReps: 6,
+      logId: "log_1",
+      templateExerciseId: "exercise_1",
+      setLabel: "1",
+      actualReps: 5,
       actualLoad: 82.5,
-      done: false,
+      done: true,
     });
+  });
+});
+
+describe("buildWorkoutSetDraftKey", () => {
+  it("prefers stable template exercise identifiers over transient log ids", () => {
+    expect(
+      buildWorkoutSetDraftKey({
+        logId: "log_1",
+        templateExerciseId: "exercise_1",
+        setLabel: "2",
+      }),
+    ).toBe("exercise_1::2");
+    expect(buildWorkoutSetDraftKey({ logId: "log_1" })).toBe("log::log_1");
   });
 });
 
@@ -471,25 +408,31 @@ describe("shouldPreserveStoredSessionDuringSupabaseBootstrap", () => {
         notes: state.notes,
         conversationEntries: state.conversationEntries,
       },
+      new Map(),
       new Map([
         [
           "workout_local",
           {
             scheduledWorkoutId: "workout_local",
-            pending: [
-              {
-                id: "workout_local:1",
-                kind: "set",
-                logId: "log_local",
-                patch: { done: true, actualReps: 5, actualLoad: 100 },
-              },
-            ],
-            inFlight: true,
+            patches: new Map([
+              [
+                "exercise_1::1",
+                {
+                  logId: "log_local",
+                  templateExerciseId: "exercise_1",
+                  setLabel: "1",
+                  done: true,
+                  actualReps: 5,
+                  actualLoad: 100,
+                },
+              ],
+            ]),
+            syncing: false,
             confirmedSessionUpdatedAt: "2026-03-24T08:10:00.000Z",
-            confirmedNoteUpdatedAt: null,
           },
         ],
       ]),
+      new Map(),
     );
 
     expect(nextState.sessions[0]?.setLogs[0]).toMatchObject({
@@ -573,14 +516,9 @@ describe("shouldPreserveStoredSessionDuringSupabaseBootstrap", () => {
         conversationEntries: state.conversationEntries,
       },
       new Map(),
+      new Map(),
       new Map([
-        [
-          "workout_local",
-          {
-            confirmedSessionUpdatedAt: "2026-03-24T08:12:00.000Z",
-            logIds: new Set(["log_local"]),
-          },
-        ],
+        ["workout_local", "2026-03-24T08:12:00.000Z"],
       ]),
     );
 
@@ -651,6 +589,7 @@ describe("shouldPreserveStoredSessionDuringSupabaseBootstrap", () => {
         ],
         conversationEntries: state.conversationEntries,
       },
+      new Map(),
       new Map(),
       new Map(),
       new Map([["workout_local", "2026-03-24T08:12:00.000Z"]]),

@@ -54,6 +54,8 @@ import type {
   ProgramUpdateInput,
   Role,
   UserProfile,
+  WorkoutBatchSetSyncResult,
+  WorkoutSetDraftPatch,
   WorkoutSession,
   WorkoutUpdateInput,
 } from "@/lib/types";
@@ -648,15 +650,6 @@ type CreateProgramResult =
 type WorkoutMutation =
   | {
       id: string;
-      kind: "set";
-      logId: string;
-      templateExerciseId?: string;
-      setLabel?: string;
-      patch: WorkoutUpdateInput;
-      debounceUntil?: number;
-    }
-  | {
-      id: string;
       kind: "note";
       body: string;
     }
@@ -679,13 +672,6 @@ type WorkoutMutation =
     };
 
 type WorkoutMutationInput =
-  | {
-      kind: "set";
-      logId: string;
-      templateExerciseId?: string;
-      setLabel?: string;
-      patch: WorkoutUpdateInput;
-    }
   | {
       kind: "note";
       body: string;
@@ -713,45 +699,22 @@ type WorkoutMutationQueueState = {
   confirmedNoteUpdatedAt?: string | null;
 };
 
-type RecentlyConfirmedWorkoutSetLogs = Map<string, { confirmedSessionUpdatedAt: string; logIds: Set<string> }>;
+type WorkoutSetDraftState = {
+  scheduledWorkoutId: string;
+  patches: Map<string, WorkoutSetDraftPatch>;
+  inFlightPatches?: Map<string, WorkoutSetDraftPatch>;
+  syncing: boolean;
+  debounceUntil?: number;
+  confirmedSessionUpdatedAt?: string;
+};
+
+type RecentlyConfirmedWorkoutSetLogs = Map<string, string>;
 type RecentlyConfirmedWorkoutNotes = Map<string, string>;
 
 export function collectPendingWorkoutMutationKinds(
   pending: ReadonlyArray<Pick<WorkoutMutation, "kind">>,
 ) {
   return pending.map((mutation) => mutation.kind);
-}
-
-export function enqueueSetMutationForWorkoutQueue(
-  queue: WorkoutMutationQueueState,
-  mutation: Extract<WorkoutMutationInput, { kind: "set" }>,
-  nextId: string,
-  now = Date.now(),
-) {
-  const inFlightMutationId = queue.inFlight ? queue.pending[0]?.id : undefined;
-  const existingPendingSet = [...queue.pending]
-    .reverse()
-    .find(
-      (pendingMutation): pendingMutation is Extract<WorkoutMutation, { kind: "set" }> =>
-        pendingMutation.kind === "set" &&
-        pendingMutation.logId === mutation.logId &&
-        pendingMutation.id !== inFlightMutationId,
-    );
-
-  if (existingPendingSet) {
-    existingPendingSet.patch = {
-      ...existingPendingSet.patch,
-      ...mutation.patch,
-    };
-    existingPendingSet.debounceUntil = now + WORKOUT_SET_SYNC_DEBOUNCE_MS;
-    return;
-  }
-
-  queue.pending.push({
-    ...mutation,
-    id: nextId,
-    debounceUntil: now + WORKOUT_SET_SYNC_DEBOUNCE_MS,
-  });
 }
 
 type PasswordResetRequestResult =
@@ -766,7 +729,7 @@ type PublicPasswordResetRequestInput = {
 const PUBLIC_PASSWORD_RESET_RESPONSE =
   "Jos sähköpostiosoite löytyy järjestelmästä, lähetämme salasanan nollauslinkin hetken kuluttua.";
 
-const WORKOUT_SET_SYNC_DEBOUNCE_MS = 700;
+const WORKOUT_SET_SYNC_DEBOUNCE_MS = 500;
 
 type UserSettingsInput = {
   fullName: string;
@@ -1085,18 +1048,43 @@ function getNoteForWorkout(state: AppState, scheduledWorkoutId: string) {
   }) ?? null;
 }
 
-function collectPendingWorkoutSetRequests(
+export function buildWorkoutSetDraftKey(patch: {
+  logId?: string;
+  templateExerciseId?: string;
+  setLabel?: string;
+}) {
+  if (patch.templateExerciseId && patch.setLabel) {
+    return `${patch.templateExerciseId}::${patch.setLabel}`;
+  }
+
+  return patch.logId ? `log::${patch.logId}` : null;
+}
+
+export function mergeWorkoutSetDraftPatch(
+  previous: WorkoutSetDraftPatch | undefined,
+  next: WorkoutUpdateInput & { logId?: string; templateExerciseId?: string; setLabel?: string },
+): WorkoutSetDraftPatch {
+  return {
+    logId: next.logId ?? previous?.logId,
+    templateExerciseId: next.templateExerciseId ?? previous?.templateExerciseId,
+    setLabel: next.setLabel ?? previous?.setLabel,
+    actualReps: next.actualReps !== undefined ? next.actualReps : previous?.actualReps,
+    actualLoad: next.actualLoad !== undefined ? next.actualLoad : previous?.actualLoad,
+    done: next.done !== undefined ? next.done : previous?.done,
+  };
+}
+
+function collectPendingWorkoutMutationState(
   requests?: ReadonlyMap<string, WorkoutMutationQueueState>,
-  recentlyConfirmedSetLogs?: ReadonlyMap<string, { confirmedSessionUpdatedAt: string; logIds: Set<string> }>,
+  workoutSetDrafts?: ReadonlyMap<string, WorkoutSetDraftState>,
 ) {
   const pendingWorkoutIds = new Set<string>();
-  const pendingLogIdsByWorkoutId = new Map<string, Set<string>>();
   const pendingSessionWorkoutIds = new Set<string>();
   const pendingNoteWorkoutIds = new Set<string>();
 
   requests?.forEach((request) => {
     const hasSessionMutation = request.pending.some((mutation) =>
-      mutation.kind === "set" || mutation.kind === "date" || mutation.kind === "duration" || mutation.kind === "complete",
+      mutation.kind === "date" || mutation.kind === "duration" || mutation.kind === "complete",
     );
     if (hasSessionMutation) {
       pendingSessionWorkoutIds.add(request.scheduledWorkoutId);
@@ -1105,64 +1093,27 @@ function collectPendingWorkoutSetRequests(
     if (request.pending.some((mutation) => mutation.kind === "note")) {
       pendingNoteWorkoutIds.add(request.scheduledWorkoutId);
     }
+  });
 
-    const pendingSetMutations = request.pending.filter(
-      (mutation): mutation is Extract<WorkoutMutation, { kind: "set" }> => mutation.kind === "set",
-    );
-
-    if (!pendingSetMutations.length) {
-      return;
+  workoutSetDrafts?.forEach((draftState, scheduledWorkoutId) => {
+    if (draftState.patches.size > 0 || draftState.syncing) {
+      pendingWorkoutIds.add(scheduledWorkoutId);
+      pendingSessionWorkoutIds.add(scheduledWorkoutId);
     }
-
-    pendingWorkoutIds.add(request.scheduledWorkoutId);
-    const ids = pendingLogIdsByWorkoutId.get(request.scheduledWorkoutId) ?? new Set<string>();
-    pendingSetMutations.forEach((mutation) => ids.add(mutation.logId));
-    pendingLogIdsByWorkoutId.set(request.scheduledWorkoutId, ids);
   });
 
-  recentlyConfirmedSetLogs?.forEach((entry, scheduledWorkoutId) => {
-    const ids = pendingLogIdsByWorkoutId.get(scheduledWorkoutId) ?? new Set<string>();
-    entry.logIds.forEach((logId) => ids.add(logId));
-    pendingLogIdsByWorkoutId.set(scheduledWorkoutId, ids);
-  });
-
-  return { pendingWorkoutIds, pendingLogIdsByWorkoutId, pendingSessionWorkoutIds, pendingNoteWorkoutIds };
+  return { pendingWorkoutIds, pendingSessionWorkoutIds, pendingNoteWorkoutIds };
 }
 
-function mergeSessionSetLogs(
-  localSession: WorkoutSession,
-  serverSession: WorkoutSession,
-  pendingLogIds: ReadonlySet<string>,
-) {
-  const localLogsById = new Map(localSession.setLogs.map((log) => [log.id, log]));
-  const mergedLogs = serverSession.setLogs.map((log) => {
-    if (!pendingLogIds.has(log.id)) {
-      return log;
-    }
-
-    return localLogsById.get(log.id) ?? log;
-  });
-
-  localSession.setLogs.forEach((log) => {
-    if (pendingLogIds.has(log.id) && !mergedLogs.some((candidate) => candidate.id === log.id)) {
-      mergedLogs.push(log);
-    }
-  });
-
-  return mergedLogs;
-}
-
-function applyConfirmedWorkoutSetUpdate(
+function applyConfirmedWorkoutSetSync(
   previous: AppState,
   scheduledWorkoutId: string,
   sessionUpdatedAt: string,
-  setLog: {
-    id: string;
-    actualReps?: number;
-    actualLoad?: number;
-    done: boolean;
-  },
+  setLogs: WorkoutBatchSetSyncResult["setLogs"],
+  pendingDrafts?: ReadonlyMap<string, WorkoutSetDraftPatch>,
 ) {
+  const confirmedLogsById = new Map(setLogs.map((setLog) => [setLog.id, setLog]));
+
   return {
     ...previous,
     sessions: previous.sessions.map((session) =>
@@ -1171,14 +1122,37 @@ function applyConfirmedWorkoutSetUpdate(
             ...session,
             updatedAt: sessionUpdatedAt,
             setLogs: session.setLogs.map((log) =>
-              log.id === setLog.id
-                ? {
-                    ...log,
-                    actualReps: setLog.actualReps,
-                    actualLoad: setLog.actualLoad,
-                    done: setLog.done,
-                  }
-                : log,
+              (() => {
+                const confirmedSetLog = confirmedLogsById.get(log.id);
+                if (!confirmedSetLog) {
+                  return log;
+                }
+
+                const nextLog = {
+                  ...log,
+                  actualReps: confirmedSetLog.actualReps,
+                  actualLoad: confirmedSetLog.actualLoad,
+                  done: confirmedSetLog.done,
+                };
+                const pendingDraft = pendingDrafts?.get(
+                  buildWorkoutSetDraftKey({
+                    templateExerciseId: confirmedSetLog.templateExerciseId,
+                    setLabel: confirmedSetLog.setLabel,
+                    logId: confirmedSetLog.id,
+                  }) ?? "",
+                );
+
+                if (!pendingDraft) {
+                  return nextLog;
+                }
+
+                return {
+                  ...nextLog,
+                  actualReps: pendingDraft.actualReps !== undefined ? pendingDraft.actualReps ?? undefined : nextLog.actualReps,
+                  actualLoad: pendingDraft.actualLoad !== undefined ? pendingDraft.actualLoad ?? undefined : nextLog.actualLoad,
+                  done: pendingDraft.done !== undefined ? pendingDraft.done : nextLog.done,
+                };
+              })(),
             ),
           }
         : session,
@@ -1190,42 +1164,7 @@ function applyConfirmedWorkoutSetUpdate(
             updatedAt: sessionUpdatedAt,
           }
         : workout,
-    ),
-  };
-}
-
-export function isSameWorkoutSetMutation(
-  mutation: Extract<WorkoutMutation, { kind: "set" }>,
-  candidate: Extract<WorkoutMutation, { kind: "set" }>,
-) {
-  if (mutation.logId === candidate.logId) {
-    return true;
-  }
-
-  return Boolean(
-    mutation.templateExerciseId &&
-      mutation.setLabel &&
-      candidate.templateExerciseId === mutation.templateExerciseId &&
-      candidate.setLabel === mutation.setLabel,
-  );
-}
-
-export function overlayPendingSetMutationPatch(
-  setLog: {
-    id: string;
-    actualReps?: number;
-    actualLoad?: number;
-    done: boolean;
-  },
-  pendingPatch: WorkoutUpdateInput,
-) {
-  return {
-    ...setLog,
-    actualReps:
-      pendingPatch.actualReps !== undefined ? pendingPatch.actualReps ?? undefined : setLog.actualReps,
-    actualLoad:
-      pendingPatch.actualLoad !== undefined ? pendingPatch.actualLoad ?? undefined : setLog.actualLoad,
-    done: pendingPatch.done !== undefined ? pendingPatch.done : setLog.done,
+      ),
   };
 }
 
@@ -1511,7 +1450,8 @@ export function reconcileSupabaseVisibleState(
   previous: AppState,
   snapshot: SupabaseVisibleAppStateSnapshot,
   pendingWorkoutSetRequests?: ReadonlyMap<string, WorkoutMutationQueueState>,
-  recentlyConfirmedSetLogs?: ReadonlyMap<string, { confirmedSessionUpdatedAt: string; logIds: Set<string> }>,
+  workoutSetDrafts?: ReadonlyMap<string, WorkoutSetDraftState>,
+  recentlyConfirmedSetLogs?: ReadonlyMap<string, string>,
   recentlyConfirmedNotes?: ReadonlyMap<string, string>,
 ) {
   const withOptimisticWorkouts = preserveActiveWorkoutShells(previous, snapshot);
@@ -1530,9 +1470,9 @@ export function reconcileSupabaseVisibleState(
       return session ? [[session.scheduledWorkoutId, note] as const] : [];
     }),
   );
-  const { pendingWorkoutIds, pendingLogIdsByWorkoutId, pendingSessionWorkoutIds, pendingNoteWorkoutIds } = collectPendingWorkoutSetRequests(
+  const { pendingWorkoutIds, pendingSessionWorkoutIds, pendingNoteWorkoutIds } = collectPendingWorkoutMutationState(
     pendingWorkoutSetRequests,
-    recentlyConfirmedSetLogs,
+    workoutSetDrafts,
   );
   const activeServerEmails = new Set(
     snapshot.users
@@ -1581,6 +1521,22 @@ export function reconcileSupabaseVisibleState(
         return localWorkout;
       }
 
+      const recentlyConfirmedUpdatedAt = recentlyConfirmedSetLogs?.get(workout.id);
+      if (recentlyConfirmedUpdatedAt) {
+        const localUpdatedAt = Date.parse(localWorkout.updatedAt);
+        const serverUpdatedAt = Date.parse(workout.updatedAt);
+        const confirmedUpdatedAt = Date.parse(recentlyConfirmedUpdatedAt);
+        if (
+          Number.isFinite(localUpdatedAt) &&
+          Number.isFinite(serverUpdatedAt) &&
+          Number.isFinite(confirmedUpdatedAt) &&
+          localUpdatedAt >= confirmedUpdatedAt &&
+          serverUpdatedAt < confirmedUpdatedAt
+        ) {
+          return localWorkout;
+        }
+      }
+
       const localUpdatedAt = Date.parse(localWorkout.updatedAt);
       const serverUpdatedAt = Date.parse(workout.updatedAt);
       return Number.isFinite(localUpdatedAt) && Number.isFinite(serverUpdatedAt) && localUpdatedAt > serverUpdatedAt
@@ -1597,13 +1553,20 @@ export function reconcileSupabaseVisibleState(
         return localSession;
       }
 
-      const pendingLogIds = pendingLogIdsByWorkoutId.get(session.scheduledWorkoutId) ?? new Set<string>();
-      if (pendingLogIds.size > 0) {
-        return {
-          ...session,
-          updatedAt: localSession.updatedAt,
-          setLogs: mergeSessionSetLogs(localSession, session, pendingLogIds),
-        };
+      const recentlyConfirmedUpdatedAt = recentlyConfirmedSetLogs?.get(session.scheduledWorkoutId);
+      if (recentlyConfirmedUpdatedAt) {
+        const localUpdatedAt = Date.parse(localSession.updatedAt);
+        const serverUpdatedAt = Date.parse(session.updatedAt);
+        const confirmedUpdatedAt = Date.parse(recentlyConfirmedUpdatedAt);
+        if (
+          Number.isFinite(localUpdatedAt) &&
+          Number.isFinite(serverUpdatedAt) &&
+          Number.isFinite(confirmedUpdatedAt) &&
+          localUpdatedAt >= confirmedUpdatedAt &&
+          serverUpdatedAt < confirmedUpdatedAt
+        ) {
+          return localSession;
+        }
       }
 
       const localUpdatedAt = Date.parse(localSession.updatedAt);
@@ -2114,6 +2077,9 @@ export function AppStateProvider({ children }: PropsWithChildren) {
   const workoutMutationIdRef = useRef(0);
   const workoutConfirmedSessionUpdatedAtRef = useRef<Map<string, string>>(new Map());
   const workoutConfirmedNoteUpdatedAtRef = useRef<Map<string, string | null>>(new Map());
+  const workoutSetDraftsRef = useRef<Map<string, WorkoutSetDraftState>>(new Map());
+  const workoutSetDraftRunnerRef = useRef<Map<string, Promise<void>>>(new Map());
+  const workoutSetDraftWakeTimeoutRef = useRef<Map<string, number>>(new Map());
   const recentlyConfirmedSetLogsRef = useRef<RecentlyConfirmedWorkoutSetLogs>(new Map());
   const recentlyConfirmedWorkoutNotesRef = useRef<RecentlyConfirmedWorkoutNotes>(new Map());
   const isHydrated =
@@ -2340,6 +2306,7 @@ export function AppStateProvider({ children }: PropsWithChildren) {
               previous,
               snapshot,
               workoutMutationQueueRef.current,
+              workoutSetDraftsRef.current,
               recentlyConfirmedSetLogsRef.current,
               recentlyConfirmedWorkoutNotesRef.current,
             ),
@@ -2509,7 +2476,7 @@ function findResolvedUserIdInSnapshot(
           }
 
           const serverUpdatedAt = Date.parse(session.updatedAt);
-          const confirmedUpdatedAt = Date.parse(entry.confirmedSessionUpdatedAt);
+          const confirmedUpdatedAt = Date.parse(entry);
           if (Number.isFinite(serverUpdatedAt) && Number.isFinite(confirmedUpdatedAt) && serverUpdatedAt >= confirmedUpdatedAt) {
             nextRecentlyConfirmed.delete(session.scheduledWorkoutId);
           }
@@ -2545,6 +2512,7 @@ function findResolvedUserIdInSnapshot(
             previous,
             payload,
             workoutMutationQueueRef.current,
+            workoutSetDraftsRef.current,
             recentlyConfirmedSetLogsRef.current,
             recentlyConfirmedWorkoutNotesRef.current,
           ),
@@ -2624,6 +2592,187 @@ function findResolvedUserIdInSnapshot(
     void refreshSupabaseVisibleState();
   }, [authenticatedUserId, hasActiveWorkoutOpen, isHydrated, supabase]);
 
+  const ensureWorkoutSetDraftState = useCallback((scheduledWorkoutId: string) => {
+    const existing = workoutSetDraftsRef.current.get(scheduledWorkoutId);
+    if (existing) {
+      existing.confirmedSessionUpdatedAt =
+        workoutConfirmedSessionUpdatedAtRef.current.get(scheduledWorkoutId)
+        ?? getSessionUpdatedAtForWorkout(stateRef.current, scheduledWorkoutId)
+        ?? existing.confirmedSessionUpdatedAt;
+      return existing;
+    }
+
+    const nextDraftState: WorkoutSetDraftState = {
+      scheduledWorkoutId,
+      patches: new Map(),
+      syncing: false,
+      confirmedSessionUpdatedAt:
+        workoutConfirmedSessionUpdatedAtRef.current.get(scheduledWorkoutId)
+        ?? getSessionUpdatedAtForWorkout(stateRef.current, scheduledWorkoutId),
+    };
+    workoutSetDraftsRef.current.set(scheduledWorkoutId, nextDraftState);
+    return nextDraftState;
+  }, []);
+
+  const syncWorkoutSetDraftVersionsFromState = useCallback((scheduledWorkoutId: string) => {
+    const existing = workoutSetDraftsRef.current.get(scheduledWorkoutId);
+    if (!existing) {
+      return;
+    }
+
+    existing.confirmedSessionUpdatedAt =
+      workoutConfirmedSessionUpdatedAtRef.current.get(scheduledWorkoutId)
+      ?? getSessionUpdatedAtForWorkout(stateRef.current, scheduledWorkoutId)
+      ?? existing.confirmedSessionUpdatedAt;
+  }, []);
+
+  const runWorkoutSetDraftSync = useCallback(async (scheduledWorkoutId: string) => {
+    if (!supabase) {
+      return;
+    }
+
+    const draftState = workoutSetDraftsRef.current.get(scheduledWorkoutId);
+    if (!draftState || draftState.syncing || draftState.patches.size === 0) {
+      return;
+    }
+
+    const inFlightPatches = new Map(draftState.patches);
+    draftState.inFlightPatches = inFlightPatches;
+    draftState.patches = new Map();
+    draftState.syncing = true;
+
+    const response = await fetch(`/api/workouts/${encodeURIComponent(scheduledWorkoutId)}/sets`, {
+      method: "PATCH",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        sets: Array.from(inFlightPatches.values()),
+      }),
+    }).catch(() => null);
+
+    const payload = (response ? await response.json().catch(() => null) : null) as
+      | ({ message?: string } & Partial<WorkoutBatchSetSyncResult>)
+      | null;
+
+    const latestDraftState = workoutSetDraftsRef.current.get(scheduledWorkoutId);
+    if (!latestDraftState) {
+      return;
+    }
+
+    latestDraftState.syncing = false;
+    latestDraftState.inFlightPatches = undefined;
+
+    if (!response?.ok || !payload?.updatedAt || !Array.isArray(payload.setLogs)) {
+      const restoredPatches = new Map(inFlightPatches);
+      latestDraftState.patches.forEach((patch, key) => {
+        restoredPatches.set(key, patch);
+      });
+      latestDraftState.patches = restoredPatches;
+      console.warn("[workout-ui] set-batch-sync-failed", {
+        scheduledWorkoutId,
+        status: response?.status,
+        message: payload?.message,
+      });
+      return;
+    }
+
+    latestDraftState.confirmedSessionUpdatedAt = payload.updatedAt;
+    workoutConfirmedSessionUpdatedAtRef.current.set(scheduledWorkoutId, payload.updatedAt);
+    recentlyConfirmedSetLogsRef.current.set(scheduledWorkoutId, payload.updatedAt);
+
+    setState((previous) =>
+      applyConfirmedWorkoutSetSync(previous, scheduledWorkoutId, payload.updatedAt!, payload.setLogs!, latestDraftState.patches),
+    );
+
+    if (latestDraftState.patches.size === 0) {
+      workoutSetDraftsRef.current.delete(scheduledWorkoutId);
+    }
+  }, [supabase]);
+
+  const flushWorkoutSetDrafts = useCallback((scheduledWorkoutId: string): Promise<void> => {
+    const existingRunner = workoutSetDraftRunnerRef.current.get(scheduledWorkoutId);
+    if (existingRunner) {
+      return existingRunner;
+    }
+
+    const runner = (async () => {
+      while (true) {
+        const draftState = workoutSetDraftsRef.current.get(scheduledWorkoutId);
+        if (!draftState || draftState.syncing || draftState.patches.size === 0) {
+          if (draftState && !draftState.syncing && draftState.patches.size === 0) {
+            workoutSetDraftsRef.current.delete(scheduledWorkoutId);
+          }
+          return;
+        }
+
+        if (typeof draftState.debounceUntil === "number" && draftState.debounceUntil > Date.now()) {
+          const existingTimeout = workoutSetDraftWakeTimeoutRef.current.get(scheduledWorkoutId);
+          if (existingTimeout) {
+            window.clearTimeout(existingTimeout);
+          }
+          const timeout = window.setTimeout(() => {
+            workoutSetDraftWakeTimeoutRef.current.delete(scheduledWorkoutId);
+            void flushWorkoutSetDrafts(scheduledWorkoutId);
+          }, Math.max(0, draftState.debounceUntil - Date.now()));
+          workoutSetDraftWakeTimeoutRef.current.set(scheduledWorkoutId, timeout);
+          return;
+        }
+
+        draftState.debounceUntil = undefined;
+        await runWorkoutSetDraftSync(scheduledWorkoutId);
+
+        const latestDraftState = workoutSetDraftsRef.current.get(scheduledWorkoutId);
+        if (!latestDraftState) {
+          return;
+        }
+
+        if (latestDraftState.patches.size === 0) {
+          workoutSetDraftsRef.current.delete(scheduledWorkoutId);
+          return;
+        }
+      }
+    })().finally(() => {
+      if (workoutSetDraftRunnerRef.current.get(scheduledWorkoutId) === runner) {
+        workoutSetDraftRunnerRef.current.delete(scheduledWorkoutId);
+      }
+    });
+
+    workoutSetDraftRunnerRef.current.set(scheduledWorkoutId, runner);
+    return runner;
+  }, [runWorkoutSetDraftSync]);
+
+  const scheduleWorkoutSetDraftSync = useCallback((scheduledWorkoutId: string) => {
+    const draftState = ensureWorkoutSetDraftState(scheduledWorkoutId);
+    draftState.debounceUntil = Date.now() + WORKOUT_SET_SYNC_DEBOUNCE_MS;
+
+    const existingTimeout = workoutSetDraftWakeTimeoutRef.current.get(scheduledWorkoutId);
+    if (existingTimeout) {
+      window.clearTimeout(existingTimeout);
+    }
+
+    const timeout = window.setTimeout(() => {
+      workoutSetDraftWakeTimeoutRef.current.delete(scheduledWorkoutId);
+      void flushWorkoutSetDrafts(scheduledWorkoutId);
+    }, WORKOUT_SET_SYNC_DEBOUNCE_MS);
+    workoutSetDraftWakeTimeoutRef.current.set(scheduledWorkoutId, timeout);
+  }, [ensureWorkoutSetDraftState, flushWorkoutSetDrafts]);
+
+  const flushPendingWorkoutSetDrafts = useCallback(async (scheduledWorkoutId: string) => {
+    const draftState = workoutSetDraftsRef.current.get(scheduledWorkoutId);
+    if (!draftState) {
+      return;
+    }
+
+    draftState.debounceUntil = undefined;
+    const wakeTimeout = workoutSetDraftWakeTimeoutRef.current.get(scheduledWorkoutId);
+    if (wakeTimeout) {
+      window.clearTimeout(wakeTimeout);
+      workoutSetDraftWakeTimeoutRef.current.delete(scheduledWorkoutId);
+    }
+    await flushWorkoutSetDrafts(scheduledWorkoutId);
+  }, [flushWorkoutSetDrafts]);
+
   const ensureWorkoutMutationQueue = useCallback((scheduledWorkoutId: string) => {
     const existing = workoutMutationQueueRef.current.get(scheduledWorkoutId);
     if (existing) {
@@ -2702,140 +2851,6 @@ function findResolvedUserIdInSnapshot(
     };
 
     switch (mutation.kind) {
-      case "set": {
-        let currentLogId = mutation.logId;
-
-        for (let attempt = 0; attempt < 2; attempt += 1) {
-          const requestLogId = currentLogId;
-          const expectedUpdatedAt =
-            workoutConfirmedSessionUpdatedAtRef.current.get(queue.scheduledWorkoutId)
-            ?? queue.confirmedSessionUpdatedAt
-            ?? getSessionUpdatedAtForWorkout(stateRef.current, queue.scheduledWorkoutId);
-          if (!expectedUpdatedAt) {
-            await resolveFailure("Sarjan päivitys epäonnistui.");
-            return;
-          }
-
-          const response = await fetch(
-            `/api/workouts/${encodeURIComponent(queue.scheduledWorkoutId)}/sets/${encodeURIComponent(currentLogId)}`,
-            {
-              method: "PATCH",
-              headers: {
-                "Content-Type": "application/json",
-              },
-              body: JSON.stringify({
-                ...mutation.patch,
-                templateExerciseId: mutation.templateExerciseId,
-                setLabel: mutation.setLabel,
-                expectedUpdatedAt,
-              }),
-            },
-          ).catch(() => null);
-
-          const payload = (response
-            ? await response.json().catch(() => null)
-            : null) as
-            | {
-                message?: string;
-                code?: string;
-                sessionUpdatedAt?: string;
-                setLog?: { id: string; actualReps?: number; actualLoad?: number; done: boolean };
-              }
-            | null;
-
-          if (response?.ok && payload?.sessionUpdatedAt && payload.setLog) {
-            queue.confirmedSessionUpdatedAt = payload.sessionUpdatedAt;
-            workoutConfirmedSessionUpdatedAtRef.current.set(queue.scheduledWorkoutId, payload.sessionUpdatedAt);
-            const confirmedLogId = payload.setLog.id;
-            mutation.logId = confirmedLogId;
-            currentLogId = confirmedLogId;
-            const queuedFollowUpMutations = queue.pending
-              .filter(
-                (pendingMutation): pendingMutation is Extract<WorkoutMutation, { kind: "set" }> =>
-                  pendingMutation.kind === "set" &&
-                  pendingMutation.id !== mutation.id &&
-                  isSameWorkoutSetMutation(
-                    {
-                      ...mutation,
-                      logId: requestLogId,
-                    },
-                    pendingMutation,
-                  ),
-              );
-
-            queuedFollowUpMutations.forEach((pendingMutation) => {
-              pendingMutation.logId = confirmedLogId;
-            });
-
-            const locallyConfirmedSetLog = queuedFollowUpMutations.reduce<{
-              id: string;
-              actualReps?: number;
-              actualLoad?: number;
-              done: boolean;
-            }>(
-              (nextSetLog, pendingMutation) => overlayPendingSetMutationPatch(nextSetLog, pendingMutation.patch),
-              {
-                id: payload.setLog.id,
-                actualReps: payload.setLog.actualReps ?? undefined,
-                actualLoad: payload.setLog.actualLoad ?? undefined,
-                done: payload.setLog.done,
-              },
-            );
-            const existingRecentlyConfirmed = recentlyConfirmedSetLogsRef.current.get(queue.scheduledWorkoutId);
-            const nextLogIds = new Set(existingRecentlyConfirmed?.logIds ?? []);
-            nextLogIds.add(confirmedLogId);
-            recentlyConfirmedSetLogsRef.current.set(queue.scheduledWorkoutId, {
-              confirmedSessionUpdatedAt: payload.sessionUpdatedAt,
-              logIds: nextLogIds,
-            });
-            setState((previous) =>
-              applyConfirmedWorkoutSetUpdate(
-                previous,
-                queue.scheduledWorkoutId,
-                payload.sessionUpdatedAt!,
-                locallyConfirmedSetLog,
-              ),
-            );
-            return;
-          }
-
-          if (payload?.code === "not_found" && attempt === 0 && mutation.templateExerciseId && mutation.setLabel) {
-            await refreshSupabaseVisibleState();
-            syncWorkoutMutationQueueVersionsFromState(queue.scheduledWorkoutId);
-            const refreshedSession = stateRef.current.sessions.find(
-              (session) => session.scheduledWorkoutId === queue.scheduledWorkoutId,
-            );
-            const remappedLog = refreshedSession?.setLogs.find(
-              (log) =>
-                log.templateExerciseId === mutation.templateExerciseId &&
-                log.setLabel === mutation.setLabel,
-            );
-
-            if (remappedLog) {
-              currentLogId = remappedLog.id;
-              mutation.logId = remappedLog.id;
-              continue;
-            }
-          }
-
-          console.warn("[workout-ui] set-mutation-failed", {
-            scheduledWorkoutId: queue.scheduledWorkoutId,
-            logId: currentLogId,
-            templateExerciseId: mutation.templateExerciseId,
-            setLabel: mutation.setLabel,
-            expectedUpdatedAt,
-            status: response?.status,
-            message: payload?.message,
-            code: payload?.code,
-          });
-
-          await resolveFailure(payload?.message ?? "Sarjan päivitys epäonnistui.");
-          return;
-        }
-
-        await resolveFailure("Sarjan päivitys epäonnistui.");
-        return;
-      }
       case "note": {
         const expectedUpdatedAt =
           queue.confirmedNoteUpdatedAt ?? getNoteForWorkout(stateRef.current, queue.scheduledWorkoutId)?.updatedAt ?? null;
@@ -3001,19 +3016,6 @@ function findResolvedUserIdInSnapshot(
         }
 
         const mutation = queue.pending[0]!;
-        if (mutation.kind === "set" && typeof mutation.debounceUntil === "number" && mutation.debounceUntil > Date.now()) {
-          const existingTimeout = workoutMutationWakeTimeoutRef.current.get(scheduledWorkoutId);
-          if (existingTimeout) {
-            window.clearTimeout(existingTimeout);
-          }
-          const wakeTimeout = window.setTimeout(() => {
-            workoutMutationWakeTimeoutRef.current.delete(scheduledWorkoutId);
-            void flushWorkoutMutationQueue(scheduledWorkoutId);
-          }, Math.max(0, mutation.debounceUntil - Date.now()));
-          workoutMutationWakeTimeoutRef.current.set(scheduledWorkoutId, wakeTimeout);
-          return;
-        }
-
         queue.inFlight = true;
         await runWorkoutMutation(queue, mutation);
 
@@ -3049,68 +3051,21 @@ function findResolvedUserIdInSnapshot(
 
   const enqueueWorkoutMutation = useCallback((scheduledWorkoutId: string, mutation: WorkoutMutationInput) => {
     const queue = ensureWorkoutMutationQueue(scheduledWorkoutId);
-    if (mutation.kind === "set") {
-      workoutMutationIdRef.current += 1;
-      enqueueSetMutationForWorkoutQueue(
-        queue,
-        mutation,
-        `${scheduledWorkoutId}:${workoutMutationIdRef.current}`,
-      );
-    } else {
-      workoutMutationIdRef.current += 1;
-      const queuedMutation: WorkoutMutation = {
-        ...mutation,
-        id: `${scheduledWorkoutId}:${workoutMutationIdRef.current}`,
-      };
-      queue.pending.push(queuedMutation);
-    }
+    workoutMutationIdRef.current += 1;
+    const queuedMutation: WorkoutMutation = {
+      ...mutation,
+      id: `${scheduledWorkoutId}:${workoutMutationIdRef.current}`,
+    };
+    queue.pending.push(queuedMutation);
 
     const wakeTimeout = workoutMutationWakeTimeoutRef.current.get(scheduledWorkoutId);
     if (wakeTimeout) {
       window.clearTimeout(wakeTimeout);
       workoutMutationWakeTimeoutRef.current.delete(scheduledWorkoutId);
-    }
-
-    const firstPendingMutation = queue.pending[0];
-    if (
-      firstPendingMutation?.kind === "set" &&
-      typeof firstPendingMutation.debounceUntil === "number" &&
-      firstPendingMutation.debounceUntil > Date.now()
-    ) {
-      const nextWakeTimeout = window.setTimeout(() => {
-        workoutMutationWakeTimeoutRef.current.delete(scheduledWorkoutId);
-        void flushWorkoutMutationQueue(scheduledWorkoutId);
-      }, Math.max(0, firstPendingMutation.debounceUntil - Date.now()));
-      workoutMutationWakeTimeoutRef.current.set(scheduledWorkoutId, nextWakeTimeout);
-      return;
     }
 
     void flushWorkoutMutationQueue(scheduledWorkoutId);
   }, [ensureWorkoutMutationQueue, flushWorkoutMutationQueue]);
-
-  const flushPendingWorkoutSetMutations = useCallback(async (scheduledWorkoutId: string) => {
-    const queue = workoutMutationQueueRef.current.get(scheduledWorkoutId);
-    if (!queue) {
-      return;
-    }
-
-    queue.pending = queue.pending.map((mutation) =>
-      mutation.kind === "set"
-        ? {
-            ...mutation,
-            debounceUntil: undefined,
-          }
-        : mutation,
-    );
-
-    const wakeTimeout = workoutMutationWakeTimeoutRef.current.get(scheduledWorkoutId);
-    if (wakeTimeout) {
-      window.clearTimeout(wakeTimeout);
-      workoutMutationWakeTimeoutRef.current.delete(scheduledWorkoutId);
-    }
-
-    await flushWorkoutMutationQueue(scheduledWorkoutId);
-  }, [flushWorkoutMutationQueue]);
 
   useEffect(() => {
     if (!isHydrated || !supabase || !authenticatedUser || !canActAsCoach(authenticatedUser.role)) {
@@ -3232,6 +3187,7 @@ function findResolvedUserIdInSnapshot(
               previous,
               latestSnapshot as SupabaseVisibleAppStateSnapshot,
               workoutMutationQueueRef.current,
+              workoutSetDraftsRef.current,
               recentlyConfirmedSetLogsRef.current,
               recentlyConfirmedWorkoutNotesRef.current,
             ),
@@ -5253,16 +5209,30 @@ function findResolvedUserIdInSnapshot(
 
         setState((previous) => domainUpdateSessionSet(previous, scheduledWorkoutId, logId, patch));
 
-        if (supabase) {
-          enqueueWorkoutMutation(scheduledWorkoutId, {
-            kind: "set",
-            logId,
-            templateExerciseId: targetLog?.templateExerciseId,
-            setLabel: targetLog?.setLabel,
-            patch,
-          });
+        if (!supabase || !targetLog) {
           return;
         }
+
+        const draftState = ensureWorkoutSetDraftState(scheduledWorkoutId);
+        const draftKey = buildWorkoutSetDraftKey({
+          logId,
+          templateExerciseId: targetLog.templateExerciseId,
+          setLabel: targetLog.setLabel,
+        });
+        if (!draftKey) {
+          return;
+        }
+
+        draftState.patches.set(
+          draftKey,
+          mergeWorkoutSetDraftPatch(draftState.patches.get(draftKey), {
+            ...patch,
+            logId,
+            templateExerciseId: targetLog.templateExerciseId,
+            setLabel: targetLog.setLabel,
+          }),
+        );
+        scheduleWorkoutSetDraftSync(scheduledWorkoutId);
       },
       saveWorkoutNote(scheduledWorkoutId, body) {
         if (!currentUser) {
@@ -5312,7 +5282,7 @@ function findResolvedUserIdInSnapshot(
         }
 
         if (supabase) {
-          await flushPendingWorkoutSetMutations(scheduledWorkoutId);
+          await flushPendingWorkoutSetDrafts(scheduledWorkoutId);
 
           const refreshedState = stateRef.current;
           if (!canCompleteSession(refreshedState, scheduledWorkoutId)) {
