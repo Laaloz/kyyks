@@ -203,6 +203,10 @@ export function AthleteDashboard({
   const [historyMenuAnchorRect, setHistoryMenuAnchorRect] = useState<AnchorRect | null>(null);
   const [historyMenuStyle, setHistoryMenuStyle] = useState<CSSProperties | null>(null);
   const [expandedHistoryGroups, setExpandedHistoryGroups] = useState<Record<string, boolean>>({});
+  const sessionByWorkoutId = useMemo(
+    () => new Map(state.sessions.map((session) => [session.scheduledWorkoutId, session])),
+    [state.sessions],
+  );
   const [selectedHistoryWorkoutByGroup, setSelectedHistoryWorkoutByGroup] = useState<Record<string, string>>({});
   const [measurementDraft, setMeasurementDraft] = useState({
     weightKg: "",
@@ -297,11 +301,11 @@ export function AthleteDashboard({
     () => new Set(state.sessions.map((session) => session.scheduledWorkoutId)),
     [state.sessions],
   );
-  const getWorkoutOrderMetadata = useMemo(() => {
-    const sessionByWorkoutId = new Map(state.sessions.map((session) => [session.scheduledWorkoutId, session]));
-    return (workout: (typeof workouts)[number]): WorkoutOrderMetadata =>
-      getWorkoutOrderTimestamps(workout, sessionByWorkoutId.get(workout.id));
-  }, [state.sessions]);
+  const getWorkoutOrderMetadata = useMemo(
+    () => (workout: (typeof workouts)[number]): WorkoutOrderMetadata =>
+      getWorkoutOrderTimestamps(workout, sessionByWorkoutId.get(workout.id)),
+    [sessionByWorkoutId],
+  );
   const compareWorkoutOrder = useMemo(() => {
     return (left: (typeof workouts)[number], right: (typeof workouts)[number]) => {
       const leftOrder = getWorkoutOrderMetadata(left);
@@ -311,17 +315,26 @@ export function AthleteDashboard({
       return metadataComparison !== 0 ? metadataComparison : right.id.localeCompare(left.id);
     };
   }, [getWorkoutOrderMetadata]);
+  const resolveWorkoutStatus = (workout: (typeof workouts)[number]) => {
+    const session = sessionByWorkoutId.get(workout.id);
+    if (session?.completedAt || workout.completedAt) {
+      return "completed" as const;
+    }
+
+    return workout.status;
+  };
+
   const activeWorkout = useMemo(
     () =>
       [...workouts]
-        .filter((item) => item.status === "in_progress")
+        .filter((item) => resolveWorkoutStatus(item) === "in_progress")
         .sort(compareWorkoutOrder)[0],
     [compareWorkoutOrder, workouts],
   );
   const resumableWorkout = useMemo(
     () =>
       [...workouts]
-        .filter((item) => item.status === "cancelled" && scheduledWithSessionIds.has(item.id))
+        .filter((item) => resolveWorkoutStatus(item) === "cancelled" && scheduledWithSessionIds.has(item.id))
         .sort(compareWorkoutOrder)[0],
     [compareWorkoutOrder, scheduledWithSessionIds, workouts],
   );
@@ -349,7 +362,7 @@ export function AthleteDashboard({
     [state.users],
   );
   const progress = selectedWorkout ? getSessionProgress(state, selectedWorkout.id) : null;
-  const inProgressCount = workouts.filter((item) => item.status === "in_progress").length;
+  const inProgressCount = workouts.filter((item) => resolveWorkoutStatus(item) === "in_progress").length;
   useEffect(() => {
     if (!dismissedActiveWorkoutId) {
       return;
@@ -406,11 +419,6 @@ export function AthleteDashboard({
     [athletePrograms, selectedWorkout?.programWorkoutId],
   );
   const workoutInsights = useMemo(() => buildWorkoutInsights(state), [state]);
-  const sessionByWorkoutId = useMemo(
-    () => new Map(state.sessions.map((session) => [session.scheduledWorkoutId, session])),
-    [state.sessions],
-  );
-  const resolveWorkoutStatus = (workout: (typeof workouts)[number]) => workout.status;
   const selectedWorkoutStatus = selectedWorkout ? resolveWorkoutStatus(selectedWorkout) : undefined;
   const selectedWorkoutInsight = selectedWorkout ? workoutInsights.get(selectedWorkout.id) : undefined;
   const bodyMeasurements = useMemo(
@@ -542,7 +550,7 @@ export function AthleteDashboard({
     const activeById = new Map<string, (typeof workouts)[number]>();
     const getWorkoutPriority = (workout: (typeof workouts)[number]): WorkoutSelectionPriority => {
       const hasSession = scheduledWithSessionIds.has(workout.id);
-      const workoutStatus = workout.status;
+      const workoutStatus = resolveWorkoutStatus(workout);
       if (workoutStatus === "in_progress") {
         return 3;
       }
@@ -553,7 +561,7 @@ export function AthleteDashboard({
     };
 
     workouts
-      .filter((workout) => workout.programWorkoutId && workout.status !== "completed")
+      .filter((workout) => workout.programWorkoutId && resolveWorkoutStatus(workout) !== "completed")
       .forEach((workout) => {
         if (!workout.programWorkoutId) {
           return;
