@@ -713,11 +713,44 @@ type WorkoutMutationQueueState = {
 };
 
 type RecentlyConfirmedWorkoutSetLogs = Map<string, { confirmedSessionUpdatedAt: string; logIds: Set<string> }>;
+type RecentlyConfirmedWorkoutNotes = Map<string, string>;
 
 export function collectPendingWorkoutMutationKinds(
   pending: ReadonlyArray<Pick<WorkoutMutation, "kind">>,
 ) {
   return pending.map((mutation) => mutation.kind);
+}
+
+export function enqueueSetMutationForWorkoutQueue(
+  queue: WorkoutMutationQueueState,
+  mutation: Extract<WorkoutMutationInput, { kind: "set" }>,
+  nextId: string,
+  now = Date.now(),
+) {
+  const inFlightMutationId = queue.inFlight ? queue.pending[0]?.id : undefined;
+  const existingPendingSet = [...queue.pending]
+    .reverse()
+    .find(
+      (pendingMutation): pendingMutation is Extract<WorkoutMutation, { kind: "set" }> =>
+        pendingMutation.kind === "set" &&
+        pendingMutation.logId === mutation.logId &&
+        pendingMutation.id !== inFlightMutationId,
+    );
+
+  if (existingPendingSet) {
+    existingPendingSet.patch = {
+      ...existingPendingSet.patch,
+      ...mutation.patch,
+    };
+    existingPendingSet.debounceUntil = now + WORKOUT_SET_SYNC_DEBOUNCE_MS;
+    return;
+  }
+
+  queue.pending.push({
+    ...mutation,
+    id: nextId,
+    debounceUntil: now + WORKOUT_SET_SYNC_DEBOUNCE_MS,
+  });
 }
 
 type PasswordResetRequestResult =
@@ -1057,8 +1090,21 @@ function collectPendingWorkoutSetRequests(
 ) {
   const pendingWorkoutIds = new Set<string>();
   const pendingLogIdsByWorkoutId = new Map<string, Set<string>>();
+  const pendingSessionWorkoutIds = new Set<string>();
+  const pendingNoteWorkoutIds = new Set<string>();
 
   requests?.forEach((request) => {
+    const hasSessionMutation = request.pending.some((mutation) =>
+      mutation.kind === "set" || mutation.kind === "date" || mutation.kind === "duration" || mutation.kind === "complete",
+    );
+    if (hasSessionMutation) {
+      pendingSessionWorkoutIds.add(request.scheduledWorkoutId);
+    }
+
+    if (request.pending.some((mutation) => mutation.kind === "note")) {
+      pendingNoteWorkoutIds.add(request.scheduledWorkoutId);
+    }
+
     const pendingSetMutations = request.pending.filter(
       (mutation): mutation is Extract<WorkoutMutation, { kind: "set" }> => mutation.kind === "set",
     );
@@ -1079,7 +1125,7 @@ function collectPendingWorkoutSetRequests(
     pendingLogIdsByWorkoutId.set(scheduledWorkoutId, ids);
   });
 
-  return { pendingWorkoutIds, pendingLogIdsByWorkoutId };
+  return { pendingWorkoutIds, pendingLogIdsByWorkoutId, pendingSessionWorkoutIds, pendingNoteWorkoutIds };
 }
 
 function mergeSessionSetLogs(
@@ -1430,11 +1476,25 @@ export function reconcileSupabaseVisibleState(
   snapshot: SupabaseVisibleAppStateSnapshot,
   pendingWorkoutSetRequests?: ReadonlyMap<string, WorkoutMutationQueueState>,
   recentlyConfirmedSetLogs?: ReadonlyMap<string, { confirmedSessionUpdatedAt: string; logIds: Set<string> }>,
+  recentlyConfirmedNotes?: ReadonlyMap<string, string>,
 ) {
   const withOptimisticWorkouts = preserveActiveWorkoutShells(previous, snapshot);
   const previousScheduledWorkoutsById = new Map(previous.scheduledWorkouts.map((workout) => [workout.id, workout]));
   const previousSessionsById = new Map(previous.sessions.map((session) => [session.id, session]));
-  const { pendingWorkoutIds, pendingLogIdsByWorkoutId } = collectPendingWorkoutSetRequests(
+  const previousSessionsByWorkoutId = new Map(previous.sessions.map((session) => [session.scheduledWorkoutId, session]));
+  const previousNotesByWorkoutId = new Map(
+    previous.notes.flatMap((note) => {
+      const session = previous.sessions.find((item) => item.id === note.sessionId);
+      return session ? [[session.scheduledWorkoutId, note] as const] : [];
+    }),
+  );
+  const snapshotNotesByWorkoutId = new Map(
+    snapshot.notes.flatMap((note) => {
+      const session = snapshot.sessions.find((item) => item.id === note.sessionId);
+      return session ? [[session.scheduledWorkoutId, note] as const] : [];
+    }),
+  );
+  const { pendingWorkoutIds, pendingLogIdsByWorkoutId, pendingSessionWorkoutIds, pendingNoteWorkoutIds } = collectPendingWorkoutSetRequests(
     pendingWorkoutSetRequests,
     recentlyConfirmedSetLogs,
   );
@@ -1497,6 +1557,10 @@ export function reconcileSupabaseVisibleState(
         return session;
       }
 
+      if (pendingSessionWorkoutIds.has(session.scheduledWorkoutId)) {
+        return localSession;
+      }
+
       const pendingLogIds = pendingLogIdsByWorkoutId.get(session.scheduledWorkoutId) ?? new Set<string>();
       if (pendingLogIds.size > 0) {
         return {
@@ -1512,7 +1576,58 @@ export function reconcileSupabaseVisibleState(
         ? localSession
         : session;
     }),
-    notes: snapshot.notes,
+    notes: (() => {
+      const mergedNotes = snapshot.notes.map((note) => {
+        const snapshotSession = snapshot.sessions.find((item) => item.id === note.sessionId);
+        const scheduledWorkoutId = snapshotSession?.scheduledWorkoutId;
+        if (!scheduledWorkoutId) {
+          return note;
+        }
+
+        const localNote = previousNotesByWorkoutId.get(scheduledWorkoutId);
+        if (!localNote) {
+          return note;
+        }
+
+        if (pendingNoteWorkoutIds.has(scheduledWorkoutId)) {
+          return localNote;
+        }
+
+        const recentlyConfirmedUpdatedAt = recentlyConfirmedNotes?.get(scheduledWorkoutId);
+        if (recentlyConfirmedUpdatedAt) {
+          const localUpdatedAt = Date.parse(localNote.updatedAt);
+          const serverUpdatedAt = Date.parse(note.updatedAt);
+          const confirmedUpdatedAt = Date.parse(recentlyConfirmedUpdatedAt);
+          if (
+            Number.isFinite(localUpdatedAt) &&
+            Number.isFinite(serverUpdatedAt) &&
+            Number.isFinite(confirmedUpdatedAt) &&
+            localUpdatedAt >= confirmedUpdatedAt &&
+            serverUpdatedAt < confirmedUpdatedAt
+          ) {
+            return localNote;
+          }
+        }
+
+        const localUpdatedAt = Date.parse(localNote.updatedAt);
+        const serverUpdatedAt = Date.parse(note.updatedAt);
+        return Number.isFinite(localUpdatedAt) && Number.isFinite(serverUpdatedAt) && localUpdatedAt > serverUpdatedAt
+          ? localNote
+          : note;
+      });
+
+      previousNotesByWorkoutId.forEach((localNote, scheduledWorkoutId) => {
+        if (snapshotNotesByWorkoutId.has(scheduledWorkoutId)) {
+          return;
+        }
+
+        if (pendingNoteWorkoutIds.has(scheduledWorkoutId) || recentlyConfirmedNotes?.has(scheduledWorkoutId)) {
+          mergedNotes.push(localNote);
+        }
+      });
+
+      return mergedNotes;
+    })(),
     conversationEntries: snapshot.conversationEntries,
   });
 }
@@ -1964,6 +2079,7 @@ export function AppStateProvider({ children }: PropsWithChildren) {
   const workoutConfirmedSessionUpdatedAtRef = useRef<Map<string, string>>(new Map());
   const workoutConfirmedNoteUpdatedAtRef = useRef<Map<string, string | null>>(new Map());
   const recentlyConfirmedSetLogsRef = useRef<RecentlyConfirmedWorkoutSetLogs>(new Map());
+  const recentlyConfirmedWorkoutNotesRef = useRef<RecentlyConfirmedWorkoutNotes>(new Map());
   const isHydrated =
     isStorageHydrated && (supabase ? (isSupabaseAuthResolved && didAttemptBootstrapRevalidation) || didBootstrapTimeout : true);
   const notify = useCallback((input: { tone: "success" | "danger" | "info"; message: string }) => {
@@ -2189,6 +2305,7 @@ export function AppStateProvider({ children }: PropsWithChildren) {
               snapshot,
               workoutMutationQueueRef.current,
               recentlyConfirmedSetLogsRef.current,
+              recentlyConfirmedWorkoutNotesRef.current,
             ),
           );
           resolvedUserId = findResolvedUserIdInSnapshot(snapshot, authUser);
@@ -2362,6 +2479,30 @@ function findResolvedUserIdInSnapshot(
           }
         });
         recentlyConfirmedSetLogsRef.current = nextRecentlyConfirmed;
+        const nextRecentlyConfirmedNotes = new Map(recentlyConfirmedWorkoutNotesRef.current);
+        payload.notes.forEach((note) => {
+          const session = payload.sessions.find((item) => item.id === note.sessionId);
+          const scheduledWorkoutId = session?.scheduledWorkoutId;
+          if (!scheduledWorkoutId) {
+            return;
+          }
+
+          const confirmedUpdatedAt = nextRecentlyConfirmedNotes.get(scheduledWorkoutId);
+          if (!confirmedUpdatedAt) {
+            return;
+          }
+
+          const serverUpdatedAt = Date.parse(note.updatedAt);
+          const localConfirmedUpdatedAt = Date.parse(confirmedUpdatedAt);
+          if (
+            Number.isFinite(serverUpdatedAt) &&
+            Number.isFinite(localConfirmedUpdatedAt) &&
+            serverUpdatedAt >= localConfirmedUpdatedAt
+          ) {
+            nextRecentlyConfirmedNotes.delete(scheduledWorkoutId);
+          }
+        });
+        recentlyConfirmedWorkoutNotesRef.current = nextRecentlyConfirmedNotes;
 
         setState((previous) =>
           reconcileSupabaseVisibleState(
@@ -2369,6 +2510,7 @@ function findResolvedUserIdInSnapshot(
             payload,
             workoutMutationQueueRef.current,
             recentlyConfirmedSetLogsRef.current,
+            recentlyConfirmedWorkoutNotesRef.current,
           ),
         );
         const authUser = await withTimeout(confirmCurrentSupabaseAuthUser(supabase), 4000, null);
@@ -2630,6 +2772,7 @@ function findResolvedUserIdInSnapshot(
 
         queue.confirmedNoteUpdatedAt = payload.updatedAt;
         workoutConfirmedNoteUpdatedAtRef.current.set(queue.scheduledWorkoutId, payload.updatedAt);
+        recentlyConfirmedWorkoutNotesRef.current.set(queue.scheduledWorkoutId, payload.updatedAt);
         const confirmedUpdatedAt = payload.updatedAt;
         setState((previous) => ({
           ...previous,
@@ -2823,27 +2966,12 @@ function findResolvedUserIdInSnapshot(
   const enqueueWorkoutMutation = useCallback((scheduledWorkoutId: string, mutation: WorkoutMutationInput) => {
     const queue = ensureWorkoutMutationQueue(scheduledWorkoutId);
     if (mutation.kind === "set") {
-      const existingPendingSet = [...queue.pending]
-        .reverse()
-        .find(
-          (pendingMutation): pendingMutation is Extract<WorkoutMutation, { kind: "set" }> =>
-            pendingMutation.kind === "set" && pendingMutation.logId === mutation.logId,
-        );
-
-      if (existingPendingSet) {
-        existingPendingSet.patch = {
-          ...existingPendingSet.patch,
-          ...mutation.patch,
-        };
-        existingPendingSet.debounceUntil = Date.now() + WORKOUT_SET_SYNC_DEBOUNCE_MS;
-      } else {
-        workoutMutationIdRef.current += 1;
-        queue.pending.push({
-          ...mutation,
-          id: `${scheduledWorkoutId}:${workoutMutationIdRef.current}`,
-          debounceUntil: Date.now() + WORKOUT_SET_SYNC_DEBOUNCE_MS,
-        });
-      }
+      workoutMutationIdRef.current += 1;
+      enqueueSetMutationForWorkoutQueue(
+        queue,
+        mutation,
+        `${scheduledWorkoutId}:${workoutMutationIdRef.current}`,
+      );
     } else {
       workoutMutationIdRef.current += 1;
       const queuedMutation: WorkoutMutation = {
@@ -3021,6 +3149,7 @@ function findResolvedUserIdInSnapshot(
               latestSnapshot as SupabaseVisibleAppStateSnapshot,
               workoutMutationQueueRef.current,
               recentlyConfirmedSetLogsRef.current,
+              recentlyConfirmedWorkoutNotesRef.current,
             ),
           );
         }

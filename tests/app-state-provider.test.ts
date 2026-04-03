@@ -14,6 +14,7 @@ import {
   canDeleteProgramFromState,
   canRetargetProgramInState,
   collectPendingWorkoutMutationKinds,
+  enqueueSetMutationForWorkoutQueue,
   rekeyOptimisticWorkoutArtifacts,
   reconcileSupabaseInviteDirectory,
   reconcileSupabaseVisibleState,
@@ -41,6 +42,84 @@ describe("collectPendingWorkoutMutationKinds", () => {
         { kind: "complete" },
       ]),
     ).toEqual(["set", "note", "complete"]);
+  });
+});
+
+describe("enqueueSetMutationForWorkoutQueue", () => {
+  it("merges into the latest pending set mutation for the same log when nothing is in flight", () => {
+    const queue = {
+      scheduledWorkoutId: "workout_1",
+      pending: [
+        {
+          id: "workout_1:1",
+          kind: "set" as const,
+          logId: "log_1",
+          patch: { actualReps: 5 },
+          debounceUntil: 100,
+        },
+      ],
+      inFlight: false,
+      confirmedSessionUpdatedAt: "2026-03-24T08:00:00.000Z",
+      confirmedNoteUpdatedAt: null,
+    };
+
+    enqueueSetMutationForWorkoutQueue(
+      queue,
+      {
+        kind: "set",
+        logId: "log_1",
+        patch: { actualReps: 6 },
+      },
+      "workout_1:2",
+      200,
+    );
+
+    expect(queue.pending).toHaveLength(1);
+    expect(queue.pending[0]).toMatchObject({
+      id: "workout_1:1",
+      patch: { actualReps: 6 },
+      debounceUntil: 900,
+    });
+  });
+
+  it("queues a new set mutation after the in-flight one instead of mutating the already sent request", () => {
+    const queue = {
+      scheduledWorkoutId: "workout_1",
+      pending: [
+        {
+          id: "workout_1:1",
+          kind: "set" as const,
+          logId: "log_1",
+          patch: { actualReps: 5 },
+          debounceUntil: 100,
+        },
+      ],
+      inFlight: true,
+      confirmedSessionUpdatedAt: "2026-03-24T08:00:00.000Z",
+      confirmedNoteUpdatedAt: null,
+    };
+
+    enqueueSetMutationForWorkoutQueue(
+      queue,
+      {
+        kind: "set",
+        logId: "log_1",
+        patch: { actualReps: 6 },
+      },
+      "workout_1:2",
+      200,
+    );
+
+    expect(queue.pending).toHaveLength(2);
+    expect(queue.pending[0]).toMatchObject({
+      id: "workout_1:1",
+      patch: { actualReps: 5 },
+    });
+    expect(queue.pending[1]).toMatchObject({
+      id: "workout_1:2",
+      patch: { actualReps: 6 },
+      debounceUntil: 900,
+    });
   });
 });
 
@@ -486,6 +565,76 @@ describe("shouldPreserveStoredSessionDuringSupabaseBootstrap", () => {
       done: true,
     });
     expect(nextState.sessions[0]?.updatedAt).toBe("2026-03-24T08:12:00.000Z");
+  });
+
+  it("preserves a recently confirmed workout note until the server snapshot catches up", () => {
+    const state = cloneDemoState();
+    state.scheduledWorkouts = [
+      {
+        id: "workout_local",
+        athleteId: "user_athlete_1",
+        coachId: "user_coach_1",
+        title: "Jalkapäivä",
+        scheduledDate: "2026-03-24T08:00:00.000Z",
+        status: "in_progress",
+        createdAt: "2026-03-24T08:00:00.000Z",
+        updatedAt: "2026-03-24T08:12:00.000Z",
+      },
+    ];
+    state.sessions = [
+      {
+        id: "session_local",
+        scheduledWorkoutId: "workout_local",
+        athleteId: "user_athlete_1",
+        startedAt: "2026-03-24T08:00:00.000Z",
+        updatedAt: "2026-03-24T08:12:00.000Z",
+        setLogs: [],
+      },
+    ];
+    state.notes = [
+      {
+        id: "note_local",
+        sessionId: "session_local",
+        athleteId: "user_athlete_1",
+        coachId: "user_coach_1",
+        body: "Tuore muistiinpano",
+        createdAt: "2026-03-24T08:00:00.000Z",
+        updatedAt: "2026-03-24T08:12:00.000Z",
+      },
+    ];
+
+    const nextState = reconcileSupabaseVisibleState(
+      state,
+      {
+        users: state.users,
+        bodyMeasurements: state.bodyMeasurements,
+        assignments: state.assignments,
+        exercises: state.exercises,
+        templates: state.templates,
+        plans: state.plans,
+        scheduledWorkouts: state.scheduledWorkouts,
+        sessions: state.sessions.map((session) => ({
+          ...session,
+          updatedAt: "2026-03-24T08:11:00.000Z",
+        })),
+        notes: [
+          {
+            ...state.notes[0]!,
+            body: "Vanha muistiinpano",
+            updatedAt: "2026-03-24T08:11:00.000Z",
+          },
+        ],
+        conversationEntries: state.conversationEntries,
+      },
+      new Map(),
+      new Map(),
+      new Map([["workout_local", "2026-03-24T08:12:00.000Z"]]),
+    );
+
+    expect(nextState.notes[0]).toMatchObject({
+      body: "Tuore muistiinpano",
+      updatedAt: "2026-03-24T08:12:00.000Z",
+    });
   });
 
   it("preserves an optimistic active workout shell until the server snapshot catches up", () => {
