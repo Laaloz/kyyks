@@ -351,6 +351,20 @@ function isBelowTargetRepMinimum(log: WorkoutSession["setLogs"][number]) {
   return log.actualReps < targetMinimum;
 }
 
+function formatLoadDraftValue(value: number) {
+  return String(value).replace(".", ",");
+}
+
+function parseLoadDraftValue(rawValue: string) {
+  const normalized = rawValue.trim().replace(",", ".");
+  if (!normalized || normalized.endsWith(".")) {
+    return null;
+  }
+
+  const parsedValue = Number(normalized);
+  return Number.isFinite(parsedValue) ? parsedValue : null;
+}
+
 const repsTooltipText =
   "Kirjaa tähän toteutuneet toistot. Jos teit enemmän tai vähemmän kuin suunnitelmassa, merkitse tähän oikea määrä.";
 
@@ -582,6 +596,38 @@ export function AthleteSessionPanel({
   useEffect(() => {
     setScheduledDateDraft(scheduledDate ? formatWorkoutDateInput(scheduledDate) : "");
   }, [scheduledDate, scheduledWorkoutId]);
+
+  useEffect(() => {
+    if (!selectedSession) {
+      return;
+    }
+
+    setLoadDrafts((previous) => {
+      let changed = false;
+      const next = { ...previous };
+
+      Object.entries(previous).forEach(([logId, rawValue]) => {
+        const parsedValue = parseLoadDraftValue(rawValue);
+        if (parsedValue === null) {
+          return;
+        }
+
+        const log = selectedSession.setLogs.find((item) => item.id === logId);
+        if (!log) {
+          delete next[logId];
+          changed = true;
+          return;
+        }
+
+        if (log.actualLoad !== undefined && Math.abs(log.actualLoad - parsedValue) < 0.0001) {
+          delete next[logId];
+          changed = true;
+        }
+      });
+
+      return changed ? next : previous;
+    });
+  }, [selectedSession]);
 
   useEffect(() => {
     if (!restRunning || !restEndsAt) {
@@ -905,13 +951,8 @@ export function AthleteSessionPanel({
       return;
     }
 
-    const normalized = rawValue.trim().replace(",", ".");
-    if (normalized.endsWith(".")) {
-      return;
-    }
-
-    const parsedValue = Number(normalized);
-    if (!Number.isFinite(parsedValue)) {
+    const parsedValue = parseLoadDraftValue(rawValue);
+    if (parsedValue === null) {
       return;
     }
 
@@ -920,7 +961,13 @@ export function AthleteSessionPanel({
 
   const handleLoadDraftBlur = (log: WorkoutSession["setLogs"][number]) => {
     setLoadDrafts((previous) => {
-      if (!(log.id in previous)) {
+      const rawValue = previous[log.id];
+      if (rawValue === undefined) {
+        return previous;
+      }
+
+      const parsedValue = parseLoadDraftValue(rawValue);
+      if (parsedValue !== null && (log.actualLoad === undefined || Math.abs(log.actualLoad - parsedValue) >= 0.0001)) {
         return previous;
       }
 
@@ -953,15 +1000,10 @@ export function AthleteSessionPanel({
     const baseValue = log.actualLoad ?? 0;
     const nextValue = Math.max(0, roundToIncrement(baseValue + delta, loadIncrementKg));
 
-    setLoadDrafts((previous) => {
-      if (!(log.id in previous)) {
-        return previous;
-      }
-
-      const next = { ...previous };
-      delete next[log.id];
-      return next;
-    });
+    setLoadDrafts((previous) => ({
+      ...previous,
+      [log.id]: formatLoadDraftValue(nextValue),
+    }));
 
     handleLogUpdate(log, { actualLoad: nextValue });
   };
@@ -1012,15 +1054,10 @@ export function AthleteSessionPanel({
     if (dragSession.field === "reps") {
       handleLogUpdateById(dragSession.logId, { actualReps: nextValue });
     } else {
-      setLoadDrafts((previous) => {
-        if (!(dragSession.logId in previous)) {
-          return previous;
-        }
-
-        const next = { ...previous };
-        delete next[dragSession.logId];
-        return next;
-      });
+      setLoadDrafts((previous) => ({
+        ...previous,
+        [dragSession.logId]: formatLoadDraftValue(nextValue),
+      }));
 
       handleLogUpdateById(dragSession.logId, { actualLoad: nextValue });
     }

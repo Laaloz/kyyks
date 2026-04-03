@@ -2650,6 +2650,14 @@ function findResolvedUserIdInSnapshot(
     }
 
     const resolveFailure = async (message: string) => {
+      const latestQueue = workoutMutationQueueRef.current.get(queue.scheduledWorkoutId);
+      if (latestQueue) {
+        latestQueue.pending = latestQueue.pending.filter((pendingMutation) => pendingMutation.id !== mutation.id);
+        if (latestQueue.pending.length === 0 && !latestQueue.inFlight) {
+          workoutMutationQueueRef.current.delete(queue.scheduledWorkoutId);
+        }
+      }
+
       await refreshSupabaseVisibleState();
       syncWorkoutMutationQueueVersionsFromState(queue.scheduledWorkoutId);
       if ("resolve" in mutation) {
@@ -5226,16 +5234,31 @@ function findResolvedUserIdInSnapshot(
 
           const refreshedState = stateRef.current;
           if (!canCompleteSession(refreshedState, scheduledWorkoutId)) {
+            const alreadyCompletedWorkout = refreshedState.scheduledWorkouts.find((item) => item.id === scheduledWorkoutId);
+            if (alreadyCompletedWorkout?.status === "completed") {
+              return { ok: true };
+            }
             return { ok: false, message: "Treeniä ei voitu merkitä valmiiksi." };
           }
 
           setState((current) => domainCompleteSession(current, scheduledWorkoutId));
-          return await new Promise<ActionResult>((resolve) => {
+          const result = await new Promise<ActionResult>((resolve) => {
             enqueueWorkoutMutation(scheduledWorkoutId, {
               kind: "complete",
               resolve,
             });
           });
+
+          if (!result.ok) {
+            await refreshSupabaseVisibleState();
+            const postRefreshState = stateRef.current;
+            const completedWorkout = postRefreshState.scheduledWorkouts.find((item) => item.id === scheduledWorkoutId);
+            if (completedWorkout?.status === "completed") {
+              return { ok: true };
+            }
+          }
+
+          return result;
         }
 
         setState((previous) => domainCompleteSession(previous, scheduledWorkoutId));

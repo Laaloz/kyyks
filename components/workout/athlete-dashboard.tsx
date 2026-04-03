@@ -327,7 +327,7 @@ export function AthleteDashboard({
   );
   const highlightedWorkout = activeWorkout ?? resumableWorkout;
   const highlightedWorkoutState = activeWorkout ? "active" : resumableWorkout ? "resumable" : null;
-  const fallbackSelectedWorkout = athleteLogMode === "workout" ? highlightedWorkout ?? workouts[workouts.length - 1] : undefined;
+  const fallbackSelectedWorkout = athleteLogMode === "workout" ? highlightedWorkout : undefined;
   const selectedWorkout =
     (selectedWorkoutId ? workouts.find((item) => item.id === selectedWorkoutId) : undefined) ??
     (selectedWorkoutId ? undefined : fallbackSelectedWorkout);
