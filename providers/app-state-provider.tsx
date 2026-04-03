@@ -408,15 +408,16 @@ export function resolveBlockingWorkoutStart(
   athleteId: string,
   programWorkoutId?: string,
 ) {
-  const scheduledWorkoutIdsWithSession = new Set(state.sessions.map((session) => session.scheduledWorkoutId));
+  const sessionsByWorkoutId = new Map(state.sessions.map((session) => [session.scheduledWorkoutId, session]));
 
   return (
     state.scheduledWorkouts.find(
       (workout) =>
         workout.athleteId === athleteId &&
+        !sessionsByWorkoutId.get(workout.id)?.completedAt &&
         workout.programWorkoutId !== programWorkoutId &&
         (workout.status === "in_progress" ||
-          (workout.status === "cancelled" && scheduledWorkoutIdsWithSession.has(workout.id))),
+          (workout.status === "cancelled" && sessionsByWorkoutId.has(workout.id))),
     ) ?? null
   );
 }
@@ -1190,6 +1191,41 @@ function applyConfirmedWorkoutSetUpdate(
           }
         : workout,
     ),
+  };
+}
+
+export function isSameWorkoutSetMutation(
+  mutation: Extract<WorkoutMutation, { kind: "set" }>,
+  candidate: Extract<WorkoutMutation, { kind: "set" }>,
+) {
+  if (mutation.logId === candidate.logId) {
+    return true;
+  }
+
+  return Boolean(
+    mutation.templateExerciseId &&
+      mutation.setLabel &&
+      candidate.templateExerciseId === mutation.templateExerciseId &&
+      candidate.setLabel === mutation.setLabel,
+  );
+}
+
+export function overlayPendingSetMutationPatch(
+  setLog: {
+    id: string;
+    actualReps?: number;
+    actualLoad?: number;
+    done: boolean;
+  },
+  pendingPatch: WorkoutUpdateInput,
+) {
+  return {
+    ...setLog,
+    actualReps:
+      pendingPatch.actualReps !== undefined ? pendingPatch.actualReps ?? undefined : setLog.actualReps,
+    actualLoad:
+      pendingPatch.actualLoad !== undefined ? pendingPatch.actualLoad ?? undefined : setLog.actualLoad,
+    done: pendingPatch.done !== undefined ? pendingPatch.done : setLog.done,
   };
 }
 
@@ -2670,6 +2706,7 @@ function findResolvedUserIdInSnapshot(
         let currentLogId = mutation.logId;
 
         for (let attempt = 0; attempt < 2; attempt += 1) {
+          const requestLogId = currentLogId;
           const expectedUpdatedAt =
             workoutConfirmedSessionUpdatedAtRef.current.get(queue.scheduledWorkoutId)
             ?? queue.confirmedSessionUpdatedAt
@@ -2709,16 +2746,55 @@ function findResolvedUserIdInSnapshot(
           if (response?.ok && payload?.sessionUpdatedAt && payload.setLog) {
             queue.confirmedSessionUpdatedAt = payload.sessionUpdatedAt;
             workoutConfirmedSessionUpdatedAtRef.current.set(queue.scheduledWorkoutId, payload.sessionUpdatedAt);
-            mutation.logId = payload.setLog.id;
+            const confirmedLogId = payload.setLog.id;
+            mutation.logId = confirmedLogId;
+            currentLogId = confirmedLogId;
+            const queuedFollowUpMutations = queue.pending
+              .filter(
+                (pendingMutation): pendingMutation is Extract<WorkoutMutation, { kind: "set" }> =>
+                  pendingMutation.kind === "set" &&
+                  pendingMutation.id !== mutation.id &&
+                  isSameWorkoutSetMutation(
+                    {
+                      ...mutation,
+                      logId: requestLogId,
+                    },
+                    pendingMutation,
+                  ),
+              );
+
+            queuedFollowUpMutations.forEach((pendingMutation) => {
+              pendingMutation.logId = confirmedLogId;
+            });
+
+            const locallyConfirmedSetLog = queuedFollowUpMutations.reduce<{
+              id: string;
+              actualReps?: number;
+              actualLoad?: number;
+              done: boolean;
+            }>(
+              (nextSetLog, pendingMutation) => overlayPendingSetMutationPatch(nextSetLog, pendingMutation.patch),
+              {
+                id: payload.setLog.id,
+                actualReps: payload.setLog.actualReps ?? undefined,
+                actualLoad: payload.setLog.actualLoad ?? undefined,
+                done: payload.setLog.done,
+              },
+            );
             const existingRecentlyConfirmed = recentlyConfirmedSetLogsRef.current.get(queue.scheduledWorkoutId);
             const nextLogIds = new Set(existingRecentlyConfirmed?.logIds ?? []);
-            nextLogIds.add(payload.setLog.id);
+            nextLogIds.add(confirmedLogId);
             recentlyConfirmedSetLogsRef.current.set(queue.scheduledWorkoutId, {
               confirmedSessionUpdatedAt: payload.sessionUpdatedAt,
               logIds: nextLogIds,
             });
             setState((previous) =>
-              applyConfirmedWorkoutSetUpdate(previous, queue.scheduledWorkoutId, payload.sessionUpdatedAt!, payload.setLog!),
+              applyConfirmedWorkoutSetUpdate(
+                previous,
+                queue.scheduledWorkoutId,
+                payload.sessionUpdatedAt!,
+                locallyConfirmedSetLog,
+              ),
             );
             return;
           }
@@ -4640,12 +4716,18 @@ function findResolvedUserIdInSnapshot(
           return { ok: false, message: "Ohjelma ei ole aktiivinen eikä siitä voi käynnistää uutta treeniä." };
         }
 
-        const existingActive = state.scheduledWorkouts.find(
-          (item) =>
-            item.athleteId === currentUser.id &&
-            item.programWorkoutId === programWorkoutId &&
-            (item.status === "in_progress" || item.status === "cancelled"),
-        );
+        const sessionsByWorkoutId = new Map(state.sessions.map((session) => [session.scheduledWorkoutId, session]));
+        const existingActive = state.scheduledWorkouts.find((item) => {
+          if (
+            item.athleteId !== currentUser.id ||
+            item.programWorkoutId !== programWorkoutId ||
+            (item.status !== "in_progress" && item.status !== "cancelled")
+          ) {
+            return false;
+          }
+
+          return !sessionsByWorkoutId.get(item.id)?.completedAt;
+        });
         const existingActiveIsOptimistic = Boolean(existingActive?.id.startsWith("workout_"));
         if (existingActive && (!supabase || !existingActiveIsOptimistic)) {
           return { ok: true, scheduledWorkoutId: existingActive.id };

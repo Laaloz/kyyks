@@ -1444,6 +1444,9 @@ export function AthleteDashboard({
                   }
 
                   setPendingStartWorkoutId(null);
+                  if (result.scheduledWorkoutId) {
+                    setSelectedWorkoutId(result.scheduledWorkoutId);
+                  }
                   setWorkoutMessage("Treeni käynnistetty. Sarjaloki luotiin automaattisesti.");
                 }}
                 onUpdate={(logId, patch) => {

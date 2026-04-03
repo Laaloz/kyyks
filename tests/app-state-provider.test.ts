@@ -15,6 +15,7 @@ import {
   canRetargetProgramInState,
   collectPendingWorkoutMutationKinds,
   enqueueSetMutationForWorkoutQueue,
+  overlayPendingSetMutationPatch,
   rekeyOptimisticWorkoutArtifacts,
   reconcileSupabaseInviteDirectory,
   reconcileSupabaseVisibleState,
@@ -119,6 +120,30 @@ describe("enqueueSetMutationForWorkoutQueue", () => {
       id: "workout_1:2",
       patch: { actualReps: 6 },
       debounceUntil: 900,
+    });
+  });
+});
+
+describe("overlayPendingSetMutationPatch", () => {
+  it("preserves newer local fields when an older server confirmation arrives for the same set", () => {
+    expect(
+      overlayPendingSetMutationPatch(
+        {
+          id: "log_1",
+          actualReps: 6,
+          actualLoad: 80,
+          done: true,
+        },
+        {
+          actualLoad: 82.5,
+          done: false,
+        },
+      ),
+    ).toEqual({
+      id: "log_1",
+      actualReps: 6,
+      actualLoad: 82.5,
+      done: false,
     });
   });
 });
@@ -1055,6 +1080,38 @@ describe("shouldPreserveStoredSessionDuringSupabaseBootstrap", () => {
     expect(resolveBlockingWorkoutStart(state, athleteId)?.id).toBe(blockingWorkoutId);
 
     state.sessions = [];
+
+    expect(resolveBlockingWorkoutStart(state, athleteId)).toBeNull();
+  });
+
+  it("ignores workouts whose session is already completed even if the scheduled status is stale", () => {
+    const state = cloneDemoState();
+    const athleteId = "user_athlete_1";
+    const blockingWorkoutId = "workout_completed_but_stale";
+
+    state.scheduledWorkouts = [
+      {
+        id: blockingWorkoutId,
+        athleteId,
+        coachId: "user_admin",
+        title: "Voimapäivä A",
+        scheduledDate: "2026-03-24T08:00:00.000Z",
+        status: "in_progress",
+        createdAt: "2026-03-24T08:00:00.000Z",
+        updatedAt: "2026-03-24T08:10:00.000Z",
+      },
+    ];
+    state.sessions = [
+      {
+        id: "session_completed",
+        scheduledWorkoutId: blockingWorkoutId,
+        athleteId,
+        startedAt: "2026-03-24T08:00:00.000Z",
+        completedAt: "2026-03-24T09:00:00.000Z",
+        updatedAt: "2026-03-24T09:00:00.000Z",
+        setLogs: [],
+      },
+    ];
 
     expect(resolveBlockingWorkoutStart(state, athleteId)).toBeNull();
   });
