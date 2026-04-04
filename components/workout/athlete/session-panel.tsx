@@ -1794,11 +1794,11 @@ export function AthleteSessionPanel({
                   <Button
                     onClick={onComplete}
                      type="button"
-                     className="w-full sm:w-auto"
+                   className="w-full sm:w-auto"
                      loading={isCompleting}
                      loadingText="Tallennetaan..."
                    >
-                     Merkitse treeni valmiiksi
+                     Merkitse valmiiksi
                    </Button>
                 ) : null
               )}
