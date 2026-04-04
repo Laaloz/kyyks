@@ -372,6 +372,29 @@ export function AthleteDashboard({
       setDismissedActiveWorkoutId(null);
     }
   }, [activeWorkout, dismissedActiveWorkoutId]);
+  useEffect(() => {
+    if (!selectedWorkoutId) {
+      return;
+    }
+
+    const selectedStillExists = workouts.some((workout) => workout.id === selectedWorkoutId);
+    if (selectedStillExists) {
+      return;
+    }
+
+    setCorrectionModeWorkoutId((current) => (current === selectedWorkoutId ? null : current));
+    setOpenHistoryMenuWorkoutId((current) => (current === selectedWorkoutId ? null : current));
+    setHistoryMenuAnchorRect(null);
+    setHistoryMenuStyle(null);
+
+    if (athleteLogMode === "workout" && highlightedWorkout) {
+      setSelectedWorkoutId(highlightedWorkout.id);
+      return;
+    }
+
+    setSelectedWorkoutId(null);
+    setAthleteLogMode("library");
+  }, [athleteLogMode, highlightedWorkout, selectedWorkoutId, workouts]);
 
   const selectedWorkoutCompletionCount =
     currentUser && selectedWorkout

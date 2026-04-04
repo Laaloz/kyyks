@@ -2555,6 +2555,40 @@ function findResolvedUserIdInSnapshot(
     }
   }
 
+  async function ensureWorkoutVisibleInState(
+    scheduledWorkoutId: string,
+    options?: { requireSession?: boolean },
+  ) {
+    const hasWorkout = stateRef.current.scheduledWorkouts.some((workout) => workout.id === scheduledWorkoutId);
+    const hasSession = stateRef.current.sessions.some((session) => session.scheduledWorkoutId === scheduledWorkoutId);
+    if (hasWorkout && (!options?.requireSession || hasSession)) {
+      return true;
+    }
+
+    const refreshed = await refreshSupabaseVisibleState({ mode: "workouts" });
+    if (!refreshed) {
+      return false;
+    }
+
+    const workoutAfterWorkoutRefresh = stateRef.current.scheduledWorkouts.some((workout) => workout.id === scheduledWorkoutId);
+    const sessionAfterWorkoutRefresh = stateRef.current.sessions.some(
+      (session) => session.scheduledWorkoutId === scheduledWorkoutId,
+    );
+    if (workoutAfterWorkoutRefresh && (!options?.requireSession || sessionAfterWorkoutRefresh)) {
+      return true;
+    }
+
+    const fullyRefreshed = await refreshSupabaseVisibleState();
+    if (!fullyRefreshed) {
+      return false;
+    }
+
+    return stateRef.current.scheduledWorkouts.some((workout) => workout.id === scheduledWorkoutId) && (
+      !options?.requireSession ||
+      stateRef.current.sessions.some((session) => session.scheduledWorkoutId === scheduledWorkoutId)
+    );
+  }
+
   useEffect(() => {
     if (!isHydrated || !supabase || !authenticatedUserId) {
       return;
@@ -4734,9 +4768,13 @@ function findResolvedUserIdInSnapshot(
             const scheduledWorkoutId = payload?.scheduledWorkoutId ?? optimisticWorkoutId ?? undefined;
             if (optimisticWorkoutId && scheduledWorkoutId && scheduledWorkoutId !== optimisticWorkoutId) {
               setState((current) => rekeyOptimisticWorkoutArtifacts(current, optimisticWorkoutId, scheduledWorkoutId));
-              await refreshSupabaseVisibleState({ mode: "workouts" });
+              await ensureWorkoutVisibleInState(scheduledWorkoutId, { requireSession: true });
             } else {
-              void refreshSupabaseVisibleState({ mode: "workouts" });
+              if (scheduledWorkoutId) {
+                await ensureWorkoutVisibleInState(scheduledWorkoutId, { requireSession: true });
+              } else {
+                await refreshSupabaseVisibleState({ mode: "workouts" });
+              }
             }
             warnIfOptimisticServerIdLeak("workout", scheduledWorkoutId);
             return { ok: true, scheduledWorkoutId };
@@ -4753,7 +4791,11 @@ function findResolvedUserIdInSnapshot(
               return { ok: false, message: payload?.message ?? "Harjoituksen käynnistys epäonnistui." };
             }
 
-            void refreshSupabaseVisibleState({ mode: "workouts" });
+            if (payload?.scheduledWorkoutId) {
+              await ensureWorkoutVisibleInState(payload.scheduledWorkoutId, { requireSession: true });
+            } else {
+              await refreshSupabaseVisibleState({ mode: "workouts" });
+            }
             warnIfOptimisticServerIdLeak("workout", payload?.scheduledWorkoutId);
             return { ok: true, scheduledWorkoutId: payload?.scheduledWorkoutId };
           }
@@ -5073,7 +5115,7 @@ function findResolvedUserIdInSnapshot(
             }));
           }
 
-          await refreshSupabaseVisibleState({ mode: "workouts" });
+          await ensureWorkoutVisibleInState(scheduledWorkoutId, { requireSession: true });
           syncWorkoutMutationQueueVersionsFromState(scheduledWorkoutId);
         }
 
