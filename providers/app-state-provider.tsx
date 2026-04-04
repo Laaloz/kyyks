@@ -258,14 +258,22 @@ function mergeStartedWorkoutPayload(
 
   const nextScheduledWorkouts = scheduledWorkout
     ? [
-        scheduledWorkout,
+        {
+          ...previous.scheduledWorkouts.find((workout) => workout.id === scheduledWorkout.id),
+          ...scheduledWorkout,
+        },
         ...previous.scheduledWorkouts.filter((workout) => workout.id !== scheduledWorkout.id),
       ]
     : previous.scheduledWorkouts;
 
   const nextSessions = session
     ? [
-        session,
+        {
+          ...previous.sessions.find(
+            (item) => item.id === session.id || item.scheduledWorkoutId === session.scheduledWorkoutId,
+          ),
+          ...session,
+        },
         ...previous.sessions.filter(
           (item) => item.id !== session.id && item.scheduledWorkoutId !== session.scheduledWorkoutId,
         ),

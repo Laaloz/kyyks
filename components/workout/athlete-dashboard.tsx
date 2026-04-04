@@ -460,6 +460,24 @@ export function AthleteDashboard({
   const latestBodyMeasurement = bodyMeasurements[0];
   const latestWaistMeasurement = bodyMeasurements.find((entry) => entry.waistCm !== undefined);
   const latestWaistCm = latestWaistMeasurement?.waistCm;
+
+  useEffect(() => {
+    if (!pendingStartWorkoutId) {
+      return;
+    }
+
+    const pendingWorkout = workouts.find((item) => item.id === pendingStartWorkoutId);
+    const pendingSession = sessionByWorkoutId.get(pendingStartWorkoutId);
+    if (!pendingWorkout || !pendingSession) {
+      return;
+    }
+
+    if (pendingWorkout.id.startsWith("workout_") || pendingSession.id.startsWith("session_")) {
+      return;
+    }
+
+    setPendingStartWorkoutId(null);
+  }, [pendingStartWorkoutId, sessionByWorkoutId, workouts]);
   const parseMeasurementField = (value: string) => {
     if (!value.trim()) {
       return undefined;
@@ -1499,10 +1517,9 @@ export function AthleteDashboard({
                     return;
                   }
 
-                  setPendingStartWorkoutId(null);
-                  if (result.scheduledWorkoutId) {
-                    setSelectedWorkoutId(result.scheduledWorkoutId);
-                  }
+                  const nextWorkoutId = result.scheduledWorkoutId ?? selectedWorkout.id;
+                  setPendingStartWorkoutId(nextWorkoutId);
+                  setSelectedWorkoutId(nextWorkoutId);
                   setWorkoutMessage("Treeni käynnistetty. Sarjaloki luotiin automaattisesti.");
                 }}
                 onUpdate={(logId, patch) => {
