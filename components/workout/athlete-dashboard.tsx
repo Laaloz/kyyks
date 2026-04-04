@@ -1478,6 +1478,16 @@ export function AthleteDashboard({
                     ? `${formatRelativeDate(selectedWorkout.scheduledDate)} · ${workoutStatusLabel(selectedWorkoutStatus ?? selectedWorkout.status)}`
                     : "Valitse treeni listalta ja avaa se tähän näkymään."}
                 </CardDescription>
+                {selectedWorkoutDescription ? (
+                  <p className="mt-3 max-w-3xl text-sm leading-6 text-[var(--text-muted)]">
+                    {selectedWorkoutDescription}
+                  </p>
+                ) : null}
+                {selectedProgramWorkout ? (
+                  <p className="mt-2 max-w-3xl text-sm leading-6 text-[var(--text-muted)]">
+                    {deriveProgramWorkoutGuidance(selectedProgramWorkout)}
+                  </p>
+                ) : null}
               </div>
               <Button
                 type="button"
