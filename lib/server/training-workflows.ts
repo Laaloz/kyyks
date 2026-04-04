@@ -503,6 +503,21 @@ async function buildProgramWorkoutSetLogs(
   );
 }
 
+async function getLatestWorkoutSession<T extends Record<string, unknown>>(
+  admin: NonNullable<ReturnType<typeof createSupabaseAdminClient>>,
+  scheduledWorkoutId: string,
+  columns: string,
+) {
+  return admin
+    .from("workout_sessions")
+    .select(columns)
+    .eq("scheduled_workout_id", scheduledWorkoutId)
+    .order("updated_at", { ascending: false })
+    .order("id", { ascending: false })
+    .limit(1)
+    .maybeSingle<T>();
+}
+
 async function createSessionWithLogs(params: {
   scheduledWorkoutId: string;
   athleteId: string;
@@ -512,6 +527,16 @@ async function createSessionWithLogs(params: {
   const admin = params.admin ?? createSupabaseAdminClient();
   if (!admin) {
     return { ok: false as const, message: "Supabase admin -yhteys puuttuu. Tarkista service role -avain." };
+  }
+
+  const { data: existingSession } = await getLatestWorkoutSession<{
+    id: string;
+    completed_at: string | null;
+    updated_at: string;
+  }>(admin, params.scheduledWorkoutId, "id, completed_at, updated_at");
+
+  if (existingSession) {
+    return { ok: true as const, sessionId: existingSession.id, updatedAt: existingSession.updated_at };
   }
 
   const timestamp = nowIso();
@@ -570,6 +595,9 @@ async function getWorkoutCompletionSnapshot(params: {
       .from("workout_sessions")
       .select("id, completed_at, updated_at")
       .eq("scheduled_workout_id", scheduledWorkoutId)
+      .order("updated_at", { ascending: false })
+      .order("id", { ascending: false })
+      .limit(1)
       .maybeSingle<{
         id: string;
         completed_at: string | null;
@@ -967,18 +995,18 @@ export async function startProgramWorkoutOnServer({
 
   const [existingActiveSession, blockingWorkoutSession] = await Promise.all([
     existingActive.data?.id
-      ? admin
-          .from("workout_sessions")
-          .select("completed_at")
-          .eq("scheduled_workout_id", existingActive.data.id)
-          .maybeSingle<{ completed_at: string | null }>()
+      ? getLatestWorkoutSession<{ completed_at: string | null }>(
+          admin,
+          existingActive.data.id,
+          "completed_at",
+        )
       : Promise.resolve({ data: null, error: null }),
     blockingWorkout.data?.id
-      ? admin
-          .from("workout_sessions")
-          .select("completed_at")
-          .eq("scheduled_workout_id", blockingWorkout.data.id)
-          .maybeSingle<{ completed_at: string | null }>()
+      ? getLatestWorkoutSession<{ completed_at: string | null }>(
+          admin,
+          blockingWorkout.data.id,
+          "completed_at",
+        )
       : Promise.resolve({ data: null, error: null }),
   ]);
 
@@ -1077,6 +1105,9 @@ export async function startScheduledWorkoutOnServer({
     .from("workout_sessions")
     .select("id, paused_at, paused_duration_seconds, updated_at")
     .eq("scheduled_workout_id", scheduledWorkoutId)
+    .order("updated_at", { ascending: false })
+    .order("id", { ascending: false })
+    .limit(1)
     .maybeSingle<{ id: string; paused_at: string | null; paused_duration_seconds: number | null; updated_at: string }>();
 
   if (existingSession) {

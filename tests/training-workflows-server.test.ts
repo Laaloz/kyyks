@@ -86,6 +86,8 @@ function createMockAdminClient({
         selectedColumns = columns ?? "";
         return builder;
       }),
+      order: vi.fn(() => builder),
+      limit: vi.fn(() => builder),
       eq: vi.fn((column: string, value: unknown) => {
         filters.push({ kind: "eq", column, value });
         return builder;
@@ -534,11 +536,12 @@ describe("training workflows server", () => {
       from: vi.fn((table: string) => {
         const builder = {
           select: vi.fn(() => builder),
+          order: vi.fn(() => builder),
+          limit: vi.fn(() => builder),
           eq: vi.fn(() => builder),
           in: vi.fn(() => builder),
           neq: vi.fn(() => builder),
           not: vi.fn(() => builder),
-          order: vi.fn(() => builder),
           insert: vi.fn(() => builder),
           maybeSingle: vi.fn(async () => {
             if (table === "training_plans") {
@@ -739,6 +742,8 @@ describe("training workflows server", () => {
       from: vi.fn((table: string) => {
         const builder = {
           select: vi.fn(() => builder),
+          order: vi.fn(() => builder),
+          limit: vi.fn(() => builder),
           eq: vi.fn(() => builder),
           update: vi.fn(() => builder),
           maybeSingle: vi.fn(async () => {
@@ -804,6 +809,8 @@ describe("training workflows server", () => {
       from: vi.fn((table: string) => {
         const builder = {
           select: vi.fn(() => builder),
+          order: vi.fn(() => builder),
+          limit: vi.fn(() => builder),
           eq: vi.fn(() => builder),
           update: vi.fn(() => builder),
           maybeSingle: vi.fn(async () => {
