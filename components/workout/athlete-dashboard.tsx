@@ -385,6 +385,14 @@ export function AthleteDashboard({
       return;
     }
 
+    if (
+      pendingWorkoutTransition?.type === "start" ||
+      pendingWorkoutTransition?.type === "open" ||
+      pendingStartWorkoutId === selectedWorkoutId
+    ) {
+      return;
+    }
+
     setCorrectionModeWorkoutId((current) => (current === selectedWorkoutId ? null : current));
     setOpenHistoryMenuWorkoutId((current) => (current === selectedWorkoutId ? null : current));
     setHistoryMenuAnchorRect(null);
@@ -397,7 +405,7 @@ export function AthleteDashboard({
 
     setSelectedWorkoutId(null);
     setAthleteLogMode("library");
-  }, [athleteLogMode, highlightedWorkout, selectedWorkoutId, workouts]);
+  }, [athleteLogMode, highlightedWorkout, pendingStartWorkoutId, pendingWorkoutTransition, selectedWorkoutId, workouts]);
 
   const selectedWorkoutCompletionCount =
     currentUser && selectedWorkout
