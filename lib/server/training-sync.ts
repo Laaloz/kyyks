@@ -170,7 +170,7 @@ export type SupabaseVisibleAppStateSnapshot = Pick<
   | "sessions"
   | "notes"
   | "conversationEntries"
->;
+> & { mode?: "full" | "workouts" };
 
 function toNumberOrUndefined(value: number | string | null | undefined) {
   if (value === null || value === undefined || value === "") {
@@ -304,7 +304,7 @@ function throwIfQueryFailed(
 
 export async function loadVisibleSupabaseAppState(
   supabase: ServerClient,
-  options?: { lite?: boolean },
+  options?: { lite?: boolean; mode?: "full" | "workouts" },
 ): Promise<SupabaseVisibleAppStateSnapshot> {
   const {
     data: { user: authUser },
@@ -321,6 +321,7 @@ export async function loadVisibleSupabaseAppState(
 
   const isAdminViewer = currentProfile?.role === "admin";
   const lite = Boolean(options?.lite);
+  const mode = options?.mode ?? "full";
   const queryStartedAt = performance.now();
   const [
     profilesResult,
@@ -333,29 +334,39 @@ export async function loadVisibleSupabaseAppState(
     notesResult,
     conversationEntriesResult,
   ] = await Promise.all([
-    supabase
-      .from("profiles")
-      .select(
-        "id, role, status, full_name, email, default_dashboard_view, email_notifications, weekly_measurement_reminders, theme_mode, load_increment_kg, height_cm, weight_kg, waist_cm, created_at, updated_at",
-      )
-      .order("created_at", { ascending: false }),
-    supabase
-      .from("body_measurements")
-      .select("id, user_id, height_cm, weight_kg, waist_cm, measured_at, created_at")
-      .limit(lite ? 60 : isAdminViewer ? 500 : 200)
-      .order("measured_at", { ascending: false }),
-    supabase
-      .from("coach_athlete_assignments")
-      .select("id, coach_id, athlete_id, active, created_at")
-      .order("created_at", { ascending: false }),
-    supabase
-      .from("exercises")
-      .select("id, external_key, name, category, equipment, cue, scope, coach_id")
-      .order("name", { ascending: true }),
-    supabase
-      .from("training_plans")
-      .select("id, coach_id, athlete_id, title, description, status, start_date, week_count, workouts, created_at, updated_at")
-      .order("created_at", { ascending: false }),
+    mode === "full"
+      ? supabase
+          .from("profiles")
+          .select(
+            "id, role, status, full_name, email, default_dashboard_view, email_notifications, weekly_measurement_reminders, theme_mode, load_increment_kg, height_cm, weight_kg, waist_cm, created_at, updated_at",
+          )
+          .order("created_at", { ascending: false })
+      : Promise.resolve({ data: [] as ProfileRow[], error: null }),
+    mode === "full"
+      ? supabase
+          .from("body_measurements")
+          .select("id, user_id, height_cm, weight_kg, waist_cm, measured_at, created_at")
+          .limit(lite ? 60 : isAdminViewer ? 500 : 200)
+          .order("measured_at", { ascending: false })
+      : Promise.resolve({ data: [] as BodyMeasurementRow[], error: null }),
+    mode === "full"
+      ? supabase
+          .from("coach_athlete_assignments")
+          .select("id, coach_id, athlete_id, active, created_at")
+          .order("created_at", { ascending: false })
+      : Promise.resolve({ data: [] as AssignmentRow[], error: null }),
+    mode === "full"
+      ? supabase
+          .from("exercises")
+          .select("id, external_key, name, category, equipment, cue, scope, coach_id")
+          .order("name", { ascending: true })
+      : Promise.resolve({ data: [] as ExerciseRow[], error: null }),
+    mode === "full"
+      ? supabase
+          .from("training_plans")
+          .select("id, coach_id, athlete_id, title, description, status, start_date, week_count, workouts, created_at, updated_at")
+          .order("created_at", { ascending: false })
+      : Promise.resolve({ data: [] as TrainingPlanRow[], error: null }),
     supabase
       .from("scheduled_workouts")
       .select("id, training_plan_id, program_workout_id, athlete_id, coach_id, title, scheduled_date, status, completed_at, created_at, updated_at")
@@ -371,11 +382,13 @@ export async function loadVisibleSupabaseAppState(
       .select("id, session_id, athlete_id, coach_id, body, created_at, updated_at")
       .limit(lite ? 40 : isAdminViewer ? 300 : 150)
       .order("updated_at", { ascending: false }),
-    supabase
-      .from("conversation_entries")
-      .select("id, athlete_id, coach_id, author_user_id, author_role, type, body, context_type, context_id, context_label, read_by_user_ids, created_at")
-      .limit(lite ? 80 : isAdminViewer ? 1000 : 400)
-      .order("created_at", { ascending: false }),
+    mode === "full"
+      ? supabase
+          .from("conversation_entries")
+          .select("id, athlete_id, coach_id, author_user_id, author_role, type, body, context_type, context_id, context_label, read_by_user_ids, created_at")
+          .limit(lite ? 80 : isAdminViewer ? 1000 : 400)
+          .order("created_at", { ascending: false })
+      : Promise.resolve({ data: [] as ConversationEntryRow[], error: null }),
   ]);
   logSyncPhase("all-queries", queryStartedAt);
 
@@ -480,6 +493,7 @@ export async function loadVisibleSupabaseAppState(
   logSyncPhase("mapping", mappingStartedAt);
 
   return {
+    mode,
     users,
     bodyMeasurements,
     assignments,

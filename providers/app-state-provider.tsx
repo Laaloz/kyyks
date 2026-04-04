@@ -1317,7 +1317,7 @@ export function resolveSupabaseUserForState(
 
 export async function fetchSupabaseVisibleStateSnapshotWithClient(
   supabase: NonNullable<ReturnType<typeof createSupabaseBrowserClient>> | null,
-  options?: { lite?: boolean; accessToken?: string; throwOnError?: boolean },
+  options?: { lite?: boolean; mode?: "full" | "workouts"; accessToken?: string; throwOnError?: boolean },
 ) {
   if (!supabase) {
     return null;
@@ -1328,6 +1328,9 @@ export async function fetchSupabaseVisibleStateSnapshotWithClient(
     const searchParams = new URLSearchParams();
     if (options?.lite) {
       searchParams.set("lite", "1");
+    }
+    if (options?.mode === "workouts") {
+      searchParams.set("mode", "workouts");
     }
     const requestPath = searchParams.size > 0 ? `/api/app-state?${searchParams.toString()}` : "/api/app-state";
     const response = await withTimeout(
@@ -1465,8 +1468,8 @@ export function reconcileSupabaseVisibleState(
     }),
   );
   const snapshotNotesByWorkoutId = new Map(
-    snapshot.notes.flatMap((note) => {
-      const session = snapshot.sessions.find((item) => item.id === note.sessionId);
+    (snapshot.notes ?? []).flatMap((note) => {
+      const session = (snapshot.sessions ?? []).find((item) => item.id === note.sessionId);
       return session ? [[session.scheduledWorkoutId, note] as const] : [];
     }),
   );
@@ -1475,7 +1478,7 @@ export function reconcileSupabaseVisibleState(
     workoutSetDrafts,
   );
   const activeServerEmails = new Set(
-    snapshot.users
+    (snapshot.users ?? previous.users)
       .filter((user) => user.status === "active")
       .map((user) => normalizeComparableEmail(user.email)),
   );
@@ -1505,12 +1508,12 @@ export function reconcileSupabaseVisibleState(
 
   return normalizeState({
     ...previous,
-    users: [...snapshot.users, ...preservedInvitedUsers],
-    bodyMeasurements: snapshot.bodyMeasurements,
-    assignments: snapshot.assignments,
-    exercises: snapshot.exercises,
-    templates: snapshot.templates,
-    plans: snapshot.plans,
+    users: [...(snapshot.users ?? previous.users), ...preservedInvitedUsers],
+    bodyMeasurements: snapshot.bodyMeasurements ?? previous.bodyMeasurements,
+    assignments: snapshot.assignments ?? previous.assignments,
+    exercises: snapshot.exercises ?? previous.exercises,
+    templates: snapshot.templates ?? previous.templates,
+    plans: snapshot.plans ?? previous.plans,
     scheduledWorkouts: withOptimisticWorkouts.scheduledWorkouts.map((workout) => {
       const localWorkout = previousScheduledWorkoutsById.get(workout.id);
       if (!localWorkout) {
@@ -1576,8 +1579,10 @@ export function reconcileSupabaseVisibleState(
         : session;
     }),
     notes: (() => {
-      const mergedNotes = snapshot.notes.map((note) => {
-        const snapshotSession = snapshot.sessions.find((item) => item.id === note.sessionId);
+      const snapshotNotes = snapshot.notes ?? previous.notes;
+      const snapshotSessions = snapshot.sessions ?? previous.sessions;
+      const mergedNotes = snapshotNotes.map((note) => {
+        const snapshotSession = snapshotSessions.find((item) => item.id === note.sessionId);
         const scheduledWorkoutId = snapshotSession?.scheduledWorkoutId;
         if (!scheduledWorkoutId) {
           return note;
@@ -1627,7 +1632,7 @@ export function reconcileSupabaseVisibleState(
 
       return mergedNotes;
     })(),
-    conversationEntries: snapshot.conversationEntries,
+    conversationEntries: snapshot.conversationEntries ?? previous.conversationEntries,
   });
 }
 
@@ -1683,8 +1688,8 @@ function findResolvedSnapshotUserIdForLocalUser(
 
   const normalizedEmail = normalizeComparableEmail(localUser.email);
   return (
-    snapshot.users.find((user) => user.id === localUserId)?.id ??
-    snapshot.users.find((user) => normalizeComparableEmail(user.email) === normalizedEmail)?.id ??
+    (snapshot.users ?? []).find((user) => user.id === localUserId)?.id ??
+    (snapshot.users ?? []).find((user) => normalizeComparableEmail(user.email) === normalizedEmail)?.id ??
     null
   );
 }
@@ -2412,7 +2417,7 @@ export function AppStateProvider({ children }: PropsWithChildren) {
   const isImpersonating = Boolean(impersonatedUserId);
   const hasStoredSession = Boolean(authenticatedUserId);
 
-  const fetchSupabaseVisibleStateSnapshot = (options?: { lite?: boolean; accessToken?: string; throwOnError?: boolean }) =>
+  const fetchSupabaseVisibleStateSnapshot = (options?: { lite?: boolean; mode?: "full" | "workouts"; accessToken?: string; throwOnError?: boolean }) =>
     fetchSupabaseVisibleStateSnapshotWithClient(supabase, options);
 
 function findResolvedUserIdInSnapshot(
@@ -2452,7 +2457,7 @@ function findResolvedUserIdInSnapshot(
     };
   }
 
-  async function refreshSupabaseVisibleState() {
+  async function refreshSupabaseVisibleState(options?: { mode?: "full" | "workouts" }) {
     if (!supabase) {
       return false;
     }
@@ -2462,14 +2467,14 @@ function findResolvedUserIdInSnapshot(
     }
 
     const refreshPromise = (async () => {
-      const payload = await fetchSupabaseVisibleStateSnapshot({ lite: !authenticatedUserId });
+      const payload = await fetchSupabaseVisibleStateSnapshot({ lite: !authenticatedUserId, mode: options?.mode });
       if (!payload) {
         return false;
       }
 
       try {
         const nextRecentlyConfirmed = new Map(recentlyConfirmedSetLogsRef.current);
-        payload.sessions.forEach((session) => {
+        (payload.sessions ?? []).forEach((session) => {
           const entry = nextRecentlyConfirmed.get(session.scheduledWorkoutId);
           if (!entry) {
             return;
@@ -2483,8 +2488,8 @@ function findResolvedUserIdInSnapshot(
         });
         recentlyConfirmedSetLogsRef.current = nextRecentlyConfirmed;
         const nextRecentlyConfirmedNotes = new Map(recentlyConfirmedWorkoutNotesRef.current);
-        payload.notes.forEach((note) => {
-          const session = payload.sessions.find((item) => item.id === note.sessionId);
+        (payload.notes ?? []).forEach((note) => {
+          const session = (payload.sessions ?? []).find((item) => item.id === note.sessionId);
           const scheduledWorkoutId = session?.scheduledWorkoutId;
           if (!scheduledWorkoutId) {
             return;
@@ -4727,9 +4732,9 @@ function findResolvedUserIdInSnapshot(
             const scheduledWorkoutId = payload?.scheduledWorkoutId ?? optimisticWorkoutId ?? undefined;
             if (optimisticWorkoutId && scheduledWorkoutId && scheduledWorkoutId !== optimisticWorkoutId) {
               setState((current) => rekeyOptimisticWorkoutArtifacts(current, optimisticWorkoutId, scheduledWorkoutId));
-              await refreshSupabaseVisibleState();
+              await refreshSupabaseVisibleState({ mode: "workouts" });
             } else {
-              void refreshSupabaseVisibleState();
+              void refreshSupabaseVisibleState({ mode: "workouts" });
             }
             warnIfOptimisticServerIdLeak("workout", scheduledWorkoutId);
             return { ok: true, scheduledWorkoutId };
@@ -4746,7 +4751,7 @@ function findResolvedUserIdInSnapshot(
               return { ok: false, message: payload?.message ?? "Harjoituksen käynnistys epäonnistui." };
             }
 
-            void refreshSupabaseVisibleState();
+            void refreshSupabaseVisibleState({ mode: "workouts" });
             warnIfOptimisticServerIdLeak("workout", payload?.scheduledWorkoutId);
             return { ok: true, scheduledWorkoutId: payload?.scheduledWorkoutId };
           }
@@ -5066,7 +5071,7 @@ function findResolvedUserIdInSnapshot(
             }));
           }
 
-          await refreshSupabaseVisibleState();
+          await refreshSupabaseVisibleState({ mode: "workouts" });
           syncWorkoutMutationQueueVersionsFromState(scheduledWorkoutId);
         }
 

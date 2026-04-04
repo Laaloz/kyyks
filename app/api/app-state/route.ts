@@ -39,9 +39,11 @@ export async function GET(request: Request) {
       return timer.json({ message: ensureProfileResult.message }, { status: 403 });
     }
 
-    const lite = new URL(request.url).searchParams.get("lite") === "1";
-    const snapshot = await loadVisibleSupabaseAppState(supabase, { lite });
-    timer.log({ userId: user.id, lite });
+    const url = new URL(request.url);
+    const lite = url.searchParams.get("lite") === "1";
+    const mode = url.searchParams.get("mode") === "workouts" ? "workouts" : "full";
+    const snapshot = await loadVisibleSupabaseAppState(supabase, { lite, mode });
+    timer.log({ userId: user.id, lite, mode });
     return timer.json(snapshot);
   } catch (error) {
     const message = error instanceof Error && error.message ? error.message : "Sovellustilan haku epäonnistui.";
