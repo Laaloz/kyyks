@@ -12,7 +12,9 @@ import type {
   ScheduledWorkout,
   TrainingPlan,
   WorkoutBatchSetSyncResult,
+  WorkoutSetLog,
   WorkoutSetDraftPatch,
+  WorkoutNote,
   WorkoutSession,
   WorkoutUpdateInput,
 } from "@/lib/types";
@@ -39,6 +41,11 @@ type WorkoutMutationResult =
 type WorkoutNoteMutationResult =
   | { ok: true; updatedAt: string }
   | { ok: false; message: string; code?: "stale_note" | "not_found" | "invalid_state" | "forbidden" };
+
+type StartedWorkoutPayload = {
+  scheduledWorkout: ScheduledWorkout;
+  session: WorkoutSession;
+};
 
 function createPhaseTimer(label: string) {
   const startedAt = performance.now();
@@ -177,6 +184,100 @@ function mapPlanRow(row: PlanRow): TrainingPlan {
     weekCount: row.week_count,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
+  };
+}
+
+function mapScheduledWorkoutRow(row: ScheduledWorkoutRow): ScheduledWorkout {
+  return {
+    id: row.id,
+    trainingPlanId: row.training_plan_id ?? undefined,
+    templateId: row.template_id ?? undefined,
+    programWorkoutId: row.program_workout_id ?? undefined,
+    athleteId: row.athlete_id,
+    coachId: row.coach_id,
+    title: row.title,
+    scheduledDate: row.scheduled_date,
+    status: row.status,
+    completedAt: row.completed_at ?? undefined,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+  };
+}
+
+function mapSetLogRow(row: SetLogRow): WorkoutSetLog {
+  return {
+    id: row.id,
+    scheduledWorkoutId: row.scheduled_workout_id,
+    templateExerciseId: row.template_exercise_id,
+    setId: row.set_id,
+    exerciseId: row.exercise_id,
+    exerciseName: row.exercise_name,
+    muscleGroup: (row.muscle_group as WorkoutSetLog["muscleGroup"]) ?? undefined,
+    supersetGroup: row.superset_group ?? undefined,
+    setLabel: row.set_label,
+    targetReps: row.target_reps,
+    targetRepsMin: row.target_reps_min ?? undefined,
+    targetRepsMax: row.target_reps_max ?? undefined,
+    targetLoad: toNumberOrUndefined(row.target_load),
+    targetRestSeconds: row.target_rest_seconds ?? undefined,
+    programWorkoutId: row.program_workout_id ?? undefined,
+    actualReps: row.actual_reps ?? undefined,
+    actualLoad: toNumberOrUndefined(row.actual_load),
+    done: row.done,
+  };
+}
+
+function mapSessionRow(row: SessionRow, setLogs: WorkoutSetLog[]): WorkoutSession {
+  return {
+    id: row.id,
+    scheduledWorkoutId: row.scheduled_workout_id,
+    athleteId: row.athlete_id,
+    startedAt: row.started_at,
+    completedAt: row.completed_at ?? undefined,
+    pausedAt: row.paused_at ?? undefined,
+    pausedDurationSeconds: row.paused_duration_seconds ?? undefined,
+    updatedAt: row.updated_at,
+    setLogs,
+  };
+}
+
+async function fetchStartedWorkoutPayload(
+  admin: NonNullable<ReturnType<typeof createSupabaseAdminClient>>,
+  scheduledWorkoutId: string,
+): Promise<StartedWorkoutPayload | null> {
+  const { data: scheduledWorkout } = await admin
+    .from("scheduled_workouts")
+    .select("id, training_plan_id, template_id, program_workout_id, athlete_id, coach_id, title, scheduled_date, status, completed_at, created_at, updated_at")
+    .eq("id", scheduledWorkoutId)
+    .maybeSingle<ScheduledWorkoutRow>();
+
+  if (!scheduledWorkout) {
+    return null;
+  }
+
+  const { data: session } = await admin
+    .from("workout_sessions")
+    .select("id, scheduled_workout_id, athlete_id, started_at, completed_at, paused_at, paused_duration_seconds, updated_at")
+    .eq("scheduled_workout_id", scheduledWorkoutId)
+    .order("updated_at", { ascending: false })
+    .order("id", { ascending: false })
+    .limit(1)
+    .maybeSingle<SessionRow>();
+
+  if (!session) {
+    return null;
+  }
+
+  const { data: setLogs } = await admin
+    .from("workout_set_logs")
+    .select("id, session_id, scheduled_workout_id, template_exercise_id, set_id, exercise_id, exercise_name, muscle_group, superset_group, set_label, target_reps, target_reps_min, target_reps_max, target_load, target_rest_seconds, program_workout_id, actual_reps, actual_load, done")
+    .eq("session_id", session.id)
+    .order("template_exercise_id", { ascending: true })
+    .order("set_label", { ascending: true });
+
+  return {
+    scheduledWorkout: mapScheduledWorkoutRow(scheduledWorkout),
+    session: mapSessionRow(session, ((setLogs ?? []) as SetLogRow[]).map((row) => mapSetLogRow(row))),
   };
 }
 
@@ -1051,7 +1152,8 @@ export async function startProgramWorkoutOnServer({
   ]);
 
   if (existingActive.data?.id && !existingActiveSession.data?.completed_at) {
-    return { ok: true as const, scheduledWorkoutId: existingActive.data.id };
+    const payload = await fetchStartedWorkoutPayload(admin, existingActive.data.id);
+    return { ok: true as const, scheduledWorkoutId: existingActive.data.id, payload: payload ?? undefined };
   }
   timer.checkpoint("blocking-query");
 
@@ -1116,7 +1218,8 @@ export async function startProgramWorkoutOnServer({
   }
 
   timer.checkpoint("done");
-  return { ok: true as const, scheduledWorkoutId: scheduledWorkout.id };
+  const payload = await fetchStartedWorkoutPayload(admin, scheduledWorkout.id);
+  return { ok: true as const, scheduledWorkoutId: scheduledWorkout.id, payload: payload ?? undefined };
 }
 
 export async function startScheduledWorkoutOnServer({
@@ -1152,7 +1255,8 @@ export async function startScheduledWorkoutOnServer({
 
   if (existingSession) {
     if (workout.status === "completed" || workout.status === "in_progress") {
-      return { ok: true as const, scheduledWorkoutId, updatedAt: existingSession.updated_at };
+      const payload = await fetchStartedWorkoutPayload(admin, scheduledWorkoutId);
+      return { ok: true as const, scheduledWorkoutId, updatedAt: existingSession.updated_at, payload: payload ?? undefined };
     }
 
     const resumedAt = nowIso();
@@ -1184,7 +1288,8 @@ export async function startScheduledWorkoutOnServer({
       })
       .eq("id", scheduledWorkoutId);
 
-    return { ok: true as const, scheduledWorkoutId, updatedAt: resumedAt };
+    const payload = await fetchStartedWorkoutPayload(admin, scheduledWorkoutId);
+    return { ok: true as const, scheduledWorkoutId, updatedAt: resumedAt, payload: payload ?? undefined };
   }
 
   let setLogs: Array<Record<string, unknown>> | null = null;
@@ -1232,7 +1337,8 @@ export async function startScheduledWorkoutOnServer({
     return sessionResult;
   }
 
-  return { ok: true as const, scheduledWorkoutId, updatedAt: sessionResult.updatedAt };
+  const payload = await fetchStartedWorkoutPayload(admin, scheduledWorkoutId);
+  return { ok: true as const, scheduledWorkoutId, updatedAt: sessionResult.updatedAt, payload: payload ?? undefined };
 }
 
 export async function updateWorkoutSetOnServer({

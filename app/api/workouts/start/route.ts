@@ -52,5 +52,10 @@ export async function POST(request: Request) {
   }
 
   timer.log({ userId: user.id, programId: parsed.data.programId, scheduledWorkoutId: result.scheduledWorkoutId });
-  return timer.json({ ok: true, scheduledWorkoutId: result.scheduledWorkoutId });
+  return timer.json({
+    ok: true,
+    scheduledWorkoutId: result.scheduledWorkoutId,
+    scheduledWorkout: result.payload?.scheduledWorkout,
+    session: result.payload?.session,
+  });
 }

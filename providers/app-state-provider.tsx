@@ -53,6 +53,7 @@ import type {
   ProgramBuilderInput,
   ProgramUpdateInput,
   Role,
+  ScheduledWorkout,
   UserProfile,
   WorkoutBatchSetSyncResult,
   WorkoutSetDraftPatch,
@@ -243,6 +244,43 @@ function clearOptimisticWorkoutArtifacts(state: AppState, scheduledWorkoutId: st
       (session) => session.scheduledWorkoutId !== scheduledWorkoutId && !sessionIds.has(session.id),
     ),
     notes: state.notes.filter((note) => !sessionIds.has(note.sessionId)),
+  };
+}
+
+function mergeStartedWorkoutPayload(
+  previous: AppState,
+  scheduledWorkout: ScheduledWorkout | undefined,
+  session: WorkoutSession | undefined,
+) {
+  if (!scheduledWorkout && !session) {
+    return previous;
+  }
+
+  const nextScheduledWorkouts = scheduledWorkout
+    ? [
+        scheduledWorkout,
+        ...previous.scheduledWorkouts.filter((workout) => workout.id !== scheduledWorkout.id),
+      ]
+    : previous.scheduledWorkouts;
+
+  const nextSessions = session
+    ? [
+        session,
+        ...previous.sessions.filter(
+          (item) => item.id !== session.id && item.scheduledWorkoutId !== session.scheduledWorkoutId,
+        ),
+      ]
+    : previous.sessions;
+
+  const nextNotes = session
+    ? previous.notes.filter((note) => note.sessionId !== session.id)
+    : previous.notes;
+
+  return {
+    ...previous,
+    scheduledWorkouts: nextScheduledWorkouts,
+    sessions: nextSessions,
+    notes: nextNotes,
   };
 }
 
@@ -4799,7 +4837,12 @@ function findResolvedUserIdInSnapshot(
               },
               body: JSON.stringify({ programId, programWorkoutId }),
             });
-            const payload = (await response.json().catch(() => null)) as { message?: string; scheduledWorkoutId?: string } | null;
+            const payload = (await response.json().catch(() => null)) as {
+              message?: string;
+              scheduledWorkoutId?: string;
+              scheduledWorkout?: ScheduledWorkout;
+              session?: WorkoutSession;
+            } | null;
             if (!response.ok) {
               setState(previousState);
               await refreshSupabaseVisibleState();
@@ -4809,13 +4852,12 @@ function findResolvedUserIdInSnapshot(
             const scheduledWorkoutId = payload?.scheduledWorkoutId ?? optimisticWorkoutId ?? undefined;
             if (optimisticWorkoutId && scheduledWorkoutId && scheduledWorkoutId !== optimisticWorkoutId) {
               setState((current) => rekeyOptimisticWorkoutArtifacts(current, optimisticWorkoutId, scheduledWorkoutId));
-              await ensureWorkoutVisibleInState(scheduledWorkoutId, { requireSession: true });
+              setState((current) => mergeStartedWorkoutPayload(current, payload?.scheduledWorkout, payload?.session));
             } else {
-              if (scheduledWorkoutId) {
-                await ensureWorkoutVisibleInState(scheduledWorkoutId, { requireSession: true });
-              } else {
-                await refreshSupabaseVisibleState({ mode: "workouts" });
-              }
+              setState((current) => mergeStartedWorkoutPayload(current, payload?.scheduledWorkout, payload?.session));
+            }
+            if (scheduledWorkoutId && !payload?.session) {
+              void ensureWorkoutVisibleInState(scheduledWorkoutId, { requireSession: true });
             }
             warnIfOptimisticServerIdLeak("workout", scheduledWorkoutId);
             return { ok: true, scheduledWorkoutId };
@@ -4827,15 +4869,19 @@ function findResolvedUserIdInSnapshot(
               },
               body: JSON.stringify({ programId, programWorkoutId }),
             });
-            const payload = (await response.json().catch(() => null)) as { message?: string; scheduledWorkoutId?: string } | null;
+            const payload = (await response.json().catch(() => null)) as {
+              message?: string;
+              scheduledWorkoutId?: string;
+              scheduledWorkout?: ScheduledWorkout;
+              session?: WorkoutSession;
+            } | null;
             if (!response.ok) {
               return { ok: false, message: payload?.message ?? "Harjoituksen käynnistys epäonnistui." };
             }
 
-            if (payload?.scheduledWorkoutId) {
-              await ensureWorkoutVisibleInState(payload.scheduledWorkoutId, { requireSession: true });
-            } else {
-              await refreshSupabaseVisibleState({ mode: "workouts" });
+            setState((current) => mergeStartedWorkoutPayload(current, payload?.scheduledWorkout, payload?.session));
+            if (payload?.scheduledWorkoutId && !payload?.session) {
+              void ensureWorkoutVisibleInState(payload.scheduledWorkoutId, { requireSession: true });
             }
             warnIfOptimisticServerIdLeak("workout", payload?.scheduledWorkoutId);
             return { ok: true, scheduledWorkoutId: payload?.scheduledWorkoutId };
@@ -5132,7 +5178,12 @@ function findResolvedUserIdInSnapshot(
           const response = await fetch(`/api/workouts/${encodeURIComponent(scheduledWorkoutId)}/start`, {
             method: "POST",
           });
-          const payload = (await response.json().catch(() => null)) as { message?: string; updatedAt?: string } | null;
+          const payload = (await response.json().catch(() => null)) as {
+            message?: string;
+            updatedAt?: string;
+            scheduledWorkout?: ScheduledWorkout;
+            session?: WorkoutSession;
+          } | null;
           if (!response.ok) {
             setState(previousState);
             await refreshSupabaseVisibleState();
@@ -5156,7 +5207,10 @@ function findResolvedUserIdInSnapshot(
             }));
           }
 
-          await ensureWorkoutVisibleInState(scheduledWorkoutId, { requireSession: true });
+          setState((current) => mergeStartedWorkoutPayload(current, payload?.scheduledWorkout, payload?.session));
+          if (!payload?.session) {
+            await ensureWorkoutVisibleInState(scheduledWorkoutId, { requireSession: true });
+          }
           syncWorkoutMutationQueueVersionsFromState(scheduledWorkoutId);
         }
 

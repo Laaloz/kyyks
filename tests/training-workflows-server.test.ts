@@ -627,7 +627,7 @@ describe("training workflows server", () => {
       programWorkoutId: "program-workout-1",
     });
 
-    expect(result).toEqual({
+    expect(result).toMatchObject({
       ok: true,
       scheduledWorkoutId: "new-workout",
     });
