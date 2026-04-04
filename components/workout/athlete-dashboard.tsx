@@ -445,12 +445,10 @@ export function AthleteDashboard({
   );
   const selectedProgramWorkout = useMemo(
     () =>
-      selectedWorkout?.programWorkoutId
-        ? athletePrograms
-            .flatMap((program) => program.workouts ?? [])
-            .find((workout) => workout.id === selectedWorkout.programWorkoutId)
+      selectedWorkout
+        ? resolveScheduledProgramWorkout(state, selectedWorkout)
         : undefined,
-    [athletePrograms, selectedWorkout?.programWorkoutId],
+    [selectedWorkout, state.plans],
   );
   const workoutInsights = useMemo(() => buildWorkoutInsights(state), [state]);
   const selectedWorkoutStatus = selectedWorkout ? resolveWorkoutStatus(selectedWorkout) : undefined;
@@ -2559,21 +2557,37 @@ function buildWorkoutExerciseInstructions(
   state: AppState,
   scheduledWorkout: AppState["scheduledWorkouts"][number],
 ) {
+  const workout = resolveScheduledProgramWorkout(state, scheduledWorkout);
+  if (!workout) {
+    return new Map<string, string>();
+  }
+
+  return new Map(
+    workout.exercises
+      .map((exercise) => [exercise.id, exercise.instruction.trim()] as const)
+      .filter((entry) => entry[1].length > 0),
+  );
+}
+
+function resolveScheduledProgramWorkout(
+  state: AppState,
+  scheduledWorkout: AppState["scheduledWorkouts"][number],
+) {
   if (scheduledWorkout.trainingPlanId && scheduledWorkout.programWorkoutId) {
     const plan = state.plans.find((item) => item.id === scheduledWorkout.trainingPlanId);
     const workout = plan?.workouts?.find((item) => item.id === scheduledWorkout.programWorkoutId);
-    if (!workout) {
-      return new Map<string, string>();
+    if (workout) {
+      return workout;
     }
-
-    return new Map(
-      workout.exercises
-        .map((exercise) => [exercise.id, exercise.instruction.trim()] as const)
-        .filter((entry) => entry[1].length > 0),
-    );
   }
 
-  return new Map<string, string>();
+  if (!scheduledWorkout.programWorkoutId) {
+    return undefined;
+  }
+
+  return state.plans
+    .flatMap((plan) => plan.workouts ?? [])
+    .find((workout) => workout.id === scheduledWorkout.programWorkoutId);
 }
 
 function formatDuration(seconds: number) {
