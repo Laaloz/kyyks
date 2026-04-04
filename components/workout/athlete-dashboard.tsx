@@ -1468,23 +1468,32 @@ export function AthleteDashboard({
         athleteLogMode === "workout" ? (
           <Card className="border-[var(--border-strong)] max-md:rounded-none max-md:border-0 max-md:bg-transparent max-md:p-0 max-md:shadow-none">
             <div className="flex flex-wrap items-start justify-between gap-4">
-              <div>
+              <div className="min-w-0">
                 <p className="text-xs font-semibold tracking-[0.04em] text-[var(--text-subtle)]">Treeni</p>
                 <CardTitle className="text-2xl">
                   {selectedWorkout ? normalizeWorkoutHistoryTitle(selectedWorkout.title) : "Aktiivinen treeni"}
                 </CardTitle>
-                <CardDescription className="mt-2">
-                  {selectedWorkout
-                    ? `${formatRelativeDate(selectedWorkout.scheduledDate)} · ${workoutStatusLabel(selectedWorkoutStatus ?? selectedWorkout.status)}`
-                    : "Valitse treeni listalta ja avaa se tähän näkymään."}
-                </CardDescription>
+                {selectedWorkout ? (
+                  <div className="mt-3 flex flex-wrap items-center gap-2">
+                    <Badge className="border-[var(--border)] bg-[var(--surface-2)] text-[var(--text-subtle)]">
+                      {formatRelativeDate(selectedWorkout.scheduledDate)}
+                    </Badge>
+                    <Badge className={statusTone(selectedWorkoutStatus ?? selectedWorkout.status)}>
+                      {workoutStatusLabel(selectedWorkoutStatus ?? selectedWorkout.status)}
+                    </Badge>
+                  </div>
+                ) : (
+                  <CardDescription className="mt-2">
+                    Valitse treeni listalta ja avaa se tähän näkymään.
+                  </CardDescription>
+                )}
                 {selectedWorkoutDescription ? (
-                  <p className="mt-3 max-w-3xl text-sm leading-6 text-[var(--text-muted)]">
+                  <p className="mt-4 max-w-3xl text-sm leading-7 text-[var(--text-muted)]">
                     {selectedWorkoutDescription}
                   </p>
                 ) : null}
                 {selectedProgramWorkout ? (
-                  <p className="mt-2 max-w-3xl text-sm leading-6 text-[var(--text-muted)]">
+                  <p className="mt-3 max-w-3xl text-sm leading-7 text-[var(--text-muted)]">
                     {deriveProgramWorkoutGuidance(selectedProgramWorkout)}
                   </p>
                 ) : null}
