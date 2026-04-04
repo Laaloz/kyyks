@@ -485,6 +485,27 @@ export function AthleteDashboard({
 
     setPendingStartWorkoutId(null);
   }, [pendingStartWorkoutId, sessionByWorkoutId, workouts]);
+  useEffect(() => {
+    if (pendingWorkoutTransition?.type !== "start" || athleteLogMode !== "workout") {
+      return;
+    }
+
+    const optimisticStartedWorkout = workouts.find(
+      (item) =>
+        item.programWorkoutId === pendingWorkoutTransition.workoutId &&
+        resolveWorkoutStatus(item) === "in_progress",
+    );
+    if (!optimisticStartedWorkout) {
+      return;
+    }
+
+    if (selectedWorkoutId !== optimisticStartedWorkout.id) {
+      setSelectedWorkoutId(optimisticStartedWorkout.id);
+    }
+    if (pendingStartWorkoutId !== optimisticStartedWorkout.id) {
+      setPendingStartWorkoutId(optimisticStartedWorkout.id);
+    }
+  }, [athleteLogMode, pendingStartWorkoutId, pendingWorkoutTransition, selectedWorkoutId, workouts]);
   const parseMeasurementField = (value: string) => {
     if (!value.trim()) {
       return undefined;

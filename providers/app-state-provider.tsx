@@ -1503,6 +1503,7 @@ export function reconcileSupabaseVisibleState(
   recentlyConfirmedSetLogs?: ReadonlyMap<string, string>,
   recentlyConfirmedNotes?: ReadonlyMap<string, string>,
   recentlyDeletedWorkoutIds?: ReadonlyMap<string, number>,
+  snapshotMode: "full" | "workouts" = "full",
 ) {
   const suppressedWorkoutIds = new Set(
     Array.from(recentlyDeletedWorkoutIds?.entries() ?? [])
@@ -1572,11 +1573,11 @@ export function reconcileSupabaseVisibleState(
   return normalizeState({
     ...previous,
     users: [...(snapshot.users ?? previous.users), ...preservedInvitedUsers],
-    bodyMeasurements: filteredSnapshot.bodyMeasurements ?? previous.bodyMeasurements,
-    assignments: filteredSnapshot.assignments ?? previous.assignments,
-    exercises: filteredSnapshot.exercises ?? previous.exercises,
-    templates: filteredSnapshot.templates ?? previous.templates,
-    plans: filteredSnapshot.plans ?? previous.plans,
+    bodyMeasurements: snapshotMode === "workouts" ? previous.bodyMeasurements : (filteredSnapshot.bodyMeasurements ?? previous.bodyMeasurements),
+    assignments: snapshotMode === "workouts" ? previous.assignments : (filteredSnapshot.assignments ?? previous.assignments),
+    exercises: snapshotMode === "workouts" ? previous.exercises : (filteredSnapshot.exercises ?? previous.exercises),
+    templates: snapshotMode === "workouts" ? previous.templates : (filteredSnapshot.templates ?? previous.templates),
+    plans: snapshotMode === "workouts" ? previous.plans : (filteredSnapshot.plans ?? previous.plans),
     scheduledWorkouts: withOptimisticWorkouts.scheduledWorkouts.map((workout) => {
       const localWorkout = previousScheduledWorkoutsById.get(workout.id);
       if (!localWorkout) {
@@ -2610,6 +2611,7 @@ function findResolvedUserIdInSnapshot(
             recentlyConfirmedSetLogsRef.current,
             recentlyConfirmedWorkoutNotesRef.current,
             recentlyDeletedWorkoutsRef.current,
+            options?.mode ?? "full",
           ),
         );
         if (options?.mode !== "workouts") {
