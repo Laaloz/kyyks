@@ -1709,7 +1709,7 @@ export function AthleteDashboard({
                   />
                   <span>
                     {pendingWorkoutTransition.type === "complete"
-                        ? "Merkitään treeniä valmiiksi ja palataan treenilistaan..."
+                        ? "Tallennetaan treeni ja päivitetään näkymä..."
                       : pendingWorkoutTransition.type === "cancel"
                         ? "Palataan treenilistaan ja päivitetään keskeytetty tila..."
                         : "Poistetaan treeniä ja päivitetään näkymä..."}

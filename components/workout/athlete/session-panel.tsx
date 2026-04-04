@@ -1748,7 +1748,7 @@ export function AthleteSessionPanel({
             />
             <span>
               {isCompleting
-                ? "Merkitään treeni valmiiksi..."
+                ? "Tallennetaan treeni..."
                 : isCancellingWorkout
                   ? "Keskeytetään treeni..."
                   : "Poistetaan treeni..."}
@@ -1776,15 +1776,17 @@ export function AthleteSessionPanel({
                    Jatka treeniä
                  </Button>
               ) : (
-                <Button
-                  onClick={onComplete}
-                   type="button"
-                   className="w-full sm:w-auto"
-                   loading={isCompleting}
-                   loadingText="Merkitään treeni valmiiksi..."
-                 >
-                   Merkitse treeni valmiiksi
-                 </Button>
+                !isCompleting ? (
+                  <Button
+                    onClick={onComplete}
+                     type="button"
+                     className="w-full sm:w-auto"
+                     loading={isCompleting}
+                     loadingText="Tallennetaan..."
+                   >
+                     Merkitse treeni valmiiksi
+                   </Button>
+                ) : null
               )}
               {showBottomBackToList ? (
                 <Button onClick={onBackToList} type="button" variant="ghost" className="w-full sm:w-auto">
