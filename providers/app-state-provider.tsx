@@ -2559,34 +2559,30 @@ function findResolvedUserIdInSnapshot(
     scheduledWorkoutId: string,
     options?: { requireSession?: boolean },
   ) {
-    const hasWorkout = stateRef.current.scheduledWorkouts.some((workout) => workout.id === scheduledWorkoutId);
-    const hasSession = stateRef.current.sessions.some((session) => session.scheduledWorkoutId === scheduledWorkoutId);
-    if (hasWorkout && (!options?.requireSession || hasSession)) {
+    const isVisible = () => {
+      const hasWorkout = stateRef.current.scheduledWorkouts.some((workout) => workout.id === scheduledWorkoutId);
+      const hasSession = stateRef.current.sessions.some((session) => session.scheduledWorkoutId === scheduledWorkoutId);
+      return hasWorkout && (!options?.requireSession || hasSession);
+    };
+
+    if (isVisible()) {
       return true;
     }
 
-    const refreshed = await refreshSupabaseVisibleState({ mode: "workouts" });
-    if (!refreshed) {
-      return false;
+    for (let attempt = 0; attempt < 3; attempt += 1) {
+      const refreshed = await refreshSupabaseVisibleState({ mode: "workouts" });
+      if (!refreshed) {
+        return false;
+      }
+
+      if (isVisible()) {
+        return true;
+      }
+
+      await new Promise((resolve) => window.setTimeout(resolve, 150));
     }
 
-    const workoutAfterWorkoutRefresh = stateRef.current.scheduledWorkouts.some((workout) => workout.id === scheduledWorkoutId);
-    const sessionAfterWorkoutRefresh = stateRef.current.sessions.some(
-      (session) => session.scheduledWorkoutId === scheduledWorkoutId,
-    );
-    if (workoutAfterWorkoutRefresh && (!options?.requireSession || sessionAfterWorkoutRefresh)) {
-      return true;
-    }
-
-    const fullyRefreshed = await refreshSupabaseVisibleState();
-    if (!fullyRefreshed) {
-      return false;
-    }
-
-    return stateRef.current.scheduledWorkouts.some((workout) => workout.id === scheduledWorkoutId) && (
-      !options?.requireSession ||
-      stateRef.current.sessions.some((session) => session.scheduledWorkoutId === scheduledWorkoutId)
-    );
+    return isVisible();
   }
 
   useEffect(() => {
