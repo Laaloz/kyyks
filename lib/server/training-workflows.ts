@@ -126,6 +126,8 @@ function nowIso() {
   return new Date().toISOString();
 }
 
+const AUTOFILL_SESSION_SCAN_LIMIT = 12;
+
 function isExercisesExternalKeySchemaError(message: string | undefined) {
   const normalized = message?.toLowerCase() ?? "";
   return (
@@ -396,10 +398,19 @@ async function resolveExerciseDatabaseRows() {
 
 async function buildAutofillSnapshotMaps(
   athleteId: string,
+  exerciseIds: string[],
   adminClient: NonNullable<ReturnType<typeof createSupabaseAdminClient>> | null = null,
 ) {
   const admin = adminClient ?? createSupabaseAdminClient();
   if (!admin) {
+    return {
+      byExerciseAndSetLabel: new Map<string, { actualReps?: number; actualLoad?: number }>(),
+      byExercise: new Map<string, { actualReps?: number; actualLoad?: number }>(),
+    };
+  }
+
+  const uniqueExerciseIds = Array.from(new Set(exerciseIds.filter(Boolean)));
+  if (!uniqueExerciseIds.length) {
     return {
       byExerciseAndSetLabel: new Map<string, { actualReps?: number; actualLoad?: number }>(),
       byExercise: new Map<string, { actualReps?: number; actualLoad?: number }>(),
@@ -411,7 +422,8 @@ async function buildAutofillSnapshotMaps(
     .select("id, completed_at, updated_at")
     .eq("athlete_id", athleteId)
     .not("completed_at", "is", null)
-    .order("completed_at", { ascending: false });
+    .order("completed_at", { ascending: false })
+    .limit(AUTOFILL_SESSION_SCAN_LIMIT);
 
   const sessionIds = (completedSessions ?? []).map((session) => session.id);
   if (!sessionIds.length) {
@@ -424,7 +436,8 @@ async function buildAutofillSnapshotMaps(
   const { data: logs } = await admin
     .from("workout_set_logs")
     .select("session_id, exercise_id, set_label, actual_reps, actual_load, done")
-    .in("session_id", sessionIds);
+    .in("session_id", sessionIds)
+    .in("exercise_id", uniqueExerciseIds);
 
   const sessionOrder = new Map(sessionIds.map((sessionId, index) => [sessionId, index]));
   const orderedLogs = (logs ?? []).sort((left, right) => {
@@ -472,7 +485,11 @@ async function buildProgramWorkoutSetLogs(
     return null;
   }
 
-  const autofill = await buildAutofillSnapshotMaps(plan.athleteId, adminClient);
+  const autofill = await buildAutofillSnapshotMaps(
+    plan.athleteId,
+    programWorkout.exercises.map((exercise) => exercise.exerciseId ?? `custom_${exercise.id}`),
+    adminClient,
+  );
 
   return programWorkout.exercises.flatMap((exercise) =>
     exercise.sets.map((set) => {
