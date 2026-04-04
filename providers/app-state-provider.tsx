@@ -1456,8 +1456,25 @@ export function reconcileSupabaseVisibleState(
   workoutSetDrafts?: ReadonlyMap<string, WorkoutSetDraftState>,
   recentlyConfirmedSetLogs?: ReadonlyMap<string, string>,
   recentlyConfirmedNotes?: ReadonlyMap<string, string>,
+  recentlyDeletedWorkoutIds?: ReadonlyMap<string, number>,
 ) {
-  const withOptimisticWorkouts = preserveActiveWorkoutShells(previous, snapshot);
+  const suppressedWorkoutIds = new Set(
+    Array.from(recentlyDeletedWorkoutIds?.entries() ?? [])
+      .filter(([, deletedAt]) => Date.now() - deletedAt < 15000)
+      .map(([workoutId]) => workoutId),
+  );
+  const filteredSnapshot: SupabaseVisibleAppStateSnapshot = suppressedWorkoutIds.size
+    ? {
+        ...snapshot,
+        scheduledWorkouts: snapshot.scheduledWorkouts.filter((workout) => !suppressedWorkoutIds.has(workout.id)),
+        sessions: snapshot.sessions.filter((session) => !suppressedWorkoutIds.has(session.scheduledWorkoutId)),
+        notes: snapshot.notes.filter((note) => {
+          const session = snapshot.sessions.find((item) => item.id === note.sessionId);
+          return session ? !suppressedWorkoutIds.has(session.scheduledWorkoutId) : true;
+        }),
+      }
+    : snapshot;
+  const withOptimisticWorkouts = preserveActiveWorkoutShells(previous, filteredSnapshot);
   const previousScheduledWorkoutsById = new Map(previous.scheduledWorkouts.map((workout) => [workout.id, workout]));
   const previousSessionsById = new Map(previous.sessions.map((session) => [session.id, session]));
   const previousSessionsByWorkoutId = new Map(previous.sessions.map((session) => [session.scheduledWorkoutId, session]));
@@ -1468,8 +1485,8 @@ export function reconcileSupabaseVisibleState(
     }),
   );
   const snapshotNotesByWorkoutId = new Map(
-    (snapshot.notes ?? []).flatMap((note) => {
-      const session = (snapshot.sessions ?? []).find((item) => item.id === note.sessionId);
+    (filteredSnapshot.notes ?? []).flatMap((note) => {
+      const session = (filteredSnapshot.sessions ?? []).find((item) => item.id === note.sessionId);
       return session ? [[session.scheduledWorkoutId, note] as const] : [];
     }),
   );
@@ -1509,11 +1526,11 @@ export function reconcileSupabaseVisibleState(
   return normalizeState({
     ...previous,
     users: [...(snapshot.users ?? previous.users), ...preservedInvitedUsers],
-    bodyMeasurements: snapshot.bodyMeasurements ?? previous.bodyMeasurements,
-    assignments: snapshot.assignments ?? previous.assignments,
-    exercises: snapshot.exercises ?? previous.exercises,
-    templates: snapshot.templates ?? previous.templates,
-    plans: snapshot.plans ?? previous.plans,
+    bodyMeasurements: filteredSnapshot.bodyMeasurements ?? previous.bodyMeasurements,
+    assignments: filteredSnapshot.assignments ?? previous.assignments,
+    exercises: filteredSnapshot.exercises ?? previous.exercises,
+    templates: filteredSnapshot.templates ?? previous.templates,
+    plans: filteredSnapshot.plans ?? previous.plans,
     scheduledWorkouts: withOptimisticWorkouts.scheduledWorkouts.map((workout) => {
       const localWorkout = previousScheduledWorkoutsById.get(workout.id);
       if (!localWorkout) {
@@ -1632,7 +1649,7 @@ export function reconcileSupabaseVisibleState(
 
       return mergedNotes;
     })(),
-    conversationEntries: snapshot.conversationEntries ?? previous.conversationEntries,
+    conversationEntries: filteredSnapshot.conversationEntries ?? previous.conversationEntries,
   });
 }
 
@@ -2089,6 +2106,7 @@ export function AppStateProvider({ children }: PropsWithChildren) {
   const workoutSetDraftWakeTimeoutRef = useRef<Map<string, number>>(new Map());
   const recentlyConfirmedSetLogsRef = useRef<RecentlyConfirmedWorkoutSetLogs>(new Map());
   const recentlyConfirmedWorkoutNotesRef = useRef<RecentlyConfirmedWorkoutNotes>(new Map());
+  const recentlyDeletedWorkoutsRef = useRef<Map<string, number>>(new Map());
   const isHydrated =
     isStorageHydrated && (supabase ? (isSupabaseAuthResolved && didAttemptBootstrapRevalidation) || didBootstrapTimeout : true);
   const notify = useCallback((input: { tone: "success" | "danger" | "info"; message: string }) => {
@@ -2316,6 +2334,7 @@ export function AppStateProvider({ children }: PropsWithChildren) {
               workoutSetDraftsRef.current,
               recentlyConfirmedSetLogsRef.current,
               recentlyConfirmedWorkoutNotesRef.current,
+              recentlyDeletedWorkoutsRef.current,
             ),
           );
           resolvedUserId = findResolvedUserIdInSnapshot(snapshot, authUser);
@@ -2544,6 +2563,7 @@ function findResolvedUserIdInSnapshot(
             workoutSetDraftsRef.current,
             recentlyConfirmedSetLogsRef.current,
             recentlyConfirmedWorkoutNotesRef.current,
+            recentlyDeletedWorkoutsRef.current,
           ),
         );
         if (options?.mode !== "workouts") {
@@ -3251,6 +3271,7 @@ function findResolvedUserIdInSnapshot(
               workoutSetDraftsRef.current,
               recentlyConfirmedSetLogsRef.current,
               recentlyConfirmedWorkoutNotesRef.current,
+              recentlyDeletedWorkoutsRef.current,
             ),
           );
         }
@@ -5441,13 +5462,15 @@ function findResolvedUserIdInSnapshot(
           });
           const payload = (await response.json().catch(() => null)) as { message?: string } | null;
           if (!response.ok) {
+            recentlyDeletedWorkoutsRef.current.delete(scheduledWorkoutId);
             setState(previousState);
             await refreshSupabaseVisibleState();
             return { ok: false, message: payload?.message ?? "Treenin poisto epäonnistui." };
           }
 
+          recentlyDeletedWorkoutsRef.current.set(scheduledWorkoutId, Date.now());
           setState((current) => clearOptimisticWorkoutArtifacts(current, scheduledWorkoutId));
-          void refreshSupabaseVisibleState();
+          void refreshSupabaseVisibleState({ mode: "workouts" });
           return { ok: true };
         }
 
