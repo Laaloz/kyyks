@@ -549,6 +549,63 @@ async function createSessionWithLogs(params: {
   return { ok: true as const, sessionId: session.id, updatedAt: session.updated_at };
 }
 
+async function recoverCompletedWorkoutState(params: {
+  admin: NonNullable<ReturnType<typeof createSupabaseAdminClient>>;
+  requester: RequesterProfile;
+  scheduledWorkoutId: string;
+}) {
+  const { admin, requester, scheduledWorkoutId } = params;
+  const [{ data: workout }, { data: session }] = await Promise.all([
+    admin
+      .from("scheduled_workouts")
+      .select("id, athlete_id, status, completed_at")
+      .eq("id", scheduledWorkoutId)
+      .maybeSingle<{
+        id: string;
+        athlete_id: string;
+        status: ScheduledWorkout["status"];
+        completed_at: string | null;
+      }>(),
+    admin
+      .from("workout_sessions")
+      .select("id, completed_at, updated_at")
+      .eq("scheduled_workout_id", scheduledWorkoutId)
+      .maybeSingle<{
+        id: string;
+        completed_at: string | null;
+        updated_at: string;
+      }>(),
+  ]);
+
+  if (!workout || (!isAdminRole(requester.role) && workout.athlete_id !== requester.id)) {
+    return null;
+  }
+
+  if (!session?.completed_at) {
+    return null;
+  }
+
+  const recoveredCompletedAt = session.completed_at;
+  const recoveredUpdatedAt = session.updated_at;
+
+  if (workout.status !== "completed" || workout.completed_at !== recoveredCompletedAt) {
+    await admin
+      .from("scheduled_workouts")
+      .update({
+        status: "completed",
+        completed_at: recoveredCompletedAt,
+        updated_at: recoveredUpdatedAt,
+      })
+      .eq("id", scheduledWorkoutId);
+  }
+
+  return {
+    ok: true as const,
+    updatedAt: recoveredUpdatedAt,
+    completedAt: recoveredCompletedAt,
+  };
+}
+
 export async function createProgramOnServer({
   requester,
   payload,
@@ -1493,6 +1550,18 @@ export async function completeWorkoutOnServer({
 
   if (!payload.ok) {
     const code = typeof payload.code === "string" ? payload.code : undefined;
+    if (code !== "forbidden" && code !== "not_found") {
+      const recovered = await recoverCompletedWorkoutState({
+        admin,
+        requester,
+        scheduledWorkoutId,
+      });
+      if (recovered) {
+        timer.checkpoint("recovered-completed-state");
+        return recovered;
+      }
+    }
+
     return {
       ok: false as const,
       message: typeof payload.message === "string" ? payload.message : "Treeniä ei voitu merkitä valmiiksi.",

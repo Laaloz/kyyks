@@ -733,4 +733,69 @@ describe("training workflows server", () => {
       completedAt: "2026-04-02T09:30:00.000Z",
     });
   });
+
+  it("recovers a completed workout when the rpc returns an error after the session was already completed", async () => {
+    const admin = {
+      from: vi.fn((table: string) => {
+        const builder = {
+          select: vi.fn(() => builder),
+          eq: vi.fn(() => builder),
+          update: vi.fn(() => builder),
+          maybeSingle: vi.fn(async () => {
+            if (table === "scheduled_workouts") {
+              return {
+                data: {
+                  id: "workout-1",
+                  athlete_id: "athlete-1",
+                  status: "in_progress",
+                  completed_at: null,
+                },
+                error: null,
+              };
+            }
+
+            if (table === "workout_sessions") {
+              return {
+                data: {
+                  id: "session-1",
+                  completed_at: "2026-04-02T09:30:00.000Z",
+                  updated_at: "2026-04-02T09:30:00.000Z",
+                },
+                error: null,
+              };
+            }
+
+            return { data: null, error: null };
+          }),
+          then: (resolve: (value: { data: unknown; error: null }) => unknown, reject?: (reason: unknown) => unknown) =>
+            Promise.resolve({ data: {}, error: null }).then(resolve, reject),
+        };
+        return builder;
+      }),
+      rpc: vi.fn(async () => ({
+        data: {
+          ok: false,
+          code: "invalid_state",
+          message: "Treeniä ei voitu merkitä valmiiksi.",
+        },
+        error: null,
+      })),
+    };
+
+    createSupabaseAdminClientMock.mockReturnValue(admin);
+
+    const result = await completeWorkoutOnServer({
+      requester: { id: "athlete-1", role: "athlete" },
+      scheduledWorkoutId: "workout-1",
+      expectedUpdatedAt: "2026-04-02T09:20:00.000Z",
+    });
+
+    expect(result).toEqual({
+      ok: true,
+      updatedAt: "2026-04-02T09:30:00.000Z",
+      completedAt: "2026-04-02T09:30:00.000Z",
+    });
+    expect(admin.from).toHaveBeenCalledWith("scheduled_workouts");
+    expect(admin.from).toHaveBeenCalledWith("workout_sessions");
+  });
 });
