@@ -1516,16 +1516,18 @@ export function AthleteSessionPanel({
 
   return (
     <div className="mt-6 space-y-5">
-      <div className="flex flex-wrap items-center gap-3">
-        <Badge className={workoutStatusBadgeClass(status)}>{workoutStatusLabel(status)}</Badge>
-        <p className="text-sm text-[var(--text-muted)]">Käynnistetty {formatDate(selectedSession.startedAt)}</p>
-        <Badge className="border-[var(--accent)] bg-[var(--surface-3)] text-[var(--accent)]">
-          Treeniaika {formatWorkoutDuration(elapsedSeconds)}
-        </Badge>
-        {readOnly ? <Badge className="border-[var(--accent-secondary)] bg-[var(--surface-3)] text-[var(--accent-secondary)]">Lukittu</Badge> : null}
-      </div>
-      <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface-2)] p-4">
-        <p className="font-medium text-[var(--text)]">{scheduledWorkoutTitle}</p>
+      <div>
+        <div className="flex flex-wrap items-center gap-3">
+          <Badge className={workoutStatusBadgeClass(status)}>{workoutStatusLabel(status)}</Badge>
+          <p className="text-sm text-[var(--text-muted)]">Käynnistetty {formatDate(selectedSession.startedAt)}</p>
+          <Badge className="border-[var(--accent)] bg-[var(--surface-3)] text-[var(--accent)]">
+            Treeniaika {formatWorkoutDuration(elapsedSeconds)}
+          </Badge>
+          {readOnly ? <Badge className="border-[var(--accent-secondary)] bg-[var(--surface-3)] text-[var(--accent-secondary)]">Lukittu</Badge> : null}
+        </div>
+        <p className="mt-4 font-[family-name:var(--font-display)] text-xl font-semibold text-[var(--text)]">
+          {scheduledWorkoutTitle}
+        </p>
         {scheduledWorkoutDescription ? (
           <p className="mt-2 max-w-3xl text-sm leading-6 text-[var(--text-muted)]">{scheduledWorkoutDescription}</p>
         ) : null}
