@@ -1678,12 +1678,12 @@ export function AthleteSessionPanel({
         </div>
       ) : (
         <>
-          {!readOnly && !hasSeenDragHint ? (
-            <div className="flex items-center justify-between gap-2 rounded-xl border border-[color-mix(in_srgb,var(--accent)_18%,var(--border))] bg-[color-mix(in_srgb,var(--accent)_6%,var(--surface))] px-3 py-2 text-xs text-[var(--text-subtle)]">
-              <span>Toisto- ja kuormakentissä voit painaa oikean reunan kahvaa ja vetää ylös tai alas muuttaaksesi arvoa.</span>
-              <GripVertical className="size-3.5 shrink-0 text-[var(--accent)]" aria-hidden="true" />
-            </div>
-          ) : null}
+      {!readOnly ? (
+        <div className="flex items-center justify-between gap-2 rounded-xl border border-[color-mix(in_srgb,var(--accent)_18%,var(--border))] bg-[color-mix(in_srgb,var(--accent)_6%,var(--surface))] px-3 py-2 text-xs text-[var(--text-subtle)]">
+          <span>Toisto- ja kuormakentissä voit painaa oikean reunan kahvaa ja vetää ylös tai alas muuttaaksesi arvoa.</span>
+          <GripVertical className="size-3.5 shrink-0 text-[var(--accent)]" aria-hidden="true" />
+        </div>
+      ) : null}
           {exerciseRenderBlocks.map((block) => {
             if (block.type === "single") {
               return renderExerciseGroupCard(block.groups[0]!);
