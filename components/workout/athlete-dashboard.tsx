@@ -1473,20 +1473,11 @@ export function AthleteDashboard({
                 <CardTitle className="text-2xl">
                   {selectedWorkout ? normalizeWorkoutHistoryTitle(selectedWorkout.title) : "Aktiivinen treeni"}
                 </CardTitle>
-                {selectedWorkout ? (
-                  <div className="mt-3 flex flex-wrap items-center gap-2">
-                    <Badge className="border-[var(--border)] bg-[var(--surface-2)] text-[var(--text-subtle)]">
-                      {formatRelativeDate(selectedWorkout.scheduledDate)}
-                    </Badge>
-                    <Badge className={statusTone(selectedWorkoutStatus ?? selectedWorkout.status)}>
-                      {workoutStatusLabel(selectedWorkoutStatus ?? selectedWorkout.status)}
-                    </Badge>
-                  </div>
-                ) : (
+                {!selectedWorkout ? (
                   <CardDescription className="mt-2">
                     Valitse treeni listalta ja avaa se tähän näkymään.
                   </CardDescription>
-                )}
+                ) : null}
                 {selectedWorkoutDescription ? (
                   <p className="mt-4 max-w-3xl text-sm leading-7 text-[var(--text-muted)]">
                     {selectedWorkoutDescription}
