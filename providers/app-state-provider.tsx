@@ -2075,6 +2075,8 @@ export function AppStateProvider({ children }: PropsWithChildren) {
   const [toast, setToast] = useState<{ id: number; tone: "success" | "danger" | "info"; message: string } | null>(null);
   const supabase = useMemo(() => createSupabaseBrowserClient(), []);
   const stateRef = useRef(state);
+  const lastResolvedAuthenticatedUserRef = useRef<UserProfile | null>(null);
+  const lastResolvedCurrentUserRef = useRef<UserProfile | null>(null);
   const refreshSupabaseVisibleStatePromiseRef = useRef<Promise<boolean> | null>(null);
   const workoutMutationQueueRef = useRef<Map<string, WorkoutMutationQueueState>>(new Map());
   const workoutMutationRunnerRef = useRef<Map<string, Promise<void>>>(new Map());
@@ -2402,14 +2404,36 @@ export function AppStateProvider({ children }: PropsWithChildren) {
     };
   }, [isStorageHydrated, supabase]);
 
-  const authenticatedUser = useMemo(
+  const resolvedAuthenticatedUser = useMemo(
     () => resolveSelectedUserFromState(state, authenticatedUserId),
     [authenticatedUserId, state],
   );
-  const currentUser = useMemo(
+  const resolvedCurrentUser = useMemo(
     () => resolveSelectedUserFromState(state, impersonatedUserId ?? authenticatedUserId),
     [authenticatedUserId, impersonatedUserId, state],
   );
+  const authenticatedUser =
+    resolvedAuthenticatedUser ??
+    (authenticatedUserId ? lastResolvedAuthenticatedUserRef.current : null);
+  const currentUser =
+    resolvedCurrentUser ??
+    (impersonatedUserId ?? authenticatedUserId ? lastResolvedCurrentUserRef.current : null);
+
+  useEffect(() => {
+    if (resolvedAuthenticatedUser) {
+      lastResolvedAuthenticatedUserRef.current = resolvedAuthenticatedUser;
+    } else if (!authenticatedUserId) {
+      lastResolvedAuthenticatedUserRef.current = null;
+    }
+  }, [authenticatedUserId, resolvedAuthenticatedUser]);
+
+  useEffect(() => {
+    if (resolvedCurrentUser) {
+      lastResolvedCurrentUserRef.current = resolvedCurrentUser;
+    } else if (!(impersonatedUserId ?? authenticatedUserId)) {
+      lastResolvedCurrentUserRef.current = null;
+    }
+  }, [authenticatedUserId, impersonatedUserId, resolvedCurrentUser]);
   const hasActiveWorkoutOpen = useMemo(
     () => hasOpenActiveWorkout(state, currentUser?.id),
     [currentUser?.id, state],
