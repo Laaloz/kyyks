@@ -1614,6 +1614,14 @@ export function AthleteSessionPanel({
           </div>
         </div>
       ) : null}
+      {isSessionSyncing ? (
+        <div className="rounded-2xl border border-[var(--border-strong)] bg-[color:color-mix(in_srgb,var(--surface-2)_82%,var(--surface))] px-4 py-3">
+          <p className="text-sm font-semibold text-[var(--text)]">Haetaan treenin tiedot...</p>
+          <p className="mt-1 text-xs text-[var(--text-subtle)]">
+            Treeni aukesi jo. Synkronoidaan palvelimelta sarjat ja viimeisimmät arvot.
+          </p>
+        </div>
+      ) : null}
       <p aria-live="polite" className="sr-only">
         {workoutMessage}
       </p>
