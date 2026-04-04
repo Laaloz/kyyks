@@ -341,9 +341,12 @@ export function AthleteDashboard({
   const highlightedWorkout = activeWorkout ?? resumableWorkout;
   const highlightedWorkoutState = activeWorkout ? "active" : resumableWorkout ? "resumable" : null;
   const fallbackSelectedWorkout = athleteLogMode === "workout" ? highlightedWorkout : undefined;
+  const explicitlySelectedWorkout = selectedWorkoutId
+    ? workouts.find((item) => item.id === selectedWorkoutId)
+    : undefined;
   const selectedWorkout =
-    (selectedWorkoutId ? workouts.find((item) => item.id === selectedWorkoutId) : undefined) ??
-    (selectedWorkoutId ? undefined : fallbackSelectedWorkout);
+    explicitlySelectedWorkout ??
+    fallbackSelectedWorkout;
 
   const selectedSession = state.sessions.find((session) => session.scheduledWorkoutId === selectedWorkout?.id);
   const existingNote = selectedSession ? state.notes.find((note) => note.sessionId === selectedSession.id)?.body ?? "" : "";
@@ -515,21 +518,32 @@ export function AthleteDashboard({
   };
   const startWorkoutFromProgram = async (programId: string, workoutId: string, workoutName: string, sourceKey: string) => {
     setPendingWorkoutTransition({ type: "start", workoutId, workoutName, sourceKey });
+    setDismissedActiveWorkoutId(null);
+    setHistoryFocusWorkoutId(null);
+    setSelectedWorkoutId(null);
+    setCorrectionModeWorkoutId(null);
+    setOpenHistoryMenuWorkoutId(null);
+    setHistoryMenuAnchorRect(null);
+    setHistoryMenuStyle(null);
+    setAthleteLogMode("workout");
+    onOpenWorkoutLog?.();
+
     const result = await startProgramWorkout(programId, workoutId);
-    if (result.ok && result.scheduledWorkoutId) {
-      openWorkoutView(result.scheduledWorkoutId);
+    if (result.ok) {
+      if (result.scheduledWorkoutId) {
+        setSelectedWorkoutId(result.scheduledWorkoutId);
+      }
       setWorkoutMessage(`Treeni "${workoutName}" käynnistyi.`);
       notify({ tone: "success", message: `Treeni "${workoutName}" käynnistyi.` });
-      onOpenWorkoutLog?.();
       setPendingWorkoutTransition(null);
       return;
     }
 
     setPendingWorkoutTransition(null);
-    setWorkoutMessage(result.ok ? "Treeni käynnistyi." : result.message);
-    if (!result.ok) {
-      notify({ tone: "danger", message: result.message });
-    }
+    setAthleteLogMode("library");
+    setSelectedWorkoutId(null);
+    setWorkoutMessage(result.message);
+    notify({ tone: "danger", message: result.message });
   };
   const openOrResumeWorkout = async (scheduledWorkoutId: string, sourceKey: string) => {
     const workout = workouts.find((item) => item.id === scheduledWorkoutId);
