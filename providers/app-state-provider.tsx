@@ -1493,7 +1493,7 @@ export function reconcileSupabaseVisibleState(
       return false;
     }
 
-    const shouldPreserve = !snapshot.users.some(
+    const shouldPreserve = !(snapshot.users ?? []).some(
       (serverUser) =>
         serverUser.id === user.id ||
         normalizeComparableEmail(serverUser.email) === normalizedEmail,
@@ -1683,7 +1683,7 @@ function findResolvedSnapshotUserIdForLocalUser(
 
   const localUser = previous.users.find((user) => user.id === localUserId) ?? null;
   if (!localUser) {
-    return snapshot.users.find((user) => user.id === localUserId)?.id ?? null;
+    return (snapshot.users ?? []).find((user) => user.id === localUserId)?.id ?? null;
   }
 
   const normalizedEmail = normalizeComparableEmail(localUser.email);
@@ -2424,13 +2424,13 @@ function findResolvedUserIdInSnapshot(
   snapshot: SupabaseVisibleAppStateSnapshot,
   authUser: SupabaseAuthUser,
 ) {
-    const authEmail = authUser.email?.trim().toLowerCase();
-    return (
-      snapshot.users.find((user) => user.id === authUser.id)?.id ??
-      snapshot.users.find((user) => authEmail && user.email.trim().toLowerCase() === authEmail)?.id ??
+  const authEmail = authUser.email?.trim().toLowerCase();
+  return (
+      (snapshot.users ?? []).find((user) => user.id === authUser.id)?.id ??
+      (snapshot.users ?? []).find((user) => authEmail && user.email.trim().toLowerCase() === authEmail)?.id ??
       null
-    );
-  }
+  );
+}
 
   function resolveSessionIdsFromSnapshot(
     previous: AppState,
@@ -2522,19 +2522,21 @@ function findResolvedUserIdInSnapshot(
             recentlyConfirmedWorkoutNotesRef.current,
           ),
         );
-        const authUser = await withTimeout(confirmCurrentSupabaseAuthUser(supabase), 4000, null);
-        const resolvedSession = resolveSessionIdsFromSnapshot(
-          state,
-          payload,
-          authUser,
-          authenticatedUserId,
-          impersonatedUserId,
-        );
-        if (resolvedSession.authenticatedUserId !== authenticatedUserId) {
-          setAuthenticatedUserId(resolvedSession.authenticatedUserId);
-        }
-        if (resolvedSession.impersonatedUserId !== impersonatedUserId) {
-          setImpersonatedUserId(resolvedSession.impersonatedUserId);
+        if (options?.mode !== "workouts") {
+          const authUser = await withTimeout(confirmCurrentSupabaseAuthUser(supabase), 4000, null);
+          const resolvedSession = resolveSessionIdsFromSnapshot(
+            state,
+            payload,
+            authUser,
+            authenticatedUserId,
+            impersonatedUserId,
+          );
+          if (resolvedSession.authenticatedUserId !== authenticatedUserId) {
+            setAuthenticatedUserId(resolvedSession.authenticatedUserId);
+          }
+          if (resolvedSession.impersonatedUserId !== impersonatedUserId) {
+            setImpersonatedUserId(resolvedSession.impersonatedUserId);
+          }
         }
         return true;
       } catch {
