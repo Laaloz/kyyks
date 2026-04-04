@@ -417,6 +417,56 @@ async function buildAutofillSnapshotMaps(
     };
   }
 
+  const rpcResult = await admin.rpc("get_latest_autofill_logs", {
+    p_athlete_id: athleteId,
+    p_exercise_ids: uniqueExerciseIds,
+    p_session_limit: AUTOFILL_SESSION_SCAN_LIMIT,
+  });
+
+  type AutofillLogRow = {
+    session_id: string;
+    exercise_id: string;
+    set_label: string;
+    actual_reps: number | null;
+    actual_load: number | string | null;
+    done: boolean;
+    completed_at: string | null;
+  };
+
+  const buildMapsFromLogs = (rows: AutofillLogRow[]) => {
+    const byExerciseAndSetLabel = new Map<string, { actualReps?: number; actualLoad?: number }>();
+    const byExercise = new Map<string, { actualReps?: number; actualLoad?: number }>();
+
+    rows.forEach((log) => {
+      if (!log.done) {
+        return;
+      }
+
+      const snapshot = {
+        actualReps: log.actual_reps ?? undefined,
+        actualLoad: toNumberOrUndefined(log.actual_load),
+      };
+
+      if (snapshot.actualReps === undefined && snapshot.actualLoad === undefined) {
+        return;
+      }
+
+      const setKey = `${log.exercise_id}:${log.set_label}`;
+      if (!byExerciseAndSetLabel.has(setKey)) {
+        byExerciseAndSetLabel.set(setKey, snapshot);
+      }
+      if (!byExercise.has(log.exercise_id)) {
+        byExercise.set(log.exercise_id, snapshot);
+      }
+    });
+
+    return { byExerciseAndSetLabel, byExercise };
+  };
+
+  if (!rpcResult.error && Array.isArray(rpcResult.data)) {
+    return buildMapsFromLogs(rpcResult.data as AutofillLogRow[]);
+  }
+
   const { data: completedSessions } = await admin
     .from("workout_sessions")
     .select("id, completed_at, updated_at")
@@ -445,34 +495,7 @@ async function buildAutofillSnapshotMaps(
     const rightIndex = sessionOrder.get(right.session_id) ?? Number.MAX_SAFE_INTEGER;
     return leftIndex - rightIndex;
   });
-
-  const byExerciseAndSetLabel = new Map<string, { actualReps?: number; actualLoad?: number }>();
-  const byExercise = new Map<string, { actualReps?: number; actualLoad?: number }>();
-
-  orderedLogs.forEach((log) => {
-    if (!log.done) {
-      return;
-    }
-
-    const snapshot = {
-      actualReps: log.actual_reps ?? undefined,
-      actualLoad: toNumberOrUndefined(log.actual_load),
-    };
-
-    if (snapshot.actualReps === undefined && snapshot.actualLoad === undefined) {
-      return;
-    }
-
-    const setKey = `${log.exercise_id}:${log.set_label}`;
-    if (!byExerciseAndSetLabel.has(setKey)) {
-      byExerciseAndSetLabel.set(setKey, snapshot);
-    }
-    if (!byExercise.has(log.exercise_id)) {
-      byExercise.set(log.exercise_id, snapshot);
-    }
-  });
-
-  return { byExerciseAndSetLabel, byExercise };
+  return buildMapsFromLogs(orderedLogs as AutofillLogRow[]);
 }
 
 async function buildProgramWorkoutSetLogs(
