@@ -1267,11 +1267,6 @@ export function AthleteSessionPanel({
             Tehty {previous.timesCompleted} kertaa · viimeksi {formatDate(previous.completedAt)} · {formatPreviousExerciseResult(previous)}
           </p>
         ) : null}
-        {isSessionSyncing ? (
-          <p className="mt-2 px-1 text-xs font-medium text-[var(--text-subtle)]">
-            Valmistellaan treeniä. Sarjojen merkkaus avautuu heti kun tiedot on synkattu palvelimelta.
-          </p>
-        ) : null}
         {isExpanded ? (
           <div
             id={disclosurePanelId}
@@ -1625,36 +1620,55 @@ export function AthleteSessionPanel({
       <p aria-live="polite" className="sr-only">
         {workoutMessage}
       </p>
-      {!readOnly && !hasSeenDragHint ? (
-        <div className="flex items-center justify-between gap-2 rounded-xl border border-[color-mix(in_srgb,var(--accent)_18%,var(--border))] bg-[color-mix(in_srgb,var(--accent)_6%,var(--surface))] px-3 py-2 text-xs text-[var(--text-subtle)]">
-          <span>Toisto- ja kuormakentissä voit painaa oikean reunan kahvaa ja vetää ylös tai alas muuttaaksesi arvoa.</span>
-          <GripVertical className="size-3.5 shrink-0 text-[var(--accent)]" aria-hidden="true" />
-        </div>
-      ) : null}
-      {exerciseRenderBlocks.map((block) => {
-        if (block.type === "single") {
-          return renderExerciseGroupCard(block.groups[0]!);
-        }
-
-        return (
-          <div key={block.key} className="rounded-3xl border border-[var(--accent)] bg-[var(--surface-3)]/60 p-3">
-            <div className="mb-3 flex items-center justify-between gap-3">
-              <div className="inline-flex items-center gap-1.5">
-                <p className="text-sm font-semibold text-[var(--accent)]">
-                  Superset {block.supersetGroup}
-                </p>
-                <InfoTooltip text="Supersetissä tämän ryhmän liikkeet tehdään vuorotellen. Saman sarjan kuittaus peilautuu ryhmän muihin liikkeisiin." />
-              </div>
-              <Badge className="border-[var(--accent)] bg-[var(--surface)] text-[var(--accent)]">
-                {block.groups.length} liikettä
-              </Badge>
-            </div>
-            <div className="grid gap-3">
-              {block.groups.map((group) => renderExerciseGroupCard(group))}
+      {isSessionSyncing ? (
+        <div className="rounded-3xl border border-[var(--border-strong)] bg-[color:color-mix(in_srgb,var(--surface-2)_82%,var(--surface))] px-4 py-5 shadow-[0_12px_28px_-24px_var(--shadow)]">
+          <div className="flex items-center gap-3">
+            <span
+              aria-hidden="true"
+              className="size-4 animate-spin rounded-full border-2 border-current border-r-transparent text-[var(--accent)]"
+            />
+            <div>
+              <p className="text-sm font-semibold text-[var(--text)]">Synkronoidaan treeniä...</p>
+              <p className="mt-1 text-xs text-[var(--text-subtle)]">
+                Liikkeet ja sarjat avautuvat heti kun palvelimen tiedot ovat valmiina.
+              </p>
             </div>
           </div>
-        );
-      })}
+        </div>
+      ) : (
+        <>
+          {!readOnly && !hasSeenDragHint ? (
+            <div className="flex items-center justify-between gap-2 rounded-xl border border-[color-mix(in_srgb,var(--accent)_18%,var(--border))] bg-[color-mix(in_srgb,var(--accent)_6%,var(--surface))] px-3 py-2 text-xs text-[var(--text-subtle)]">
+              <span>Toisto- ja kuormakentissä voit painaa oikean reunan kahvaa ja vetää ylös tai alas muuttaaksesi arvoa.</span>
+              <GripVertical className="size-3.5 shrink-0 text-[var(--accent)]" aria-hidden="true" />
+            </div>
+          ) : null}
+          {exerciseRenderBlocks.map((block) => {
+            if (block.type === "single") {
+              return renderExerciseGroupCard(block.groups[0]!);
+            }
+
+            return (
+              <div key={block.key} className="rounded-3xl border border-[var(--accent)] bg-[var(--surface-3)]/60 p-3">
+                <div className="mb-3 flex items-center justify-between gap-3">
+                  <div className="inline-flex items-center gap-1.5">
+                    <p className="text-sm font-semibold text-[var(--accent)]">
+                      Superset {block.supersetGroup}
+                    </p>
+                    <InfoTooltip text="Supersetissä tämän ryhmän liikkeet tehdään vuorotellen. Saman sarjan kuittaus peilautuu ryhmän muihin liikkeisiin." />
+                  </div>
+                  <Badge className="border-[var(--accent)] bg-[var(--surface)] text-[var(--accent)]">
+                    {block.groups.length} liikettä
+                  </Badge>
+                </div>
+                <div className="grid gap-3">
+                  {block.groups.map((group) => renderExerciseGroupCard(group))}
+                </div>
+              </div>
+            );
+          })}
+        </>
+      )}
       {openInstruction ? (
         <CoachInstructionDialog
           exerciseName={openInstruction.exerciseName}
