@@ -549,7 +549,7 @@ async function createSessionWithLogs(params: {
   return { ok: true as const, sessionId: session.id, updatedAt: session.updated_at };
 }
 
-async function recoverCompletedWorkoutState(params: {
+async function getWorkoutCompletionSnapshot(params: {
   admin: NonNullable<ReturnType<typeof createSupabaseAdminClient>>;
   requester: RequesterProfile;
   scheduledWorkoutId: string;
@@ -581,6 +581,21 @@ async function recoverCompletedWorkoutState(params: {
     return null;
   }
 
+  return { workout, session: session ?? null };
+}
+
+async function recoverCompletedWorkoutState(params: {
+  admin: NonNullable<ReturnType<typeof createSupabaseAdminClient>>;
+  requester: RequesterProfile;
+  scheduledWorkoutId: string;
+}) {
+  const snapshot = await getWorkoutCompletionSnapshot(params);
+  if (!snapshot) {
+    return null;
+  }
+
+  const { admin, scheduledWorkoutId } = params;
+  const { workout, session } = snapshot;
   if (!session?.completed_at) {
     return null;
   }
@@ -603,6 +618,54 @@ async function recoverCompletedWorkoutState(params: {
     ok: true as const,
     updatedAt: recoveredUpdatedAt,
     completedAt: recoveredCompletedAt,
+  };
+}
+
+async function retryCompleteWorkoutOnServer(params: {
+  admin: NonNullable<ReturnType<typeof createSupabaseAdminClient>>;
+  requester: RequesterProfile;
+  scheduledWorkoutId: string;
+}) {
+  const snapshot = await getWorkoutCompletionSnapshot(params);
+  if (!snapshot) {
+    return null;
+  }
+
+  const { admin, requester, scheduledWorkoutId } = params;
+  const { workout, session } = snapshot;
+
+  if (workout.status === "completed" || session?.completed_at) {
+    return recoverCompletedWorkoutState({ admin, requester, scheduledWorkoutId });
+  }
+
+  if (!session?.updated_at) {
+    return null;
+  }
+
+  const { data, error } = await admin.rpc("complete_workout_atomic", {
+    p_scheduled_workout_id: scheduledWorkoutId,
+    p_requester_id: requester.id,
+    p_requester_role: requester.role,
+    p_expected_session_updated_at: session.updated_at,
+  });
+
+  if (error) {
+    return null;
+  }
+
+  const payload = Array.isArray(data) ? data[0] : data;
+  if (!payload || typeof payload !== "object") {
+    return null;
+  }
+
+  if (!payload.ok) {
+    return recoverCompletedWorkoutState({ admin, requester, scheduledWorkoutId });
+  }
+
+  return {
+    ok: true as const,
+    updatedAt: String(payload.updated_at),
+    completedAt: typeof payload.completed_at === "string" ? payload.completed_at : undefined,
   };
 }
 
@@ -1550,6 +1613,18 @@ export async function completeWorkoutOnServer({
 
   if (!payload.ok) {
     const code = typeof payload.code === "string" ? payload.code : undefined;
+    if (code === "stale_session") {
+      const retried = await retryCompleteWorkoutOnServer({
+        admin,
+        requester,
+        scheduledWorkoutId,
+      });
+      if (retried) {
+        timer.checkpoint("retry-after-stale-session");
+        return retried;
+      }
+    }
+
     if (code !== "forbidden" && code !== "not_found") {
       const recovered = await recoverCompletedWorkoutState({
         admin,

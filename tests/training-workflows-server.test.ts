@@ -798,4 +798,89 @@ describe("training workflows server", () => {
     expect(admin.from).toHaveBeenCalledWith("scheduled_workouts");
     expect(admin.from).toHaveBeenCalledWith("workout_sessions");
   });
+
+  it("retries completion with the latest session version after a stale_session response", async () => {
+    const admin = {
+      from: vi.fn((table: string) => {
+        const builder = {
+          select: vi.fn(() => builder),
+          eq: vi.fn(() => builder),
+          update: vi.fn(() => builder),
+          maybeSingle: vi.fn(async () => {
+            if (table === "scheduled_workouts") {
+              return {
+                data: {
+                  id: "workout-1",
+                  athlete_id: "athlete-1",
+                  status: "in_progress",
+                  completed_at: null,
+                },
+                error: null,
+              };
+            }
+
+            if (table === "workout_sessions") {
+              return {
+                data: {
+                  id: "session-1",
+                  completed_at: null,
+                  updated_at: "2026-04-02T09:25:00.000Z",
+                },
+                error: null,
+              };
+            }
+
+            return { data: null, error: null };
+          }),
+          then: (resolve: (value: { data: unknown; error: null }) => unknown, reject?: (reason: unknown) => unknown) =>
+            Promise.resolve({ data: {}, error: null }).then(resolve, reject),
+        };
+        return builder;
+      }),
+      rpc: vi
+        .fn()
+        .mockResolvedValueOnce({
+          data: {
+            ok: false,
+            code: "stale_session",
+            message: "Treeni ehti muuttua ennen viimeistelyä.",
+          },
+          error: null,
+        })
+        .mockResolvedValueOnce({
+          data: {
+            ok: true,
+            updated_at: "2026-04-02T09:30:00.000Z",
+            completed_at: "2026-04-02T09:30:00.000Z",
+          },
+          error: null,
+        }),
+    };
+
+    createSupabaseAdminClientMock.mockReturnValue(admin);
+
+    const result = await completeWorkoutOnServer({
+      requester: { id: "athlete-1", role: "athlete" },
+      scheduledWorkoutId: "workout-1",
+      expectedUpdatedAt: "2026-04-02T09:20:00.000Z",
+    });
+
+    expect(admin.rpc).toHaveBeenNthCalledWith(1, "complete_workout_atomic", {
+      p_scheduled_workout_id: "workout-1",
+      p_requester_id: "athlete-1",
+      p_requester_role: "athlete",
+      p_expected_session_updated_at: "2026-04-02T09:20:00.000Z",
+    });
+    expect(admin.rpc).toHaveBeenNthCalledWith(2, "complete_workout_atomic", {
+      p_scheduled_workout_id: "workout-1",
+      p_requester_id: "athlete-1",
+      p_requester_role: "athlete",
+      p_expected_session_updated_at: "2026-04-02T09:25:00.000Z",
+    });
+    expect(result).toEqual({
+      ok: true,
+      updatedAt: "2026-04-02T09:30:00.000Z",
+      completedAt: "2026-04-02T09:30:00.000Z",
+    });
+  });
 });
