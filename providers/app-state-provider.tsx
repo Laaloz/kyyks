@@ -2981,19 +2981,48 @@ function findResolvedUserIdInSnapshot(
 
     switch (mutation.kind) {
       case "note": {
-        const expectedUpdatedAt =
-          queue.confirmedNoteUpdatedAt ?? getNoteForWorkout(stateRef.current, queue.scheduledWorkoutId)?.updatedAt ?? null;
+        const saveNote = async () => {
+          const expectedUpdatedAt =
+            queue.confirmedNoteUpdatedAt ?? getNoteForWorkout(stateRef.current, queue.scheduledWorkoutId)?.updatedAt ?? null;
 
-        const response = await fetch(`/api/workouts/${encodeURIComponent(queue.scheduledWorkoutId)}/note`, {
-          method: "PUT",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({ body: mutation.body, expectedUpdatedAt }),
-        }).catch(() => null);
+          const response = await fetch(`/api/workouts/${encodeURIComponent(queue.scheduledWorkoutId)}/note`, {
+            method: "PUT",
+            headers: {
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({ body: mutation.body, expectedUpdatedAt }),
+          }).catch(() => null);
 
-        const payload = (response ? await response.json().catch(() => null) : null) as { updatedAt?: string; message?: string } | null;
+          const payload = (response ? await response.json().catch(() => null) : null) as {
+            updatedAt?: string;
+            message?: string;
+            code?: string;
+          } | null;
+
+          return { response, payload };
+        };
+
+        let { response, payload } = await saveNote();
+
+        if ((!response?.ok || typeof payload?.updatedAt !== "string") && payload?.code === "stale_note") {
+          console.warn("[workout-ui] note-save-retrying-after-stale", {
+            scheduledWorkoutId: queue.scheduledWorkoutId,
+            status: response?.status,
+            code: payload.code,
+            message: payload.message,
+          });
+          await refreshSupabaseVisibleState({ mode: "workouts" });
+          syncWorkoutMutationQueueVersionsFromState(queue.scheduledWorkoutId);
+          ({ response, payload } = await saveNote());
+        }
+
         if (!response?.ok || typeof payload?.updatedAt !== "string") {
+          console.warn("[workout-ui] note-save-failed", {
+            scheduledWorkoutId: queue.scheduledWorkoutId,
+            status: response?.status,
+            code: payload?.code,
+            message: payload?.message,
+          });
           await resolveFailure(payload?.message ?? "Muistiinpanon tallennus epäonnistui.");
           return;
         }
