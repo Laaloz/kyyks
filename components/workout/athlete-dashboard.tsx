@@ -450,6 +450,13 @@ export function AthleteDashboard({
         : undefined,
     [selectedWorkout, state.plans],
   );
+  const selectedWorkoutDescription = useMemo(
+    () =>
+      selectedWorkout
+        ? resolveScheduledWorkoutDescription(state, selectedWorkout)
+        : undefined,
+    [selectedWorkout, state.plans, state.templates],
+  );
   const workoutInsights = useMemo(() => buildWorkoutInsights(state), [state]);
   const selectedWorkoutStatus = selectedWorkout ? resolveWorkoutStatus(selectedWorkout) : undefined;
   const selectedWorkoutInsight = selectedWorkout ? workoutInsights.get(selectedWorkout.id) : undefined;
@@ -1498,6 +1505,7 @@ export function AthleteDashboard({
                 selectedSession={selectedSession}
                 scheduledWorkoutId={selectedWorkout.id}
                 scheduledWorkoutTitle={normalizeWorkoutHistoryTitle(selectedWorkout.title)}
+                scheduledWorkoutDescription={selectedWorkoutDescription}
                 scheduledWorkoutGuidance={selectedProgramWorkout ? deriveProgramWorkoutGuidance(selectedProgramWorkout) : undefined}
                 scheduledDate={selectedWorkout.completedAt ?? selectedSession?.completedAt ?? selectedWorkout.scheduledDate}
                 isSessionSyncing={pendingStartWorkoutId === selectedWorkout.id}
@@ -2584,6 +2592,29 @@ function buildWorkoutExerciseInstructions(
       .map((exercise) => [exercise.id, exercise.instruction.trim()] as const)
       .filter((entry) => entry[1].length > 0),
   );
+}
+
+function resolveScheduledWorkoutDescription(
+  state: AppState,
+  scheduledWorkout: AppState["scheduledWorkouts"][number],
+) {
+  if (scheduledWorkout.trainingPlanId) {
+    const plan = state.plans.find((item) => item.id === scheduledWorkout.trainingPlanId);
+    const description = plan?.description?.trim();
+    if (description) {
+      return description;
+    }
+  }
+
+  if (scheduledWorkout.templateId) {
+    const template = state.templates.find((item) => item.id === scheduledWorkout.templateId);
+    const description = template?.description?.trim();
+    if (description) {
+      return description;
+    }
+  }
+
+  return undefined;
 }
 
 function resolveScheduledProgramWorkout(

@@ -374,6 +374,7 @@ const loadTooltipText =
 export function AthleteSessionPanel({
   scheduledWorkoutId,
   scheduledWorkoutTitle,
+  scheduledWorkoutDescription,
   scheduledWorkoutGuidance,
   selectedSession,
   note,
@@ -402,6 +403,7 @@ export function AthleteSessionPanel({
 }: {
   scheduledWorkoutId: string;
   scheduledWorkoutTitle: string;
+  scheduledWorkoutDescription?: string;
   scheduledWorkoutGuidance?: string;
   selectedSession?: WorkoutSession;
   note: string;
@@ -1452,10 +1454,46 @@ export function AthleteSessionPanel({
     );
   };
 
+  if (isSessionSyncing) {
+    return (
+      <div className="mt-6 space-y-4">
+        <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface-2)] p-4">
+          <p className="font-medium text-[var(--text)]">{scheduledWorkoutTitle}</p>
+          {scheduledWorkoutDescription ? (
+            <p className="mt-2 max-w-3xl text-sm leading-6 text-[var(--text-muted)]">{scheduledWorkoutDescription}</p>
+          ) : null}
+          {scheduledWorkoutGuidance ? (
+            <p className="mt-2 max-w-3xl text-sm leading-6 text-[var(--text-muted)]">{scheduledWorkoutGuidance}</p>
+          ) : null}
+        </div>
+        <div className="rounded-3xl border border-[var(--border-strong)] bg-[color:color-mix(in_srgb,var(--surface-2)_82%,var(--surface))] px-4 py-5 shadow-[0_12px_28px_-24px_var(--shadow)]">
+          <div className="flex items-center gap-3">
+            <span
+              aria-hidden="true"
+              className="size-4 animate-spin rounded-full border-2 border-current border-r-transparent text-[var(--accent)]"
+            />
+            <div>
+              <p className="text-sm font-semibold text-[var(--text)]">Synkronoidaan treeniä...</p>
+              <p className="mt-1 text-xs text-[var(--text-subtle)]">
+                Liikkeet, sarjat ja ohjeet avautuvat heti kun palvelimen tiedot ovat valmiina.
+              </p>
+            </div>
+          </div>
+        </div>
+        <p aria-live="polite" className="sr-only">
+          {workoutMessage}
+        </p>
+      </div>
+    );
+  }
+
   if (!selectedSession) {
     return (
         <div className="mt-5 rounded-2xl border border-dashed border-[var(--border)] bg-[color:color-mix(in_srgb,var(--surface-2)_82%,var(--surface))] p-6 shadow-[0_10px_24px_-22px_var(--shadow)]">
         <p className="font-medium text-[var(--text)]">{scheduledWorkoutTitle}</p>
+        {scheduledWorkoutDescription ? (
+          <p className="mt-2 max-w-3xl text-sm leading-6 text-[var(--text-muted)]">{scheduledWorkoutDescription}</p>
+        ) : null}
         {scheduledWorkoutGuidance ? (
           <p className="mt-2 max-w-3xl text-sm leading-6 text-[var(--text-muted)]">{scheduledWorkoutGuidance}</p>
         ) : null}
@@ -1488,6 +1526,9 @@ export function AthleteSessionPanel({
       </div>
       <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface-2)] p-4">
         <p className="font-medium text-[var(--text)]">{scheduledWorkoutTitle}</p>
+        {scheduledWorkoutDescription ? (
+          <p className="mt-2 max-w-3xl text-sm leading-6 text-[var(--text-muted)]">{scheduledWorkoutDescription}</p>
+        ) : null}
         {scheduledWorkoutGuidance ? (
           <p className="mt-2 max-w-3xl text-sm leading-6 text-[var(--text-muted)]">{scheduledWorkoutGuidance}</p>
         ) : null}
