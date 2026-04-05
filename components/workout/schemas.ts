@@ -29,6 +29,9 @@ export const loginSchema = z.object({
 
 export const userSettingsSchema = z.object({
   fullName: z.string().trim().min(2, "Anna koko nimi."),
+  profileImageUrl: z.union([z.string().trim().url("Anna kelvollinen kuvan URL-osoite."), z.literal("")]).transform((value) =>
+    value === "" ? undefined : value,
+  ),
   defaultDashboardView: z.enum(["overview", "templates", "invites", "athlete-log", "conversation", "athletes", "users"]),
   emailNotifications: z.boolean(),
   weeklyMeasurementReminders: z.boolean(),

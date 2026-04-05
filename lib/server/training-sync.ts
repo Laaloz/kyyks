@@ -29,6 +29,7 @@ type ProfileRow = {
   role: UserProfile["role"];
   status: UserProfile["status"];
   full_name: string;
+  profile_image_url: string | null;
   email: string;
   default_dashboard_view: UserProfile["settings"] extends infer _ ? string | null : string | null;
   email_notifications: boolean;
@@ -186,6 +187,7 @@ function mapProfileRow(profile: ProfileRow): UserProfile {
     id: profile.id,
     role: profile.role,
     fullName: profile.full_name,
+    profileImageUrl: profile.profile_image_url ?? undefined,
     email: profile.email,
     status: profile.status,
     heightCm: toNumberOrUndefined(profile.height_cm),
@@ -338,7 +340,7 @@ export async function loadVisibleSupabaseAppState(
       ? supabase
           .from("profiles")
           .select(
-            "id, role, status, full_name, email, default_dashboard_view, email_notifications, weekly_measurement_reminders, theme_mode, load_increment_kg, height_cm, weight_kg, waist_cm, created_at, updated_at",
+            "id, role, status, full_name, profile_image_url, email, default_dashboard_view, email_notifications, weekly_measurement_reminders, theme_mode, load_increment_kg, height_cm, weight_kg, waist_cm, created_at, updated_at",
           )
           .order("created_at", { ascending: false })
       : Promise.resolve({ data: [] as ProfileRow[], error: null }),

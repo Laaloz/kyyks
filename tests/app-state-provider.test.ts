@@ -745,6 +745,7 @@ describe("shouldPreserveStoredSessionDuringSupabaseBootstrap", () => {
         role: "athlete",
         status: "active",
         full_name: "Laalo Treenaaja",
+        profile_image_url: null,
         email: "laaloceesay+test@gmail.com",
         default_dashboard_view: "athlete-log",
         email_notifications: false,

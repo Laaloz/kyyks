@@ -75,6 +75,9 @@ import {
 
 const STATE_KEY = "rooki-fit-state-v1";
 const SESSION_KEY = "rooki-fit-session-v1";
+const PROFILE_IMAGE_BUCKET = "profile-images";
+const PROFILE_IMAGE_MAX_BYTES = 5 * 1024 * 1024;
+const PROFILE_IMAGE_ALLOWED_TYPES = new Set(["image/jpeg", "image/png", "image/webp", "image/avif"]);
 type PersistedSession = {
   authenticatedUserId: string | null;
   impersonatedUserId: string | null;
@@ -788,6 +791,7 @@ const WORKOUT_SET_SYNC_DEBOUNCE_MS = 500;
 
 type UserSettingsInput = {
   fullName: string;
+  profileImageUrl?: string;
   defaultDashboardView: DashboardHomeView;
   emailNotifications: boolean;
   weeklyMeasurementReminders: boolean;
@@ -1043,6 +1047,7 @@ type SupabaseProfileRecord = {
   role: Role;
   status: UserProfile["status"];
   full_name: string;
+  profile_image_url: string | null;
   email: string;
   default_dashboard_view: DashboardHomeView | null;
   email_notifications: boolean;
@@ -1228,6 +1233,7 @@ function mapSupabaseProfileToUser(profile: SupabaseProfileRecord): UserProfile {
     id: profile.id,
     role: profile.role,
     fullName: profile.full_name,
+    profileImageUrl: profile.profile_image_url ?? undefined,
     email: profile.email,
     status: profile.status,
     heightCm: profile.height_cm ?? undefined,
@@ -1883,7 +1889,7 @@ async function fetchSupabaseProfile(supabase: NonNullable<ReturnType<typeof crea
   const { data, error } = await supabase
     .from("profiles")
     .select(
-      "id, role, status, full_name, email, default_dashboard_view, email_notifications, weekly_measurement_reminders, theme_mode, load_increment_kg, height_cm, weight_kg, waist_cm, created_at, updated_at",
+      "id, role, status, full_name, profile_image_url, email, default_dashboard_view, email_notifications, weekly_measurement_reminders, theme_mode, load_increment_kg, height_cm, weight_kg, waist_cm, created_at, updated_at",
     )
     .eq("id", userId)
     .maybeSingle();
@@ -2095,6 +2101,8 @@ interface AppStateContextValue {
   startAdminImpersonation: (userId: string) => ActionResult;
   stopAdminImpersonation: () => ActionResult;
   updateCurrentUserSettings: (input: UserSettingsInput) => Promise<ActionResult>;
+  uploadCurrentUserProfileImage: (file: File) => Promise<ActionResult>;
+  removeCurrentUserProfileImage: () => Promise<ActionResult>;
   updateCurrentUserMeasurements: (input: UserMeasurementInput) => Promise<ActionResult>;
   requestCurrentUserPasswordReset: () => Promise<PasswordResetRequestResult>;
   requestPasswordResetForEmail: (input: PublicPasswordResetRequestInput) => Promise<PasswordResetRequestResult>;
@@ -3489,6 +3497,7 @@ function findResolvedUserIdInSnapshot(
         }
 
         const fullName = input.fullName.trim();
+        const profileImageUrl = input.profileImageUrl?.trim() || undefined;
         if (fullName.length < 2) {
           return { ok: false, message: "Nimen pitää olla vähintään 2 merkkiä." };
         }
@@ -3505,6 +3514,7 @@ function findResolvedUserIdInSnapshot(
 
         const hasChanges =
           currentUser.fullName !== fullName ||
+          currentUser.profileImageUrl !== profileImageUrl ||
           currentSettings.defaultDashboardView !== nextSettings.defaultDashboardView ||
           currentSettings.emailNotifications !== nextSettings.emailNotifications ||
           currentSettings.weeklyMeasurementReminders !== nextSettings.weeklyMeasurementReminders ||
@@ -3521,6 +3531,7 @@ function findResolvedUserIdInSnapshot(
               ? {
                   ...user,
                   fullName,
+                  profileImageUrl,
                   updatedAt: timestamp,
                   settings: normalizeUserSettings(user.role, {
                     ...user.settings,
@@ -3548,6 +3559,7 @@ function findResolvedUserIdInSnapshot(
             },
               body: JSON.stringify({
                 fullName,
+                profileImageUrl: profileImageUrl ?? "",
                 defaultDashboardView: input.defaultDashboardView,
                 emailNotifications: input.emailNotifications,
                 weeklyMeasurementReminders: input.weeklyMeasurementReminders,
@@ -3568,6 +3580,110 @@ function findResolvedUserIdInSnapshot(
         }
 
         applySettingsUpdate();
+        await waitForNextPaint(2);
+        return { ok: true };
+      },
+      async uploadCurrentUserProfileImage(file) {
+        if (!currentUser) {
+          return { ok: false, message: "Kirjaudu sisään ennen profiilikuvan päivitystä." };
+        }
+
+        if (!supabase) {
+          return { ok: false, message: "Profiilikuvan lataus vaatii Supabase-yhteyden." };
+        }
+
+        if (!PROFILE_IMAGE_ALLOWED_TYPES.has(file.type)) {
+          return { ok: false, message: "Valitse JPG-, PNG-, WebP- tai AVIF-kuva." };
+        }
+
+        if (file.size > PROFILE_IMAGE_MAX_BYTES) {
+          return { ok: false, message: "Profiilikuvan maksimikoko on 5 Mt." };
+        }
+
+        const timestamp = new Date().toISOString();
+        const objectPath = `${currentUser.id}/avatar`;
+        const { error: uploadError } = await supabase.storage.from(PROFILE_IMAGE_BUCKET).upload(objectPath, file, {
+          upsert: true,
+          contentType: file.type,
+          cacheControl: "3600",
+        });
+
+        if (uploadError) {
+          return { ok: false, message: "Profiilikuvan lataus epäonnistui." };
+        }
+
+        const {
+          data: { publicUrl },
+        } = supabase.storage.from(PROFILE_IMAGE_BUCKET).getPublicUrl(objectPath);
+
+        const { error: profileError } = await supabase
+          .from("profiles")
+          .update({
+            profile_image_url: publicUrl,
+            updated_at: timestamp,
+          })
+          .eq("id", currentUser.id);
+
+        if (profileError) {
+          return { ok: false, message: "Profiilikuvan tallennus profiiliin epäonnistui." };
+        }
+
+        setState((previous) => ({
+          ...previous,
+          users: previous.users.map((user) =>
+            user.id === currentUser.id
+              ? {
+                  ...user,
+                  profileImageUrl: publicUrl,
+                  updatedAt: timestamp,
+                }
+              : user,
+          ),
+        }));
+        await waitForNextPaint(2);
+        return { ok: true };
+      },
+      async removeCurrentUserProfileImage() {
+        if (!currentUser) {
+          return { ok: false, message: "Kirjaudu sisään ennen profiilikuvan poistoa." };
+        }
+
+        if (!supabase) {
+          return { ok: false, message: "Profiilikuvan poisto vaatii Supabase-yhteyden." };
+        }
+
+        const timestamp = new Date().toISOString();
+        const objectPath = `${currentUser.id}/avatar`;
+        const { error: deleteError } = await supabase.storage.from(PROFILE_IMAGE_BUCKET).remove([objectPath]);
+
+        if (deleteError && deleteError.message) {
+          return { ok: false, message: "Profiilikuvan poisto epäonnistui." };
+        }
+
+        const { error: profileError } = await supabase
+          .from("profiles")
+          .update({
+            profile_image_url: null,
+            updated_at: timestamp,
+          })
+          .eq("id", currentUser.id);
+
+        if (profileError) {
+          return { ok: false, message: "Profiilikuvan poisto profiilista epäonnistui." };
+        }
+
+        setState((previous) => ({
+          ...previous,
+          users: previous.users.map((user) =>
+            user.id === currentUser.id
+              ? {
+                  ...user,
+                  profileImageUrl: undefined,
+                  updatedAt: timestamp,
+                }
+              : user,
+          ),
+        }));
         await waitForNextPaint(2);
         return { ok: true };
       },

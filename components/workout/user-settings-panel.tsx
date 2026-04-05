@@ -1,8 +1,8 @@
 "use client";
 
 import { zodResolver } from "@hookform/resolvers/zod";
-import { Bell, Ellipsis, HousePlus, KeyRound, Mail, MoonStar, Ruler, Share, UserRoundCog, Waves } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { Bell, Ellipsis, HousePlus, KeyRound, Mail, MoonStar, Ruler, Share, UserRound, UserRoundCog, Waves } from "lucide-react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
 
@@ -54,6 +54,7 @@ function parseLoadIncrement(value: string) {
 }
 
 const SETTINGS_SAVE_MIN_LOADING_MS = 350;
+const PROFILE_IMAGE_HELPER_TEXT = "JPG, PNG, WebP tai AVIF. Maksimikoko 5 Mt.";
 
 type DeferredInstallPromptEvent = Event & {
   prompt: () => Promise<void>;
@@ -75,6 +76,8 @@ export function UserSettingsPanel({ adminOnly = false }: { adminOnly?: boolean }
     state,
     notify,
     updateCurrentUserSettings,
+    uploadCurrentUserProfileImage,
+    removeCurrentUserProfileImage,
     updateCurrentUserMeasurements,
     requestCurrentUserPasswordReset,
   } = useAppState();
@@ -86,6 +89,7 @@ export function UserSettingsPanel({ adminOnly = false }: { adminOnly?: boolean }
   const [passwordResetMessageTone, setPasswordResetMessageTone] = useState<"success" | "danger" | null>(null);
   const [isSendingOwnPasswordReset, setIsSendingOwnPasswordReset] = useState(false);
   const [isSavingProfile, setIsSavingProfile] = useState(false);
+  const [isUploadingProfileImage, setIsUploadingProfileImage] = useState(false);
   const [deferredInstallPrompt, setDeferredInstallPrompt] = useState<DeferredInstallPromptEvent | null>(null);
   const [isInstalledToHomeScreen, setIsInstalledToHomeScreen] = useState(false);
   const latestOwnWaistCm = useMemo(
@@ -97,11 +101,13 @@ export function UserSettingsPanel({ adminOnly = false }: { adminOnly?: boolean }
   );
   const [isTriggeringInstallPrompt, setIsTriggeringInstallPrompt] = useState(false);
   const [heightCmDraft, setHeightCmDraft] = useState(currentUser?.heightCm !== undefined ? String(currentUser.heightCm) : "");
+  const profileImageInputRef = useRef<HTMLInputElement | null>(null);
 
   const form = useForm<z.input<typeof userSettingsSchema>, unknown, z.output<typeof userSettingsSchema>>({
     resolver: zodResolver(userSettingsSchema),
     defaultValues: {
       fullName: currentUser?.fullName ?? "",
+      profileImageUrl: currentUser?.profileImageUrl ?? "",
       defaultDashboardView: resolveDefaultView(
         currentUser?.role ?? "coach",
         currentUser?.settings?.defaultDashboardView,
@@ -127,6 +133,7 @@ export function UserSettingsPanel({ adminOnly = false }: { adminOnly?: boolean }
 
     form.reset({
       fullName: currentUser.fullName,
+      profileImageUrl: currentUser.profileImageUrl ?? "",
       defaultDashboardView: resolveDefaultView(currentUser.role, currentUser.settings?.defaultDashboardView),
       emailNotifications: currentUser.settings?.emailNotifications ?? false,
       weeklyMeasurementReminders: currentUser.settings?.weeklyMeasurementReminders ?? true,
@@ -164,8 +171,15 @@ export function UserSettingsPanel({ adminOnly = false }: { adminOnly?: boolean }
   const settingsWeeklyMeasurementReminders = form.watch("weeklyMeasurementReminders");
   const settingsLoadIncrementKg = form.watch("loadIncrementKg");
   const submitProfile = async () => {
+    const isProfileFormValid = await form.trigger(["fullName"]);
     const trimmedFullName = profileName.trim();
     const parsedMeasurements = bodyMeasurementSchema.safeParse({ heightCm: heightCmDraft, weightKg: "", waistCm: "" });
+
+    if (!isProfileFormValid) {
+      setProfileMessage("Tarkista profiilin tiedot ja yritä uudelleen.");
+      setProfileMessageTone("danger");
+      return;
+    }
 
     if (!trimmedFullName || trimmedFullName.length < 2) {
       setProfileMessage("Anna koko nimi ennen tallennusta.");
@@ -187,6 +201,7 @@ export function UserSettingsPanel({ adminOnly = false }: { adminOnly?: boolean }
       const settingsResult = await withMinimumDelay(
         updateCurrentUserSettings({
           fullName: trimmedFullName,
+          profileImageUrl: currentUser.profileImageUrl,
           defaultDashboardView: settingsDefaultView,
           emailNotifications: settingsEmailNotifications,
           weeklyMeasurementReminders: settingsWeeklyMeasurementReminders,
@@ -224,6 +239,9 @@ export function UserSettingsPanel({ adminOnly = false }: { adminOnly?: boolean }
     Boolean(currentUser) &&
     (profileName.trim() !== currentUser.fullName ||
       (heightCmDraft.trim() ? Number(heightCmDraft.replace(",", ".")) : undefined) !== currentUser.heightCm);
+  const profileImageSrc = currentUser.profileImageUrl
+    ? `${currentUser.profileImageUrl}${currentUser.profileImageUrl.includes("?") ? "&" : "?"}v=${encodeURIComponent(currentUser.updatedAt)}`
+    : null;
 
   const installPlatform = useMemo(() => {
     if (typeof window === "undefined") {
@@ -335,6 +353,26 @@ export function UserSettingsPanel({ adminOnly = false }: { adminOnly?: boolean }
         </CardDescription>
 
         <div className="mt-6 space-y-4">
+          <div className="flex items-center gap-4 rounded-2xl border-2 border-[var(--border)] bg-[var(--surface-2)] p-4">
+            <div className="flex size-16 shrink-0 items-center justify-center overflow-hidden rounded-full border border-[var(--border-strong)] bg-[var(--surface)]">
+              {profileImageSrc ? (
+                <img
+                  src={profileImageSrc}
+                  alt=""
+                  className="size-full object-cover"
+                />
+              ) : (
+                <UserRound className="size-7 text-[var(--text-subtle)]" aria-hidden="true" />
+              )}
+            </div>
+            <div className="space-y-1">
+              <p className="text-sm font-semibold text-[var(--text)]">Headerin profiilikuva</p>
+              <p className="text-xs text-[var(--text-subtle)]">
+                Lataa profiilikuva suoraan laitteelta. Jos kuvaa ei ole asetettu, näytämme profiili-ikonin.
+              </p>
+            </div>
+          </div>
+
           <div>
             <Label htmlFor="account-full-name">Koko nimi</Label>
             <Input
@@ -349,6 +387,75 @@ export function UserSettingsPanel({ adminOnly = false }: { adminOnly?: boolean }
                 {form.formState.errors.fullName.message}
               </p>
             ) : null}
+          </div>
+
+          <div>
+            <Label htmlFor="account-profile-image-upload">Profiilikuva</Label>
+            <input
+              id="account-profile-image-upload"
+              ref={profileImageInputRef}
+              type="file"
+              accept="image/jpeg,image/png,image/webp,image/avif"
+              className="sr-only"
+              onChange={(event) => {
+                const nextFile = event.target.files?.[0];
+                event.target.value = "";
+                if (!nextFile) {
+                  return;
+                }
+
+                setIsUploadingProfileImage(true);
+                setProfileMessage("");
+                void uploadCurrentUserProfileImage(nextFile)
+                  .then((result) => {
+                    setProfileMessage(result.ok ? "Profiilikuva päivitettiin." : result.message);
+                    setProfileMessageTone(result.ok ? "success" : "danger");
+                    notify({
+                      tone: result.ok ? "success" : "danger",
+                      message: result.ok ? "Profiilikuva päivitettiin." : result.message,
+                    });
+                  })
+                  .finally(() => {
+                    setIsUploadingProfileImage(false);
+                  });
+              }}
+            />
+            <div className="flex flex-wrap items-center gap-3">
+              <Button
+                type="button"
+                variant="secondary"
+                disabled={isUploadingProfileImage}
+                loading={isUploadingProfileImage}
+                loadingText="Ladataan kuvaa..."
+                onClick={() => profileImageInputRef.current?.click()}
+              >
+                Valitse kuva
+              </Button>
+              <Button
+                type="button"
+                variant="secondary"
+                disabled={!currentUser.profileImageUrl || isUploadingProfileImage}
+                onClick={() => {
+                  setIsUploadingProfileImage(true);
+                  setProfileMessage("");
+                  void removeCurrentUserProfileImage()
+                    .then((result) => {
+                      setProfileMessage(result.ok ? "Profiilikuva poistettiin." : result.message);
+                      setProfileMessageTone(result.ok ? "success" : "danger");
+                      notify({
+                        tone: result.ok ? "success" : "danger",
+                        message: result.ok ? "Profiilikuva poistettiin." : result.message,
+                      });
+                    })
+                    .finally(() => {
+                      setIsUploadingProfileImage(false);
+                    });
+                }}
+              >
+                Poista kuva
+              </Button>
+            </div>
+            <p className="mt-2 text-xs text-[var(--text-subtle)]">{PROFILE_IMAGE_HELPER_TEXT}</p>
           </div>
 
           <div>
@@ -386,7 +493,7 @@ export function UserSettingsPanel({ adminOnly = false }: { adminOnly?: boolean }
               message={profileMessage}
               tone={profileMessageTone}
               pendingMessage="Tallennetaan profiilia..."
-              isPending={isSavingProfile}
+              isPending={isSavingProfile || isUploadingProfileImage}
               className="text-sm"
             />
           ) : null}
@@ -394,7 +501,7 @@ export function UserSettingsPanel({ adminOnly = false }: { adminOnly?: boolean }
           <Button
             type="button"
             className="w-full sm:w-auto"
-            disabled={!isProfileDirty || isSavingProfile}
+            disabled={!isProfileDirty || isSavingProfile || isUploadingProfileImage}
             loading={isSavingProfile}
             loadingText="Tallennetaan profiilia..."
             onClick={() => void submitProfile()}

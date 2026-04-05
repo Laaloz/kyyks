@@ -6,6 +6,7 @@ describe("userSettingsSchema", () => {
   it("accepts the Mallu theme mode", () => {
     const parsed = userSettingsSchema.safeParse({
       fullName: "Mallu Testaaja",
+      profileImageUrl: "https://example.com/avatar.jpg",
       defaultDashboardView: "overview",
       emailNotifications: true,
       weeklyMeasurementReminders: true,

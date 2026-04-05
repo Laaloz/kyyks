@@ -1,6 +1,6 @@
 "use client";
 
-import { BellRing, Dumbbell, Home, LogOut, MessageSquare, MoreHorizontal, ScrollText, UserPlus, UserRoundCog, Users, type LucideIcon } from "lucide-react";
+import { BellRing, Dumbbell, Home, LogOut, MessageSquare, MoreHorizontal, ScrollText, UserPlus, UserRound, UserRoundCog, Users, type LucideIcon } from "lucide-react";
 import { useEffect, useRef, useState, type KeyboardEvent } from "react";
 
 import { AdminDashboard } from "@/components/workout/admin-dashboard";
@@ -8,7 +8,6 @@ import { MeasurementReminderDialog } from "@/components/workout/athlete/measurem
 import { AthleteDashboard } from "@/components/workout/athlete-dashboard";
 import { CoachDashboard } from "@/components/workout/coach-dashboard";
 import { UserSettingsPanel } from "@/components/workout/user-settings-panel";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { isConversationEntryNotifiable } from "@/lib/conversation";
 import { getCoachConversationAthletes } from "@/lib/domain";
@@ -107,6 +106,7 @@ export function DashboardShell() {
   const [athleteOverviewFocusTarget, setAthleteOverviewFocusTarget] = useState<AthleteOverviewFocusTarget | null>(null);
   const previousUserIdRef = useRef<string | null>(null);
   const navButtonRefs = useRef<Record<string, HTMLButtonElement | null>>({});
+  const [profileImageFailed, setProfileImageFailed] = useState(false);
 
   if (!currentUser) {
     return null;
@@ -142,7 +142,6 @@ export function DashboardShell() {
   const activeTabId = `workspace-tab-${activePrimaryView}`;
   const activePanelId = `workspace-panel-${activePrimaryView}`;
   const activeViewLabel = navLabelByView[view];
-  const activeMobileViewLabel = mobileNavLabelByView[view];
   const shouldHideMobileBottomNav = isMobileWorkoutDetailOpen;
   const measurementReminder = getMeasurementReminderState(state, currentUser);
   const weeklyMeasurementRemindersEnabled = currentUser.settings?.weeklyMeasurementReminders ?? true;
@@ -151,6 +150,10 @@ export function DashboardShell() {
     (measurementReminder.isDue || isReminderPreviewMode);
   const weightReminderDue = measurementReminder.weightDue || isReminderPreviewMode;
   const waistReminderDue = measurementReminder.waistDue || isReminderPreviewMode;
+  const todayLabel = `Tänään ${new Intl.DateTimeFormat("fi-FI").format(new Date())}`;
+  const profileImageSrc = currentUser.profileImageUrl
+    ? `${currentUser.profileImageUrl}${currentUser.profileImageUrl.includes("?") ? "&" : "?"}v=${encodeURIComponent(currentUser.updatedAt)}`
+    : null;
   const adminConversationAthleteIds =
     currentUser.role === "admin"
       ? new Set(getCoachConversationAthletes(state, currentUser.id).map((athlete) => athlete.id))
@@ -255,6 +258,10 @@ export function DashboardShell() {
       // Ignore storage failures and keep the in-memory view state.
     }
   }, [currentUser.id, view]);
+
+  useEffect(() => {
+    setProfileImageFailed(false);
+  }, [currentUser.profileImageUrl]);
 
   useEffect(() => {
     if (view === "settings") {
@@ -372,40 +379,51 @@ export function DashboardShell() {
       >
         <div className="flex flex-col gap-4">
           <div className="grid gap-3 lg:grid-cols-[minmax(0,1.65fr)_minmax(16rem,0.95fr)]">
-            <section className="min-w-0 rounded-[1.35rem] border border-[var(--border-strong)] bg-[linear-gradient(180deg,var(--surface)_0%,var(--surface-2)_100%)] px-3 py-2.5 shadow-[0_1px_0_0_var(--shadow-soft),0_12px_24px_-22px_var(--shadow)] lg:rounded-[1.55rem] lg:border lg:border-[var(--border)] lg:bg-[linear-gradient(135deg,var(--surface)_0%,var(--surface-3)_100%)] lg:shadow-[inset_0_1px_0_rgba(255,255,255,0.55)] sm:px-4 sm:py-3">
-              <div className="flex items-center gap-2.5 sm:gap-3">
-                <div className="flex size-8 shrink-0 items-center justify-center rounded-xl border border-[var(--accent-strong)] bg-[var(--accent)] shadow-[0_1px_0_0_var(--accent-strong),0_8px_18px_-16px_var(--accent)] sm:size-10 sm:rounded-[1.15rem]">
-                  <Dumbbell className="size-[1rem] text-white" aria-hidden="true" />
+            <section className="min-w-0">
+              <div className="flex items-center justify-between gap-3">
+                <div className="min-w-0">
+                  <h1 className="truncate font-[family-name:var(--font-display)] text-[1rem] font-semibold leading-tight text-[var(--text)] sm:pr-2 sm:text-[1.65rem] sm:leading-[1.02]">
+                    {currentUser.fullName}
+                  </h1>
+                  <p className="mt-1 text-sm text-[var(--text-subtle)]">{todayLabel}</p>
                 </div>
-                <div className="min-w-0 w-full">
-                  <div className="flex items-center justify-between gap-2">
-                    <div className="min-w-0">
-                      <h1 className="truncate font-[family-name:var(--font-display)] text-[1rem] font-semibold leading-tight text-[var(--text)] sm:pr-2 sm:text-[1.65rem] sm:leading-[1.02]">
-                        {currentUser.fullName}
-                      </h1>
-                      <div className="mt-0.5 flex flex-wrap items-center gap-2">
-                        <Badge className="border-[var(--accent)] bg-[var(--surface)] px-2.5 py-0.5 text-[10px] text-[var(--accent)]">
-                          <span className="lg:hidden">{activeMobileViewLabel}</span>
-                          <span className="hidden lg:inline">{activeViewLabel}</span>
-                        </Badge>
-                      </div>
-                    </div>
-                    {shouldShowMeasurementReminder ? (
-                      <div className="flex shrink-0 items-center gap-2 lg:hidden">
-                        <Button
-                          onClick={() => setIsMeasurementReminderOpen(true)}
-                          type="button"
-                          variant="secondary"
-                          className="size-9 !rounded-xl !border-[var(--accent)] !bg-[var(--surface)] !px-0 !py-0 !text-[var(--accent)] shadow-[0_0_0_1px_var(--accent)] sm:size-10 sm:!rounded-2xl"
-                          aria-label="Avaa kehon seurannan muistutus"
-                          title="Avaa kehon seurannan muistutus"
-                        >
-                          <BellRing className="size-4" aria-hidden="true" />
-                          <span className="sr-only">Avaa kehon seurannan muistutus</span>
-                        </Button>
-                      </div>
-                    ) : null}
-                  </div>
+                <div className="flex shrink-0 items-center gap-2">
+                  {shouldShowMeasurementReminder ? (
+                    <Button
+                      onClick={() => setIsMeasurementReminderOpen(true)}
+                      type="button"
+                      variant="secondary"
+                      className="size-10 !rounded-full !border-[var(--accent)] !bg-[var(--accent)] !px-0 !py-0 !text-white shadow-[inset_0_0_0_1px_var(--accent-strong),0_10px_24px_-16px_var(--accent)] sm:size-11"
+                      aria-label="Avaa kehon seurannan muistutus"
+                      title="Avaa kehon seurannan muistutus"
+                    >
+                      <BellRing className="size-5" aria-hidden="true" />
+                      <span className="sr-only">Avaa kehon seurannan muistutus</span>
+                    </Button>
+                  ) : null}
+                  <Button
+                    onClick={() => setView("settings")}
+                    type="button"
+                    variant="secondary"
+                    className={`size-10 overflow-hidden !rounded-full !border-[var(--border-strong)] !bg-[var(--surface)] !px-0 !py-0 sm:size-11 ${
+                      view === "settings" ? "!border-[var(--accent)] !text-[var(--accent)]" : "!text-[var(--text)]"
+                    }`}
+                    aria-label="Avaa tilin asetukset"
+                    aria-pressed={view === "settings"}
+                    title="Avaa tilin asetukset"
+                  >
+                    {profileImageSrc && !profileImageFailed ? (
+                      <img
+                        src={profileImageSrc}
+                        alt=""
+                        className="size-full object-cover"
+                        onError={() => setProfileImageFailed(true)}
+                      />
+                    ) : (
+                      <UserRound className="size-5" aria-hidden="true" />
+                    )}
+                    <span className="sr-only">Avaa tilin asetukset</span>
+                  </Button>
                 </div>
               </div>
             </section>

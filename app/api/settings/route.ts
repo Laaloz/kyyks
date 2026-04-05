@@ -7,6 +7,7 @@ import { createSupabaseServerClient } from "@/lib/supabase/server";
 
 const settingsSchema = z.object({
   fullName: z.string().trim().min(2),
+  profileImageUrl: z.union([z.string().trim().url(), z.literal("")]).transform((value) => (value === "" ? null : value)),
   defaultDashboardView: z.enum(["overview", "templates", "invites", "athlete-log", "conversation", "athletes", "users"]),
   emailNotifications: z.boolean(),
   weeklyMeasurementReminders: z.boolean(),
@@ -47,6 +48,7 @@ export async function PATCH(request: Request) {
     .from("profiles")
     .update({
       full_name: parsed.data.fullName,
+      profile_image_url: parsed.data.profileImageUrl,
       default_dashboard_view: parsed.data.defaultDashboardView,
       email_notifications: parsed.data.emailNotifications,
       weekly_measurement_reminders: parsed.data.weeklyMeasurementReminders,

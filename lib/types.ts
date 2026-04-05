@@ -35,6 +35,7 @@ export interface UserProfile {
   id: string;
   role: Role;
   fullName: string;
+  profileImageUrl?: string;
   email: string;
   status: UserStatus;
   demoPassword?: string;
