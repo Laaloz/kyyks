@@ -116,6 +116,10 @@ export function ProgressRing({
   showLabel?: boolean;
 }) {
   const safePercent = Math.max(0, Math.min(100, percent));
+  const ringRadius = 62;
+  const ringStrokeWidth = 6;
+  const ringCircumference = 2 * Math.PI * ringRadius;
+  const ringOffset = ringCircumference - (safePercent / 100) * ringCircumference;
 
   return (
     <div className="flex flex-col items-center text-center">
@@ -124,13 +128,31 @@ export function ProgressRing({
         aria-valuemax={100}
         aria-valuemin={0}
         aria-valuenow={safePercent}
-        className="grid size-36 place-items-center rounded-full border border-[var(--border)] shadow-[inset_0_1px_0_var(--shadow-soft)]"
+        className="relative grid size-[8.5rem] place-items-center rounded-full border border-[var(--border)] shadow-[inset_0_1px_0_var(--shadow-soft)]"
         role="progressbar"
-        style={{
-          background: `conic-gradient(var(--accent) 0 ${safePercent}%, color-mix(in_srgb,var(--surface-4)_82%,var(--border)) ${safePercent}% 100%)`,
-        }}
       >
-        <div className="flex size-28 flex-col items-center justify-center gap-1 rounded-full border border-[var(--border)] bg-[var(--surface)] shadow-[0_1px_0_0_var(--shadow-soft)]">
+        <svg className="absolute inset-0 size-full -rotate-90" viewBox="0 0 144 144" aria-hidden="true">
+          <circle
+            cx="72"
+            cy="72"
+            r={ringRadius}
+            fill="none"
+            stroke="color-mix(in srgb, var(--surface-4) 82%, var(--border))"
+            strokeWidth={ringStrokeWidth}
+          />
+          <circle
+            cx="72"
+            cy="72"
+            r={ringRadius}
+            fill="none"
+            stroke="var(--accent)"
+            strokeLinecap="round"
+            strokeWidth={ringStrokeWidth}
+            strokeDasharray={ringCircumference}
+            strokeDashoffset={ringOffset}
+          />
+        </svg>
+        <div className="flex size-[6.75rem] flex-col items-center justify-center gap-1 rounded-full border border-[var(--border)] bg-[var(--surface)] shadow-[0_1px_0_0_var(--shadow-soft)]">
           <Flame className="size-8 text-[var(--accent)]" />
           <p className="font-[family-name:var(--font-display)] text-3xl font-semibold leading-none text-[var(--text)]">
             {safePercent}%

@@ -1086,7 +1086,7 @@ export function AthleteDashboard({
             <div>
               <p className="text-xs font-semibold tracking-[0.04em] text-[var(--text-subtle)]">Yhteenveto</p>
               <CardTitle className="mt-2 text-2xl">Tämä viikko</CardTitle>
-              <CardDescription className="mt-2 max-w-3xl leading-7">
+              <CardDescription className="mt-2 max-w-3xl leading-6">
                 Näet viikon etenemisen, viimeisimmän treenin ja seuraavan askeleen yhdellä silmäyksellä.
               </CardDescription>
             </div>
