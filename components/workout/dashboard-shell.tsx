@@ -670,7 +670,11 @@ export function DashboardShell() {
                       </span>
                     ) : null}
                   </span>
-                  <span className="max-w-full truncate">{tabLabel}</span>
+                  <span
+                    className="max-w-full truncate text-[14px] font-medium"
+                  >
+                    {tabLabel}
+                  </span>
                 </button>
               );
             })}
@@ -692,7 +696,7 @@ export function DashboardShell() {
               <span className="flex size-6.5 items-center justify-center rounded-full bg-[var(--surface-2)] text-[var(--text)]" aria-hidden="true">
                 <MoreHorizontal className="size-[0.95rem]" aria-hidden="true" />
               </span>
-              <span className="max-w-full truncate">Lisää</span>
+              <span className="max-w-full truncate text-[14px] font-medium">Lisää</span>
             </button>
           </div>
         </nav>
