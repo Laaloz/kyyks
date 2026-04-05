@@ -1,24 +1,24 @@
 import { PROGRAMS_DASHBOARD_VIEW, type AthleteRole, type DashboardHomeView, type Invite, type Role, type UserProfile } from "@/lib/types";
 
 const coachWorkspaceViews: DashboardHomeView[] = [
+  "athlete-log",
   "overview",
   PROGRAMS_DASHBOARD_VIEW,
   "athletes",
-  "athlete-log",
 ];
 
 const adminWorkspaceViews: DashboardHomeView[] = [
+  "athlete-log",
   "overview",
   "athletes",
   PROGRAMS_DASHBOARD_VIEW,
-  "athlete-log",
   "conversation",
   "invites",
   "users",
 ];
 
-const athleteWorkspaceViews: DashboardHomeView[] = ["overview", "athlete-log", "conversation"];
-const independentAthleteWorkspaceViews: DashboardHomeView[] = ["overview", PROGRAMS_DASHBOARD_VIEW, "athlete-log", "conversation"];
+const athleteWorkspaceViews: DashboardHomeView[] = ["athlete-log", "overview", "conversation"];
+const independentAthleteWorkspaceViews: DashboardHomeView[] = ["athlete-log", "overview", PROGRAMS_DASHBOARD_VIEW, "conversation"];
 
 export function isAthleteRole(role: Role | null | undefined): role is AthleteRole {
   return role === "athlete" || role === "independent_athlete";

@@ -1,6 +1,6 @@
 "use client";
 
-import { BellRing, Dumbbell, Home, LogOut, MessageSquare, MoreHorizontal, NotebookPen, Sparkles, UserPlus, UserRoundCog, Users, type LucideIcon } from "lucide-react";
+import { BellRing, Dumbbell, Home, LogOut, MessageSquare, MoreHorizontal, ScrollText, UserPlus, UserRoundCog, Users, type LucideIcon } from "lucide-react";
 import { useEffect, useRef, useState, type KeyboardEvent } from "react";
 
 import { AdminDashboard } from "@/components/workout/admin-dashboard";
@@ -27,18 +27,18 @@ const MEASUREMENTS_SECTION_ID = "overview-measurements";
 
 function mobilePrimaryNavItemsForRole(role: Role): PrimaryWorkspaceView[] {
   if (role === "athlete") {
-    return ["overview", "athlete-log", "conversation"];
+    return ["athlete-log", "overview", "conversation"];
   }
 
   if (role === "independent_athlete") {
-    return ["overview", PROGRAMS_WORKSPACE_VIEW, "athlete-log", "conversation"];
+    return ["athlete-log", "overview", PROGRAMS_WORKSPACE_VIEW, "conversation"];
   }
 
   if (role === "admin") {
-    return ["overview", "athletes", "users", "conversation"];
+    return ["athlete-log", "overview", "athletes", "users"];
   }
 
-  return ["overview", PROGRAMS_WORKSPACE_VIEW, "athletes", "athlete-log"];
+  return ["athlete-log", "overview", PROGRAMS_WORKSPACE_VIEW, "athletes"];
 }
 
 function navItemsForRole(role: Role): PrimaryWorkspaceView[] {
@@ -126,15 +126,17 @@ export function DashboardShell() {
   const mobileNavLabelByView = navLabelByView;
   const navIconByView: Record<PrimaryWorkspaceView, LucideIcon> = {
     overview: Home,
-    athletes: Dumbbell,
-    users: Users,
-    [PROGRAMS_WORKSPACE_VIEW]: Sparkles,
+    athletes: Users,
+    users: UserRoundCog,
+    [PROGRAMS_WORKSPACE_VIEW]: ScrollText,
     invites: UserPlus,
-    "athlete-log": NotebookPen,
+    "athlete-log": Dumbbell,
     conversation: MessageSquare,
   };
   const mobilePrimaryNavItems = mobilePrimaryNavItemsForRole(currentUser.role).filter((item) => navItems.includes(item));
   const mobileOverflowNavItems = navItems.filter((item) => !mobilePrimaryNavItems.includes(item));
+  const [mobileWorkoutNavItem, ...mobileSecondaryNavItems] = mobilePrimaryNavItems;
+  const mobileNavSlotCount = (mobileWorkoutNavItem ? 1 : 0) + mobileSecondaryNavItems.length + 1;
   const activePrimaryView =
     view === "settings" ? resolveInitialView(currentUser.role, currentUser.settings?.defaultDashboardView) : view;
   const activeTabId = `workspace-tab-${activePrimaryView}`;
@@ -623,81 +625,122 @@ export function DashboardShell() {
         )}
       </main>
 
-      <div className={`${shouldHideMobileBottomNav ? "hidden" : "fixed"} inset-x-0 bottom-0 z-30 border-t border-[color-mix(in_srgb,var(--border)_90%,var(--surface))] bg-[color-mix(in_srgb,var(--surface)_94%,var(--background))] px-2 pb-[calc(0.4rem+env(safe-area-inset-bottom))] pt-1 shadow-[0_-10px_22px_-24px_var(--shadow)] backdrop-blur lg:hidden`}>
+      <div className={`${shouldHideMobileBottomNav ? "hidden" : "fixed"} inset-x-0 bottom-0 z-30 border-t border-[color-mix(in_srgb,var(--border)_90%,var(--surface))] bg-[var(--surface)] px-1 py-1 pb-[calc(0.25rem+env(safe-area-inset-bottom))] shadow-[0_-8px_18px_-24px_var(--shadow)] backdrop-blur lg:hidden`}>
         <nav aria-label="Mobiilinavigaatio">
           <div
             className="grid gap-1"
-            style={{ gridTemplateColumns: `repeat(${mobilePrimaryNavItems.length + 1}, minmax(0, 1fr))` }}
+            style={{
+              gridTemplateColumns: mobileWorkoutNavItem
+                ? `minmax(5.45rem, 1.05fr) repeat(${Math.max(mobileNavSlotCount - 1, 1)}, minmax(0, 1fr))`
+                : `repeat(${mobileNavSlotCount}, minmax(0, 1fr))`,
+            }}
           >
-            {mobilePrimaryNavItems.map((item) => {
-                  const Icon = navIconByView[item];
-                  const isActive = view === item;
-                  const tabLabel = mobileNavLabelByView[item];
+            {mobileWorkoutNavItem ? (
+              <button
+                type="button"
+                className={`group relative flex min-w-[5.45rem] flex-col items-center justify-center gap-0.5 rounded-[1.02rem] px-3.25 py-1.5 text-[14px] leading-none transition hover:bg-[var(--nav-workout-hover-bg)] ${
+                  view === mobileWorkoutNavItem
+                    ? "bg-[var(--nav-active-bg)] text-[var(--accent)]"
+                    : "bg-[var(--nav-workout-bg)] text-[var(--text)]"
+                }`}
+                aria-current={view === mobileWorkoutNavItem ? "page" : undefined}
+                onClick={() => setView(mobileWorkoutNavItem)}
+              >
+                {view === mobileWorkoutNavItem ? (
+                  <span className="absolute bottom-0 left-1/2 h-0.5 w-6 -translate-x-1/2 rounded-full bg-[var(--accent)]" aria-hidden="true" />
+                ) : null}
+                <span
+                  className={`relative flex size-7 items-center justify-center rounded-full ${
+                    view === mobileWorkoutNavItem
+                      ? "bg-[var(--nav-group-icon-active-bg)] text-[var(--accent)]"
+                      : "bg-[var(--nav-workout-icon-bg)] text-[var(--text)] group-hover:bg-[var(--nav-group-icon-active-bg)]"
+                  }`}
+                  aria-hidden="true"
+                >
+                  {(() => {
+                    const Icon = navIconByView[mobileWorkoutNavItem];
+                    return <Icon className="size-[0.95rem]" aria-hidden="true" />;
+                  })()}
+                </span>
+                <span className={`max-w-full truncate text-[14px] font-normal ${view === mobileWorkoutNavItem ? "text-[var(--accent)]" : "text-[var(--text)]"}`}>
+                  {mobileNavLabelByView[mobileWorkoutNavItem]}
+                </span>
+              </button>
+            ) : null}
 
-                  return (
-                    <button
-                      key={item}
-                      type="button"
-                      className={`relative flex min-w-0 flex-col items-center justify-center gap-0.5 rounded-[0.95rem] px-1 py-1 text-[14px] font-medium leading-none transition ${
-                        isActive
-                          ? "bg-[color-mix(in_srgb,var(--accent)_8%,var(--surface))] text-[var(--accent)]"
-                          : "bg-transparent text-[var(--text-muted)]"
-                      }`}
-                      aria-current={isActive ? "page" : undefined}
-                      onClick={() => setView(item)}
+            <div
+              className="grid min-w-0 grid-flow-col auto-cols-fr gap-1 rounded-[1.02rem] bg-transparent"
+              style={{ gridColumn: `span ${Math.max(mobileNavSlotCount - (mobileWorkoutNavItem ? 1 : 0), 1)} / span ${Math.max(mobileNavSlotCount - (mobileWorkoutNavItem ? 1 : 0), 1)}` }}
+            >
+              {mobileSecondaryNavItems.map((item) => {
+                const Icon = navIconByView[item];
+                const isActive = view === item;
+                const tabLabel = mobileNavLabelByView[item];
+
+                return (
+                  <button
+                    key={item}
+                    type="button"
+                    className={`relative flex min-w-0 flex-col items-center justify-center gap-0.5 rounded-[1.02rem] px-1 py-1.5 text-[14px] font-normal leading-none transition ${
+                      isActive
+                        ? "bg-[var(--nav-active-bg)] text-[var(--accent)]"
+                        : "bg-transparent text-[var(--text-muted)]"
+                    }`}
+                    aria-current={isActive ? "page" : undefined}
+                    onClick={() => setView(item)}
                   >
                     {isActive ? (
-                      <span className="absolute left-1/2 top-0 h-0.5 w-5 -translate-x-1/2 rounded-full bg-[var(--accent)]" aria-hidden="true" />
+                      <span className="absolute bottom-0 left-1/2 h-0.5 w-5 -translate-x-1/2 rounded-full bg-[var(--accent)]" aria-hidden="true" />
                     ) : null}
                     <span
                       className={`relative flex size-6.5 items-center justify-center rounded-full ${
                         isActive
-                          ? "bg-[color-mix(in_srgb,var(--accent)_12%,var(--surface))] text-[var(--accent)]"
-                          : "bg-[var(--surface-2)] text-[var(--text)]"
+                          ? "bg-[var(--nav-group-icon-active-bg)] text-[var(--accent)]"
+                          : "bg-[var(--nav-group-icon-bg)] text-[var(--text)]"
                       }`}
                       aria-hidden="true"
                     >
-                    <Icon className="size-[0.95rem]" aria-hidden="true" />
-                    {item === "conversation" && unreadConversationCount > 0 ? (
-                      <span
-                        className={`absolute -right-1 -top-1 inline-flex min-w-4 items-center justify-center rounded-full px-1 text-[8px] font-bold ${
-                          isActive
-                            ? "bg-[var(--accent)] text-[var(--accent-contrast)]"
-                            : "bg-[var(--accent)] text-[var(--accent-contrast)]"
-                        }`}
-                      >
-                        {unreadConversationCount}
-                      </span>
-                    ) : null}
-                  </span>
-                  <span
-                    className="max-w-full truncate text-[14px] font-medium"
-                  >
-                    {tabLabel}
-                  </span>
-                </button>
-              );
-            })}
+                      <Icon className="size-[0.95rem]" aria-hidden="true" />
+                      {item === "conversation" && unreadConversationCount > 0 ? (
+                        <span className="absolute -right-1 -top-1 inline-flex min-w-4 items-center justify-center rounded-full bg-[var(--accent)] px-1 text-[8px] font-bold text-[var(--accent-contrast)]">
+                          {unreadConversationCount}
+                        </span>
+                      ) : null}
+                    </span>
+                    <span className="max-w-full truncate text-[14px] font-normal">
+                      {tabLabel}
+                    </span>
+                  </button>
+                );
+              })}
 
-                    <button
-              type="button"
-              className={`relative flex min-w-0 flex-col items-center justify-center gap-0.5 rounded-[0.95rem] px-1 py-1 text-[14px] font-medium leading-none transition ${
-                isMobileNavSheetOpen || view === "settings" || mobileOverflowNavItems.includes(view as PrimaryWorkspaceView)
-                  ? "bg-[var(--surface-2)] text-[var(--text)]"
-                  : "bg-transparent text-[var(--text-muted)]"
-              }`}
-              aria-expanded={isMobileNavSheetOpen}
-              aria-haspopup="dialog"
-              onClick={() => setIsMobileNavSheetOpen((current) => !current)}
-            >
-              {isMobileNavSheetOpen || view === "settings" || mobileOverflowNavItems.includes(view as PrimaryWorkspaceView) ? (
-                <span className="absolute left-1/2 top-0 h-0.5 w-5 -translate-x-1/2 rounded-full bg-[var(--accent)]" aria-hidden="true" />
-              ) : null}
-              <span className="flex size-6.5 items-center justify-center rounded-full bg-[var(--surface-2)] text-[var(--text)]" aria-hidden="true">
-                <MoreHorizontal className="size-[0.95rem]" aria-hidden="true" />
-              </span>
-              <span className="max-w-full truncate text-[14px] font-medium">Lisää</span>
-            </button>
+              <button
+                type="button"
+                className={`relative flex min-w-0 flex-col items-center justify-center gap-0.5 rounded-[1.02rem] px-1 py-1.5 text-[14px] font-normal leading-none transition ${
+                  isMobileNavSheetOpen || view === "settings" || mobileOverflowNavItems.includes(view as PrimaryWorkspaceView)
+                    ? "bg-[var(--nav-active-bg)] text-[var(--accent)]"
+                    : "bg-transparent text-[var(--text-muted)]"
+                }`}
+                aria-expanded={isMobileNavSheetOpen}
+                aria-haspopup="dialog"
+                onClick={() => setIsMobileNavSheetOpen((current) => !current)}
+              >
+                {isMobileNavSheetOpen || view === "settings" || mobileOverflowNavItems.includes(view as PrimaryWorkspaceView) ? (
+                  <span className="absolute bottom-0 left-1/2 h-0.5 w-5 -translate-x-1/2 rounded-full bg-[var(--accent)]" aria-hidden="true" />
+                ) : null}
+                <span
+                  className={`flex size-6.5 items-center justify-center rounded-full ${
+                    isMobileNavSheetOpen || view === "settings" || mobileOverflowNavItems.includes(view as PrimaryWorkspaceView)
+                      ? "bg-[var(--nav-group-icon-active-bg)] text-[var(--accent)]"
+                      : "bg-[var(--nav-group-icon-bg)] text-[var(--text)]"
+                  }`}
+                  aria-hidden="true"
+                >
+                  <MoreHorizontal className="size-[0.95rem]" aria-hidden="true" />
+                </span>
+                <span className="max-w-full truncate text-[14px] font-normal">Lisää</span>
+              </button>
+            </div>
           </div>
         </nav>
       </div>

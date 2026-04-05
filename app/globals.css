@@ -30,6 +30,22 @@
   --font-display: "Manrope", "Segoe UI", "Helvetica Neue", sans-serif;
   --font-body: "Inter", "Segoe UI", "Helvetica Neue", sans-serif;
   --selection-background: #bfd4fb;
+  --nav-group-bg: #edf2fc;
+  --nav-group-icon-bg: color-mix(in srgb, var(--nav-group-bg) 72%, white);
+  --nav-group-icon-active-bg: color-mix(in srgb, var(--nav-group-bg) 88%, white);
+  --nav-active-bg: color-mix(in srgb, var(--nav-group-bg) 64%, white);
+  --nav-workout-bg-soft: color-mix(in srgb, var(--accent) 22%, white);
+  --nav-workout-icon-bg-soft: color-mix(in srgb, var(--accent) 12%, white);
+  --nav-workout-hover-bg-soft: color-mix(in srgb, var(--accent) 18%, white);
+  --nav-workout-bg-energetic: #dbe8ff;
+  --nav-workout-icon-bg-energetic: #eef4ff;
+  --nav-workout-hover-bg-energetic: #cfe0ff;
+  --nav-workout-bg-sporty: color-mix(in srgb, var(--accent) 38%, white);
+  --nav-workout-icon-bg-sporty: color-mix(in srgb, var(--accent) 20%, white);
+  --nav-workout-hover-bg-sporty: color-mix(in srgb, var(--accent) 30%, white);
+  --nav-workout-bg: var(--nav-workout-bg-energetic);
+  --nav-workout-icon-bg: var(--nav-workout-icon-bg-energetic);
+  --nav-workout-hover-bg: var(--nav-workout-hover-bg-energetic);
   color-scheme: light;
 }
 
@@ -61,6 +77,22 @@
   --warning: #f0b44b;
   --danger: #ff7a7a;
   --selection-background: #204c8f;
+  --nav-group-bg: color-mix(in srgb, var(--surface-3) 78%, #223c61);
+  --nav-group-icon-bg: color-mix(in srgb, var(--nav-group-bg) 82%, var(--surface));
+  --nav-group-icon-active-bg: color-mix(in srgb, var(--accent) 24%, var(--surface));
+  --nav-active-bg: color-mix(in srgb, var(--nav-group-bg) 74%, var(--surface));
+  --nav-workout-bg-soft: color-mix(in srgb, var(--accent) 38%, var(--surface-2));
+  --nav-workout-icon-bg-soft: color-mix(in srgb, var(--accent) 24%, var(--surface));
+  --nav-workout-hover-bg-soft: color-mix(in srgb, var(--accent) 46%, var(--surface-2));
+  --nav-workout-bg-energetic: color-mix(in srgb, var(--accent) 54%, var(--surface));
+  --nav-workout-icon-bg-energetic: color-mix(in srgb, var(--accent) 38%, var(--surface));
+  --nav-workout-hover-bg-energetic: color-mix(in srgb, var(--accent) 62%, var(--surface-2));
+  --nav-workout-bg-sporty: color-mix(in srgb, var(--accent) 58%, var(--surface-2));
+  --nav-workout-icon-bg-sporty: color-mix(in srgb, var(--accent) 36%, var(--surface));
+  --nav-workout-hover-bg-sporty: color-mix(in srgb, var(--accent) 64%, var(--surface-2));
+  --nav-workout-bg: var(--nav-workout-bg-energetic);
+  --nav-workout-icon-bg: var(--nav-workout-icon-bg-energetic);
+  --nav-workout-hover-bg: var(--nav-workout-hover-bg-energetic);
   color-scheme: dark;
 }
 
@@ -92,6 +124,22 @@
   --warning: #d97706;
   --danger: #b11f24;
   --selection-background: #f3a093;
+  --nav-group-bg: color-mix(in srgb, var(--surface-2) 82%, white);
+  --nav-group-icon-bg: color-mix(in srgb, var(--nav-group-bg) 72%, white);
+  --nav-group-icon-active-bg: color-mix(in srgb, var(--nav-group-bg) 88%, white);
+  --nav-active-bg: color-mix(in srgb, var(--nav-group-bg) 70%, white);
+  --nav-workout-bg-soft: color-mix(in srgb, var(--accent) 18%, white);
+  --nav-workout-icon-bg-soft: color-mix(in srgb, var(--accent) 10%, white);
+  --nav-workout-hover-bg-soft: color-mix(in srgb, var(--accent) 14%, white);
+  --nav-workout-bg-energetic: color-mix(in srgb, var(--accent) 30%, white);
+  --nav-workout-icon-bg-energetic: color-mix(in srgb, var(--accent) 18%, white);
+  --nav-workout-hover-bg-energetic: color-mix(in srgb, var(--accent) 24%, white);
+  --nav-workout-bg-sporty: color-mix(in srgb, var(--accent) 30%, white);
+  --nav-workout-icon-bg-sporty: color-mix(in srgb, var(--accent) 16%, white);
+  --nav-workout-hover-bg-sporty: color-mix(in srgb, var(--accent) 24%, white);
+  --nav-workout-bg: var(--nav-workout-bg-energetic);
+  --nav-workout-icon-bg: var(--nav-workout-icon-bg-energetic);
+  --nav-workout-hover-bg: var(--nav-workout-hover-bg-energetic);
   color-scheme: light;
 }
 
