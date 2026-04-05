@@ -285,6 +285,18 @@ export function DashboardShell() {
   }, [view]);
 
   useEffect(() => {
+    if (typeof window === "undefined") {
+      return;
+    }
+
+    if (view === "overview" && athleteOverviewFocusTarget === "measurements") {
+      return;
+    }
+
+    window.scrollTo({ top: 0, behavior: "auto" });
+  }, [athleteOverviewFocusTarget, view]);
+
+  useEffect(() => {
     if (view !== "athlete-log") {
       setIsMobileWorkoutDetailOpen(false);
     }
@@ -643,7 +655,7 @@ export function DashboardShell() {
         )}
       </main>
 
-      <div className={`${shouldHideMobileBottomNav ? "hidden" : "fixed"} inset-x-0 bottom-0 z-30 border-t border-[color-mix(in_srgb,var(--border)_90%,var(--surface))] bg-[var(--surface)] px-1 py-1 pb-[calc(0.25rem+env(safe-area-inset-bottom))] shadow-[0_-8px_18px_-24px_var(--shadow)] backdrop-blur lg:hidden`}>
+      <div className={`${shouldHideMobileBottomNav ? "hidden" : "fixed"} inset-x-0 bottom-0 z-30 border-t border-[color-mix(in_srgb,var(--border)_90%,var(--surface))] bg-[var(--surface)] px-1 py-1 pb-[calc(0.75rem+env(safe-area-inset-bottom))] shadow-[0_-8px_18px_-24px_var(--shadow)] backdrop-blur lg:hidden`}>
         <nav aria-label="Mobiilinavigaatio">
           <div
             className="grid gap-1"
