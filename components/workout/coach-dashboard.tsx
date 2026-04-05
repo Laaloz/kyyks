@@ -889,6 +889,18 @@ export function CoachDashboard({
     previousWorkoutCountRef.current = currentWorkoutCount;
   }, [composerView, watchedWorkouts.length]);
 
+  useEffect(() => {
+    if (typeof window === "undefined") {
+      return;
+    }
+
+    if (view !== PROGRAMS_WORKSPACE_VIEW) {
+      return;
+    }
+
+    window.scrollTo({ top: 0, behavior: "auto" });
+  }, [view]);
+
   return (
     <div className="grid gap-6">
       {view === "overview" && currentUser ? (
