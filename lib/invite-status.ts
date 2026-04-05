@@ -1,3 +1,4 @@
+import { isInviteExpired } from "@/lib/domain";
 import type { Invite, InviteStatus, UserProfile } from "@/lib/types";
 
 export function getInviteLifecycleLabel(status: InviteStatus) {
@@ -12,6 +13,9 @@ export function getVisiblePendingInvites(invites: Invite[], users: UserProfile[]
   );
 
   return invites.filter(
-    (invite) => invite.status === "pending" && !activeEmails.has(invite.email.trim().toLowerCase()),
+    (invite) =>
+      invite.status === "pending" &&
+      !isInviteExpired(invite.expiresAt) &&
+      !activeEmails.has(invite.email.trim().toLowerCase()),
   );
 }

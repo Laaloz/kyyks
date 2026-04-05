@@ -1,3 +1,4 @@
+import { Flame } from "lucide-react";
 import type { ComponentType } from "react";
 
 import { Badge } from "@/components/ui/badge";
@@ -105,6 +106,42 @@ export function MetricGrid({
   );
 }
 
+export function ProgressRing({
+  percent,
+  label,
+  showLabel = true,
+}: {
+  percent: number;
+  label: string;
+  showLabel?: boolean;
+}) {
+  const safePercent = Math.max(0, Math.min(100, percent));
+
+  return (
+    <div className="flex flex-col items-center text-center">
+      <div
+        aria-label={`${label} ${safePercent}%`}
+        aria-valuemax={100}
+        aria-valuemin={0}
+        aria-valuenow={safePercent}
+        className="grid size-36 place-items-center rounded-full border border-[var(--border)] shadow-[inset_0_1px_0_var(--shadow-soft)]"
+        role="progressbar"
+        style={{
+          background: `conic-gradient(var(--accent) 0 ${safePercent}%, color-mix(in_srgb,var(--surface-4)_82%,var(--border)) ${safePercent}% 100%)`,
+        }}
+      >
+        <div className="flex size-28 flex-col items-center justify-center gap-1 rounded-full border border-[var(--border)] bg-[var(--surface)] shadow-[0_1px_0_0_var(--shadow-soft)]">
+          <Flame className="size-8 text-[var(--accent)]" />
+          <p className="font-[family-name:var(--font-display)] text-3xl font-semibold leading-none text-[var(--text)]">
+            {safePercent}%
+          </p>
+        </div>
+      </div>
+      {showLabel ? <p className="mt-3 text-xs font-semibold tracking-[0.04em] text-[var(--text-subtle)]">{label}</p> : null}
+    </div>
+  );
+}
+
 export function OwnTrainingOverviewCard({
   currentUser,
   state,
@@ -125,8 +162,12 @@ export function OwnTrainingOverviewCard({
     }
 
     const completedMoment = Date.parse(workout.completedAt ?? workout.updatedAt);
-    return Number.isFinite(completedMoment) && Date.now() - completedMoment <= 7 * 24 * 60 * 60 * 1000;
+      return Number.isFinite(completedMoment) && Date.now() - completedMoment <= 7 * 24 * 60 * 60 * 1000;
   }).length;
+  const weeklyTargetCount = ownPrograms.reduce((sum, program) => sum + (program.workouts?.length ?? 0), 0);
+  const completionRate = weeklyTargetCount
+    ? Math.min(Math.round((completedLastWeekCount / weeklyTargetCount) * 100), 100)
+    : 0;
   const latestCompletedWorkout = [...ownWorkouts]
     .filter((workout) => workout.status === "completed")
     .sort((left, right) =>
@@ -147,19 +188,23 @@ export function OwnTrainingOverviewCard({
         </div>
         <div className="grid gap-3 lg:grid-cols-[1.2fr_0.8fr]">
           <div className="rounded-3xl border border-[var(--border)] bg-[var(--surface-2)] p-5">
-            <div className="space-y-4">
-              <div className="text-center">
-                <p className="text-xs font-semibold tracking-[0.04em] text-[var(--text-subtle)]">Viikon yhteenveto</p>
-                <p className="mt-2 text-2xl font-semibold text-[var(--text)]">
-                  {completedLastWeekCount} {completedLastWeekCount === 1 ? "treeni" : "treeniä"} valmiina
-                </p>
-                <p className="mt-1 text-sm text-[var(--text-muted)]">
-                  {ownPrograms.length > 0
-                    ? `${ownPrograms.length} ${ownPrograms.length === 1 ? "aktiivinen ohjelma" : "aktiivista ohjelmaa"} omassa seurannassa.`
-                    : "Ei aktiivisia omia ohjelmia juuri nyt."}
-                </p>
-              </div>
-              <div className="grid gap-3 sm:grid-cols-2">
+            <div className="grid gap-4 md:grid-cols-[auto_1fr] md:items-center">
+              <ProgressRing label="Viikon eteneminen" percent={completionRate} showLabel={false} />
+              <div className="space-y-4">
+                <div className="text-center">
+                  <p className="text-xs font-semibold tracking-[0.04em] text-[var(--text-subtle)]">Viikon yhteenveto</p>
+                  <p className="mt-2 text-2xl font-semibold text-[var(--text)]">
+                    {completedLastWeekCount} {completedLastWeekCount === 1 ? "treeni" : "treeniä"} valmiina
+                  </p>
+                  <p className="mt-1 text-sm text-[var(--text-muted)]">
+                    {weeklyTargetCount > 0
+                      ? `Tavoite tällä viikolla: ${weeklyTargetCount} ${weeklyTargetCount === 1 ? "treeni" : "treeniä"}`
+                      : ownPrograms.length > 0
+                        ? `${ownPrograms.length} ${ownPrograms.length === 1 ? "aktiivinen ohjelma" : "aktiivista ohjelmaa"} omassa seurannassa.`
+                        : "Ei aktiivisia omia ohjelmia juuri nyt."}
+                  </p>
+                </div>
+                <div className="grid gap-3 sm:grid-cols-2">
                 <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface)] px-4 py-3">
                   <p className="text-xs font-semibold tracking-[0.04em] text-[var(--text-subtle)]">Kesken nyt</p>
                   <p className="mt-1 text-base font-semibold text-[var(--text)]">{inProgressCount}</p>
@@ -176,6 +221,7 @@ export function OwnTrainingOverviewCard({
                   </p>
                 </div>
               </div>
+            </div>
             </div>
           </div>
           <div className="rounded-3xl border border-[var(--border)] bg-[var(--surface-2)] p-5">

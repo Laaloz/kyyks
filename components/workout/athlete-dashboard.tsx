@@ -1,6 +1,6 @@
 "use client";
 
-import { ChevronDown, ChevronLeft, ChevronUp, Flame, MoreHorizontal } from "lucide-react";
+import { ChevronDown, ChevronLeft, ChevronUp, MoreHorizontal } from "lucide-react";
 import {
   startTransition,
   useEffect,
@@ -34,7 +34,7 @@ import type { AppState, ConversationEntry, WorkoutSession } from "@/lib/types";
 import { formatDate, formatDateWithWeekday, formatRelativeDate } from "@/lib/utils";
 import { resolveBlockingWorkoutStart, useAppState } from "@/providers/app-state-provider";
 
-import { workoutStatusBadgeClass, workoutStatusLabel, type WorkspaceView } from "@/components/workout/shared";
+import { ProgressRing, workoutStatusBadgeClass, workoutStatusLabel, type WorkspaceView } from "@/components/workout/shared";
 
 type WorkoutSelectionPriority = 0 | 2 | 3;
 
@@ -2743,38 +2743,6 @@ function HistoryMetric({ label, value }: { label: string; value: string }) {
     <div className="rounded-xl border border-[var(--border)] bg-[var(--surface)] px-3 py-2">
       <p className="text-[11px] font-semibold tracking-[0.04em] text-[var(--text-subtle)]">{label}</p>
       <p className="mt-1 text-sm font-medium text-[var(--text)]">{value}</p>
-    </div>
-  );
-}
-
-function ProgressRing({
-  percent,
-  label,
-  showLabel = true,
-}: {
-  percent: number;
-  label: string;
-  showLabel?: boolean;
-}) {
-  return (
-    <div className="flex flex-col items-center text-center">
-      <div
-        aria-label={`${label} ${percent}%`}
-        aria-valuemax={100}
-        aria-valuemin={0}
-        aria-valuenow={percent}
-        className="grid size-36 place-items-center rounded-full"
-        role="progressbar"
-        style={{
-          background: `conic-gradient(var(--accent) ${percent}%, var(--surface-4) ${percent}% 100%)`,
-        }}
-      >
-        <div className="flex size-28 flex-col items-center justify-center gap-1 rounded-full border border-[var(--border)] bg-[var(--surface)]">
-          <Flame className="size-8 text-[var(--accent)]" />
-          <p className="font-[family-name:var(--font-display)] text-3xl font-semibold leading-none text-[var(--text)]">{percent}%</p>
-        </div>
-      </div>
-      {showLabel ? <p className="mt-3 text-xs font-semibold tracking-[0.04em] text-[var(--text-subtle)]">{label}</p> : null}
     </div>
   );
 }
