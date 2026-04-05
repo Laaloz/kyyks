@@ -635,6 +635,15 @@ function normalizeState(raw: AppState): AppState {
   }));
   const mergedExerciseById = new Map(defaultGlobalExercises.map((exercise) => [exercise.id, exercise]));
   normalizedExercises.forEach((exercise) => {
+    const defaultExercise = mergedExerciseById.get(exercise.id);
+    if (defaultExercise && exercise.scope === "global") {
+      mergedExerciseById.set(exercise.id, {
+        ...exercise,
+        ...defaultExercise,
+      });
+      return;
+    }
+
     mergedExerciseById.set(exercise.id, exercise);
   });
 
@@ -971,7 +980,7 @@ function resolveProgramWorkouts(
         name: customName || exercise.exerciseName || "Custom-liike",
         category: "Custom",
         equipment: "Valmentajan määrittämä",
-        cue: "Muokkaa liikkeen ohje valmennukseen sopivaksi.",
+        cue: exercise.instruction?.trim() || "Muokkaa liikkeen ohje valmennukseen sopivaksi.",
         scope: "coach_custom",
         coachId,
       };

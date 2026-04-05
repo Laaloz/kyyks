@@ -38,7 +38,7 @@ function mobilePrimaryNavItemsForRole(role: Role): PrimaryWorkspaceView[] {
     return ["overview", "athletes", "users", "conversation"];
   }
 
-  return ["overview", PROGRAMS_WORKSPACE_VIEW, "athlete-log", "conversation"];
+  return ["overview", PROGRAMS_WORKSPACE_VIEW, "athletes", "athlete-log"];
 }
 
 function navItemsForRole(role: Role): PrimaryWorkspaceView[] {
@@ -114,25 +114,16 @@ export function DashboardShell() {
 
   const navItems = navItemsForRole(currentUser.role);
   const navLabelByView: Record<WorkspaceView, string> = {
-    overview: "Yleiskuva",
-    athletes: "Treenaajat",
-    users: "Käyttäjät",
-    [PROGRAMS_WORKSPACE_VIEW]: "Ohjelmat",
-    invites: "Kutsut",
-    "athlete-log": "Treenit",
-    conversation: "Keskustelu",
-    settings: "Tili",
-  };
-  const mobileNavLabelByView: Record<WorkspaceView, string> = {
     overview: "Koti",
     athletes: "Tiimi",
     users: "Hallinta",
-    [PROGRAMS_WORKSPACE_VIEW]: "Ohjelmat",
+    [PROGRAMS_WORKSPACE_VIEW]: "Ohjelma",
     invites: "Kutsut",
-    "athlete-log": "Treenit",
+    "athlete-log": "Treeni",
     conversation: "Chat",
     settings: "Tili",
   };
+  const mobileNavLabelByView = navLabelByView;
   const navIconByView: Record<PrimaryWorkspaceView, LucideIcon> = {
     overview: Home,
     athletes: Dumbbell,
@@ -364,7 +355,7 @@ export function DashboardShell() {
   };
 
   return (
-    <div className="mx-auto flex min-h-screen max-w-7xl flex-col gap-6 px-4 py-4 pb-28 sm:px-6 lg:px-8 lg:pb-4">
+    <div className="mx-auto flex min-h-screen max-w-7xl flex-col gap-4 px-4 py-4 pb-28 lg:gap-6 sm:px-6 lg:px-8 lg:pb-4">
       {shouldShowMeasurementReminder && isMeasurementReminderOpen ? (
         <MeasurementReminderDialog
           weightDue={weightReminderDue}
@@ -379,19 +370,19 @@ export function DashboardShell() {
       >
         <div className="flex flex-col gap-4">
           <div className="grid gap-3 lg:grid-cols-[minmax(0,1.65fr)_minmax(16rem,0.95fr)]">
-            <section className="min-w-0 rounded-[1.5rem] border border-[var(--border-strong)] bg-[linear-gradient(180deg,var(--surface)_0%,var(--surface-2)_100%)] px-3 py-3 shadow-[0_1px_0_0_var(--shadow-soft),0_14px_30px_-22px_var(--shadow)] lg:rounded-[1.75rem] lg:border lg:border-[var(--border)] lg:bg-[linear-gradient(135deg,var(--surface)_0%,var(--surface-3)_100%)] lg:shadow-[inset_0_1px_0_rgba(255,255,255,0.55)] sm:px-5 sm:py-4">
-              <div className="flex items-center gap-3 sm:gap-3.5">
-                <div className="flex size-9 shrink-0 items-center justify-center rounded-xl border border-[var(--accent-strong)] bg-[var(--accent)] shadow-[0_1px_0_0_var(--accent-strong),0_10px_22px_-18px_var(--accent)] sm:size-11 sm:rounded-2xl">
-                  <Dumbbell className="size-[1.125rem] text-white" aria-hidden="true" />
+            <section className="min-w-0 rounded-[1.35rem] border border-[var(--border-strong)] bg-[linear-gradient(180deg,var(--surface)_0%,var(--surface-2)_100%)] px-3 py-2.5 shadow-[0_1px_0_0_var(--shadow-soft),0_12px_24px_-22px_var(--shadow)] lg:rounded-[1.55rem] lg:border lg:border-[var(--border)] lg:bg-[linear-gradient(135deg,var(--surface)_0%,var(--surface-3)_100%)] lg:shadow-[inset_0_1px_0_rgba(255,255,255,0.55)] sm:px-4 sm:py-3">
+              <div className="flex items-center gap-2.5 sm:gap-3">
+                <div className="flex size-8 shrink-0 items-center justify-center rounded-xl border border-[var(--accent-strong)] bg-[var(--accent)] shadow-[0_1px_0_0_var(--accent-strong),0_8px_18px_-16px_var(--accent)] sm:size-10 sm:rounded-[1.15rem]">
+                  <Dumbbell className="size-[1rem] text-white" aria-hidden="true" />
                 </div>
                 <div className="min-w-0 w-full">
                   <div className="flex items-center justify-between gap-2">
                     <div className="min-w-0">
-                      <h1 className="truncate font-[family-name:var(--font-display)] text-[1.05rem] font-semibold leading-tight text-[var(--text)] sm:pr-2 sm:text-[1.85rem] sm:leading-[1.02]">
+                      <h1 className="truncate font-[family-name:var(--font-display)] text-[1rem] font-semibold leading-tight text-[var(--text)] sm:pr-2 sm:text-[1.65rem] sm:leading-[1.02]">
                         {currentUser.fullName}
                       </h1>
-                      <div className="mt-1 flex flex-wrap items-center gap-2">
-                        <Badge className="border-[var(--accent)] bg-[var(--surface)] px-2.5 py-0.5 text-[11px] text-[var(--accent)]">
+                      <div className="mt-0.5 flex flex-wrap items-center gap-2">
+                        <Badge className="border-[var(--accent)] bg-[var(--surface)] px-2.5 py-0.5 text-[10px] text-[var(--accent)]">
                           <span className="lg:hidden">{activeMobileViewLabel}</span>
                           <span className="hidden lg:inline">{activeViewLabel}</span>
                         </Badge>

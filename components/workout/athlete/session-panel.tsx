@@ -161,7 +161,7 @@ function CoachInstructionDialog({
         </h3>
         <p
           id="coach-instruction-description"
-          className="mt-3 max-h-[60vh] overflow-y-auto text-sm leading-6 text-[var(--text-muted)]"
+          className="mt-3 max-h-[60vh] overflow-y-auto whitespace-pre-line text-sm leading-6 text-[var(--text-muted)]"
         >
           {instruction}
         </p>

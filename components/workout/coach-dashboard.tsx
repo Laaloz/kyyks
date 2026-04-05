@@ -2,16 +2,17 @@
 
 import { zodResolver } from "@hookform/resolvers/zod";
 import {
-  Activity,
   Check,
   ChevronDown,
   ChevronUp,
   CircleCheckBig,
   ClipboardList,
   ClipboardPenLine,
+  type LucideIcon,
   MoreHorizontal,
   Plus,
   Search,
+  X,
 } from "lucide-react";
 import { useEffect, useId, useMemo, useRef, useState } from "react";
 import { type Resolver, useFieldArray, useForm } from "react-hook-form";
@@ -96,7 +97,7 @@ function getComposerWorkoutLabel(
     return derivedName;
   }
 
-  return typeof index === "number" ? `Treeni ${index + 1}` : "Nimeämätön treeni";
+  return typeof index === "number" ? `Päivä ${index + 1}` : "Nimeämätön päivä";
 }
 
 function getWorkoutExercisePreview(
@@ -121,11 +122,11 @@ function getWorkoutExercisePreview(
     .filter(Boolean);
 
   if (!names.length) {
-    return { preview: "Ei liikkeitä vielä", extraCount: 0 };
+    return { names: [], extraCount: 0 };
   }
 
   return {
-    preview: names.slice(0, limit).join(", "),
+    names: names.slice(0, limit),
     extraCount: Math.max(0, names.length - limit),
   };
 }
@@ -183,14 +184,14 @@ function mapComposerIssueLabel(path: string, message: string) {
 
   const workoutIndex = Number(workoutMatch[1]);
   const restPath = workoutMatch[2] ?? "";
-  const workoutPrefix = `Treeni ${workoutIndex + 1}`;
+  const workoutPrefix = `Päivä ${workoutIndex + 1}`;
 
   if (restPath === "nameOverride") {
-    return `${workoutPrefix}: anna treenille nimi.`;
+    return `${workoutPrefix}: anna päivälle nimi.`;
   }
 
   if (restPath === "defaultRestSeconds") {
-    return `${workoutPrefix}: lisää treenille oletuslepo.`;
+    return `${workoutPrefix}: lisää päivälle oletuslepo.`;
   }
 
   if (restPath === "exercises") {
@@ -648,7 +649,7 @@ export function CoachDashboard({
 
   const athletes = currentUser
     ? isAdminRole(currentUser.role)
-      ? getCoachConversationAthletes(state, currentUser.id)
+      ? getCoachAthletes(currentUser.id)
       : getCoachAthletes(currentUser.id)
     : [];
   const programTargets = useMemo(() => {
@@ -727,7 +728,7 @@ export function CoachDashboard({
       title: "",
       description: "",
       athleteId: programTargets[0]?.id ?? "",
-      workouts: [emptyProgramWorkout("custom")],
+      workouts: [],
     },
   });
 
@@ -786,7 +787,7 @@ export function CoachDashboard({
       title: "",
       description: "",
       athleteId,
-      workouts: [emptyProgramWorkout("custom")],
+      workouts: [],
     });
     setComposerView("details");
     setActiveWorkoutIndex(0);
@@ -824,9 +825,9 @@ export function CoachDashboard({
   }, [activeExerciseIndex, activeWorkout]);
 
   const composerSteps: Array<{ view: ComposerView; step: string; title: string; description: string }> = [
-    { view: "details", step: "1/4", title: "Perustiedot", description: "Kenelle ohjelma tehdään ja mikä sen nimi on." },
-    { view: "workouts", step: "2/4", title: "Treenit", description: "Luo ohjelman treenit yksi kerrallaan ja nimeä ne." },
-    { view: "workout_editor", step: "3/4", title: "Treenin sisältö", description: "Muokkaa yhden valitun treenin liikkeet ja treenikohtaiset asetukset." },
+    { view: "details", step: "1/4", title: "Perustiedot", description: "Määritä viikon treeniohjelman nimi ja kenelle se tehdään." },
+    { view: "workouts", step: "2/4", title: "Päivät", description: "Luo ohjelman päivät ja täytä niiden perustiedot." },
+    { view: "workout_editor", step: "3/4", title: "Liikkeet", description: "Muokkaa yhden valitun päivän liikkeet ja liikekohtaiset asetukset." },
     { view: "review", step: "4/4", title: "Tarkistus", description: "Tarkista kokonaisuus ennen tallennusta." },
   ];
   const activeComposerStep = composerSteps.find((step) => step.view === composerView) ?? composerSteps[0];
@@ -837,6 +838,13 @@ export function CoachDashboard({
   const scrollComposerIntoView = (behavior: ScrollBehavior = "smooth") => {
     window.requestAnimationFrame(() => {
       composerCardRef.current?.scrollIntoView({ behavior, block: "start" });
+    });
+  };
+
+  const scrollWorkoutCardIntoView = (workoutIndex: number) => {
+    window.requestAnimationFrame(() => {
+      const element = document.getElementById(`program-workout-${workoutIndex}`);
+      element?.scrollIntoView({ behavior: "smooth", block: "start" });
     });
   };
 
@@ -893,7 +901,7 @@ export function CoachDashboard({
 
       {view === "overview" ? <OwnMeasurementsCard sectionId="overview-measurements" /> : null}
 
-      {view === "overview" || view === "athletes" ? (
+      {view === "athletes" ? (
         <CoachAthleteInsights
           athletes={athletes}
           coachId={undefined}
@@ -927,10 +935,6 @@ export function CoachDashboard({
             <Card className="border-[var(--border-strong)]" id="coach-program-composer">
               <p className="text-xs font-semibold text-[var(--text-subtle)]">Ohjelman rakentaja</p>
               <CardTitle className="text-2xl">{editorTitle}</CardTitle>
-              <CardDescription className="mt-2">{editorDescription}</CardDescription>
-              <p className="mt-3 text-xs text-[var(--text-subtle)]">
-                Ohjelmat tallennetaan suoraan ohjelmina. Erillisiä treenipohjia ei käytetä tässä näkymässä.
-              </p>
             {isEditingProgram ? (
               <div className="mt-4 flex flex-wrap items-center gap-3 rounded-xl border border-[var(--border)] bg-[var(--surface-2)] p-3">
                 <Badge>Muokkaustila</Badge>
@@ -950,7 +954,7 @@ export function CoachDashboard({
             ) : null}
 
             <form
-              className="mt-6 space-y-5"
+              className="mt-5 space-y-4"
               onSubmit={form.handleSubmit(async (values) => {
                 const payloadWorkouts = mapComposerWorkouts(values.workouts);
                 const result = isEditingProgram && editingProgramId
@@ -999,14 +1003,14 @@ export function CoachDashboard({
                 openIssueLocation(firstIssue);
               })}
             >
-              <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface-2)] p-4">
+              <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface-2)] p-3">
                 <div className="flex flex-wrap items-center justify-between gap-3">
                   <div>
                     <div className="flex items-center gap-2">
                       <Badge>{activeComposerStep.step}</Badge>
                       <p className="text-sm font-semibold text-[var(--text)]">{activeComposerStep.title}</p>
                     </div>
-                    <p className="mt-2 text-sm text-[var(--text-muted)]">{activeComposerStep.description}</p>
+                    <p className="mt-1 text-sm text-[var(--text-muted)]">{activeComposerStep.description}</p>
                   </div>
                   {composerView !== "details" ? (
                     <Button
@@ -1029,15 +1033,15 @@ export function CoachDashboard({
                     </Button>
                   ) : null}
                 </div>
-                <p className="mt-3 text-xs font-medium text-[var(--text-subtle)]">
+                <p className="mt-2 text-xs font-medium text-[var(--text-subtle)]">
                   `*` merkityt kentät ovat pakollisia.
                 </p>
               </div>
 
-              {composerView === "details" ? (
-                <div className="space-y-4 rounded-xl border-2 border-[var(--border)] bg-[var(--surface-2)] p-4">
-                    <p className="text-[0.875rem] font-medium text-[var(--text-subtle)]">
-                      1. Ohjelman tiedot
+                  {composerView === "details" ? (
+                <div className="space-y-3 rounded-xl border border-[var(--border)] bg-[var(--surface-2)] p-4">
+                    <p className="text-sm font-medium text-[var(--text-subtle)]">
+                      1. Viikon treeniohjelman tiedot
                     </p>
                     <div className="grid gap-4 md:grid-cols-2">
                       <div>
@@ -1088,24 +1092,299 @@ export function CoachDashboard({
                         className="min-h-24"
                       />
                       <FieldError id={`${formId}-description-error`} message={form.formState.errors.description?.message?.toString()} />
-                      <p className="mt-1 text-xs text-[var(--text-subtle)]">
-                        Tähän voit kirjoittaa ohjelman tavoitteen, arjen muistutukset tai muut tarkentavat huomiot treenaajalle.
-                      </p>
+                      <p className="mt-1 text-xs text-[var(--text-subtle)]">Kirjoita tähän tavoite tai tärkeät lisäohjeet.</p>
                     </div>
                   </div>
               ) : null}
 
               {composerView === "workouts" ? (
-                <div className="space-y-4 rounded-xl border-2 border-[var(--border)] bg-[var(--surface-2)] p-4">
-                  <p className="text-[0.875rem] font-medium text-[var(--text-subtle)]">
-                    2. Treenit
+                <div className="space-y-3 rounded-xl border border-[var(--border)] bg-[var(--surface-2)] p-4">
+                  <p className="text-sm font-medium text-[var(--text-subtle)]">
+                    2. Päivät
                   </p>
-                  <div className="flex flex-wrap items-start justify-between gap-3">
-                    <div>
-                      <p className="mt-1 text-sm text-[var(--text-muted)]">
-                        Lisää treenit yksi kerrallaan. Tässä vaiheessa päätetään treenityyppi ja nimi. Kun treeni on luotu, paina `Muokkaa treeniä` lisätäksesi liikkeet ja rakentaaksesi sisällön.
-                      </p>
-                    </div>
+                  <p className="text-sm text-[var(--text-muted)]">
+                    Lisää ohjelmaan päivät ja täytä niiden perustiedot. Liikkeet lisäät seuraavassa vaiheessa.
+                  </p>
+                  <div className="grid gap-3">
+                    {workoutFields.fields.map((field, index) => {
+                      const workout = watchedWorkouts[index];
+                      const workoutName = getComposerWorkoutLabel(workout, index);
+                      const workoutSplit = workout?.splitType ?? "custom";
+                      const workoutIssues = composerIssues.filter((issue) => issue.workoutIndex === index);
+                      const workoutIssueCount = workoutIssues.length;
+                      const isWorkoutReady = workoutIssueCount === 0;
+                      const workoutExerciseIssueCount = composerIssues.filter(
+                        (issue) => issue.workoutIndex === index && typeof issue.exerciseIndex === "number",
+                      ).length;
+                      const workoutBasicIssueCount = workoutIssues.filter(
+                        (issue) =>
+                          typeof issue.exerciseIndex !== "number" &&
+                          issue.fieldPath !== `workouts.${index}.exercises`,
+                      ).length;
+                      const hasNoExercises = !workout?.exercises.length;
+                      const exercisePreview = getWorkoutExercisePreview(workout, exerciseNameById);
+                      const isExpanded = activeWorkoutIndex === index;
+
+                      return (
+                        <div
+                          key={field.id}
+                          id={`program-workout-${index}`}
+                          className={cn(
+                            "overflow-hidden rounded-2xl border bg-[var(--surface)] shadow-[0_1px_0_0_var(--shadow-soft),0_8px_24px_-20px_var(--shadow)] transition",
+                            isExpanded
+                              ? "border-[var(--accent-strong)]"
+                              : isWorkoutReady
+                                ? "border-[color:color-mix(in_oklab,var(--success)_40%,var(--border))] bg-[color:color-mix(in_oklab,var(--success)_4%,var(--surface))]"
+                                : "border-[var(--border)]",
+                          )}
+                        >
+                          <div
+                            className={cn(
+                              "relative flex items-start gap-3 px-3 pt-3",
+                              isExpanded ? "bg-[color:color-mix(in_oklab,var(--accent)_10%,var(--surface))]" : "bg-[var(--surface)]",
+                            )}
+                          >
+                            <button
+                              type="button"
+                              className="absolute inset-2 rounded-lg text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)] focus-visible:ring-inset"
+                              aria-expanded={isExpanded}
+                              aria-controls={`program-workout-panel-${index}`}
+                              onClick={() => {
+                                setActiveWorkoutIndex((current) => {
+                                  const nextIndex = current === index ? -1 : index;
+                                  if (nextIndex === index) {
+                                    scrollWorkoutCardIntoView(index);
+                                  }
+                                  return nextIndex;
+                                });
+                              }}
+                            />
+                            <div className="pointer-events-none relative z-10 min-w-0 flex-1">
+                              <p className="text-sm font-semibold text-[var(--text)]">Päivä {index + 1}</p>
+                              <p className="mt-1 text-sm text-[var(--text-muted)]">{workoutName}</p>
+                            </div>
+                            <div className="relative z-10 flex shrink-0 items-start gap-2">
+                                <button
+                                  type="button"
+                                  className="grid size-8.5 shrink-0 place-items-center rounded-full border border-[color:color-mix(in_oklab,var(--danger)_35%,var(--border))] bg-[color:color-mix(in_oklab,var(--danger)_10%,var(--surface))] text-[var(--danger)] transition hover:border-[color:color-mix(in_oklab,var(--danger)_45%,var(--border))] hover:bg-[color:color-mix(in_oklab,var(--danger)_14%,var(--surface))] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--danger)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--surface)]"
+                                  aria-label={`Poista päivä ${index + 1}`}
+                                  title={`Poista päivä ${index + 1}`}
+                                  onClick={() => {
+                                    if (!window.confirm(`Poistetaanko päivä ${index + 1}?`)) {
+                                      return;
+                                    }
+                                    workoutFields.remove(index);
+                                    if (activeWorkoutIndex >= index) {
+                                      setActiveWorkoutIndex((current) => Math.max(0, current - 1));
+                                    }
+                                    setActiveExerciseIndex(0);
+                                  }}
+                                >
+                                  <X className="size-4" aria-hidden="true" />
+                                </button>
+                              <button
+                                type="button"
+                                className="grid size-8.5 shrink-0 place-items-center rounded-full border border-[var(--border)] bg-[var(--surface)] text-[var(--text-subtle)] transition hover:border-[var(--border-strong)] hover:bg-[var(--surface-3)] hover:text-[var(--text)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--surface)]"
+                                aria-expanded={isExpanded}
+                                aria-controls={`program-workout-panel-${index}`}
+                                onClick={() => {
+                                  setActiveWorkoutIndex((current) => {
+                                    const nextIndex = current === index ? -1 : index;
+                                    if (nextIndex === index) {
+                                      scrollWorkoutCardIntoView(index);
+                                    }
+                                    return nextIndex;
+                                  });
+                                }}
+                              >
+                                {isExpanded ? <ChevronUp className="size-4" aria-hidden="true" /> : <ChevronDown className="size-4" aria-hidden="true" />}
+                                <span className="sr-only">{isExpanded ? `Sulje päivä ${index + 1}` : `Avaa päivä ${index + 1}`}</span>
+                              </button>
+                            </div>
+                          </div>
+                          <div
+                            className={cn(
+                              "px-3 pb-3 pt-2",
+                              isExpanded ? "border-b border-[var(--border)] bg-[color:color-mix(in_oklab,var(--accent)_10%,var(--surface))]" : "bg-[var(--surface)]",
+                            )}
+                          >
+                            <div className="flex w-full flex-wrap gap-1.5">
+                              {isWorkoutReady ? (
+                                <Badge className="border-[color:color-mix(in_oklab,var(--success)_40%,var(--border))] bg-[color:color-mix(in_oklab,var(--success)_12%,var(--surface))] text-[var(--success)]">
+                                  Kunnossa
+                                </Badge>
+                              ) : null}
+                              {workoutBasicIssueCount ? (
+                                <Badge className="border-[color:color-mix(in_oklab,var(--danger)_35%,var(--border))] bg-[color:color-mix(in_oklab,var(--danger)_10%,var(--surface))] text-[var(--danger)]">
+                                  Puuttuu {workoutBasicIssueCount} kohtaa
+                                </Badge>
+                              ) : null}
+                              {hasNoExercises ? (
+                                <Badge className="border-[color:color-mix(in_oklab,var(--danger)_35%,var(--border))] bg-[color:color-mix(in_oklab,var(--danger)_10%,var(--surface))] text-[var(--danger)]">
+                                  Ei liikkeitä vielä
+                                </Badge>
+                              ) : null}
+                              {exercisePreview.names.length ? (
+                                <>
+                                  {exercisePreview.names.map((exerciseName) => (
+                                    <span
+                                      key={`${field.id}-${exerciseName}`}
+                                      className="inline-flex items-center rounded-full border border-[var(--border)] bg-[var(--surface-2)] px-2.5 py-1 text-xs font-medium text-[var(--text)]"
+                                    >
+                                      {exerciseName}
+                                    </span>
+                                  ))}
+                                  {exercisePreview.extraCount > 0 ? (
+                                    <span className="inline-flex items-center rounded-full border border-[var(--border)] bg-[var(--surface-2)] px-2.5 py-1 text-xs font-medium text-[var(--text-subtle)]">
+                                      +{exercisePreview.extraCount}
+                                    </span>
+                                  ) : null}
+                                </>
+                              ) : !hasNoExercises ? (
+                                <p className="text-xs text-[var(--text-muted)]">Ei liikkeitä vielä</p>
+                              ) : null}
+                            </div>
+                          </div>
+
+                          {isExpanded ? (
+                            <div id={`program-workout-panel-${index}`} className="space-y-3 px-3 pb-3 pt-3">
+                              <div className="grid gap-3 md:grid-cols-3">
+                                <div>
+                                  <RequiredLabel htmlFor={`workout-${index}-split`}>Treenialue</RequiredLabel>
+                                  <Select
+                                    id={`workout-${index}-split`}
+                                    aria-invalid={Boolean(form.formState.errors.workouts?.[index]?.splitType)}
+                                    aria-describedby={form.formState.errors.workouts?.[index]?.splitType ? `workout-${index}-split-error` : undefined}
+                                    value={workoutSplit}
+                                    onChange={(event) => {
+                                      const nextSplit = event.target.value as ProgramComposerFormValues["workouts"][number]["splitType"];
+                                      form.setValue(`workouts.${index}.splitType`, nextSplit, {
+                                        shouldDirty: true,
+                                        shouldValidate: true,
+                                      });
+                                      if (nextSplit !== "custom") {
+                                        form.setValue(`workouts.${index}.nameOverride`, "", {
+                                          shouldDirty: true,
+                                          shouldValidate: true,
+                                        });
+                                      }
+                                    }}
+                                  >
+                                    <option value="upper">Yläkroppa</option>
+                                    <option value="lower">Alakroppa</option>
+                                    <option value="full_body">Koko kroppa</option>
+                                    <option value="custom">Muu</option>
+                                  </Select>
+                                  <FieldError
+                                    id={`workout-${index}-split-error`}
+                                    message={form.formState.errors.workouts?.[index]?.splitType?.message?.toString()}
+                                  />
+                                </div>
+                                {workoutSplit === "custom" ? (
+                                  <div>
+                                    <RequiredLabel htmlFor={`workout-${index}-name`}>Nimi</RequiredLabel>
+                                    <Input
+                                      id={`workout-${index}-name`}
+                                      aria-invalid={Boolean(form.formState.errors.workouts?.[index]?.nameOverride)}
+                                      aria-describedby={form.formState.errors.workouts?.[index]?.nameOverride ? `workout-${index}-name-error` : undefined}
+                                      value={workout?.nameOverride ?? ""}
+                                      onChange={(event) => {
+                                        form.setValue(`workouts.${index}.nameOverride`, event.target.value, {
+                                          shouldDirty: true,
+                                          shouldValidate: true,
+                                        });
+                                      }}
+                                      placeholder="Esim. Työntö"
+                                    />
+                                    <FieldError
+                                      id={`workout-${index}-name-error`}
+                                      message={form.formState.errors.workouts?.[index]?.nameOverride?.message?.toString()}
+                                    />
+                                  </div>
+                                ) : null}
+                                <div>
+                                  <RequiredLabel htmlFor={`workout-${index}-default-rest`}>Oletuslepo (s)</RequiredLabel>
+                                  <Input
+                                    id={`workout-${index}-default-rest`}
+                                    type="number"
+                                    min={15}
+                                    max={600}
+                                    aria-invalid={Boolean(form.formState.errors.workouts?.[index]?.defaultRestSeconds)}
+                                    aria-describedby={form.formState.errors.workouts?.[index]?.defaultRestSeconds ? `workout-${index}-default-rest-error` : undefined}
+                                    {...form.register(`workouts.${index}.defaultRestSeconds` as const)}
+                                  />
+                                  <FieldError
+                                    id={`workout-${index}-default-rest-error`}
+                                    message={form.formState.errors.workouts?.[index]?.defaultRestSeconds?.message?.toString()}
+                                  />
+                                </div>
+                              </div>
+
+                              <div>
+                                <RequiredLabel className="mb-0" htmlFor={`workout-${index}-guidance`} optional>Treenin yleisohje</RequiredLabel>
+                                <Textarea
+                                  id={`workout-${index}-guidance`}
+                                  aria-invalid={Boolean(form.formState.errors.workouts?.[index]?.guidance)}
+                                  aria-describedby={form.formState.errors.workouts?.[index]?.guidance ? `workout-${index}-guidance-error` : undefined}
+                                  {...form.register(`workouts.${index}.guidance` as const)}
+                                  placeholder="Esim. Tee pääliikkeet rauhassa ensin ja pidä 1-2 toistoa varaa."
+                                  rows={2}
+                                  className="mt-2"
+                                />
+                                <FieldError
+                                  id={`workout-${index}-guidance-error`}
+                                  message={form.formState.errors.workouts?.[index]?.guidance?.message?.toString()}
+                                />
+                              </div>
+
+                              <div className="space-y-2 sm:ml-auto sm:w-auto">
+                                {workoutBasicIssueCount ? (
+                                  <div className="flex sm:justify-end">
+                                    <p className="text-xs font-semibold text-[var(--danger)]">
+                                      Täydennä päivän tiedot ennen liikkeisiin siirtymistä.
+                                    </p>
+                                  </div>
+                                ) : null}
+                                {workoutExerciseIssueCount ? (
+                                  <div className="flex sm:justify-end">
+                                    <span className="inline-flex items-center rounded-full border border-[color:color-mix(in_oklab,var(--danger)_35%,var(--border))] bg-[color:color-mix(in_oklab,var(--danger)_10%,var(--surface))] px-3 py-1 text-xs font-semibold tracking-[0.03em] text-[var(--danger)]">
+                                      Liikkeissä {workoutExerciseIssueCount} puutetta
+                                    </span>
+                                  </div>
+                                ) : null}
+                                <div className="flex sm:justify-end">
+                                <Button
+                                  type="button"
+                                  variant="secondary"
+                                  className={cn(
+                                    "h-10 w-full px-4 py-0 sm:w-auto",
+                                    workoutExerciseIssueCount
+                                      ? "border-[color:color-mix(in_oklab,var(--danger)_35%,var(--border))] text-[var(--danger)] hover:border-[color:color-mix(in_oklab,var(--danger)_45%,var(--border))] hover:bg-[color:color-mix(in_oklab,var(--danger)_8%,var(--surface))]"
+                                      : "",
+                                  )}
+                                  onClick={async () => {
+                                    setActiveWorkoutIndex(index);
+                                    setActiveExerciseIndex(0);
+
+                                    if (workoutBasicIssueCount) {
+                                      await form.trigger(`workouts.${index}`);
+                                      return;
+                                    }
+
+                                    setComposerView("workout_editor");
+                                  }}
+                                >
+                                  {hasNoExercises ? "Liikkeet" : `Liikkeet (${workout.exercises.length})`}
+                                </Button>
+                                </div>
+                              </div>
+                            </div>
+                          ) : null}
+                        </div>
+                      );
+                    })}
+                  </div>
+                  <div className="flex justify-end">
                     <Button
                       type="button"
                       variant="secondary"
@@ -1120,166 +1399,23 @@ export function CoachDashboard({
                       Lisää treeni
                     </Button>
                   </div>
-                  <div className="grid gap-3">
-                    {workoutFields.fields.map((field, index) => {
-                      const workout = watchedWorkouts[index];
-                      const workoutExerciseCount = workout?.exercises.length ?? 0;
-                      const workoutName = getComposerWorkoutLabel(workout, index);
-                      const workoutSplit = workout?.splitType ?? "custom";
-                      const workoutIssueCount = composerIssues.filter((issue) => issue.workoutIndex === index).length;
-                      const exercisePreview = getWorkoutExercisePreview(workout, exerciseNameById);
-
-                      return (
-                        <div
-                          key={field.id}
-                          id={`program-workout-${index}`}
-                          className="rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-4"
-                        >
-                          <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-                            <div className="min-w-0">
-                              <div className="flex flex-wrap items-center gap-2">
-                                <p className="text-base font-semibold text-[var(--text)]">Treeni {index + 1}</p>
-                                <Badge>{workoutName}</Badge>
-                                <Badge className={cn(
-                                  workoutIssueCount
-                                    ? "border-[color:color-mix(in_oklab,var(--danger)_35%,var(--border))] bg-[color:color-mix(in_oklab,var(--danger)_10%,var(--surface))] text-[var(--danger)]"
-                                    : "border-[color:color-mix(in_oklab,var(--success)_35%,var(--border))] bg-[color:color-mix(in_oklab,var(--success)_10%,var(--surface))] text-[var(--success)]",
-                                )}>
-                                  {workoutIssueCount ? `Puuttuu ${workoutIssueCount} kohtaa` : "Valmis"}
-                                </Badge>
-                              </div>
-                              <p className="mt-2 text-sm text-[var(--text-muted)]">
-                                {workoutExerciseCount} liikettä
-                              </p>
-                              <p className="mt-2 text-sm text-[var(--text)]">
-                                {exercisePreview.preview}
-                                {exercisePreview.extraCount > 0 ? ` +${exercisePreview.extraCount}` : ""}
-                              </p>
-                            </div>
-                            <div className="flex flex-wrap gap-2">
-                              <Button
-                                type="button"
-                                variant="secondary"
-                                className="w-full sm:w-auto"
-                                onClick={() => {
-                                  setActiveWorkoutIndex(index);
-                                  setActiveExerciseIndex(0);
-                                  setComposerView("workout_editor");
-                                }}
-                              >
-                                Muokkaa treeniä
-                              </Button>
-                              {!isEditingProgram && workoutFields.fields.length > 1 ? (
-                                <Button
-                                  type="button"
-                                  variant="ghost"
-                                  className="w-full sm:w-auto"
-                                  onClick={() => {
-                                    workoutFields.remove(index);
-                                    if (activeWorkoutIndex >= index) {
-                                      setActiveWorkoutIndex((current) => Math.max(0, current - 1));
-                                    }
-                                    setActiveExerciseIndex(0);
-                                  }}
-                                >
-                                  Poista
-                                </Button>
-                              ) : null}
-                            </div>
-                          </div>
-
-                          <div className={cn("mt-4 grid gap-4", workoutSplit === "custom" ? "md:grid-cols-2" : "md:grid-cols-2")}>
-                            <div>
-                              <RequiredLabel htmlFor={`workout-${index}-split`}>Treenialue</RequiredLabel>
-                              <Select
-                                id={`workout-${index}-split`}
-                                aria-invalid={Boolean(form.formState.errors.workouts?.[index]?.splitType)}
-                                aria-describedby={form.formState.errors.workouts?.[index]?.splitType ? `workout-${index}-split-error` : undefined}
-                                value={workoutSplit}
-                                onChange={(event) => {
-                                  const nextSplit = event.target.value as ProgramComposerFormValues["workouts"][number]["splitType"];
-                                  form.setValue(`workouts.${index}.splitType`, nextSplit, {
-                                    shouldDirty: true,
-                                    shouldValidate: true,
-                                  });
-                                  if (nextSplit !== "custom") {
-                                    form.setValue(`workouts.${index}.nameOverride`, "", {
-                                      shouldDirty: true,
-                                      shouldValidate: true,
-                                    });
-                                  }
-                                }}
-                              >
-                                <option value="upper">Yläkroppa</option>
-                                <option value="lower">Alakroppa</option>
-                                <option value="full_body">Koko kroppa</option>
-                                <option value="custom">Muu</option>
-                              </Select>
-                              <FieldError
-                                id={`workout-${index}-split-error`}
-                                message={form.formState.errors.workouts?.[index]?.splitType?.message?.toString()}
-                              />
-                            </div>
-                            {workoutSplit === "custom" ? (
-                              <div>
-                                <RequiredLabel htmlFor={`workout-${index}-name`}>Treenin nimi</RequiredLabel>
-                                <Input
-                                  id={`workout-${index}-name`}
-                                  aria-invalid={Boolean(form.formState.errors.workouts?.[index]?.nameOverride)}
-                                  aria-describedby={form.formState.errors.workouts?.[index]?.nameOverride ? `workout-${index}-name-error` : undefined}
-                                  value={workout?.nameOverride ?? ""}
-                                  onChange={(event) => {
-                                    form.setValue(`workouts.${index}.nameOverride`, event.target.value, {
-                                      shouldDirty: true,
-                                      shouldValidate: true,
-                                    });
-                                  }}
-                                  placeholder="Esim. Penkki + yläselkä"
-                                />
-                                <FieldError
-                                  id={`workout-${index}-name-error`}
-                                  message={form.formState.errors.workouts?.[index]?.nameOverride?.message?.toString()}
-                                />
-                              </div>
-                            ) : (
-                              <div className="rounded-xl border border-[var(--border)] bg-[var(--surface-2)] px-3 py-2.5">
-                                <p className="text-xs font-semibold text-[var(--text-subtle)]">Treenin nimi</p>
-                                <p className="mt-1 text-sm font-medium text-[var(--text)]">{workoutName}</p>
-                                <p className="mt-1 text-xs text-[var(--text-subtle)]">
-                                  Nimi muodostuu automaattisesti valitusta treenialueesta.
-                                </p>
-                              </div>
-                            )}
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
                 </div>
               ) : null}
 
               {composerView === "workout_editor" ? (
-                <div className="space-y-4 rounded-xl border-2 border-[var(--border)] bg-[var(--surface-2)] p-4">
+                <div className="space-y-4 rounded-xl border border-[var(--border)] bg-[var(--surface-2)] p-4">
                   <p className="text-[0.875rem] font-medium text-[var(--text-subtle)]">
-                    3. Treenin sisältö
+                    3. Liikkeet
                   </p>
                   <div className="flex flex-wrap items-center justify-between gap-3">
                     <div>
                       <p className="mt-1 text-sm text-[var(--text-muted)]">
-                        Muokkaat nyt vain yhtä treeniä kerrallaan. Lisää treenin yleisohje, lepo ja liikkeet tähän näkymään.
+                        Muokkaat nyt yhden valitun päivän liikkeitä.
                       </p>
                       <p className="mt-2 text-xs font-semibold text-[var(--text-subtle)]">
-                        Ohjelma &gt; Treeni {activeWorkoutIndex + 1} / {getComposerWorkoutLabel(activeWorkout, activeWorkoutIndex)}
+                        Ohjelma &gt; Päivä {activeWorkoutIndex + 1} / {getComposerWorkoutLabel(activeWorkout, activeWorkoutIndex)}
                       </p>
                     </div>
-                    <Button
-                      type="button"
-                      variant="secondary"
-                      className="w-full sm:w-auto"
-                      onClick={() => setComposerView("workouts")}
-                    >
-                      Takaisin treeneihin
-                    </Button>
                   </div>
 
                   {workoutFields.fields[activeWorkoutIndex] ? (
@@ -1299,9 +1435,9 @@ export function CoachDashboard({
                         setActiveExerciseIndex(0);
                         setComposerView("workouts");
                       }}
-                      removable={workoutFields.fields.length > 1 && !isEditingProgram}
-                      allowExerciseRemoval={!isEditingProgram}
-                      showWorkoutMeta
+                      removable
+                      allowExerciseRemoval
+                      showWorkoutMeta={false}
                       activeExerciseIndex={activeExerciseIndex}
                       onActiveExerciseIndexChange={setActiveExerciseIndex}
                     />
@@ -1310,60 +1446,22 @@ export function CoachDashboard({
               ) : null}
 
               {composerView === "review" ? (
-                <div className="space-y-5 rounded-xl border-2 border-[var(--border)] bg-[var(--surface-2)] p-4">
+                <div className="space-y-5 rounded-xl border border-[var(--border)] bg-[var(--surface-2)] p-4">
                   <p className="text-[0.875rem] font-medium text-[var(--text-subtle)]">
                     4. Tarkistus
                   </p>
                   <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface-2)] p-4">
-                    <p className="text-sm font-semibold text-[var(--text)]">Ennen tallennusta</p>
+                    <p className="text-sm font-semibold text-[var(--text)]">Yhteenveto</p>
                     <p className="mt-2 text-sm text-[var(--text-muted)]">
-                      Nyt näet koko ohjelman yhdellä kertaa. Korjaa puutteet tarvittaessa ennen tallennusta.
-                    </p>
-                    <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-                      <div className="rounded-xl border border-[var(--border)] bg-[var(--surface)] p-3">
-                        <p className="text-xs font-semibold text-[var(--text-subtle)]">Pakolliset kentät</p>
-                        <p className="mt-2 text-lg font-semibold text-[var(--text)]">
-                          {composerRequiredStats.completed}/{composerRequiredStats.total}
-                        </p>
-                      </div>
-                      <div className="rounded-xl border border-[var(--border)] bg-[var(--surface)] p-3">
-                        <p className="text-xs font-semibold text-[var(--text-subtle)]">Treenejä</p>
-                        <p className="mt-2 text-lg font-semibold text-[var(--text)]">{watchedWorkouts.length}</p>
-                      </div>
-                      <div className="rounded-xl border border-[var(--border)] bg-[var(--surface)] p-3">
-                        <p className="text-xs font-semibold text-[var(--text-subtle)]">Liikkeitä</p>
-                        <p className="mt-2 text-lg font-semibold text-[var(--text)]">{totalExerciseCount}</p>
-                      </div>
-                      <div className="rounded-xl border border-[var(--border)] bg-[var(--surface)] p-3">
-                        <p className="text-xs font-semibold text-[var(--text-subtle)]">Virheitä</p>
-                        <p className={cn("mt-2 text-lg font-semibold", composerIssues.length ? "text-[var(--danger)]" : "text-[var(--success)]")}>
-                          {composerIssues.length}
-                        </p>
-                      </div>
-                    </div>
-                    <p className="mt-4 text-xs text-[var(--text-subtle)]">
-                      Yhteenveto: {watchedProgramTitle?.trim() || "Nimeämätön ohjelma"}, {activeAthleteName}, {watchedWorkouts.length} treeniä, {totalExerciseCount} liikettä, {totalSetCount} sarjaa. Kuvaus, liikkeen lempinimi, kuorma ja lisämuistiinpanot ovat valinnaisia. Tallennettu ohjelma aktivoituu heti.
+                      {watchedProgramTitle?.trim() || "Nimeämätön ohjelma"} · {activeAthleteName} · {watchedWorkouts.length} päivää · {totalExerciseCount} liikettä · {totalSetCount} sarjaa
                     </p>
                   </div>
 
                   <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface-2)] p-4">
-                    <div className="flex flex-wrap items-center justify-between gap-3">
-                      <div className="flex items-center gap-2">
-                        <ClipboardList className="size-4 text-[var(--text-subtle)]" />
-                        <p className="text-sm font-semibold text-[var(--text)]">Tarkistuslista</p>
-                      </div>
-                      <span className={cn(
-                        "rounded-full px-2.5 py-1 text-xs font-semibold",
-                        composerIssues.length
-                          ? "bg-[color:color-mix(in_oklab,var(--danger)_10%,var(--surface))] text-[var(--danger)]"
-                          : "bg-[color:color-mix(in_oklab,var(--success)_10%,var(--surface))] text-[var(--success)]",
-                      )}>
-                        {composerIssues.length ? `${composerIssues.length} puutetta` : "Valmis"}
-                      </span>
+                    <div className="flex items-center gap-2">
+                      <ClipboardList className="size-4 text-[var(--text-subtle)]" />
+                      <p className="text-sm font-semibold text-[var(--text)]">Tarkistuslista</p>
                     </div>
-                    <p className="mt-2 text-sm text-[var(--text-muted)]">
-                      Klikkaa puutetta niin siirryt suoraan oikeaan kohtaan.
-                    </p>
                     <div className="mt-4 space-y-2">
                       {composerIssues.length ? (
                         composerIssues.map((issue) => (
@@ -1377,18 +1475,13 @@ export function CoachDashboard({
                           </button>
                         ))
                       ) : (
-                        <div className="rounded-xl border border-[color:color-mix(in_oklab,var(--success)_30%,var(--border))] bg-[color:color-mix(in_oklab,var(--success)_10%,var(--surface))] px-3 py-4 text-sm text-[var(--success)]">
-                          Kaikki pakolliset kohdat ovat kunnossa. Ohjelma on valmis tallennettavaksi.
-                        </div>
+                        <p className="text-sm text-[var(--text-muted)]">Ei pakollisia puutteita.</p>
                       )}
                     </div>
                   </div>
 
-                  <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface-2)] p-4">
-                    <p className="text-sm font-semibold text-[var(--text)]">Treenien sisältö</p>
-                    <p className="mt-2 text-sm text-[var(--text-muted)]">
-                      Näet tästä nopeasti mitä liikkeitä kuhunkin treeniin on lisätty ennen tallennusta.
-                    </p>
+                  <div>
+                    <p className="text-sm font-semibold text-[var(--text)]">Päivien sisältö</p>
                     <div className="mt-4 space-y-3">
                       {watchedWorkouts.map((workout, index) => {
                         const workoutIssues = composerIssues.filter((issue) => issue.workoutIndex === index).length;
@@ -1400,16 +1493,13 @@ export function CoachDashboard({
                           >
                             <div className="flex flex-wrap items-center gap-2">
                               <p className="text-sm font-semibold text-[var(--text)]">
-                                Treeni {index + 1}: {getComposerWorkoutLabel(workout, index)}
+                                Päivä {index + 1}: {getComposerWorkoutLabel(workout, index)}
                               </p>
-                              <Badge>{splitLabel(workout?.splitType)}</Badge>
-                              <Badge className={cn(
-                                workoutIssues
-                                  ? "border-[color:color-mix(in_oklab,var(--danger)_35%,var(--border))] bg-[color:color-mix(in_oklab,var(--danger)_10%,var(--surface))] text-[var(--danger)]"
-                                  : "border-[color:color-mix(in_oklab,var(--success)_35%,var(--border))] bg-[color:color-mix(in_oklab,var(--success)_10%,var(--surface))] text-[var(--success)]",
-                              )}>
-                                {workoutIssues ? `Puuttuu ${workoutIssues} kohtaa` : "Valmis"}
-                              </Badge>
+                              {workoutIssues ? (
+                                <Badge className="border-[color:color-mix(in_oklab,var(--danger)_35%,var(--border))] bg-[color:color-mix(in_oklab,var(--danger)_10%,var(--surface))] text-[var(--danger)]">
+                                  Puuttuu {workoutIssues} kohtaa
+                                </Badge>
+                              ) : null}
                             </div>
                             {workout?.guidance?.trim() ? (
                               <p className="mt-2 text-sm text-[var(--text-muted)]">{workout.guidance.trim()}</p>
@@ -1465,18 +1555,20 @@ export function CoachDashboard({
                 </div>
               ) : null}
 
-              <InlineFeedback message={programMessage} tone={programMessageTone} className="min-h-5 text-sm" />
+              {programMessage ? (
+                <InlineFeedback message={programMessage} tone={programMessageTone} className="text-sm" />
+              ) : null}
               <div className="sticky bottom-3 z-10 rounded-2xl border border-[var(--border)] bg-[color:color-mix(in_oklab,var(--surface)_92%,var(--background))] p-3 shadow-[0_16px_40px_-28px_var(--shadow)] backdrop-blur">
                 <div className="flex flex-wrap items-center justify-between gap-3">
-                  <p className={cn("text-sm", composerView === "review" && canSaveProgram ? "text-[var(--success)]" : "text-[var(--text-subtle)]")}>
+                  <p className="text-sm text-[var(--text-subtle)]">
                     {composerView === "details"
-                      ? "Aloita ohjelman perustiedoista."
+                      ? "Täytä ohjelman perustiedot."
                       : composerView === "workouts"
-                        ? "Luo ohjelman treenit yksi kerrallaan."
+                        ? "Täytä päivien perustiedot."
                         : composerView === "workout_editor"
-                          ? "Muokkaa valitun treenin sisältö valmiiksi."
+                          ? "Muokkaa valitun päivän liikkeet valmiiksi."
                           : canSaveProgram
-                            ? "Ohjelma on valmis tallennettavaksi."
+                            ? "Ohjelma voidaan tallentaa."
                             : `Täydennä ${composerIssues.length} pakollista kohtaa ennen tallennusta.`}
                   </p>
                   <div className="flex flex-wrap gap-3">
@@ -1496,7 +1588,7 @@ export function CoachDashboard({
                           setComposerView("workouts");
                         }}
                       >
-                        Jatka treeneihin
+                        Siirry lisäämään treenit
                       </Button>
                     ) : null}
                     {composerView === "workouts" ? (
@@ -1971,6 +2063,8 @@ function CoachAthleteInsights({
 }) {
   const [expandedWorkoutDetailsId, setExpandedWorkoutDetailsId] = useState<string | null>(null);
   const [selectedWorkoutByGroup, setSelectedWorkoutByGroup] = useState<Record<string, string>>({});
+  const [isArchiveExpanded, setIsArchiveExpanded] = useState(false);
+  const [activeMeasurementTrend, setActiveMeasurementTrend] = useState<"weight" | "waist" | "volume">("weight");
   const selectedAthlete = athletes.find((athlete) => athlete.id === selectedAthleteId) ?? null;
   const selectedAthleteProfile = useMemo(
     () => state.users.find((user) => user.id === selectedAthleteId) ?? null,
@@ -1983,6 +2077,8 @@ function CoachAthleteInsights({
   useEffect(() => {
     setExpandedWorkoutDetailsId(null);
     setSelectedWorkoutByGroup({});
+    setIsArchiveExpanded(false);
+    setActiveMeasurementTrend("weight");
   }, [selectedAthleteId]);
 
   const athleteWorkouts = useMemo(() => {
@@ -2191,11 +2287,6 @@ function CoachAthleteInsights({
     ? Math.round((completedLastThirtyDays / scheduledLastThirtyDays) * 100)
     : 0;
 
-  const averageVolume = completedRows.length
-    ? Math.round(
-        completedRows.reduce((sum, row) => sum + row.volume, 0) / completedRows.length,
-      )
-    : 0;
   const lastNoteDate = state.notes
     .filter(
       (note) =>
@@ -2246,9 +2337,10 @@ function CoachAthleteInsights({
   if (!athletes.length) {
     return (
       <Card>
-        <CardTitle className="text-2xl">Treenaajan seuranta</CardTitle>
+        <p className="text-xs font-semibold tracking-[0.04em] text-[var(--text-subtle)]">Tiimi</p>
+        <CardTitle className="text-2xl">Treenaajan kehitys</CardTitle>
         <CardDescription className="mt-2">
-          Lisää ensin treenaajia rosteriin, niin näet treenien tarkat suoritus- ja kehitystiedot.
+          Lisää ensin treenaajia, niin näet heidän toteumat, kehityksen ja kehon seurannan tästä näkymästä.
         </CardDescription>
       </Card>
     );
@@ -2258,10 +2350,10 @@ function CoachAthleteInsights({
     <Card className="border-[var(--border-strong)]">
       <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
         <div>
-          <p className="text-xs font-semibold tracking-[0.04em] text-[var(--text-subtle)]">Treenaajan seuranta</p>
-          <CardTitle className="text-2xl">Treenaajan kehitys ja toteuma</CardTitle>
+          <p className="text-xs font-semibold tracking-[0.04em] text-[var(--text-subtle)]">Tiimi</p>
+          <CardTitle className="text-2xl">Treenaajan kehitys</CardTitle>
           <CardDescription className="mt-2">
-            Seuraa toteumaa, valmennusmuistiinpanoja ja kehityksen suuntaa yhdestä paikasta.
+            Seuraa toteumaa, kehitystä ja kehon seurantaa yhdestä paikasta.
           </CardDescription>
         </div>
         <div className="w-full lg:w-72">
@@ -2282,7 +2374,7 @@ function CoachAthleteInsights({
 
       {selectedAthlete ? (
         <>
-          <div className="mt-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+          <div className="mt-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
             <InsightMetric
               label="Valmistumisaste 30 pv"
               value={`${completionRateLastThirtyDays}%`}
@@ -2296,12 +2388,6 @@ function CoachAthleteInsights({
               icon={ClipboardList}
             />
             <InsightMetric
-              label="Keskivolyymi"
-              value={averageVolume}
-              hint="kg x toistot / valmis treeni"
-              icon={Activity}
-            />
-            <InsightMetric
               label="Viimeisin muistiinpano"
               value={lastNoteDate ? formatDate(lastNoteDate) : "Ei vielä"}
               hint="Valmentajan ja treenaajan kirjaama"
@@ -2309,40 +2395,24 @@ function CoachAthleteInsights({
             />
           </div>
 
-          <div className="mt-5 grid gap-4 xl:grid-cols-[1.08fr_0.92fr]">
-            <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface-2)] p-4">
-              <p className="text-sm font-semibold text-[var(--text)]">Kehitysgraafi (volyymi)</p>
-              <p className="mt-1 text-xs text-[var(--text-subtle)]">Viimeiset 10 valmista treeniä</p>
-              <MetricTrendChart
-                points={volumeTrendPoints}
-                ariaLabel="Volyymin kehitystrendi"
-                emptyMessage="Ei valmiita treenejä graafiin vielä."
-                helperText="Alarivillä näkyy kuukausi ja vuosi, oikealla volyymin asteikko."
-                valueLabel="Volyymi"
-                unit="kg"
-                decimals={0}
-                useZeroBaseline
-              />
-            </div>
-            <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface-2)] p-4">
-              <p className="text-sm font-semibold text-[var(--text)]">Vaihejakauma 8 viikolta</p>
-              <p className="mt-1 text-xs text-[var(--text-subtle)]">
-                Kuinka paljon treenejä ollut vaiheissa keskeytetty, kesken ja valmis.
-              </p>
-              <PhaseBars bars={phaseBars} />
-            </div>
+          <div className="mt-5 rounded-2xl border border-[var(--border)] bg-[var(--surface-2)] p-4">
+            <p className="text-sm font-semibold text-[var(--text)]">Vaihejakauma 8 viikolta</p>
+            <p className="mt-1 text-xs text-[var(--text-subtle)]">
+              Kuinka paljon treenejä on ollut vaiheissa keskeytetty, kesken ja valmis.
+            </p>
+            <PhaseBars bars={phaseBars} />
           </div>
 
           <div className="mt-4 rounded-2xl border border-[var(--border)] bg-[var(--surface-2)] p-4">
             <div className="flex flex-col gap-3 xl:flex-row xl:items-start xl:justify-between">
-              <div className="max-w-2xl">
+              <div>
                 <p className="text-sm font-semibold text-[var(--text)]">Kehon seuranta</p>
                 <p className="mt-1 text-xs text-[var(--text-subtle)]">
-                  Pituus, paino ja vyötärö auttavat hahmottamaan, mihin suuntaan treenaajan arki ja palautuminen liikkuvat.
+                  Viimeisimmät mitat ja niiden kehitys.
                 </p>
               </div>
-              <div className="grid gap-3 sm:grid-cols-2 xl:min-w-[36rem] xl:grid-cols-4">
-                <div className="rounded-xl border border-[var(--border)] bg-[var(--surface)] px-4 py-3">
+              <div className="grid w-full gap-2 sm:grid-cols-2 lg:grid-cols-4">
+                <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface)] px-3 py-2.5">
                   <p className="text-[11px] font-semibold tracking-[0.04em] text-[var(--text-subtle)]">Pituus</p>
                   <p className="mt-1 text-sm font-semibold text-[var(--text)]">
                     {selectedAthleteProfile?.heightCm !== undefined
@@ -2350,7 +2420,7 @@ function CoachAthleteInsights({
                       : "Ei asetettu"}
                   </p>
                 </div>
-                <div className="rounded-xl border border-[var(--border)] bg-[var(--surface)] px-4 py-3">
+                <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface)] px-3 py-2.5">
                   <p className="text-[11px] font-semibold tracking-[0.04em] text-[var(--text-subtle)]">Paino</p>
                   <p className="mt-1 text-sm font-semibold text-[var(--text)]">
                     {selectedAthleteProfile?.weightKg !== undefined
@@ -2358,7 +2428,7 @@ function CoachAthleteInsights({
                       : "Ei asetettu"}
                   </p>
                 </div>
-                <div className="rounded-xl border border-[var(--border)] bg-[var(--surface)] px-4 py-3">
+                <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface)] px-3 py-2.5">
                   <p className="text-[11px] font-semibold tracking-[0.04em] text-[var(--text-subtle)]">Vyötärö</p>
                   <p className="mt-1 text-sm font-semibold text-[var(--text)]">
                     {selectedAthleteProfile?.waistCm !== undefined
@@ -2366,7 +2436,7 @@ function CoachAthleteInsights({
                       : "Ei asetettu"}
                   </p>
                 </div>
-                <div className="rounded-xl border border-[var(--border)] bg-[var(--surface)] px-4 py-3">
+                <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface)] px-3 py-2.5">
                   <p className="text-[11px] font-semibold tracking-[0.04em] text-[var(--text-subtle)]">Viimeisin mittaus</p>
                   <p className="mt-1 text-sm font-semibold text-[var(--text)]">
                     {latestBodyMeasurement ? shortDate(latestBodyMeasurement.measuredAt) : "Ei vielä"}
@@ -2374,308 +2444,404 @@ function CoachAthleteInsights({
                 </div>
               </div>
             </div>
-            <div className="mt-4 grid gap-4 xl:grid-cols-2">
-              <div>
-                <p className="text-xs font-semibold tracking-[0.04em] text-[var(--text-subtle)]">Painotrendi</p>
-                <MetricTrendChart
-                  points={weightTrendPoints}
-                  ariaLabel="Painon kehitystrendi"
-                  emptyMessage="Painomittauksia ei ole vielä kirjattu."
-                  helperText="Alarivillä näkyy kuukausi ja vuosi, oikealla painon asteikko."
-                  valueLabel="Paino"
-                  unit="kg"
-                />
+            <div className="mt-4 rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-4">
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                <div>
+                  <p className="text-sm font-semibold text-[var(--text)]">Kehitystrendi</p>
+                  <p className="mt-1 text-sm text-[var(--text-muted)]">Valitse paino, vyötärö tai volyymi.</p>
+                </div>
+                <div className="grid w-full grid-cols-3 rounded-xl border border-[var(--border)] bg-[var(--surface-2)] p-1 sm:w-auto">
+                  <button
+                    type="button"
+                    className={`w-full rounded-lg px-3 py-2 text-sm font-medium transition ${
+                      activeMeasurementTrend === "weight"
+                        ? "bg-[color-mix(in_srgb,var(--accent)_10%,var(--surface))] text-[var(--accent)]"
+                        : "text-[var(--text-muted)]"
+                    }`}
+                    aria-pressed={activeMeasurementTrend === "weight"}
+                    onClick={() => setActiveMeasurementTrend("weight")}
+                  >
+                    Paino
+                  </button>
+                  <button
+                    type="button"
+                    className={`w-full rounded-lg px-3 py-2 text-sm font-medium transition ${
+                      activeMeasurementTrend === "waist"
+                        ? "bg-[color-mix(in_srgb,var(--accent)_10%,var(--surface))] text-[var(--accent)]"
+                        : "text-[var(--text-muted)]"
+                    }`}
+                    aria-pressed={activeMeasurementTrend === "waist"}
+                    onClick={() => setActiveMeasurementTrend("waist")}
+                  >
+                    Vyötärö
+                  </button>
+                  <button
+                    type="button"
+                    className={`w-full rounded-lg px-3 py-2 text-sm font-medium transition ${
+                      activeMeasurementTrend === "volume"
+                        ? "bg-[color-mix(in_srgb,var(--accent)_10%,var(--surface))] text-[var(--accent)]"
+                        : "text-[var(--text-muted)]"
+                    }`}
+                    aria-pressed={activeMeasurementTrend === "volume"}
+                    onClick={() => setActiveMeasurementTrend("volume")}
+                  >
+                    Volyymi
+                  </button>
+                </div>
               </div>
-              <div>
-                <p className="text-xs font-semibold tracking-[0.04em] text-[var(--text-subtle)]">Vyötärötrendi</p>
-                <MetricTrendChart
-                  points={waistTrendPoints}
-                  ariaLabel="Vyötärön kehitystrendi"
-                  emptyMessage="Vyötärömittauksia ei ole vielä kirjattu."
-                  helperText="Alarivillä näkyy kuukausi ja vuosi, oikealla vyötärön asteikko."
-                  valueLabel="Vyötärö"
-                  unit="cm"
-                />
+              <div className="mt-4">
+                {activeMeasurementTrend === "weight" ? (
+                  <>
+                    <p className="text-xs font-semibold tracking-[0.04em] text-[var(--text-subtle)]">Painotrendi</p>
+                    <MetricTrendChart
+                      points={weightTrendPoints}
+                      ariaLabel="Painon kehitystrendi"
+                      emptyMessage="Painomittauksia ei ole vielä kirjattu."
+                      helperText="Alarivillä näkyy kuukausi ja vuosi, oikealla painon asteikko."
+                      valueLabel="Paino"
+                      unit="kg"
+                    />
+                  </>
+                ) : activeMeasurementTrend === "waist" ? (
+                  <>
+                    <p className="text-xs font-semibold tracking-[0.04em] text-[var(--text-subtle)]">Vyötärötrendi</p>
+                    <MetricTrendChart
+                      points={waistTrendPoints}
+                      ariaLabel="Vyötärön kehitystrendi"
+                      emptyMessage="Vyötärömittauksia ei ole vielä kirjattu."
+                      helperText="Alarivillä näkyy kuukausi ja vuosi, oikealla vyötärön asteikko."
+                      valueLabel="Vyötärö"
+                      unit="cm"
+                    />
+                  </>
+                ) : (
+                  <>
+                    <p className="text-xs font-semibold tracking-[0.04em] text-[var(--text-subtle)]">Volyymitrendi</p>
+                    <MetricTrendChart
+                      points={volumeTrendPoints}
+                      ariaLabel="Volyymin kehitystrendi"
+                      emptyMessage="Ei valmiita treenejä graafiin vielä."
+                      helperText="Alarivillä näkyy kuukausi ja vuosi, oikealla volyymin asteikko."
+                      valueLabel="Volyymi"
+                      unit="kg"
+                      decimals={0}
+                      useZeroBaseline
+                    />
+                  </>
+                )}
               </div>
             </div>
           </div>
 
-          <div className="mt-5">
-            <p className="text-sm font-semibold text-[var(--text)]">Treeniarkisto, toteumat ja keskustelu</p>
-            <p className="mt-1 text-sm text-[var(--text-muted)]">
-              Jokainen treenialue näkyy omana korttinaan. Valitse toteutus päivämäärän mukaan ja näe muistiinpanot, suoritukset ja keskustelu samasta näkymästä.
-            </p>
-            <div className="mx-auto mt-3 grid max-w-[84rem] gap-4 xl:grid-cols-2">
-              {groupedWorkoutRows.length === 0 ? (
-                <p className="text-sm text-[var(--text-muted)] xl:col-span-2">Treenejä ei vielä löytynyt valitulle treenaajalle.</p>
-              ) : (
-                groupedWorkoutRows.map((group) => {
-                  const selectedRow =
-                    group.rows.find((row) => row.id === selectedWorkoutByGroup[group.key]) ?? group.rows[0];
-                  if (!selectedRow) {
-                    return null;
-                  }
+          <div className="mt-5 overflow-hidden rounded-3xl border border-[var(--border)] bg-[var(--surface-2)]">
+            <div className="flex items-start gap-3 p-4">
+              <button
+                type="button"
+                className="min-w-0 flex-1 rounded-[1rem] text-left text-inherit transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--background)]"
+                aria-expanded={isArchiveExpanded}
+                aria-controls="coach-athlete-archive-panel"
+                onClick={() => setIsArchiveExpanded((current) => !current)}
+              >
+                <p className="text-sm font-semibold text-[var(--text)]">Treeniarkisto, toteumat ja keskustelu</p>
+                <p className="mt-1 text-sm text-[var(--text-muted)]">
+                  Avaa tarkempi näkymä, kun haluat selata toteutuksia, sarjadataa, muistiinpanoja ja keskustelua.
+                </p>
+              </button>
+              <button
+                type="button"
+                className="grid size-8.5 shrink-0 place-items-center rounded-full border border-[var(--border)] bg-[var(--surface)] text-[var(--text-subtle)] transition hover:border-[var(--border-strong)] hover:bg-[var(--surface-3)] hover:text-[var(--text)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--background)]"
+                aria-label={isArchiveExpanded ? "Sulje treeniarkisto" : "Avaa treeniarkisto"}
+                aria-expanded={isArchiveExpanded}
+                aria-controls="coach-athlete-archive-panel"
+                onClick={() => setIsArchiveExpanded((current) => !current)}
+              >
+                {isArchiveExpanded ? (
+                  <ChevronUp className="size-4" aria-hidden="true" />
+                ) : (
+                  <ChevronDown className="size-4" aria-hidden="true" />
+                )}
+              </button>
+            </div>
 
-                  const isDetailsOpen = expandedWorkoutDetailsId === selectedRow.id;
-                  const dateLabel =
-                    selectedRow.status === "completed"
-                      ? formatDateWithWeekday(selectedRow.completedAt)
-                      : formatDate(selectedRow.completedAt);
-                  return (
-                    <div key={group.key} className="rounded-3xl border border-[var(--border)] bg-[var(--surface-2)] p-5">
-                      <div className="flex flex-col gap-4">
-                        <div className="flex flex-wrap items-start justify-between gap-3">
-                          <div className="min-w-0">
-                            <p className="text-xs font-semibold tracking-[0.04em] text-[var(--text-subtle)]">Treenialue</p>
-                            <p className="mt-1 font-[family-name:var(--font-display)] text-xl font-semibold text-[var(--text)]">
-                              {group.title}
-                            </p>
-                            <p className="mt-1 text-sm text-[var(--text-muted)]">
-                              {dateLabel} · {selectedRow.insight.exerciseCount} liikettä · {selectedRow.occurrenceLabel}
-                            </p>
-                          </div>
-                          <div className="grid w-full min-w-0 gap-2 sm:w-72 sm:max-w-full">
-                            <div>
-                              <Label htmlFor={`coach-group-${group.key}-date`} className="text-xs">
-                                Näytä toteutus
-                              </Label>
-                              <Select
-                                id={`coach-group-${group.key}-date`}
-                                value={selectedRow.id}
-                                onChange={(event) =>
-                                  setSelectedWorkoutByGroup((current) => ({
-                                    ...current,
-                                    [group.key]: event.target.value,
-                                  }))
-                                }
-                              >
-                                {group.rows.map((row) => (
-                                  <option key={row.id} value={row.id}>
-                                    {formatDateWithWeekday(row.completedAt)} · {row.occurrenceLabel}
-                                  </option>
-                                ))}
-                              </Select>
-                            </div>
-                            <div className="flex flex-wrap gap-2">
-                              <Badge className={coachStatusTone(selectedRow.status)}>
-                                {workoutStatusLabel(selectedRow.status)}
-                              </Badge>
-                              <Badge>{Math.round(selectedRow.volume)} kg</Badge>
-                              <Badge className="border-[var(--border)] bg-[var(--surface-3)] text-[var(--text)]">
-                                Toteuma {selectedRow.insight.completionPercent}%
-                              </Badge>
-                            </div>
-                          </div>
-                        </div>
+            {isArchiveExpanded ? (
+              <div id="coach-athlete-archive-panel" className="border-t border-[var(--border)] px-4 pb-4 pt-4">
+                <div className="mx-auto grid max-w-[84rem] gap-4 xl:grid-cols-2">
+                  {groupedWorkoutRows.length === 0 ? (
+                    <p className="text-sm text-[var(--text-muted)] xl:col-span-2">Treenejä ei vielä löytynyt valitulle treenaajalle.</p>
+                  ) : (
+                    groupedWorkoutRows.map((group) => {
+                      const selectedRow =
+                        group.rows.find((row) => row.id === selectedWorkoutByGroup[group.key]) ?? group.rows[0];
+                      if (!selectedRow) {
+                        return null;
+                      }
 
-                        <div className="grid gap-2 sm:grid-cols-2 2xl:grid-cols-4">
-                          <CoachOverviewStat
-                            label="Sarjat valmiina"
-                            value={`${selectedRow.completedSets}/${selectedRow.totalSets || 0}`}
-                            tone={selectedRow.pendingSetCount > 0 ? "warning" : "success"}
-                          />
-                          <CoachOverviewStat
-                            label="Kesto"
-                            value={formatCoachWorkoutDuration(selectedRow.insight.durationSeconds)}
-                          />
-                          <CoachOverviewStat
-                            label="Kalorit"
-                            value={`${selectedRow.insight.estimatedCalories} kcal`}
-                          />
-                        </div>
-
-                        <div className="grid gap-4">
-                          <div className="space-y-4">
-                            <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-4">
-                              <div className="flex items-center justify-between gap-2">
-                                <div>
-                                  <p className="text-sm font-semibold text-[var(--text)]">Toteuma</p>
-                                  <p className="mt-1 text-xs text-[var(--text-subtle)]">
-                                    Valitun toteutuksen keskeiset mittarit yhdellä silmäyksellä.
-                                  </p>
-                                </div>
-                                {selectedRow.pendingSetCount > 0 ? (
-                                  <Badge className="border-[color-mix(in_srgb,var(--warning)_40%,var(--border))] bg-[color:color-mix(in_srgb,var(--warning)_14%,var(--surface))] text-[var(--warning)]">
-                                    Kesken {selectedRow.pendingSetCount} sarjaa
-                                  </Badge>
-                                ) : (
-                                  <Badge className="border-[color-mix(in_srgb,var(--success)_40%,var(--border))] bg-[color:color-mix(in_srgb,var(--success)_14%,var(--surface))] text-[var(--success)]">
-                                    Kaikki sarjat valmiina
-                                  </Badge>
-                                )}
-                              </div>
-                              <div className="mt-3 grid grid-cols-2 gap-2 2xl:grid-cols-3">
-                                <CoachHistoryMetric label="Kuorma yht." value={`${Math.round(selectedRow.insight.totalLoadKg)} kg`} />
-                                <CoachHistoryMetric
-                                  label="Volyymi (kg x toistot)"
-                                  value={`${Math.round(selectedRow.insight.liftedKg)} kg`}
-                                />
-                                <CoachHistoryMetric label="Suoritus" value={`${selectedRow.insight.completionPercent}%`} />
-                                <CoachHistoryMetric label="Harjoitteet" value={`${selectedRow.insight.exerciseCount}`} />
-                              </div>
-                              <div className="mt-3 rounded-xl border border-[var(--border)] bg-[var(--surface-2)] px-3 py-2">
-                                <p className="text-[11px] font-semibold tracking-[0.04em] text-[var(--text-subtle)]">
-                                  Lihasryhmäyleiskatsaus
+                      const isDetailsOpen = expandedWorkoutDetailsId === selectedRow.id;
+                      const dateLabel =
+                        selectedRow.status === "completed"
+                          ? formatDateWithWeekday(selectedRow.completedAt)
+                          : formatDate(selectedRow.completedAt);
+                      return (
+                        <div key={group.key} className="rounded-3xl border border-[var(--border)] bg-[var(--surface)] p-5">
+                          <div className="flex flex-col gap-4">
+                            <div className="flex flex-wrap items-start justify-between gap-3">
+                              <div className="min-w-0">
+                                <p className="text-xs font-semibold tracking-[0.04em] text-[var(--text-subtle)]">Treenialue</p>
+                                <p className="mt-1 font-[family-name:var(--font-display)] text-xl font-semibold text-[var(--text)]">
+                                  {group.title}
                                 </p>
-                                <div className="mt-2 grid grid-cols-2 gap-1.5 sm:grid-cols-3">
-                                  {coachHistoryMuscleGroups.map((group) => (
-                                    <p key={group.key} className="text-[11px] text-[var(--text-muted)]">
-                                      {group.label}: {Math.round(selectedRow.insight.muscleGroupLiftedKg[group.key])} kg
-                                    </p>
-                                  ))}
+                                <p className="mt-1 text-sm text-[var(--text-muted)]">
+                                  {dateLabel} · {selectedRow.insight.exerciseCount} liikettä · {selectedRow.occurrenceLabel}
+                                </p>
+                              </div>
+                              <div className="grid w-full min-w-0 gap-2 sm:w-72 sm:max-w-full">
+                                <div>
+                                  <Label htmlFor={`coach-group-${group.key}-date`} className="text-xs">
+                                    Näytä toteutus
+                                  </Label>
+                                  <Select
+                                    id={`coach-group-${group.key}-date`}
+                                    value={selectedRow.id}
+                                    onChange={(event) =>
+                                      setSelectedWorkoutByGroup((current) => ({
+                                        ...current,
+                                        [group.key]: event.target.value,
+                                      }))
+                                    }
+                                  >
+                                    {group.rows.map((row) => (
+                                      <option key={row.id} value={row.id}>
+                                        {formatDateWithWeekday(row.completedAt)} · {row.occurrenceLabel}
+                                      </option>
+                                    ))}
+                                  </Select>
+                                </div>
+                                <div className="flex flex-wrap gap-2">
+                                  <Badge className={coachStatusTone(selectedRow.status)}>
+                                    {workoutStatusLabel(selectedRow.status)}
+                                  </Badge>
+                                  <Badge>{Math.round(selectedRow.volume)} kg</Badge>
+                                  <Badge className="border-[var(--border)] bg-[var(--surface-3)] text-[var(--text)]">
+                                    Toteuma {selectedRow.insight.completionPercent}%
+                                  </Badge>
                                 </div>
                               </div>
                             </div>
 
-                            <div>
-                              <Button
-                                type="button"
-                                variant="ghost"
-                                className="w-full justify-between"
-                                aria-expanded={isDetailsOpen}
-                                onClick={() =>
-                                  setExpandedWorkoutDetailsId((current) => (current === selectedRow.id ? null : selectedRow.id))
-                                }
-                              >
-                                <span>Sarjat ja toistot</span>
-                                {isDetailsOpen ? (
-                                  <ChevronUp className="size-4" aria-hidden="true" />
-                                ) : (
-                                  <ChevronDown className="size-4" aria-hidden="true" />
-                                )}
-                              </Button>
-                              {isDetailsOpen ? (
-                                <div className="mt-2 rounded-xl border border-[var(--border)] bg-[var(--surface)] p-3">
-                                  {selectedRow.setGroups.length === 0 ? (
-                                    <p className="text-sm text-[var(--text-subtle)]">Sarjadataa ei löytynyt tästä treenistä.</p>
-                                  ) : (
-                                    <div className="grid gap-2">
-                                      {selectedRow.setGroups.map((group) => (
-                                        <div
-                                          key={group.key}
-                                          className="rounded-lg border border-[var(--border)] bg-[var(--surface-2)] px-3 py-2"
-                                        >
-                                          <div className="flex flex-wrap items-start justify-between gap-2">
-                                            <div>
-                                              <p className="text-xs font-semibold text-[var(--text)]">
-                                                {group.exerciseName}
-                                                {group.supersetGroup ? ` · Superset ${group.supersetGroup}` : ""}
-                                              </p>
-                                              <p className="mt-1 text-[11px] text-[var(--text-subtle)]">
-                                                Tavoite: {formatCoachTargetReps(group.logs[0])} toistoa
-                                              </p>
-                                            </div>
-                                          </div>
-                                          <div className="mt-2 space-y-2">
-                                            {group.logs.map((log) => (
-                                              <div
-                                                key={log.id}
-                                                className="rounded-lg border border-[var(--border)] bg-[var(--surface)] px-3 py-2"
-                                              >
-                                                <div className="flex flex-wrap items-center justify-between gap-2">
-                                                  <p className="text-xs font-semibold text-[var(--text)]">Sarja {log.setLabel}</p>
-                                                  <span
-                                                    className={
-                                                      log.done
-                                                        ? "inline-flex items-center rounded-full border border-[color-mix(in_srgb,var(--success)_40%,var(--border))] bg-[color:color-mix(in_srgb,var(--success)_14%,var(--surface))] px-2 py-0.5 text-[11px] font-semibold text-[var(--success)]"
-                                                        : "inline-flex items-center rounded-full border border-[color-mix(in_srgb,var(--warning)_40%,var(--border))] bg-[color:color-mix(in_srgb,var(--warning)_14%,var(--surface))] px-2 py-0.5 text-[11px] font-semibold text-[var(--warning)]"
-                                                    }
-                                                  >
-                                                    {log.done ? "Valmis" : "Kesken"}
-                                                  </span>
-                                                </div>
-                                                <p className="mt-1 text-xs leading-5 text-[var(--text-subtle)]">
-                                                  {formatCoachSetActual(log)}
-                                                </p>
-                                              </div>
-                                            ))}
-                                          </div>
-                                        </div>
+                            <div className="grid gap-2 sm:grid-cols-2 2xl:grid-cols-4">
+                              <CoachOverviewStat
+                                label="Sarjat valmiina"
+                                value={`${selectedRow.completedSets}/${selectedRow.totalSets || 0}`}
+                                tone={selectedRow.pendingSetCount > 0 ? "warning" : "success"}
+                              />
+                              <CoachOverviewStat
+                                label="Kesto"
+                                value={formatCoachWorkoutDuration(selectedRow.insight.durationSeconds)}
+                              />
+                              <CoachOverviewStat
+                                label="Kalorit"
+                                value={`${selectedRow.insight.estimatedCalories} kcal`}
+                              />
+                            </div>
+
+                            <div className="grid gap-4">
+                              <div className="space-y-4">
+                                <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface-2)] p-4">
+                                  <div className="flex items-center justify-between gap-2">
+                                    <div>
+                                      <p className="text-sm font-semibold text-[var(--text)]">Toteuma</p>
+                                      <p className="mt-1 text-xs text-[var(--text-subtle)]">
+                                        Valitun toteutuksen keskeiset mittarit yhdellä silmäyksellä.
+                                      </p>
+                                    </div>
+                                    {selectedRow.pendingSetCount > 0 ? (
+                                      <Badge className="border-[color-mix(in_srgb,var(--warning)_40%,var(--border))] bg-[color:color-mix(in_srgb,var(--warning)_14%,var(--surface))] text-[var(--warning)]">
+                                        Kesken {selectedRow.pendingSetCount} sarjaa
+                                      </Badge>
+                                    ) : (
+                                      <Badge className="border-[color-mix(in_srgb,var(--success)_40%,var(--border))] bg-[color:color-mix(in_srgb,var(--success)_14%,var(--surface))] text-[var(--success)]">
+                                        Kaikki sarjat valmiina
+                                      </Badge>
+                                    )}
+                                  </div>
+                                  <div className="mt-3 grid grid-cols-2 gap-2 2xl:grid-cols-3">
+                                    <CoachHistoryMetric label="Kuorma yht." value={`${Math.round(selectedRow.insight.totalLoadKg)} kg`} />
+                                    <CoachHistoryMetric
+                                      label="Volyymi (kg x toistot)"
+                                      value={`${Math.round(selectedRow.insight.liftedKg)} kg`}
+                                    />
+                                    <CoachHistoryMetric label="Suoritus" value={`${selectedRow.insight.completionPercent}%`} />
+                                    <CoachHistoryMetric label="Harjoitteet" value={`${selectedRow.insight.exerciseCount}`} />
+                                  </div>
+                                  <div className="mt-3 rounded-xl border border-[var(--border)] bg-[var(--surface)] px-3 py-2">
+                                    <p className="text-[11px] font-semibold tracking-[0.04em] text-[var(--text-subtle)]">
+                                      Lihasryhmäyleiskatsaus
+                                    </p>
+                                    <div className="mt-2 grid grid-cols-2 gap-1.5 sm:grid-cols-3">
+                                      {coachHistoryMuscleGroups.map((group) => (
+                                        <p key={group.key} className="text-[11px] text-[var(--text-muted)]">
+                                          {group.label}: {Math.round(selectedRow.insight.muscleGroupLiftedKg[group.key])} kg
+                                        </p>
                                       ))}
                                     </div>
-                                  )}
+                                  </div>
                                 </div>
-                              ) : null}
-                            </div>
-                          </div>
 
-                          <div className="space-y-4">
-                            <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-4">
-                              <div className="flex items-center gap-1">
-                                <p className="text-sm font-semibold text-[var(--text)]">Muistiinpanot</p>
-                                <InfoTooltip text="Treenaajan muistiinpanot kootaan tähän kohteen mukaan, jotta löydät saman treenialueen huomiot yhdestä paikasta." />
+                                <div>
+                                  <Button
+                                    type="button"
+                                    variant="ghost"
+                                    className="w-full justify-between"
+                                    aria-expanded={isDetailsOpen}
+                                    onClick={() =>
+                                      setExpandedWorkoutDetailsId((current) => (current === selectedRow.id ? null : selectedRow.id))
+                                    }
+                                  >
+                                    <span>Sarjat ja toistot</span>
+                                    {isDetailsOpen ? (
+                                      <ChevronUp className="size-4" aria-hidden="true" />
+                                    ) : (
+                                      <ChevronDown className="size-4" aria-hidden="true" />
+                                    )}
+                                  </Button>
+                                  {isDetailsOpen ? (
+                                    <div className="mt-2 rounded-xl border border-[var(--border)] bg-[var(--surface-2)] p-3">
+                                      {selectedRow.setGroups.length === 0 ? (
+                                        <p className="text-sm text-[var(--text-subtle)]">Sarjadataa ei löytynyt tästä treenistä.</p>
+                                      ) : (
+                                        <div className="grid gap-2">
+                                          {selectedRow.setGroups.map((group) => (
+                                            <div
+                                              key={group.key}
+                                              className="rounded-lg border border-[var(--border)] bg-[var(--surface)] px-3 py-2"
+                                            >
+                                              <div className="flex flex-wrap items-start justify-between gap-2">
+                                                <div>
+                                                  <p className="text-xs font-semibold text-[var(--text)]">
+                                                    {group.exerciseName}
+                                                    {group.supersetGroup ? ` · Superset ${group.supersetGroup}` : ""}
+                                                  </p>
+                                                  <p className="mt-1 text-[11px] text-[var(--text-subtle)]">
+                                                    Tavoite: {formatCoachTargetReps(group.logs[0])} toistoa
+                                                  </p>
+                                                </div>
+                                              </div>
+                                              <div className="mt-2 space-y-2">
+                                                {group.logs.map((log) => (
+                                                  <div
+                                                    key={log.id}
+                                                    className="rounded-lg border border-[var(--border)] bg-[var(--surface-2)] px-3 py-2"
+                                                  >
+                                                    <div className="flex flex-wrap items-center justify-between gap-2">
+                                                      <p className="text-xs font-semibold text-[var(--text)]">Sarja {log.setLabel}</p>
+                                                      <span
+                                                        className={
+                                                          log.done
+                                                            ? "inline-flex items-center rounded-full border border-[color-mix(in_srgb,var(--success)_40%,var(--border))] bg-[color:color-mix(in_srgb,var(--success)_14%,var(--surface))] px-2 py-0.5 text-[11px] font-semibold text-[var(--success)]"
+                                                            : "inline-flex items-center rounded-full border border-[color-mix(in_srgb,var(--warning)_40%,var(--border))] bg-[color:color-mix(in_srgb,var(--warning)_14%,var(--surface))] px-2 py-0.5 text-[11px] font-semibold text-[var(--warning)]"
+                                                        }
+                                                      >
+                                                        {log.done ? "Valmis" : "Kesken"}
+                                                      </span>
+                                                    </div>
+                                                    <p className="mt-1 text-xs leading-5 text-[var(--text-subtle)]">
+                                                      {formatCoachSetActual(log)}
+                                                    </p>
+                                                  </div>
+                                                ))}
+                                              </div>
+                                            </div>
+                                          ))}
+                                        </div>
+                                      )}
+                                    </div>
+                                  ) : null}
+                                </div>
                               </div>
-                              <p className="mt-1 text-xs text-[var(--text-subtle)]">
-                                Kaikki saman treenialueen kirjaukset ilman että päivämäärää tarvitsee vaihtaa edestakaisin.
-                              </p>
-                              <div className="mt-3 max-h-56 space-y-3 overflow-y-auto pr-1">
-                                {group.noteEntries.length ? (
-                                  group.noteEntries.map((noteEntry) => (
-                                    <div
-                                      key={noteEntry.id}
-                                      className="rounded-lg border border-[var(--border)] bg-[var(--surface-2)] px-3 py-3"
-                                    >
-                                      <p className="text-xs font-semibold tracking-[0.04em] text-[var(--text-subtle)]">
-                                        {formatDateWithWeekday(noteEntry.completedAt)} · {noteEntry.occurrenceLabel}
+
+                              <div className="space-y-4">
+                                <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface-2)] p-4">
+                                  <div className="flex items-center gap-1">
+                                    <p className="text-sm font-semibold text-[var(--text)]">Muistiinpanot</p>
+                                    <InfoTooltip text="Treenaajan muistiinpanot kootaan tähän kohteen mukaan, jotta löydät saman treenialueen huomiot yhdestä paikasta." />
+                                  </div>
+                                  <p className="mt-1 text-xs text-[var(--text-subtle)]">
+                                    Kaikki saman treenialueen kirjaukset ilman että päivämäärää tarvitsee vaihtaa edestakaisin.
+                                  </p>
+                                  <div className="mt-3 max-h-56 space-y-3 overflow-y-auto pr-1">
+                                    {group.noteEntries.length ? (
+                                      group.noteEntries.map((noteEntry) => (
+                                        <div
+                                          key={noteEntry.id}
+                                          className="rounded-lg border border-[var(--border)] bg-[var(--surface)] px-3 py-3"
+                                        >
+                                          <p className="text-xs font-semibold tracking-[0.04em] text-[var(--text-subtle)]">
+                                            {formatDateWithWeekday(noteEntry.completedAt)} · {noteEntry.occurrenceLabel}
+                                          </p>
+                                          <p className="mt-1 whitespace-pre-line text-sm leading-6 text-[var(--text-muted)]">
+                                            {noteEntry.body}
+                                          </p>
+                                        </div>
+                                      ))
+                                    ) : (
+                                      <p className="rounded-lg border border-dashed border-[var(--border)] bg-[var(--surface)] px-3 py-2 text-sm text-[var(--text-subtle)]">
+                                        Tälle treenialueelle ei ole vielä kirjattu muistiinpanoja.
                                       </p>
-                                      <p className="mt-1 text-sm leading-6 text-[var(--text-muted)]">{noteEntry.body}</p>
-                                    </div>
-                                  ))
-                                ) : (
-                                  <p className="rounded-lg border border-dashed border-[var(--border)] bg-[var(--surface-2)] px-3 py-2 text-sm text-[var(--text-subtle)]">
-                                    Tälle treenialueelle ei ole vielä kirjattu muistiinpanoja.
-                                  </p>
-                                )}
-                              </div>
-                            </div>
+                                    )}
+                                  </div>
+                                </div>
 
-                            <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-4">
-                              <div className="flex items-center gap-1">
-                                <p className="text-sm font-semibold text-[var(--text)]">Kommentit</p>
-                                <InfoTooltip text="Kaikki tämän treenialueen viestit näkyvät yhdessä listassa riippumatta valitusta toteutuspäivästä." />
-                              </div>
-                              <p className="mt-1 text-xs text-[var(--text-subtle)]">
-                                Näet valmentajan ja treenaajan kommunikoinnin samassa paikassa kuin toteuman.
-                              </p>
-                              <div className="mt-3 max-h-64 space-y-3 overflow-y-auto pr-1">
-                                {group.conversationEntries.length ? (
-                                  group.conversationEntries.map((entry) => (
-                                    <div
-                                      key={entry.id}
-                                      className="rounded-lg border border-[var(--border)] bg-[var(--surface-2)] px-3 py-2"
-                                    >
-                                      <div className="flex flex-wrap items-center gap-2">
-                                        <Badge className={coachConversationEntryTone(entry.type)}>
-                                          {coachConversationEntryLabel(entry.type)}
-                                        </Badge>
-                                        <p className="text-xs text-[var(--text-subtle)]">
-                                          {formatDateWithWeekday(entry.workoutCompletedAt)} · {entry.occurrenceLabel}
-                                        </p>
-                                      </div>
-                                      <p className="mt-1 text-sm text-[var(--text-muted)]">{entry.body}</p>
-                                      <p className="mt-1 text-xs text-[var(--text-subtle)]">{formatDateWithWeekday(entry.createdAt)}</p>
-                                    </div>
-                                  ))
-                                ) : (
-                                  <p className="rounded-lg border border-dashed border-[var(--border)] bg-[var(--surface-2)] px-3 py-2 text-sm text-[var(--text-subtle)]">
-                                    Tälle treenialueelle ei ole vielä kertynyt kommentteja keskusteluvirtaan.
+                                <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface-2)] p-4">
+                                  <div className="flex items-center gap-1">
+                                    <p className="text-sm font-semibold text-[var(--text)]">Kommentit</p>
+                                    <InfoTooltip text="Kaikki tämän treenialueen viestit näkyvät yhdessä listassa riippumatta valitusta toteutuspäivästä." />
+                                  </div>
+                                  <p className="mt-1 text-xs text-[var(--text-subtle)]">
+                                    Näet valmentajan ja treenaajan kommunikoinnin samassa paikassa kuin toteuman.
                                   </p>
-                                )}
-                              </div>
-                              <div className="mt-3">
-                                <Button type="button" variant="secondary" onClick={() => onOpenConversation?.()}>
-                                  Avaa keskustelu
-                                </Button>
+                                  <div className="mt-3 max-h-64 space-y-3 overflow-y-auto pr-1">
+                                    {group.conversationEntries.length ? (
+                                      group.conversationEntries.map((entry) => (
+                                        <div
+                                          key={entry.id}
+                                          className="rounded-lg border border-[var(--border)] bg-[var(--surface)] px-3 py-2"
+                                        >
+                                          <div className="flex flex-wrap items-center gap-2">
+                                            <Badge className={coachConversationEntryTone(entry.type)}>
+                                              {coachConversationEntryLabel(entry.type)}
+                                            </Badge>
+                                            <p className="text-xs text-[var(--text-subtle)]">
+                                              {formatDateWithWeekday(entry.workoutCompletedAt)} · {entry.occurrenceLabel}
+                                            </p>
+                                          </div>
+                                          <p className="mt-1 whitespace-pre-line text-sm leading-6 text-[var(--text-muted)]">
+                                            {entry.body}
+                                          </p>
+                                          <p className="mt-1 text-xs text-[var(--text-subtle)]">{formatDateWithWeekday(entry.createdAt)}</p>
+                                        </div>
+                                      ))
+                                    ) : (
+                                      <p className="rounded-lg border border-dashed border-[var(--border)] bg-[var(--surface)] px-3 py-2 text-sm text-[var(--text-subtle)]">
+                                        Tälle treenialueelle ei ole vielä kertynyt kommentteja keskusteluvirtaan.
+                                      </p>
+                                    )}
+                                  </div>
+                                  <div className="mt-3">
+                                    <Button type="button" variant="secondary" onClick={() => onOpenConversation?.()}>
+                                      Avaa keskustelu
+                                    </Button>
+                                  </div>
+                                </div>
                               </div>
                             </div>
                           </div>
                         </div>
-                      </div>
-                    </div>
-                  );
-                })
-              )}
-            </div>
+                      );
+                    })
+                  )}
+                </div>
+              </div>
+            ) : null}
           </div>
         </>
       ) : null}
@@ -2692,22 +2858,22 @@ function InsightMetric({
   label: string;
   value: string | number;
   hint: string;
-  icon: typeof Activity;
+  icon: LucideIcon;
 }) {
   return (
-    <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface-2)] p-4">
-      <div className="flex items-start justify-between gap-3">
+    <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface-2)] px-3 py-2.5">
+      <div className="flex items-start justify-between gap-2">
         <div>
           <p className="text-xs font-semibold tracking-[0.03em] text-[var(--text-subtle)]">{label}</p>
-          <p className="mt-2 font-[family-name:var(--font-display)] text-2xl font-semibold text-[var(--text)]">
+          <p className="mt-1 font-[family-name:var(--font-display)] text-xl font-semibold text-[var(--text)]">
             {value}
           </p>
         </div>
-        <div className="rounded-xl border border-[var(--border)] bg-[var(--surface)] p-2.5">
-          <Icon className="size-4 text-[var(--accent)]" />
+        <div className="rounded-lg border border-[var(--border)] bg-[var(--surface)] p-2">
+          <Icon className="size-3.5 text-[var(--accent)]" />
         </div>
       </div>
-      <p className="mt-2 text-xs text-[var(--text-subtle)]">{hint}</p>
+      <p className="mt-1 text-[11px] text-[var(--text-subtle)]">{hint}</p>
     </div>
   );
 }

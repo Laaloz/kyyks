@@ -216,6 +216,7 @@ export function AthleteDashboard({
   const [measurementMessageTone, setMeasurementMessageTone] = useState<MeasurementMessageTone>("info");
   const [isSavingMeasurements, setIsSavingMeasurements] = useState(false);
   const [isMeasurementFormExpanded, setIsMeasurementFormExpanded] = useState(false);
+  const [activeMeasurementTrend, setActiveMeasurementTrend] = useState<"weight" | "waist" | "volume">("weight");
   const [isCompletingWorkout, setIsCompletingWorkout] = useState(false);
   const [pendingWorkoutTransition, setPendingWorkoutTransition] = useState<
     | { type: "open"; scheduledWorkoutId: string; workoutName: string; sourceKey: string }
@@ -264,6 +265,7 @@ export function AthleteDashboard({
   }, [currentUser?.id]);
   useEffect(() => {
     setIsMeasurementFormExpanded(false);
+    setActiveMeasurementTrend("weight");
   }, [currentUser?.id]);
   useEffect(() => {
     onWorkoutDetailModeChange?.(view === "athlete-log" && athleteLogMode === "workout");
@@ -551,6 +553,18 @@ export function AthleteDashboard({
         : [],
     [bodyMeasurements, currentUser],
   );
+  const volumeTrendPoints = useMemo(
+    () =>
+      [...workouts]
+        .filter((workout) => workout.status === "completed")
+        .map((workout) => ({
+          date: workout.completedAt ?? sessionByWorkoutId.get(workout.id)?.completedAt ?? getWorkoutOrderMetadata(workout).primaryTimestamp,
+          value: workoutInsights.get(workout.id)?.liftedKg ?? 0,
+        }))
+        .sort((left, right) => left.date.localeCompare(right.date))
+        .slice(-12),
+    [getWorkoutOrderMetadata, sessionByWorkoutId, workoutInsights, workouts],
+  );
   const openWorkoutView = (scheduledWorkoutId: string, options?: { correctionMode?: boolean }) => {
     setDismissedActiveWorkoutId(null);
     setHistoryFocusWorkoutId(null);
@@ -797,21 +811,24 @@ export function AthleteDashboard({
     };
   }, [athletePrograms, getWorkoutOrderMetadata, state.sessions, workoutInsights, workouts]);
   const groupedWorkoutHistory = useMemo(() => {
+    const planTitleById = new Map(state.plans.map((plan) => [plan.id, plan.title.trim()]));
     const grouped = new Map<
       string,
       {
         key: string;
         title: string;
+        programTitle?: string;
         workouts: Array<{
           workout: (typeof workoutHistory)[number];
           occurrenceLabel: string;
           insight: WorkoutInsight;
-          notePreview: string | null;
+          noteBody: string | null;
           workoutStatus: string;
           completedAt: string;
           historyDateLabel: string;
           canResumeHistoryWorkout: boolean;
           canDeleteHistoryWorkout: boolean;
+          programTitle?: string;
         }>;
       }
     >();
@@ -830,7 +847,7 @@ export function AthleteDashboard({
         muscleGroupSetCounts: createEmptyMuscleGroupSetCounts(),
         muscleGroupLiftedKg: createEmptyMuscleGroupLiftedKg(),
       };
-      const notePreview = createNotePreview(latestNoteByWorkoutId.get(workout.id)?.body);
+      const noteBody = latestNoteByWorkoutId.get(workout.id)?.body ?? null;
       const canDeleteHistoryWorkout = Boolean(workout.programWorkoutId);
       const workoutStatus = resolveWorkoutStatus(workout);
       const completedAt =
@@ -845,18 +862,27 @@ export function AthleteDashboard({
       const canResumeHistoryWorkout =
         workoutStatus === "cancelled" && scheduledWithSessionIds.has(workout.id);
       const title = historyTitle?.title ?? normalizeWorkoutHistoryTitle(workout.title);
-      const groupKey = title.toLowerCase();
+      const programTitle =
+        workout.trainingPlanId && workout.programWorkoutId
+          ? planTitleById.get(workout.trainingPlanId) || undefined
+          : undefined;
+      const groupKey = workout.programWorkoutId
+        ? `program:${workout.programWorkoutId}`
+        : workout.templateId
+          ? `template:${workout.templateId}`
+          : `title:${title.toLowerCase()}`;
       const current = grouped.get(groupKey);
       const row = {
         workout,
         occurrenceLabel: historyTitle?.occurrenceLabel ?? "Treeni 1",
         insight,
-        notePreview,
+        noteBody,
         workoutStatus,
         completedAt,
         historyDateLabel,
         canResumeHistoryWorkout,
         canDeleteHistoryWorkout,
+        programTitle,
       };
 
       if (current) {
@@ -867,6 +893,7 @@ export function AthleteDashboard({
       grouped.set(groupKey, {
         key: groupKey,
         title,
+        programTitle,
         workouts: [row],
       });
     });
@@ -887,6 +914,7 @@ export function AthleteDashboard({
     resolveWorkoutStatus,
     scheduledWithSessionIds,
     sessionByWorkoutId,
+    state.plans,
     workoutHistory,
     workoutHistoryTitles,
     getWorkoutOrderMetadata,
@@ -1056,93 +1084,118 @@ export function AthleteDashboard({
         <Card className="border-[var(--border-strong)]">
           <div className="space-y-4">
             <div>
-              <p className="text-xs font-semibold tracking-[0.04em] text-[var(--text-subtle)]">Treeniäly</p>
-              <CardTitle className="mt-2 text-2xl">Tämän viikon treenipulssi</CardTitle>
+              <p className="text-xs font-semibold tracking-[0.04em] text-[var(--text-subtle)]">Yhteenveto</p>
+              <CardTitle className="mt-2 text-2xl">Tämä viikko</CardTitle>
               <CardDescription className="mt-2 max-w-3xl leading-7">
-                Näe yhdellä silmäyksellä mitä kannattaa tehdä seuraavaksi, miten viikko etenee ja mitä olet jo saanut aikaan.
+                Näet viikon etenemisen, viimeisimmän treenin ja seuraavan askeleen yhdellä silmäyksellä.
               </CardDescription>
             </div>
-            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-[1fr_1fr_0.85fr] lg:auto-rows-fr lg:items-stretch">
-              <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface-2)] px-4 py-4">
-                <div className="flex items-center gap-1">
-                  <p className="text-xs font-semibold tracking-[0.04em] text-[var(--text-subtle)]">Viikon eteneminen</p>
-                  <InfoTooltip text="Kuinka monta tämän viikon valmista treeniä on tehty suhteessa ohjelman viikkotavoitteeseen." />
-                </div>
-                <p className="mt-2 text-lg font-semibold text-[var(--text)]">
-                  {weeklyInsights.completedCount}/{weeklyInsights.targetCount} treeniä valmiina
-                </p>
-                <p className="mt-1 text-sm text-[var(--text-muted)]">
-                  {weeklyInsights.targetCount > 0
-                    ? "Tasainen eteneminen vie pitkälle. Jatkuvuus rakentaa tuloksia."
-                    : "Viikkotavoitetta ei ole vielä määritetty."}
-                </p>
-              </div>
-              <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface-2)] px-4 py-4">
-                <div className="flex items-center gap-1">
-                  <p className="text-xs font-semibold tracking-[0.04em] text-[var(--text-subtle)]">Nostettu tällä viikolla</p>
-                  <InfoTooltip text="Luku lasketaan valmiista sarjoista kaavalla kuorma x toistot." />
-                </div>
-                <p className="mt-2 text-lg font-semibold text-[var(--text)]">{formatLiftedKgValue(weeklyInsights.weeklyVolume)}</p>
-                <p className="mt-1 text-sm text-[var(--text-muted)]">
-                  Jokainen valmis sarja kasvattaa kokonaistyömäärää ja rakentaa progressiota.
-                </p>
-              </div>
-              <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface-2)] px-4 py-4">
-                  <p className="text-xs font-semibold tracking-[0.04em] text-[var(--text-subtle)]">
-                    {highlightedWorkoutState === "active"
-                      ? "Aktiivinen treeni"
-                      : highlightedWorkoutState === "resumable"
-                        ? "Keskeytetty treeni"
-                        : "Päivän valinta"}
-                  </p>
-                  <p className="mt-2 text-lg font-semibold text-[var(--text)]">
-                    {highlightedWorkout
-                      ? normalizeWorkoutHistoryTitle(highlightedWorkout.title)
-                      : athletePrograms.length
-                        ? "Ei aktiivista treeniä"
-                        : "Ei treenejä vielä"}
-                  </p>
-                  <p className="mt-1 text-sm text-[var(--text-muted)]">
-                    {highlightedWorkoutState === "active"
-                      ? "Siirry takaisin treeniin ja viimeistele sarjat."
-                      : highlightedWorkoutState === "resumable"
-                        ? "Sinulla on keskeytetty treeni odottamassa jatkoa samasta kohdasta."
-                      : athletePrograms.length
-                        ? "Avaa alapuolelta treenilista ja valitse seuraava treeni ohjelmastasi."
-                        : "Pyydä valmentajaa rakentamaan ensimmäinen ohjelma."}
-                  </p>
-                  {highlightedWorkout ? (
-                    <div className="mt-4">
-                      <Button
-                        type="button"
-                        variant="secondary"
-                        className="w-full sm:w-auto"
-                        loading={isTransitionLoading("overview-highlight")}
-                        loadingText="Avataan treeniä..."
-                        onClick={() => {
-                          void openOrResumeWorkout(highlightedWorkout.id, "overview-highlight");
-                        }}
-                      >
-                        {highlightedWorkoutState === "active" ? "Siirry treeniin" : "Jatka treeniä"}
-                      </Button>
+            <div className="grid gap-3 lg:grid-cols-[1.2fr_0.8fr]">
+              <div className="rounded-3xl border border-[var(--border)] bg-[var(--surface-2)] p-5">
+                <div className="grid gap-4 md:grid-cols-[auto_1fr] md:items-center">
+                  <ProgressRing label="Viikon eteneminen" percent={weeklyInsights.completionRate} showLabel={false} />
+                  <div className="space-y-4">
+                    <div className="text-center">
+                      <div className="flex items-center justify-center gap-1">
+                        <p className="text-xs font-semibold tracking-[0.04em] text-[var(--text-subtle)]">Viikon eteneminen</p>
+                        <InfoTooltip text="Kuinka monta tämän viikon valmista treeniä on tehty suhteessa ohjelman viikkotavoitteeseen." />
+                      </div>
+                      <p className="mt-2 text-2xl font-semibold text-[var(--text)]">
+                        {weeklyInsights.completedCount}{" "}
+                        {weeklyInsights.completedCount === 1 ? "treeni" : "treeniä"} valmiina
+                      </p>
+                      <p className="mt-1 text-sm text-[var(--text-muted)]">
+                        {weeklyInsights.targetCount > 0
+                          ? `Tavoite tällä viikolla: ${weeklyInsights.targetCount} ${weeklyInsights.targetCount === 1 ? "treeni" : "treeniä"}`
+                          : "Viikkotavoitetta ei ole vielä määritetty."}
+                      </p>
                     </div>
-                  ) : null}
+                    <div className="grid gap-3 sm:grid-cols-2">
+                      <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface)] px-4 py-3">
+                        <div className="flex items-center gap-1">
+                          <p className="text-xs font-semibold tracking-[0.04em] text-[var(--text-subtle)]">Volyymi tällä viikolla</p>
+                          <InfoTooltip text="Luku lasketaan valmiista sarjoista kaavalla kuorma x toistot." />
+                        </div>
+                        <p className="mt-1 text-base font-semibold text-[var(--text)]">
+                          {formatLiftedKgValue(weeklyInsights.weeklyVolume)}
+                        </p>
+                        <p className="mt-1 text-xs text-[var(--text-subtle)]">Valmiit sarjat yhteensä</p>
+                      </div>
+                      <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface)] px-4 py-3">
+                        <p className="text-xs font-semibold tracking-[0.04em] text-[var(--text-subtle)]">Viimeisin valmis treeni</p>
+                        <p className="mt-1 text-base font-semibold text-[var(--text)]">
+                          {weeklyInsights.latestCompleted
+                            ? normalizeWorkoutHistoryTitle(weeklyInsights.latestCompleted.title)
+                            : "Ei vielä valmiita treenejä"}
+                        </p>
+                        <p className="mt-1 text-xs text-[var(--text-muted)]">
+                          {weeklyInsights.latestCompleted
+                            ? formatDateWithWeekday(weeklyInsights.latestCompleted.completedAt ?? getWorkoutOrderMetadata(weeklyInsights.latestCompleted).primaryTimestamp)
+                            : "Kun saat treenin valmiiksi, se näkyy tässä."}
+                        </p>
+                      </div>
+                    </div>
+                  </div>
                 </div>
-              <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface-2)] px-4 py-4">
-                <p className="text-xs font-semibold tracking-[0.04em] text-[var(--text-subtle)]">Viimeisin valmis treeni</p>
+              </div>
+              <div className="rounded-3xl border border-[var(--border)] bg-[var(--surface-2)] p-5">
+                <p className="text-xs font-semibold tracking-[0.04em] text-[var(--text-subtle)]">
+                  {highlightedWorkoutState === "active"
+                    ? "Aktiivinen treeni"
+                    : highlightedWorkoutState === "resumable"
+                      ? "Keskeytetty treeni"
+                      : "Seuraava askel"}
+                </p>
                 <p className="mt-2 text-lg font-semibold text-[var(--text)]">
-                  {weeklyInsights.latestCompleted
-                    ? normalizeWorkoutHistoryTitle(weeklyInsights.latestCompleted.title)
-                    : "Ei vielä valmiita treenejä"}
+                  {highlightedWorkout
+                    ? normalizeWorkoutHistoryTitle(highlightedWorkout.title)
+                    : athletePrograms.length
+                      ? "Avaa treenit"
+                      : "Ei treenejä vielä"}
                 </p>
                 <p className="mt-1 text-sm text-[var(--text-muted)]">
-                  {weeklyInsights.latestCompleted
-                    ? `${formatDateWithWeekday(weeklyInsights.latestCompleted.completedAt ?? getWorkoutOrderMetadata(weeklyInsights.latestCompleted).primaryTimestamp)} · ${formatLiftedKgValue(weeklyInsights.latestCompletedVolume)}`
-                    : "Ensimmäinen valmis treeni näkyy tässä automaattisesti."}
+                  {highlightedWorkoutState === "active"
+                    ? "Palaa suoraan käynnissä olevaan treeniin."
+                    : highlightedWorkoutState === "resumable"
+                      ? "Keskeytetty treeni odottaa jatkamista."
+                      : athletePrograms.length
+                        ? "Valitse seuraava treeni treenilistasta."
+                        : "Pyydä valmentajaa rakentamaan ensimmäinen ohjelma."}
                 </p>
-              </div>
-              <div className="grid place-items-center rounded-3xl border border-[var(--border)] bg-[var(--surface-2)] p-6 sm:col-span-2 lg:col-start-3 lg:row-start-1 lg:row-span-2">
-                <ProgressRing label="Viikon eteneminen" percent={weeklyInsights.completionRate} />
+                <div className="mt-4">
+                  {highlightedWorkout ? (
+                    <Button
+                      type="button"
+                      variant="secondary"
+                      className="w-full"
+                      loading={isTransitionLoading("overview-highlight")}
+                      loadingText="Avataan treeniä..."
+                      onClick={() => {
+                        void openOrResumeWorkout(highlightedWorkout.id, "overview-highlight");
+                      }}
+                    >
+                      {highlightedWorkoutState === "active" ? "Siirry treeniin" : "Jatka treeniä"}
+                    </Button>
+                  ) : (
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      className="w-full"
+                      disabled={!athletePrograms.length}
+                      onClick={() => {
+                        setAthleteLogMode("library");
+                        onOpenWorkoutLog?.();
+                      }}
+                    >
+                      Avaa treenit
+                    </Button>
+                  )}
+                </div>
+                {weeklyInsights.latestCompleted ? (
+                  <p className="mt-3 text-xs text-[var(--text-subtle)]">
+                    Viimeisin valmis: {formatLiftedKgValue(weeklyInsights.latestCompletedVolume)}
+                  </p>
+                ) : null}
               </div>
             </div>
           </div>
@@ -1160,39 +1213,36 @@ export function AthleteDashboard({
                 <p className="text-xs font-semibold tracking-[0.04em] text-[var(--text-subtle)]">Kehon seuranta</p>
                 <CardTitle className="mt-2 text-2xl">Omat mitat ja kehitys</CardTitle>
                 <CardDescription className="mt-2 max-w-3xl">
-                  Näet tästä omat viimeisimmät mittasi ja niiden kehityksen. Kun kirjaat uuden mittauksen, seuranta päivittyy automaattisesti.
+                  Näet viimeisimmät mittasi ja niiden kehityksen.
                 </CardDescription>
             </div>
-            <div className="grid w-full gap-3 sm:grid-cols-2 xl:w-auto xl:min-w-[38rem] xl:grid-cols-4">
-              <div className="rounded-2xl border border-dashed border-[var(--border)] bg-[color-mix(in_srgb,var(--surface-2)_74%,var(--surface))] px-4 py-4">
-                <div className="flex items-center justify-between gap-3">
-                  <p className="text-xs font-semibold tracking-[0.04em] text-[var(--text-subtle)]">Pituus</p>
-                  <Badge className="border-[var(--border)] bg-[var(--surface)] text-[10px] text-[var(--text-subtle)]">
-                    Profiilissa
+            <div className="grid w-full gap-2 sm:grid-cols-2 lg:grid-cols-4">
+              <div className="rounded-2xl border border-dashed border-[var(--border)] bg-[color-mix(in_srgb,var(--surface-2)_74%,var(--surface))] px-3 py-2.5">
+                <div className="flex items-center justify-between gap-2">
+                  <p className="text-[11px] font-semibold tracking-[0.04em] text-[var(--text-subtle)]">Pituus</p>
+                  <Badge className="border-[var(--border)] bg-[var(--surface)] px-2 py-0.5 text-[9px] text-[var(--text-subtle)]">
+                    Profiili
                   </Badge>
                 </div>
-                <p className="mt-2 text-lg font-semibold text-[var(--text)]">
+                <p className="mt-1 text-base font-semibold text-[var(--text)]">
                   {currentUser.heightCm !== undefined ? `${currentUser.heightCm} cm` : "Ei asetettu"}
                 </p>
-                <p className="mt-2 text-xs text-[var(--text-subtle)]">
-                  Päivitä pituus tilin profiilista. Paino ja vyötärö kirjataan alle omaan mittaseurantaan.
-                </p>
               </div>
-              <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface-2)] px-4 py-4">
-                <p className="text-xs font-semibold tracking-[0.04em] text-[var(--text-subtle)]">Paino</p>
-                <p className="mt-2 text-lg font-semibold text-[var(--text)]">
+              <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface-2)] px-3 py-2.5">
+                <p className="text-[11px] font-semibold tracking-[0.04em] text-[var(--text-subtle)]">Paino</p>
+                <p className="mt-1 text-base font-semibold text-[var(--text)]">
                   {currentUser.weightKg !== undefined ? `${currentUser.weightKg} kg` : "Ei asetettu"}
                 </p>
               </div>
-              <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface-2)] px-4 py-4">
-                <p className="text-xs font-semibold tracking-[0.04em] text-[var(--text-subtle)]">Vyötärö</p>
-                <p className="mt-2 text-lg font-semibold text-[var(--text)]">
+              <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface-2)] px-3 py-2.5">
+                <p className="text-[11px] font-semibold tracking-[0.04em] text-[var(--text-subtle)]">Vyötärö</p>
+                <p className="mt-1 text-base font-semibold text-[var(--text)]">
                   {latestWaistCm !== undefined ? `${latestWaistCm} cm` : "Ei asetettu"}
                 </p>
               </div>
-              <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface-2)] px-4 py-4">
-                <p className="text-xs font-semibold tracking-[0.04em] text-[var(--text-subtle)]">Viimeisin mittaus</p>
-                <p className="mt-2 text-lg font-semibold text-[var(--text)]">
+              <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface-2)] px-3 py-2.5">
+                <p className="text-[11px] font-semibold tracking-[0.04em] text-[var(--text-subtle)]">Viimeisin mittaus</p>
+                <p className="mt-1 text-base font-semibold text-[var(--text)]">
                   {latestBodyMeasurement ? formatDate(latestBodyMeasurement.measuredAt) : "Ei vielä"}
                 </p>
               </div>
@@ -1210,7 +1260,7 @@ export function AthleteDashboard({
               >
                 <span className="block text-sm font-semibold text-[var(--text)]">Kirjaa uusi mittaus</span>
                 <span className="mt-1 block text-sm text-[var(--text-muted)]">
-                  Lisää tähän uusin mittaus, kun haluat päivittää oman seurannan. Voit täyttää vain ne kentät, joihin tuli muutos.
+                  Päivitä paino tai vyötärö. Voit täyttää vain muuttuneet kentät.
                 </span>
               </button>
               <button
@@ -1288,8 +1338,8 @@ export function AthleteDashboard({
                   >
                     {measurementMessage ||
                       (isMeasurementDirty
-                        ? "Tallennus päivittää viimeisimmän mittauksen ja trendit."
-                        : "Täytä yksi tai useampi kenttä, kun haluat tallentaa uuden mittauksen.")}
+                        ? "Tallennus päivittää mittauksen ja trendin."
+                        : "Täytä paino tai vyötärö tallentaaksesi uuden mittauksen.")}
                   </p>
                   <Button
                     type="button"
@@ -1326,120 +1376,96 @@ export function AthleteDashboard({
               </div>
             ) : null}
           </div>
-          <div className="mt-5 grid gap-4 xl:grid-cols-2">
-            <div>
-              <p className="text-xs font-semibold tracking-[0.04em] text-[var(--text-subtle)]">Painotrendi</p>
-              <MetricTrendChart
-                points={weightTrendPoints}
-                ariaLabel="Painon kehitystrendi"
-                emptyMessage="Lisää paino viimeisimpään mittaukseen, niin kehitystrendi alkaa piirtyä tähän."
-                helperText="Alarivillä näkyy kuukausi ja vuosi, oikealla painon asteikko."
-                valueLabel="Paino"
-                unit="kg"
-              />
+          <div className="mt-5 rounded-2xl border border-[var(--border)] bg-[var(--surface-2)] p-4">
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+              <div>
+                <p className="text-sm font-semibold text-[var(--text)]">Kehitystrendi</p>
+                <p className="mt-1 text-sm text-[var(--text-muted)]">Valitse paino, vyötärö tai volyymi.</p>
+              </div>
+              <div className="grid w-full grid-cols-3 rounded-xl border border-[var(--border)] bg-[var(--surface)] p-1 sm:w-auto">
+                <button
+                  type="button"
+                  className={`w-full rounded-lg px-3 py-2 text-sm font-medium transition ${
+                    activeMeasurementTrend === "weight"
+                      ? "bg-[color-mix(in_srgb,var(--accent)_10%,var(--surface))] text-[var(--accent)]"
+                      : "text-[var(--text-muted)]"
+                  }`}
+                  aria-pressed={activeMeasurementTrend === "weight"}
+                  onClick={() => setActiveMeasurementTrend("weight")}
+                >
+                  Paino
+                </button>
+                <button
+                  type="button"
+                  className={`w-full rounded-lg px-3 py-2 text-sm font-medium transition ${
+                    activeMeasurementTrend === "waist"
+                      ? "bg-[color-mix(in_srgb,var(--accent)_10%,var(--surface))] text-[var(--accent)]"
+                      : "text-[var(--text-muted)]"
+                  }`}
+                  aria-pressed={activeMeasurementTrend === "waist"}
+                  onClick={() => setActiveMeasurementTrend("waist")}
+                >
+                  Vyötärö
+                </button>
+                <button
+                  type="button"
+                  className={`w-full rounded-lg px-3 py-2 text-sm font-medium transition ${
+                    activeMeasurementTrend === "volume"
+                      ? "bg-[color-mix(in_srgb,var(--accent)_10%,var(--surface))] text-[var(--accent)]"
+                      : "text-[var(--text-muted)]"
+                  }`}
+                  aria-pressed={activeMeasurementTrend === "volume"}
+                  onClick={() => setActiveMeasurementTrend("volume")}
+                >
+                  Volyymi
+                </button>
+              </div>
             </div>
-            <div>
-              <p className="text-xs font-semibold tracking-[0.04em] text-[var(--text-subtle)]">Vyötärötrendi</p>
-              <MetricTrendChart
-                points={waistTrendPoints}
-                ariaLabel="Vyötärön kehitystrendi"
-                emptyMessage="Lisää vyötärö viimeisimpään mittaukseen, niin kehitystrendi alkaa piirtyä tähän."
-                helperText="Alarivillä näkyy kuukausi ja vuosi, oikealla vyötärön asteikko."
-                valueLabel="Vyötärö"
-                unit="cm"
-              />
+            <div className="mt-4">
+              {activeMeasurementTrend === "weight" ? (
+                <>
+                  <p className="text-xs font-semibold tracking-[0.04em] text-[var(--text-subtle)]">Painotrendi</p>
+                  <MetricTrendChart
+                    points={weightTrendPoints}
+                    ariaLabel="Painon kehitystrendi"
+                    emptyMessage="Lisää paino viimeisimpään mittaukseen, niin kehitystrendi alkaa piirtyä tähän."
+                    helperText="Alarivillä näkyy kuukausi ja vuosi, oikealla painon asteikko."
+                    valueLabel="Paino"
+                    unit="kg"
+                  />
+                </>
+              ) : activeMeasurementTrend === "waist" ? (
+                <>
+                  <p className="text-xs font-semibold tracking-[0.04em] text-[var(--text-subtle)]">Vyötärötrendi</p>
+                  <MetricTrendChart
+                    points={waistTrendPoints}
+                    ariaLabel="Vyötärön kehitystrendi"
+                    emptyMessage="Lisää vyötärö viimeisimpään mittaukseen, niin kehitystrendi alkaa piirtyä tähän."
+                    helperText="Alarivillä näkyy kuukausi ja vuosi, oikealla vyötärön asteikko."
+                    valueLabel="Vyötärö"
+                    unit="cm"
+                  />
+                </>
+              ) : (
+                <>
+                  <p className="text-xs font-semibold tracking-[0.04em] text-[var(--text-subtle)]">Volyymitrendi</p>
+                  <MetricTrendChart
+                    points={volumeTrendPoints}
+                    ariaLabel="Volyymin kehitystrendi"
+                    emptyMessage="Kun saat treenejä valmiiksi, volyymitrendi näkyy tässä."
+                    helperText="Alarivillä näkyy kuukausi ja vuosi, oikealla volyymin asteikko."
+                    valueLabel="Volyymi"
+                    unit="kg"
+                    decimals={0}
+                    useZeroBaseline
+                  />
+                </>
+              )}
             </div>
-            </div>
+          </div>
           </Card>
         </div>
       ) : null}
-
-      {view === "overview" && (
-        <Card className="border-[var(--border-strong)]">
-          <p className="text-xs font-semibold tracking-[0.04em] text-[var(--text-subtle)]">Seuraava askel</p>
-          <CardTitle className="text-2xl">
-            {highlightedWorkoutState === "active"
-              ? "Siirry aktiiviseen treeniin"
-              : highlightedWorkoutState === "resumable"
-                ? "Jatka keskeytettyä treeniä"
-              : athletePrograms.length
-                ? "Siirry treeneihin"
-                : "Treeniohjelma puuttuu"}
-          </CardTitle>
-          <CardDescription className="mt-2">
-            {highlightedWorkoutState === "active"
-              ? "Avaa keskeneräinen treeni suoraan siitä kohdasta, johon jäit."
-              : highlightedWorkoutState === "resumable"
-                ? "Jatka keskeytettyä treeniä suoraan siitä kohdasta, johon jäit."
-              : athletePrograms.length
-                ? "Treeneissä valitset treenin, seuraat historiaa ja teet kaikki kirjaukset."
-                : "Pyydä valmentajaa lisäämään sinulle ohjelma, niin pääset aloittamaan treenit tästä."}
-          </CardDescription>
-          <div className="mt-5 grid gap-4 xl:grid-cols-[0.95fr_1.05fr]">
-            <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface-2)] p-4">
-              <p className="text-xs font-semibold tracking-[0.04em] text-[var(--text-subtle)]">
-                {highlightedWorkout ? "Nopea toiminto" : "Treenit"}
-              </p>
-              <p className="mt-2 text-lg font-semibold text-[var(--text)]">
-                {highlightedWorkout ? normalizeWorkoutHistoryTitle(highlightedWorkout.title) : "Avaa treenit ja historia"}
-              </p>
-              <p className="mt-1 text-sm text-[var(--text-muted)]">
-                {highlightedWorkoutState === "active"
-                  ? "Siirry takaisin treeniin ilman ylimääräisiä välivaiheita."
-                  : highlightedWorkoutState === "resumable"
-                    ? "Jatka keskeytettyä treeniä ilman, että aloitat uutta päivää."
-                  : athletePrograms.length
-                    ? "Valitse treeni, käynnistä se tai palaa aiempiin toteutuksiin."
-                    : "Kun ohjelma on luotu, käynnistät treenit tästä näkymästä."}
-              </p>
-              <div className="mt-4 flex flex-wrap gap-3">
-                {highlightedWorkout ? (
-                  <Button
-                    type="button"
-                    variant="secondary"
-                    loading={isTransitionLoading("overview-next-step")}
-                    loadingText="Avataan treeniä..."
-                    onClick={() => {
-                      void openOrResumeWorkout(highlightedWorkout.id, "overview-next-step");
-                    }}
-                  >
-                    {highlightedWorkoutState === "active" ? "Siirry treeniin" : "Jatka treeniä"}
-                  </Button>
-                ) : (
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    disabled={!athletePrograms.length}
-                    onClick={() => {
-                      setAthleteLogMode("library");
-                      onOpenWorkoutLog?.();
-                    }}
-                  >
-                    Avaa treenit
-                  </Button>
-                )}
-              </div>
-            </div>
-            <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
-              <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface-2)] px-4 py-4">
-                <p className="text-xs font-semibold tracking-[0.04em] text-[var(--text-subtle)]">Ohjelmat</p>
-                <p className="mt-2 text-lg font-semibold text-[var(--text)]">{athletePrograms.length}</p>
-                <p className="mt-1 text-sm text-[var(--text-muted)]">Aktiiviset treeniohjelmasi</p>
-              </div>
-              <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface-2)] px-4 py-4">
-                <p className="text-xs font-semibold tracking-[0.04em] text-[var(--text-subtle)]">Toteutukset</p>
-                <p className="mt-2 text-lg font-semibold text-[var(--text)]">{workoutHistory.length}</p>
-                <p className="mt-1 text-sm text-[var(--text-muted)]">Harjoituksiin tallennetut toteutukset</p>
-              </div>
-              <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface-2)] px-4 py-4">
-                <p className="text-xs font-semibold tracking-[0.04em] text-[var(--text-subtle)]">Kesken</p>
-                <p className="mt-2 text-lg font-semibold text-[var(--text)]">{inProgressCount}</p>
-                <p className="mt-1 text-sm text-[var(--text-muted)]">Treeni odottaa jatkamista</p>
-              </div>
-            </div>
-          </div>
-        </Card>
-      )}
 
       {view === "conversation" && currentUser ? (
         <ConversationPanel
@@ -1982,12 +2008,13 @@ export function AthleteDashboard({
                         const {
                           workout,
                           insight,
-                          notePreview,
+                          noteBody,
                           workoutStatus,
                           historyDateLabel,
                           canResumeHistoryWorkout,
                           canDeleteHistoryWorkout,
                           occurrenceLabel,
+                          programTitle,
                         } = selectedHistoryWorkout;
                         const isFocusedHistoryItem = historyFocusWorkoutId === workout.id;
                         const isActionMenuOpen = openHistoryMenuWorkoutId === workout.id;
@@ -2138,6 +2165,9 @@ export function AthleteDashboard({
                                 </div>
                               </div>
                               <div className="mt-3 min-w-0">
+                                {programTitle ? (
+                                  <p className="text-xs text-[var(--text-subtle)]">Ohjelma: {programTitle}</p>
+                                ) : null}
                                 <p className="text-sm text-[var(--text-muted)]">
                                   Toteutus: {historyDateLabel} · {occurrenceLabel}
                                 </p>
@@ -2168,6 +2198,9 @@ export function AthleteDashboard({
                                     <p className="text-[11px] font-semibold tracking-[0.04em] text-[var(--text-subtle)]">
                                       Toteutus
                                     </p>
+                                    {programTitle ? (
+                                      <p className="mt-1 text-xs text-[var(--text-subtle)]">Ohjelma: {programTitle}</p>
+                                    ) : null}
                                     <p className="mt-1 text-sm text-[var(--text)]">
                                       {historyDateLabel} · {occurrenceLabel}
                                     </p>
@@ -2182,6 +2215,9 @@ export function AthleteDashboard({
                                         Uusin ensin
                                       </p>
                                     </div>
+                                    {programTitle ? (
+                                      <p className="mt-2 text-xs text-[var(--text-subtle)]">Ohjelma: {programTitle}</p>
+                                    ) : null}
                                     <Select
                                       id={`athlete-history-group-${group.key}`}
                                       value={workout.id}
@@ -2202,12 +2238,14 @@ export function AthleteDashboard({
                                   </div>
                                 )}
 
-                                {notePreview ? (
+                                {noteBody ? (
                                   <div className="mt-3 rounded-2xl border border-[var(--border)] bg-[var(--surface-2)] px-3 py-3">
                                     <p className="text-[11px] font-semibold tracking-[0.04em] text-[var(--text-subtle)]">
                                       Oma muistiinpano
                                     </p>
-                                    <p className="mt-1 text-xs leading-5 text-[var(--text-muted)]">{notePreview}</p>
+                                    <p className="mt-1 whitespace-pre-line text-xs leading-5 text-[var(--text-muted)]">
+                                      {noteBody}
+                                    </p>
                                   </div>
                                 ) : (
                                   <p className="mt-3 text-xs text-[var(--text-subtle)]">Ei muistiinpanoa tästä treenistä.</p>
@@ -2688,18 +2726,6 @@ function formatWorkoutDuration(seconds: number) {
   return `${String(hours).padStart(2, "0")}:${String(minutes).padStart(2, "0")}:${String(remainder).padStart(2, "0")}`;
 }
 
-function createNotePreview(note?: string, maxLength = 160) {
-  if (!note) {
-    return "";
-  }
-
-  if (note.length <= maxLength) {
-    return note;
-  }
-
-  return `${note.slice(0, maxLength - 1).trimEnd()}…`;
-}
-
 function formatLiftedKgValue(value: number) {
   return `${Math.round(value)} kg`;
 }
@@ -2721,7 +2747,15 @@ function HistoryMetric({ label, value }: { label: string; value: string }) {
   );
 }
 
-function ProgressRing({ percent, label }: { percent: number; label: string }) {
+function ProgressRing({
+  percent,
+  label,
+  showLabel = true,
+}: {
+  percent: number;
+  label: string;
+  showLabel?: boolean;
+}) {
   return (
     <div className="flex flex-col items-center text-center">
       <div
@@ -2740,7 +2774,7 @@ function ProgressRing({ percent, label }: { percent: number; label: string }) {
           <p className="font-[family-name:var(--font-display)] text-3xl font-semibold leading-none text-[var(--text)]">{percent}%</p>
         </div>
       </div>
-      <p className="mt-3 text-xs font-semibold tracking-[0.04em] text-[var(--text-subtle)]">{label}</p>
+      {showLabel ? <p className="mt-3 text-xs font-semibold tracking-[0.04em] text-[var(--text-subtle)]">{label}</p> : null}
     </div>
   );
 }

@@ -26,7 +26,7 @@ const dashboardViewLabel: Record<DashboardHomeView, string> = {
   users: "Käyttäjät",
   [PROGRAMS_DASHBOARD_VIEW]: "Ohjelmat",
   invites: "Kutsut",
-  "athlete-log": "Treenit",
+  "athlete-log": "Treeni",
   conversation: "Keskustelu",
 };
 

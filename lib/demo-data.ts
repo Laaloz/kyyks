@@ -14,7 +14,7 @@ export const defaultGlobalExercises: AppState["exercises"] = [
     name: "Takakyykky",
     category: "Alavartalo",
     equipment: "Levantotanko",
-    cue: "Pidä keskivartalo tiukkana ja aja jaloilla lattiaa vasten.",
+    cue: "Asetu tukevasti tangon alle, jännitä keskivartalo ja pidä rintakehä avoinna. Istuudu hallitusti alas koko jalkapohjalle ja aja ylös painamalla lattiaa pois alta.",
     scope: "global",
   },
   {
@@ -22,7 +22,7 @@ export const defaultGlobalExercises: AppState["exercises"] = [
     name: "Etukyykky",
     category: "Alavartalo",
     equipment: "Levantotanko",
-    cue: "Pidä kyynärpäät ylhäällä ja rintakehä avoinna.",
+    cue: "Pidä kyynärpäät korkealla ja tanko tukevasti etuharteilla. Laskeudu suoraan alas hallitusti ja nouse ylös säilyttäen pysty vartalo ja keskivartalon tuki.",
     scope: "global",
   },
   {
@@ -30,7 +30,7 @@ export const defaultGlobalExercises: AppState["exercises"] = [
     name: "Goblet-kyykky",
     category: "Alavartalo",
     equipment: "Käsipaino / Kahvakuula",
-    cue: "Paina polvia ulos ja pidä kantapäät lattiassa.",
+    cue: "Pidä paino lähellä rintaa ja rintakehä avoinna koko liikkeen ajan. Laskeudu alas kantapäät maassa ja työnnä polvia varpaiden suuntaan.",
     scope: "global",
   },
   {
@@ -38,7 +38,7 @@ export const defaultGlobalExercises: AppState["exercises"] = [
     name: "Jalkaprässi",
     category: "Alavartalo",
     equipment: "Jalkaprässi",
-    cue: "Kontrolloi alasmeno ja työnnä tasaisesti koko jalkapohjalla.",
+    cue: "Aseta jalat tasaisesti levylle ja pidä alaselkä kiinni tuessa. Laskeudu hallitusti sopivaan syvyyteen ja työnnä levy ylös ilman että polvet lukittuvat voimalla.",
     scope: "global",
   },
   {
@@ -46,7 +46,7 @@ export const defaultGlobalExercises: AppState["exercises"] = [
     name: "Hack-kyykky",
     category: "Alavartalo",
     equipment: "Hack-laite",
-    cue: "Pidä selkä tuettuna ja liike hallittuna koko matkalla.",
+    cue: "Pidä selkä tukevasti alustaa vasten ja keskivartalo jännittyneenä. Laskeudu hallitusti alas ja työnnä ylös koko jalkapohjan kautta.",
     scope: "global",
   },
   {
@@ -54,7 +54,7 @@ export const defaultGlobalExercises: AppState["exercises"] = [
     name: "Bulgarialainen askelkyykky",
     category: "Alavartalo",
     equipment: "Käsipainot",
-    cue: "Laske hallitusti ja pidä paino etujalalla.",
+    cue: "Aseta etujalka tukevasti maahan ja pidä paino pääosin etujalalla. Laskeudu suoraan alas hallitusti ja työnnä ylös ilman että takajalka tekee liikaa työtä.",
     scope: "global",
   },
   {
@@ -62,7 +62,7 @@ export const defaultGlobalExercises: AppState["exercises"] = [
     name: "Kävelyaskelkyykky",
     category: "Alavartalo",
     equipment: "Käsipainot",
-    cue: "Pidä vartalo pystyssä ja askelpituus tasaisena.",
+    cue: "Pidä vartalo pystyssä ja askel riittävän pitkänä, jotta etupolvi pysyy hallinnassa. Työnnä jokainen askel ylös etujalan kautta ja säilytä tasainen rytmi.",
     scope: "global",
   },
   {
@@ -70,7 +70,7 @@ export const defaultGlobalExercises: AppState["exercises"] = [
     name: "Step-up",
     category: "Alavartalo",
     equipment: "Boksi + käsipainot",
-    cue: "Paina ylös etujalan kautta ilman ponnistusta takajalalla.",
+    cue: "Aseta koko etujalka korokkeelle ja pidä lantio suorassa. Työnnä itsesi ylös etujalan kautta ilman ponnistusta takajalalla.",
     scope: "global",
   },
   {
@@ -78,7 +78,7 @@ export const defaultGlobalExercises: AppState["exercises"] = [
     name: "Romanialainen maastaveto",
     category: "Takaketju",
     equipment: "Levantotanko",
-    cue: "Vie lantio taakse ja pidä tanko lähellä vartaloa.",
+    cue: "Pidä tanko lähellä reisiä ja selkä neutraalina koko liikkeen ajan. Vie lantiota taakse hallitusti ja nouse ylös puristamalla pakarat.",
     scope: "global",
   },
   {
@@ -86,7 +86,7 @@ export const defaultGlobalExercises: AppState["exercises"] = [
     name: "Maastaveto",
     category: "Takaketju",
     equipment: "Levantotanko",
-    cue: "Vedä tanko lähellä sääriä ja lukitse selkä neutraaliksi.",
+    cue: "Asetu tangon päälle siten, että tanko on lähellä sääriä ja selkä neutraali. Jännitä keskivartalo, työnnä lattiaa pois jaloilla ja vedä tanko ylös vartaloa pitkin.",
     scope: "global",
   },
   {
@@ -94,7 +94,7 @@ export const defaultGlobalExercises: AppState["exercises"] = [
     name: "Sumomaastaveto",
     category: "Takaketju",
     equipment: "Levantotanko",
-    cue: "Avaa polvet varpaiden suuntaan ja työnnä lattiaa sivuille.",
+    cue: "Aseta jalat leveälle ja polvet varpaiden suuntaan. Pidä rintakehä korkealla, työnnä lattiaa sivuille ja vedä tanko ylös lähellä vartaloa.",
     scope: "global",
   },
   {
@@ -102,7 +102,7 @@ export const defaultGlobalExercises: AppState["exercises"] = [
     name: "Good morning",
     category: "Takaketju",
     equipment: "Levantotanko",
-    cue: "Pidä polvissa kevyt koukku ja taivuta lantiosta, ei selästä.",
+    cue: "Pidä polvissa kevyt koukku ja tanko vakaasti yläselällä. Työnnä lantiota taakse ja pidä selkä neutraalina koko alas- ja ylösliikkeen ajan.",
     scope: "global",
   },
   {
@@ -110,7 +110,7 @@ export const defaultGlobalExercises: AppState["exercises"] = [
     name: "Hip thrust",
     category: "Pakarat",
     equipment: "Penkki + tanko",
-    cue: "Purista pakarat yläasennossa ja pidä kylkiluut alhaalla.",
+    cue: "Aseta yläselkä penkkiä vasten ja pidä leuka kevyesti alhaalla. Työnnä lantio ylös puristaen pakaroita ja vältä alaselän yliojennusta.",
     scope: "global",
   },
   {
@@ -118,7 +118,7 @@ export const defaultGlobalExercises: AppState["exercises"] = [
     name: "Glute bridge",
     category: "Pakarat",
     equipment: "Kehonpaino / tanko",
-    cue: "Nosta lantio linjaan ja pidä jännitys pakaroissa.",
+    cue: "Pidä jalkapohjat tukevasti maassa ja kylkiluut alhaalla. Nosta lantio linjaan hallitusti ja purista pakarat yläasennossa.",
     scope: "global",
   },
   {
@@ -126,7 +126,7 @@ export const defaultGlobalExercises: AppState["exercises"] = [
     name: "Takareisikoukistus",
     category: "Alavartalo",
     equipment: "Leg curl -laite",
-    cue: "Pidä lantio tuettuna ja tee liike ilman heilautusta.",
+    cue: "Pidä lantio tuettuna alustaa vasten ja liike rauhallisena. Vedä kantapäät kohti pakaroita hallitusti ja laske takaisin ilman heilautusta.",
     scope: "global",
   },
   {
@@ -134,7 +134,7 @@ export const defaultGlobalExercises: AppState["exercises"] = [
     name: "Jalanojennus",
     category: "Alavartalo",
     equipment: "Leg extension -laite",
-    cue: "Pysäytä hetkeksi yläasennossa ja laske hallitusti.",
+    cue: "Säädä polvi nivelakselin kohdalle ja pidä reidet tukevasti penkissä. Ojenna polvet hallitusti, pysäytä hetkeksi yläasentoon ja laske rauhassa alas.",
     scope: "global",
   },
   {
@@ -142,7 +142,7 @@ export const defaultGlobalExercises: AppState["exercises"] = [
     name: "Pohjenousu seisten",
     category: "Alavartalo",
     equipment: "Pohjelaite / käsipainot",
-    cue: "Käy täydessä venytyksessä ja nouse varpaille loppuun asti.",
+    cue: "Anna kantapäiden laskea alas täyteen venytykseen ja pidä paino päkiöillä. Nouse hallitusti ylös varpaille asti ja pysäytä hetkeksi yläasentoon.",
     scope: "global",
   },
   {
@@ -150,7 +150,7 @@ export const defaultGlobalExercises: AppState["exercises"] = [
     name: "Pohjenousu istuen",
     category: "Alavartalo",
     equipment: "Istuva pohjelaite",
-    cue: "Pidä tempo rauhallisena ja hakeudu täyteen liikerataan.",
+    cue: "Pidä reidet tukevasti alustaa vasten ja hae pohkeeseen täysi venytys ala-asennossa. Nouse hallitusti päkiöille ja jarruta lasku takaisin alas.",
     scope: "global",
   },
   {
@@ -158,7 +158,7 @@ export const defaultGlobalExercises: AppState["exercises"] = [
     name: "Lonkan loitonnus laitteessa",
     category: "Pakarat",
     equipment: "Abductor-laite",
-    cue: "Pidä lantio vakaana ja avaa jalat hallitusti ulos.",
+    cue: "Pidä lantio tukevasti alustaa vasten ja keskivartalo vakaana. Avaa jalat ulos hallitusti ja palauta liike takaisin ilman nykäisyä.",
     scope: "global",
   },
   {
@@ -166,7 +166,7 @@ export const defaultGlobalExercises: AppState["exercises"] = [
     name: "Lonkan lähennys laitteessa",
     category: "Alavartalo",
     equipment: "Adductor-laite",
-    cue: "Purista jalat yhteen hallitusti ilman nykäisyä.",
+    cue: "Pidä lantio paikallaan ja aloita liike hallitusti sisäreisillä. Purista jalat yhteen loppuasentoon ja palauta rauhassa alkuun.",
     scope: "global",
   },
   {
@@ -174,7 +174,7 @@ export const defaultGlobalExercises: AppState["exercises"] = [
     name: "Penkkipunnerrus",
     category: "Rinta",
     equipment: "Penkki + tanko",
-    cue: "Vedä lapaluut yhteen ja pidä jalat aktiivisina.",
+    cue: "Asetu penkille selinmakuulle jalat tukevasti maahan. Vedä lapaluut yhteen ja alas sekä pidä alaselässä kevyt kaari.\n\nOta tangosta hieman hartioita leveämpi ote ja pidä ranteet suorina. Aloita tanko hartioiden yläpuolelta.\n\nLaske tanko hallitusti rinnan alaosaan kyynärpäät noin 30-60 asteen kulmassa vartalosta.\n\nPunnerra tanko takaisin ylös loivassa kaaressa suorille käsille. Pidä keho jännittyneenä ja vältä pomputusta.\n\nHengitä sisään alas laskiessa ja ulos ylös työntäessä.",
     scope: "global",
   },
   {
@@ -182,7 +182,7 @@ export const defaultGlobalExercises: AppState["exercises"] = [
     name: "Vinopenkki tangolla",
     category: "Rinta",
     equipment: "Vinopenkki + tanko",
-    cue: "Pidä liikerata hallittuna ja kyynärpäät hieman vartalon edessä.",
+    cue: "Vedä lapaluut yhteen ja pidä jalat tukevasti maassa. Laske tanko hallitusti ylä- tai keskirinnan suuntaan ja punnersa ylös ilman että kyynärpäät leviävät liikaa.",
     scope: "global",
   },
   {
@@ -190,7 +190,7 @@ export const defaultGlobalExercises: AppState["exercises"] = [
     name: "Alavinopenkki tangolla",
     category: "Rinta",
     equipment: "Alavinopenkki + tanko",
-    cue: "Pidä lapatuet koko sarjan ajan.",
+    cue: "Pidä lapatuet tiukkana ja ranne-tankolinja vakaana. Laske tanko hallitusti alarinnan suuntaan ja työnnä takaisin ylös tasaisella voimalla.",
     scope: "global",
   },
   {
@@ -198,7 +198,7 @@ export const defaultGlobalExercises: AppState["exercises"] = [
     name: "Käsipainopenkki",
     category: "Rinta",
     equipment: "Penkki + käsipainot",
-    cue: "Laske käsipainot kontrolloidusti ja työnnä ylös kaarella.",
+    cue: "Vedä lapaluut yhteen ja pidä käsipainot hallinnassa koko liikeradan ajan. Laske kyynärpäät hallitusti alas ja työnnä painot ylös loivassa kaaressa.",
     scope: "global",
   },
   {
@@ -206,7 +206,7 @@ export const defaultGlobalExercises: AppState["exercises"] = [
     name: "Vinopenkki käsipainoilla",
     category: "Rinta",
     equipment: "Vinopenkki + käsipainot",
-    cue: "Pidä olkapäät alhaalla ja liike vakaana.",
+    cue: "Pidä lapatuet aktiivisina ja olkapäät alhaalla koko sarjan ajan. Laske käsipainot hallitusti alas ja työnnä takaisin ylös vakaalla liikeradalla.",
     scope: "global",
   },
   {
@@ -214,7 +214,7 @@ export const defaultGlobalExercises: AppState["exercises"] = [
     name: "Rintafly käsipainoilla",
     category: "Rinta",
     equipment: "Penkki + käsipainot",
-    cue: "Säilytä kevyt kyynärkulma ja keskity venytykseen.",
+    cue: "Pidä kyynärpäissä kevyt koukku ja rintakehä avoinna. Avaa kädet hallitusti venytykseen ja tuo painot takaisin yhteen ilman että hartiat nousevat.",
     scope: "global",
   },
   {
@@ -222,7 +222,7 @@ export const defaultGlobalExercises: AppState["exercises"] = [
     name: "Taljafly",
     category: "Rinta",
     equipment: "Talja",
-    cue: "Pidä rintakehä ylhäällä ja vie kädet yhteen hallitusti.",
+    cue: "Asetu vakaaseen asentoon ja pidä rintakehä korkealla. Vie kädet yhteen kaarella rintaa puristaen ja palauta hallitusti venytykseen.",
     scope: "global",
   },
   {
@@ -230,7 +230,7 @@ export const defaultGlobalExercises: AppState["exercises"] = [
     name: "Pec deck",
     category: "Rinta",
     equipment: "Pec deck -laite",
-    cue: "Purista rintaa keskiasennossa ja palauta hitaasti.",
+    cue: "Pidä hartiat alhaalla ja kyynärpäät pehmeinä. Purista kädet yhteen rinnan avulla ja jarruta palautus takaisin venytykseen.",
     scope: "global",
   },
   {
@@ -238,7 +238,7 @@ export const defaultGlobalExercises: AppState["exercises"] = [
     name: "Punnerrus",
     category: "Rinta",
     equipment: "Kehonpaino",
-    cue: "Pidä vartalo linjassa ja liike täydessä kontrollissa.",
+    cue: "Pidä vartalo suorassa linjassa päästä kantapäihin ja keskivartalo tiukkana. Laskeudu hallitusti alas ja työnnä ylös ilman että lantio roikkuu.",
     scope: "global",
   },
   {
@@ -246,7 +246,7 @@ export const defaultGlobalExercises: AppState["exercises"] = [
     name: "Dippi",
     category: "Rinta / ojentajat",
     equipment: "Dippiteline",
-    cue: "Pidä hartiat alhaalla ja kyynärpäät hallinnassa.",
+    cue: "Pidä hartiat alhaalla ja rintakehä avoinna. Laskeudu hallitusti kyynärpäät takaviistoon ja työnnä itsesi ylös ilman heilautusta.",
     scope: "global",
   },
   {
@@ -254,7 +254,7 @@ export const defaultGlobalExercises: AppState["exercises"] = [
     name: "Pystypunnerrus tangolla",
     category: "Hartiat",
     equipment: "Levantotanko",
-    cue: "Purista pakarat ja vältä alaselän notkoa.",
+    cue: "Purista pakarat ja keskivartalo tiukaksi ennen nostoa. Työnnä tanko suoraan ylös pään yli ja vie pää läpi yläasennossa.",
     scope: "global",
   },
   {
@@ -262,7 +262,7 @@ export const defaultGlobalExercises: AppState["exercises"] = [
     name: "Istuva pystypunnerrus käsipainoilla",
     category: "Hartiat",
     equipment: "Penkki + käsipainot",
-    cue: "Pidä kyynärpäät ranteiden alla koko liikkeen ajan.",
+    cue: "Asetu tukevasti penkkiin ja pidä kyynärpäät ranteiden alla. Punnerra painot suoraan ylös hallitusti ja laske takaisin ilman että hartiat kohoavat.",
     scope: "global",
   },
   {
@@ -270,7 +270,7 @@ export const defaultGlobalExercises: AppState["exercises"] = [
     name: "Arnold press",
     category: "Hartiat",
     equipment: "Käsipainot",
-    cue: "Kierrä kädet hallitusti ja pidä liike pehmeänä.",
+    cue: "Aloita kämmenet itseä kohti kyynärpäät edessä. Kierrä kädet punnerruksen aikana ylös ja palauta liike hallitusti takaisin alkuasentoon.",
     scope: "global",
   },
   {
@@ -278,7 +278,7 @@ export const defaultGlobalExercises: AppState["exercises"] = [
     name: "Vipunosto sivulle",
     category: "Hartiat",
     equipment: "Käsipainot / talja",
-    cue: "Nosta kyynärpäät johtavana ja vältä vauhdinottoa.",
+    cue: "Pidä kyynärpäissä kevyt kulma ja nosta kädet sivuille hartialinjalle asti. Vältä vauhdinottoa ja pidä niska rentona.",
     scope: "global",
   },
   {
@@ -286,7 +286,7 @@ export const defaultGlobalExercises: AppState["exercises"] = [
     name: "Vipunosto eteen",
     category: "Hartiat",
     equipment: "Käsipainot / levypaino",
-    cue: "Pidä keskivartalo vakaana ja nosta hartiat rentoina.",
+    cue: "Pidä keskivartalo vakaana ja nosta paino hallitusti eteen hartialinjalle. Laske takaisin alas ilman että nojaat taakse.",
     scope: "global",
   },
   {
@@ -294,7 +294,7 @@ export const defaultGlobalExercises: AppState["exercises"] = [
     name: "Takaolkapääfly",
     category: "Hartiat",
     equipment: "Käsipainot / pec deck",
-    cue: "Avaa kädet sivuille ja pidä yläselkä aktiivisena.",
+    cue: "Nojaa eteenpäin vakaasti ja pidä niska neutraalina. Avaa kädet sivuille takaolkapäillä ja jarruta palautus alas.",
     scope: "global",
   },
   {
@@ -302,7 +302,7 @@ export const defaultGlobalExercises: AppState["exercises"] = [
     name: "Pystysoutu",
     category: "Hartiat",
     equipment: "Tanko / käsipainot",
-    cue: "Vedä kyynärpäät ylöspäin hallitusti ilman nykäisyä.",
+    cue: "Vedä paino ylös vartalon läheltä kyynärpäät johtavana. Pidä liike hallittuna ja lopeta ennen kuin hartiat nousevat korviin.",
     scope: "global",
   },
   {
@@ -310,7 +310,7 @@ export const defaultGlobalExercises: AppState["exercises"] = [
     name: "Kulmasoutu",
     category: "Selkä",
     equipment: "Käsipainot",
-    cue: "Pidä vartalo vakaana ja vedä kyynärpäät kohti lantiota.",
+    cue: "Pidä tuki vakaana ja selkä neutraalina. Vedä kyynärpää kohti lantiota ja purista lapaa yhteen yläasennossa.",
     scope: "global",
   },
   {
@@ -318,7 +318,7 @@ export const defaultGlobalExercises: AppState["exercises"] = [
     name: "Kulmasoutu tangolla",
     category: "Selkä",
     equipment: "Levantotanko",
-    cue: "Pidä selkä neutraalina ja vedä tanko alavatsalle.",
+    cue: "Hae vahva etunoja ja pidä keskivartalo tiukkana. Vedä tanko alavatsalle ilman että ylävartalo nousee.",
     scope: "global",
   },
   {
@@ -326,7 +326,7 @@ export const defaultGlobalExercises: AppState["exercises"] = [
     name: "Rintasoutu penkiltä",
     category: "Selkä",
     equipment: "Vinopenkki + käsipainot",
-    cue: "Pidä rintatuki kiinni penkissä ja vedä lavat yhteen.",
+    cue: "Pidä rintakehä tukevasti penkkiä vasten koko sarjan ajan. Vedä kyynärpäät taakse ja purista lapoja yhteen yläasennossa.",
     scope: "global",
   },
   {
@@ -334,7 +334,7 @@ export const defaultGlobalExercises: AppState["exercises"] = [
     name: "Istuva soutu taljassa",
     category: "Selkä",
     equipment: "Talja",
-    cue: "Vedä kahva navan suuntaan ja palauta kontrolloidusti.",
+    cue: "Istahda vakaasti ja pidä rintakehä korkealla. Vedä kahva kohti napaa, pysäytä hetkeksi ja palauta rauhallisesti.",
     scope: "global",
   },
   {
@@ -342,7 +342,7 @@ export const defaultGlobalExercises: AppState["exercises"] = [
     name: "Alatalja",
     category: "Selkä",
     equipment: "Alatalja",
-    cue: "Pidä rintakehä ylhäällä, vedä kyynärpäät taakse ja jarruta palautus.",
+    cue: "Pidä rintakehä ylhäällä ja keskivartalo vakaana koko vedon ajan. Vedä kyynärpäät taakse ja jarruta palautus hallitusti alkuun.",
     scope: "global",
   },
   {
@@ -350,7 +350,7 @@ export const defaultGlobalExercises: AppState["exercises"] = [
     name: "Ylätalja",
     category: "Selkä",
     equipment: "Ylätalja",
-    cue: "Vedä kyynärpäät alas ja taakse, älä nykäise.",
+    cue: "Pidä rintakehä ylhäällä ja aloita veto lapojen aktivoinnilla. Vedä tanko ylärinnan suuntaan kyynärpäät alas ja taakse ilman nykäisyä.",
     scope: "global",
   },
   {
@@ -358,7 +358,7 @@ export const defaultGlobalExercises: AppState["exercises"] = [
     name: "Leuanveto myötäotteella",
     category: "Selkä",
     equipment: "Leuanvetotanko",
-    cue: "Aloita lapojen aktivoinnilla ja vedä rinta kohti tankoa.",
+    cue: "Aloita roikunnasta aktivoimalla lavat ja jännittämällä keskivartalo. Vedä itsesi ylös rinta kohti tankoa ilman heiluriliikettä.",
     scope: "global",
   },
   {
@@ -366,7 +366,7 @@ export const defaultGlobalExercises: AppState["exercises"] = [
     name: "Leuanveto vastaotteella",
     category: "Selkä / hauis",
     equipment: "Leuanvetotanko",
-    cue: "Pidä keskivartalo tiukkana ja vältä keinumista.",
+    cue: "Pidä keskivartalo tiukkana ja aloita veto lapojen kautta. Vedä leuka tangon yli hallitusti ja laskeudu täyteen roikuntaan kontrolloidusti.",
     scope: "global",
   },
   {
@@ -374,7 +374,7 @@ export const defaultGlobalExercises: AppState["exercises"] = [
     name: "Yhden käden soutu taljassa",
     category: "Selkä",
     equipment: "Talja",
-    cue: "Pidä lantio vakaana ja vedä kyynärpää taakse.",
+    cue: "Pidä lantio ja rintakehä vakaana koko vedon ajan. Vedä kyynärpää taakse kyljen suuntaan ja jarruta palautus.",
     scope: "global",
   },
   {
@@ -382,7 +382,7 @@ export const defaultGlobalExercises: AppState["exercises"] = [
     name: "Face pull",
     category: "Yläselkä",
     equipment: "Talja + köysi",
-    cue: "Vedä köysi kasvojen suuntaan ja kierrä peukalot taakse.",
+    cue: "Vedä köysi kasvojen korkeudelle kyynärpäät leveinä. Kierrä peukalot taakse ja pidä yläselkä aktiivisena.",
     scope: "global",
   },
   {
@@ -390,7 +390,7 @@ export const defaultGlobalExercises: AppState["exercises"] = [
     name: "Hartiannosto",
     category: "Yläselkä",
     equipment: "Käsipainot / tanko",
-    cue: "Nosta hartiat suoraan ylös ja laske hitaasti.",
+    cue: "Pidä kädet suorina ja nosta hartiat suoraan ylöspäin. Pysäytä hetkeksi yläasennossa ja laske hitaasti alas.",
     scope: "global",
   },
   {
@@ -398,7 +398,7 @@ export const defaultGlobalExercises: AppState["exercises"] = [
     name: "Suorin käsin ylätaljaveto",
     category: "Selkä",
     equipment: "Talja",
-    cue: "Pidä kyynärpäissä kevyt kulma ja vedä käsivarret alas.",
+    cue: "Pidä rintakehä avoinna ja kyynärpäissä kevyt kulma. Vedä kädet alas lantiolle latseilla ilman että nojaat liikaa.",
     scope: "global",
   },
   {
@@ -406,7 +406,7 @@ export const defaultGlobalExercises: AppState["exercises"] = [
     name: "Kapea penkkipunnerrus",
     category: "Ojentajat",
     equipment: "Penkki + tanko",
-    cue: "Pidä kyynärpäät lähellä vartaloa ja liike kontrollissa.",
+    cue: "Pidä ote hartioita kapeampana ja kyynärpäät lähellä vartaloa. Laske tanko hallitusti alarinnan suuntaan ja punnersa ylös ojentajilla.",
     scope: "global",
   },
   {
@@ -414,7 +414,7 @@ export const defaultGlobalExercises: AppState["exercises"] = [
     name: "Ojentajapunnerrus taljassa",
     category: "Ojentajat",
     equipment: "Talja",
-    cue: "Lukitse kyynärpäät kylkiin ja ojenna loppuun asti.",
+    cue: "Pidä kyynärpäät kiinni kyljissä ja hartiat alhaalla. Ojenna kyynärpäät loppuun asti ja palauta hallitusti takaisin ylös.",
     scope: "global",
   },
   {
@@ -422,7 +422,7 @@ export const defaultGlobalExercises: AppState["exercises"] = [
     name: "Ojentaja pään yli",
     category: "Ojentajat",
     equipment: "Köysitalja / käsipaino",
-    cue: "Pidä yläkädet paikallaan ja venytä ojentaja kunnolla.",
+    cue: "Pidä yläkädet paikallaan ja kyynärpäät osoittamassa eteen. Laske paino venytykseen pään taakse ja ojenna hallitusti ylös.",
     scope: "global",
   },
   {
@@ -430,7 +430,7 @@ export const defaultGlobalExercises: AppState["exercises"] = [
     name: "Ranskalainen punnerrus",
     category: "Ojentajat",
     equipment: "EZ-tanko / käsipainot",
-    cue: "Pidä kyynärpäät osoittamassa ylös ja liike hallittuna.",
+    cue: "Pidä olkavarret mahdollisimman paikallaan ja kyynärpäät osoittamassa ylös. Laske paino hallitusti otsan taakse ja ojenna takaisin ylös.",
     scope: "global",
   },
   {
@@ -438,7 +438,7 @@ export const defaultGlobalExercises: AppState["exercises"] = [
     name: "Hauiskääntö tangolla",
     category: "Hauis",
     equipment: "EZ-tanko / suora tanko",
-    cue: "Pidä kyynärpäät paikallaan ja vältä vartalon heijausta.",
+    cue: "Pidä kyynärpäät kyljissä ja rintakehä avoinna. Nosta tanko ylös ilman heilautusta ja laske hallitusti alas.",
     scope: "global",
   },
   {
@@ -446,7 +446,7 @@ export const defaultGlobalExercises: AppState["exercises"] = [
     name: "Hauiskääntö käsipainoilla",
     category: "Hauis",
     equipment: "Käsipainot",
-    cue: "Kierrä kämmenet ylösnousussa ja laske hitaasti.",
+    cue: "Pidä kyynärpäät paikallaan ja kierrä kämmenet ylös noston aikana. Laske painot hitaasti takaisin alas täyteen venytykseen.",
     scope: "global",
   },
   {
@@ -454,7 +454,7 @@ export const defaultGlobalExercises: AppState["exercises"] = [
     name: "Vasarahauiskääntö",
     category: "Hauis",
     equipment: "Käsipainot",
-    cue: "Pidä ranteet neutraalina ja kyynärpäät kyljessä.",
+    cue: "Pidä ranteet neutraalina ja kyynärpäät lähellä vartaloa. Nosta painot hallitusti ylös ja laske alas ilman heilautusta.",
     scope: "global",
   },
   {
@@ -462,7 +462,7 @@ export const defaultGlobalExercises: AppState["exercises"] = [
     name: "Scott-hauiskääntö",
     category: "Hauis",
     equipment: "Scott-penkki",
-    cue: "Pidä olkavarsi tukevasti padissa ja tee täysi liikerata.",
+    cue: "Pidä olkavarret tukevasti padilla ja hartiat rentoina. Tee täysi liikerata hallitusti ja vältä painon pudottamista alas.",
     scope: "global",
   },
   {
@@ -470,7 +470,7 @@ export const defaultGlobalExercises: AppState["exercises"] = [
     name: "Hauiskääntö taljassa",
     category: "Hauis",
     equipment: "Talja",
-    cue: "Pidä jännitys koko liikkeen ajan.",
+    cue: "Pidä jännitys hauiksessa koko liikkeen ajan ja kyynärpäät paikoillaan. Purista yläasennossa ja palauta hitaasti.",
     scope: "global",
   },
   {
@@ -478,7 +478,7 @@ export const defaultGlobalExercises: AppState["exercises"] = [
     name: "Lankku",
     category: "Core",
     equipment: "Kehonpaino",
-    cue: "Purista pakarat ja pidä kyljet aktiivisina.",
+    cue: "Purista pakarat ja keskivartalo tiukaksi koko pidon ajan. Pidä vartalo suorassa linjassa ilman että alaselkä notkahtaa.",
     scope: "global",
   },
   {
@@ -486,7 +486,7 @@ export const defaultGlobalExercises: AppState["exercises"] = [
     name: "Sivulankku",
     category: "Core",
     equipment: "Kehonpaino",
-    cue: "Pidä lantio ylhäällä ja vartalo suorassa linjassa.",
+    cue: "Pidä kyynärpää suoraan olkapään alla ja lantio korkealla. Säilytä vartalo suorassa linjassa koko pidon ajan.",
     scope: "global",
   },
   {
@@ -494,7 +494,7 @@ export const defaultGlobalExercises: AppState["exercises"] = [
     name: "Dead bug",
     category: "Core",
     equipment: "Kehonpaino",
-    cue: "Pidä alaselkä kevyesti lattiaa vasten koko liikkeen ajan.",
+    cue: "Pidä alaselkä kevyesti lattiaa vasten ja kyljet aktiivisina. Ojenna raajat vuorotellen hallitusti ilman että selkä irtoaa alustasta.",
     scope: "global",
   },
   {
@@ -502,7 +502,7 @@ export const defaultGlobalExercises: AppState["exercises"] = [
     name: "Ab wheel roll-out",
     category: "Core",
     equipment: "Ab wheel",
-    cue: "Vie rulla eteen hallitusti säilyttäen keskivartalon jännitys.",
+    cue: "Jännitä keskivartalo ennen rullausta ja pidä lantio hallinnassa. Vie rulla eteen niin pitkälle kuin pystyt ilman että alaselkä notkahtaa.",
     scope: "global",
   },
   {
@@ -510,7 +510,7 @@ export const defaultGlobalExercises: AppState["exercises"] = [
     name: "Jalkojen nosto roikkuen",
     category: "Core",
     equipment: "Leuanvetotanko",
-    cue: "Nosta jalat ilman heiluriliikettä.",
+    cue: "Aloita vakaasta roikunnasta ja pidä lapatuet aktiivisina. Nosta jalat hallitusti ylös ilman heilautusta ja laske rauhassa alas.",
     scope: "global",
   },
   {
@@ -518,7 +518,7 @@ export const defaultGlobalExercises: AppState["exercises"] = [
     name: "Vatsarutistus taljassa",
     category: "Core",
     equipment: "Talja",
-    cue: "Pyöristä yläselkä hallitusti ja pidä lantio paikallaan.",
+    cue: "Pidä lantio paikallaan ja pyöristä yläselkää vatsan avulla. Rutista hallitusti alas ja palaa ylös ilman että vedät käsillä liikaa.",
     scope: "global",
   },
   {
@@ -526,7 +526,7 @@ export const defaultGlobalExercises: AppState["exercises"] = [
     name: "Russian twist",
     category: "Core",
     equipment: "Levy / käsipaino",
-    cue: "Kierrä rintarankaa, älä vain heilauta käsiä.",
+    cue: "Pidä rintakehä ryhdikkäänä ja keskivartalo aktiivisena. Kierrä rintarangasta puolelta toiselle hallitusti ilman pelkkää käsien heilautusta.",
     scope: "global",
   },
   {
@@ -534,7 +534,7 @@ export const defaultGlobalExercises: AppState["exercises"] = [
     name: "Pallof press",
     category: "Core",
     equipment: "Talja / kuminauha",
-    cue: "Vastusta kiertoa ja pidä lantio neutraalina.",
+    cue: "Asetu vakaaseen asentoon ja jännitä keskivartalo. Punnerra kahva eteen ja vastusta taljan vetoa ilman että lantio kiertyy.",
     scope: "global",
   },
   {
@@ -542,7 +542,7 @@ export const defaultGlobalExercises: AppState["exercises"] = [
     name: "Farmer's walk",
     category: "Koko kroppa",
     equipment: "Käsipainot / farmer-kahvat",
-    cue: "Pidä ryhti korkeana ja askel napakkana.",
+    cue: "Seiso ryhdikkäästi hartiat alhaalla ja pidä ote vahvana. Kävele lyhyin hallituin askelin ilman että kuorma heiluttaa vartaloa.",
     scope: "global",
   },
   {
@@ -550,7 +550,7 @@ export const defaultGlobalExercises: AppState["exercises"] = [
     name: "Kelkan työntö",
     category: "Koko kroppa",
     equipment: "Kelkka",
-    cue: "Pidä vartalo etukenossa ja työnnä tasaisella rytmillä.",
+    cue: "Kallista vartalo kevyesti eteen ja pidä keskivartalo tiukkana. Työnnä kelkkaa tasaisella rytmillä koko jalkapohjan kautta.",
     scope: "global",
   },
   {
@@ -558,7 +558,7 @@ export const defaultGlobalExercises: AppState["exercises"] = [
     name: "Kahvakuulaheilautus",
     category: "Takaketju",
     equipment: "Kahvakuula",
-    cue: "Tee liike lantiosta, ei käsillä nostamalla.",
+    cue: "Vie lantio taakse ja pidä selkä neutraalina ennen heilautusta. Räjäytä lantio eteen ja anna käsien vain ohjata kuulaa.",
     scope: "global",
   },
   {
@@ -566,7 +566,7 @@ export const defaultGlobalExercises: AppState["exercises"] = [
     name: "Thruster",
     category: "Koko kroppa",
     equipment: "Levantotanko / käsipainot",
-    cue: "Yhdistä kyykky ja pystypunnerrus yhtenä virtana.",
+    cue: "Pidä keskivartalo tiukkana ja laskeudu hallittuun etukyykkyyn. Nouse voimakkaasti ylös ja jatka liike suoraan pystypunnerrukseksi.",
     scope: "global",
   },
 ];

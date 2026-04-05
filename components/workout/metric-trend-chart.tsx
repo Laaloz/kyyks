@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   CartesianGrid,
   Line,
@@ -56,6 +56,21 @@ export function MetricTrendChart({
   decimals = 1,
   useZeroBaseline = false,
 }: MetricTrendChartProps) {
+  const [isCompactViewport, setIsCompactViewport] = useState(false);
+
+  useEffect(() => {
+    if (typeof window === "undefined") {
+      return;
+    }
+
+    const mediaQuery = window.matchMedia("(max-width: 520px)");
+    const updateViewport = () => setIsCompactViewport(mediaQuery.matches);
+    updateViewport();
+
+    mediaQuery.addEventListener("change", updateViewport);
+    return () => mediaQuery.removeEventListener("change", updateViewport);
+  }, []);
+
   const chartData = useMemo(
     () =>
       points
@@ -106,11 +121,19 @@ export function MetricTrendChart({
   }
 
   return (
-    <div className="mt-3 min-w-0" role="img" aria-label={ariaLabel}>
-      <div className="h-60 min-h-[15rem] min-w-0 w-full overflow-hidden rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-3">
-        <div className="h-full min-w-0 w-full">
+    <div className="mt-3 min-w-0 max-w-full overflow-hidden" role="img" aria-label={ariaLabel}>
+      <div className="h-60 min-h-[15rem] min-w-0 max-w-full w-full overflow-hidden rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-3">
+        <div className="h-full min-w-0 max-w-full w-full overflow-hidden">
           <ResponsiveContainer width="100%" height="100%">
-            <LineChart data={chartData} margin={{ top: 8, right: 8, bottom: 12, left: 4 }}>
+            <LineChart
+              data={chartData}
+              margin={{
+                top: 8,
+                right: isCompactViewport ? 0 : 8,
+                bottom: isCompactViewport ? 8 : 12,
+                left: isCompactViewport ? 0 : 4,
+              }}
+            >
               <CartesianGrid stroke="var(--border)" strokeDasharray="3 3" vertical={false} />
               <XAxis
                 type="number"
@@ -121,7 +144,7 @@ export function MetricTrendChart({
                 tick={{ fill: "var(--text-subtle)", fontSize: 12 }}
                 tickLine={false}
                 axisLine={{ stroke: "var(--border)" }}
-                tickMargin={10}
+                tickMargin={isCompactViewport ? 6 : 10}
                 minTickGap={24}
               />
               <YAxis
@@ -131,7 +154,8 @@ export function MetricTrendChart({
                 tick={{ fill: "var(--text-subtle)", fontSize: 12 }}
                 tickLine={false}
                 axisLine={false}
-                width={56}
+                width={isCompactViewport ? 36 : 56}
+                hide={isCompactViewport}
               />
               <Tooltip
                 cursor={{ stroke: "var(--border-strong)", strokeDasharray: "4 4" }}

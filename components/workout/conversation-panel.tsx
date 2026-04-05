@@ -243,7 +243,7 @@ function ConversationEntryCard({
               </Badge>
             ) : null}
           </div>
-          <p className="mt-2 text-sm leading-6 text-[var(--text-muted)]">{entry.body}</p>
+          <p className="mt-2 whitespace-pre-line text-sm leading-6 text-[var(--text-muted)]">{entry.body}</p>
         </div>
         <div className="flex items-center gap-2 text-xs text-[var(--text-subtle)]">
           {conversationIcon(entry.type)}

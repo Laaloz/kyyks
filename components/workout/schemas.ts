@@ -204,7 +204,7 @@ export function emptyTemplateExercise() {
   };
 }
 
-export function emptyProgramWorkoutExercise(defaultRestSeconds = 180) {
+export function emptyProgramWorkoutExercise(defaultRestSeconds = 120) {
   return {
     exerciseId: "",
     exerciseNameOverride: "",
@@ -225,14 +225,14 @@ export function emptyProgramWorkoutExercise(defaultRestSeconds = 180) {
 
 export function emptyProgramWorkout(
   splitType: "upper" | "lower" | "full_body" | "custom" = "custom",
-  defaultRestSeconds = 180,
+  defaultRestSeconds = 120,
 ) {
   return {
     splitType,
     nameOverride: "",
     guidance: "",
     defaultRestSeconds,
-    exercises: [emptyProgramWorkoutExercise(defaultRestSeconds)],
+    exercises: [],
   };
 }
 

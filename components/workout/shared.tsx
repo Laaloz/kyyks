@@ -132,52 +132,80 @@ export function OwnTrainingOverviewCard({
     .sort((left, right) =>
       (right.completedAt ?? right.updatedAt).localeCompare(left.completedAt ?? left.updatedAt),
     )[0];
+  const highlightedWorkout = ownWorkouts.find((workout) => workout.status === "in_progress");
+  const highlightedState = highlightedWorkout ? "active" : ownPrograms.length > 0 ? "ready" : "empty";
 
   return (
     <Card className="border-[var(--border-strong)]">
-      <div className="grid gap-5 xl:grid-cols-[1.05fr_0.95fr] xl:items-end">
-        <div className="space-y-3">
-          <p className="text-xs font-semibold tracking-[0.04em] text-[var(--text-subtle)]">Oma treeniseuranta</p>
-          <CardTitle className="text-2xl">Pidä myös oma progressi näkyvissä</CardTitle>
-          <CardDescription className="max-w-3xl leading-6">
-            Treenit-workspacesta näet omat ohjelmat, käynnissä olevat treenit ja viimeisimmät toteutukset ilman että valmennus- tai hallintanäkymä katoaa ympäriltä.
+      <div className="space-y-4">
+        <div>
+          <p className="text-xs font-semibold tracking-[0.04em] text-[var(--text-subtle)]">Yhteenveto</p>
+          <CardTitle className="mt-2 text-2xl">Tämä viikko</CardTitle>
+          <CardDescription className="mt-2 max-w-3xl leading-7">
+            Näet oman treeniseurannan, viimeisimmän toteutuksen ja seuraavan askeleen yhdellä silmäyksellä.
           </CardDescription>
-          <div className="flex flex-wrap items-center gap-3">
-            <Button type="button" variant="secondary" onClick={() => onOpenWorkoutLog?.()}>
-              Avaa omat treenit
-            </Button>
-            <Badge>{currentUser.fullName}</Badge>
+        </div>
+        <div className="grid gap-3 lg:grid-cols-[1.2fr_0.8fr]">
+          <div className="rounded-3xl border border-[var(--border)] bg-[var(--surface-2)] p-5">
+            <div className="space-y-4">
+              <div className="text-center">
+                <p className="text-xs font-semibold tracking-[0.04em] text-[var(--text-subtle)]">Viikon yhteenveto</p>
+                <p className="mt-2 text-2xl font-semibold text-[var(--text)]">
+                  {completedLastWeekCount} {completedLastWeekCount === 1 ? "treeni" : "treeniä"} valmiina
+                </p>
+                <p className="mt-1 text-sm text-[var(--text-muted)]">
+                  {ownPrograms.length > 0
+                    ? `${ownPrograms.length} ${ownPrograms.length === 1 ? "aktiivinen ohjelma" : "aktiivista ohjelmaa"} omassa seurannassa.`
+                    : "Ei aktiivisia omia ohjelmia juuri nyt."}
+                </p>
+              </div>
+              <div className="grid gap-3 sm:grid-cols-2">
+                <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface)] px-4 py-3">
+                  <p className="text-xs font-semibold tracking-[0.04em] text-[var(--text-subtle)]">Kesken nyt</p>
+                  <p className="mt-1 text-base font-semibold text-[var(--text)]">{inProgressCount}</p>
+                </div>
+                <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface)] px-4 py-3">
+                  <p className="text-xs font-semibold tracking-[0.04em] text-[var(--text-subtle)]">Viimeisin valmis treeni</p>
+                  <p className="mt-1 text-base font-semibold text-[var(--text)]">
+                    {latestCompletedWorkout ? normalizeWorkoutHistoryTitle(latestCompletedWorkout.title) : "Ei vielä valmiita treenejä"}
+                  </p>
+                  <p className="mt-1 text-xs text-[var(--text-muted)]">
+                    {latestCompletedWorkout
+                      ? formatDateWithWeekday(latestCompletedWorkout.completedAt ?? latestCompletedWorkout.updatedAt)
+                      : "Kun teet oman treenin valmiiksi, se näkyy tässä."}
+                  </p>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div className="rounded-3xl border border-[var(--border)] bg-[var(--surface-2)] p-5">
+            <p className="text-xs font-semibold tracking-[0.04em] text-[var(--text-subtle)]">
+              {highlightedState === "active" ? "Aktiivinen treeni" : "Seuraava askel"}
+            </p>
+            <p className="mt-2 text-lg font-semibold text-[var(--text)]">
+              {highlightedWorkout
+                ? normalizeWorkoutHistoryTitle(highlightedWorkout.title)
+                : ownPrograms.length
+                  ? "Avaa omat treenit"
+                  : "Ei treenejä vielä"}
+            </p>
+            <p className="mt-1 text-sm text-[var(--text-muted)]">
+              {highlightedState === "active"
+                ? "Palaa suoraan käynnissä olevaan treeniin."
+                : ownPrograms.length
+                  ? "Siirry treeneihin nähdäksesi omat ohjelmat ja toteutukset."
+                  : "Luo ensin oma ohjelma tai avaa treenit, kun sisältöä on saatavilla."}
+            </p>
+            <div className="mt-4">
+              <Button type="button" variant={highlightedWorkout ? "secondary" : "ghost"} className="w-full" onClick={() => onOpenWorkoutLog?.()}>
+                {highlightedWorkout ? "Siirry treeniin" : "Avaa omat treenit"}
+              </Button>
+            </div>
+            <div className="mt-3 flex flex-wrap items-center gap-2">
+              <Badge>{currentUser.fullName}</Badge>
+            </div>
           </div>
         </div>
-        <div className="grid gap-3 sm:grid-cols-3 xl:grid-cols-1 2xl:grid-cols-3">
-          <div className="rounded-xl border-2 border-[var(--border)] bg-[var(--surface-2)] px-4 py-4">
-            <p className="text-xs font-semibold tracking-[0.04em] text-[var(--text-subtle)]">Aktiiviset ohjelmat</p>
-            <p className="mt-2 text-2xl font-semibold text-[var(--text)]">{ownPrograms.length}</p>
-            <p className="mt-1 text-sm text-[var(--text-muted)]">omaan käyttöön rakennetut ohjelmat</p>
-          </div>
-          <div className="rounded-xl border-2 border-[var(--border)] bg-[var(--surface-2)] px-4 py-4">
-            <p className="text-xs font-semibold tracking-[0.04em] text-[var(--text-subtle)]">Kesken nyt</p>
-            <p className="mt-2 text-2xl font-semibold text-[var(--text)]">{inProgressCount}</p>
-            <p className="mt-1 text-sm text-[var(--text-muted)]">treeni odottaa jatkamista</p>
-          </div>
-          <div className="rounded-xl border-2 border-[var(--border)] bg-[var(--surface-2)] px-4 py-4">
-            <p className="text-xs font-semibold tracking-[0.04em] text-[var(--text-subtle)]">Valmiit 7 päivässä</p>
-            <p className="mt-2 text-2xl font-semibold text-[var(--text)]">{completedLastWeekCount}</p>
-            <p className="mt-1 text-sm text-[var(--text-muted)]">omaa toteutusta viime viikolta</p>
-          </div>
-        </div>
-      </div>
-
-      <div className="mt-5 rounded-2xl border border-[var(--border)] bg-[var(--surface-2)] p-4">
-        <p className="text-xs font-semibold tracking-[0.04em] text-[var(--text-subtle)]">Viimeisin valmis treeni</p>
-        <p className="mt-2 text-lg font-semibold text-[var(--text)]">
-          {latestCompletedWorkout ? normalizeWorkoutHistoryTitle(latestCompletedWorkout.title) : "Ei vielä valmiita omia treenejä"}
-        </p>
-        <p className="mt-1 text-sm text-[var(--text-muted)]">
-          {latestCompletedWorkout
-            ? formatDateWithWeekday(latestCompletedWorkout.completedAt ?? latestCompletedWorkout.updatedAt)
-            : "Kun teet oman treenin valmiiksi, viimeisin toteutus näkyy tässä automaattisesti."}
-        </p>
       </div>
     </Card>
   );

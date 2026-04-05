@@ -1,13 +1,12 @@
 "use client";
 
-import { Check, ChevronDown, ChevronUp, Plus, Search } from "lucide-react";
+import { Check, ChevronDown, ChevronUp, Plus, Search, X } from "lucide-react";
 import { useFieldArray, type Control, type FieldErrors, type UseFormRegister, type UseFormSetValue, type UseFormWatch } from "react-hook-form";
 import { useEffect, useMemo, useRef, useState } from "react";
 
 import { Button } from "@/components/ui/button";
 import { Input, Label, Select, Textarea } from "@/components/ui/field";
 import { InfoTooltip } from "@/components/ui/tooltip";
-import { splitLabel } from "@/lib/domain";
 import { cn } from "@/lib/utils";
 
 import {
@@ -67,7 +66,7 @@ function SearchableExerciseSelect({
 }: {
   id: string;
   selectedExerciseId: string;
-  exerciseOptions: Array<{ id: string; name: string; scope: string }>;
+  exerciseOptions: Array<{ id: string; name: string; scope: string; cue: string }>;
   onSelect: (exerciseId: string) => void;
 }) {
   const [isOpen, setIsOpen] = useState(false);
@@ -216,7 +215,7 @@ export function ProgramWorkoutEditor({
   register: UseFormRegister<ProgramComposerFormValues>;
   setValue: UseFormSetValue<ProgramComposerFormValues>;
   watch: UseFormWatch<ProgramComposerFormValues>;
-  exerciseOptions: Array<{ id: string; name: string; scope: string }>;
+  exerciseOptions: Array<{ id: string; name: string; scope: string; cue: string }>;
   onRemove: () => void;
   removable: boolean;
   allowExerciseRemoval: boolean;
@@ -232,6 +231,7 @@ export function ProgramWorkoutEditor({
   const selectedSplitType = watch(`workouts.${index}.splitType` as const);
   const [internalExpandedExerciseIndex, setInternalExpandedExerciseIndex] = useState<number>(-1);
   const previousExerciseCountRef = useRef(exerciseFields.fields.length);
+  const exerciseCardRefs = useRef<Record<string, HTMLDivElement | null>>({});
   const workoutErrors = errors?.[index];
   const expandedExerciseIndex = activeExerciseIndex ?? internalExpandedExerciseIndex;
 
@@ -242,9 +242,29 @@ export function ProgramWorkoutEditor({
     }
   };
 
+  const scrollExerciseCardIntoView = (fieldId: string) => {
+    window.requestAnimationFrame(() => {
+      exerciseCardRefs.current[fieldId]?.scrollIntoView({
+        behavior: "smooth",
+        block: "start",
+      });
+    });
+  };
+
   useEffect(() => {
     if (exerciseFields.fields.length > previousExerciseCountRef.current) {
-      setExpandedExerciseIndex(exerciseFields.fields.length - 1);
+      const nextIndex = exerciseFields.fields.length - 1;
+      const nextField = exerciseFields.fields[nextIndex];
+      setExpandedExerciseIndex(nextIndex);
+      window.requestAnimationFrame(() => {
+        if (!nextField) {
+          return;
+        }
+        exerciseCardRefs.current[nextField.id]?.scrollIntoView({
+          behavior: "smooth",
+          block: "start",
+        });
+      });
     } else if (expandedExerciseIndex >= exerciseFields.fields.length) {
       setExpandedExerciseIndex(Math.max(0, exerciseFields.fields.length - 1));
     }
@@ -253,15 +273,11 @@ export function ProgramWorkoutEditor({
   }, [exerciseFields.fields.length, expandedExerciseIndex]);
 
   return (
-    <fieldset
-      className="space-y-4 rounded-xl border-2 border-[var(--border)] bg-[var(--surface-2)] p-4"
+    <div
+      className="space-y-4"
       data-program-workout="true"
       id={`program-workout-${fieldId}`}
     >
-      <legend className="px-2 text-sm font-semibold text-[var(--text-subtle)]">
-        Treeni {index + 1}
-      </legend>
-
       {showWorkoutMeta ? (
         <div className="space-y-4">
           <div className="grid gap-4 [grid-template-columns:repeat(auto-fit,minmax(15rem,1fr))]">
@@ -366,6 +382,9 @@ export function ProgramWorkoutEditor({
           const targetLoad = watch(
             `workouts.${index}.exercises.${exerciseIndex}.targetLoad` as const,
           );
+          const supersetGroup = watch(
+            `workouts.${index}.exercises.${exerciseIndex}.supersetGroup` as const,
+          );
           const customExerciseName = watch(
             `workouts.${index}.exercises.${exerciseIndex}.customExerciseName` as const,
           );
@@ -394,13 +413,13 @@ export function ProgramWorkoutEditor({
             exerciseErrors?.targetRepsMax,
             exerciseErrors?.restSeconds,
           ].filter(Boolean).length;
-          const exerciseStateLabel = exerciseIssueCount
-            ? `Puuttuu ${exerciseIssueCount} kohtaa`
-            : "Valmis";
 
           return (
             <div
               key={exerciseField.id}
+              ref={(node) => {
+                exerciseCardRefs.current[exerciseField.id] = node;
+              }}
               className={cn(
                 "overflow-hidden rounded-2xl border bg-[var(--surface)] shadow-[0_1px_0_0_var(--shadow-soft),0_8px_24px_-20px_var(--shadow)]",
                 isExpanded
@@ -410,8 +429,8 @@ export function ProgramWorkoutEditor({
             >
               <div
                 className={cn(
-                  "relative flex items-start gap-2 p-2",
-                  isExpanded ? "border-b border-[var(--border)] bg-[color:color-mix(in_oklab,var(--accent)_10%,var(--surface))]" : "bg-[var(--surface)]",
+                  "relative flex items-start gap-3 px-3 pt-3",
+                  isExpanded ? "bg-[color:color-mix(in_oklab,var(--accent)_10%,var(--surface))]" : "bg-[var(--surface)]",
                 )}
               >
                 <button
@@ -419,55 +438,48 @@ export function ProgramWorkoutEditor({
                   aria-expanded={isExpanded}
                   aria-controls={`workout-${index}-exercise-panel-${exerciseIndex}`}
                   className="absolute inset-2 rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)] focus-visible:ring-inset"
-                  onClick={() => setExpandedExerciseIndex(isExpanded ? -1 : exerciseIndex)}
+                  onClick={() => {
+                    const nextIndex = isExpanded ? -1 : exerciseIndex;
+                    setExpandedExerciseIndex(nextIndex);
+                    if (nextIndex === exerciseIndex) {
+                      scrollExerciseCardIntoView(exerciseField.id);
+                    }
+                  }}
                 />
-                <div className="pointer-events-none relative z-10 min-w-0 flex-1 px-4 py-4">
+                <div className="pointer-events-none relative z-10 min-w-0 flex-1">
                   <div className="min-w-0 flex-1">
                     <p className="text-sm font-semibold text-[var(--text)]">Liike {exerciseIndex + 1}</p>
                     <p className="mt-1 text-sm text-[var(--text-muted)]">{resolvedExerciseLabel}</p>
-                    <div className="mt-3 flex flex-wrap gap-2">
-                      <span className={cn(
-                        "rounded-full border px-2.5 py-1 text-xs font-semibold",
-                        exerciseIssueCount
-                          ? "border-[color:color-mix(in_oklab,var(--danger)_35%,var(--border))] bg-[color:color-mix(in_oklab,var(--danger)_10%,var(--surface))] text-[var(--danger)]"
-                          : "border-[color:color-mix(in_oklab,var(--success)_35%,var(--border))] bg-[color:color-mix(in_oklab,var(--success)_10%,var(--surface))] text-[var(--success)]",
-                      )}>
-                        {exerciseStateLabel}
-                      </span>
-                      <span className="rounded-full border border-[var(--border)] bg-[var(--surface-2)] px-2.5 py-1 text-xs font-semibold text-[var(--text-subtle)]">
-                        {setCount || "?"} sarjaa
-                      </span>
-                      <span className="rounded-full border border-[var(--border)] bg-[var(--surface-2)] px-2.5 py-1 text-xs font-semibold text-[var(--text-subtle)]">
-                        {repsLabel} toistoa
-                      </span>
-                      <span className="rounded-full border border-[var(--border)] bg-[var(--surface-2)] px-2.5 py-1 text-xs font-semibold text-[var(--text-subtle)]">
-                        {restSeconds || "?"} s lepo
-                      </span>
-                      {targetLoad !== undefined && targetLoad !== "" ? (
-                        <span className="rounded-full border border-[var(--border)] bg-[var(--surface-2)] px-2.5 py-1 text-xs font-semibold text-[var(--text-subtle)]">
-                          {targetLoad} kg
-                        </span>
-                      ) : null}
-                    </div>
                   </div>
                 </div>
-                {exerciseFields.fields.length > 1 && allowExerciseRemoval ? (
+                {allowExerciseRemoval ? (
                   <button
                     type="button"
-                    className="relative z-10 shrink-0 self-center rounded-xl border border-[var(--border)] bg-[var(--surface-2)] px-3 py-2 text-sm font-semibold text-[var(--text-muted)] shadow-[0_1px_0_0_var(--shadow-soft)] transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--surface)]"
+                    className="relative z-10 grid size-8.5 shrink-0 place-items-center self-start rounded-full border border-[color:color-mix(in_oklab,var(--danger)_35%,var(--border))] bg-[color:color-mix(in_oklab,var(--danger)_10%,var(--surface))] text-[var(--danger)] transition hover:border-[color:color-mix(in_oklab,var(--danger)_45%,var(--border))] hover:bg-[color:color-mix(in_oklab,var(--danger)_14%,var(--surface))] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--danger)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--surface)]"
+                    aria-label={`Poista liike ${exerciseIndex + 1}`}
+                    title={`Poista liike ${exerciseIndex + 1}`}
                     onClick={() => {
+                      if (!window.confirm(`Poistetaanko liike ${exerciseIndex + 1}?`)) {
+                        return;
+                      }
                       exerciseFields.remove(exerciseIndex);
                     }}
                   >
-                    Poista
+                    <X className="size-4" aria-hidden="true" />
                   </button>
                 ) : null}
                 <button
                   type="button"
-                  className="relative z-10 ml-auto inline-flex h-[42px] w-[42px] shrink-0 items-center justify-center self-center rounded-xl border border-[var(--border)] bg-[var(--surface-2)] text-[var(--text-muted)] shadow-[0_1px_0_0_var(--shadow-soft)] transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--surface)]"
+                  className="relative z-10 ml-auto grid size-8.5 shrink-0 place-items-center self-start rounded-full border border-[var(--border)] bg-[var(--surface)] text-[var(--text-subtle)] transition hover:border-[var(--border-strong)] hover:bg-[var(--surface-3)] hover:text-[var(--text)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--surface)]"
                   aria-expanded={isExpanded}
                   aria-controls={`workout-${index}-exercise-panel-${exerciseIndex}`}
-                  onClick={() => setExpandedExerciseIndex(isExpanded ? -1 : exerciseIndex)}
+                  onClick={() => {
+                    const nextIndex = isExpanded ? -1 : exerciseIndex;
+                    setExpandedExerciseIndex(nextIndex);
+                    if (nextIndex === exerciseIndex) {
+                      scrollExerciseCardIntoView(exerciseField.id);
+                    }
+                  }}
                 >
                   {isExpanded ? (
                     <ChevronUp className="size-4" aria-hidden="true" />
@@ -477,12 +489,45 @@ export function ProgramWorkoutEditor({
                   <span className="sr-only">{isExpanded ? "Sulje liike" : "Avaa liike"}</span>
                 </button>
               </div>
+              <div
+                className={cn(
+                  "px-3 pb-3 pt-2",
+                  isExpanded ? "border-b border-[var(--border)] bg-[color:color-mix(in_oklab,var(--accent)_10%,var(--surface))]" : "bg-[var(--surface)]",
+                )}
+              >
+                <div className="flex w-full flex-wrap gap-2">
+                  {exerciseIssueCount ? (
+                    <span className="rounded-full border border-[color:color-mix(in_oklab,var(--danger)_35%,var(--border))] bg-[color:color-mix(in_oklab,var(--danger)_10%,var(--surface))] px-2.5 py-1 text-xs font-semibold text-[var(--danger)]">
+                      Puuttuu {exerciseIssueCount} kohtaa
+                    </span>
+                  ) : null}
+                  <span className="rounded-full border border-[var(--border)] bg-[var(--surface-2)] px-2.5 py-1 text-xs font-semibold text-[var(--text-subtle)]">
+                    {setCount || "?"} sarjaa
+                  </span>
+                  <span className="rounded-full border border-[var(--border)] bg-[var(--surface-2)] px-2.5 py-1 text-xs font-semibold text-[var(--text-subtle)]">
+                    {repsLabel} toistoa
+                  </span>
+                  <span className="rounded-full border border-[var(--border)] bg-[var(--surface-2)] px-2.5 py-1 text-xs font-semibold text-[var(--text-subtle)]">
+                    {restSeconds || "?"} s lepo
+                  </span>
+                  {supersetGroup ? (
+                    <span className="rounded-full border border-[var(--border)] bg-[var(--surface-2)] px-2.5 py-1 text-xs font-semibold text-[var(--text-subtle)]">
+                      Superset {supersetGroup}
+                    </span>
+                  ) : null}
+                  {targetLoad !== undefined && targetLoad !== "" ? (
+                    <span className="rounded-full border border-[var(--border)] bg-[var(--surface-2)] px-2.5 py-1 text-xs font-semibold text-[var(--text-subtle)]">
+                      {targetLoad} kg
+                    </span>
+                  ) : null}
+                </div>
+              </div>
 
               {isExpanded ? (
                 <>
                   <div
                     id={`workout-${index}-exercise-panel-${exerciseIndex}`}
-                    className="grid gap-4 p-4 md:grid-cols-2"
+                    className="grid gap-4 p-3 md:grid-cols-2"
                   >
                     <div>
                       <RequiredLabel htmlFor={`workout-${index}-exercise-${exerciseIndex}`}>Liike</RequiredLabel>
@@ -491,10 +536,25 @@ export function ProgramWorkoutEditor({
                         selectedExerciseId={selectedExerciseId}
                         exerciseOptions={exerciseOptions}
                         onSelect={(exerciseId) => {
+                          const previousExercise = exerciseOptions.find((exercise) => exercise.id === selectedExerciseId);
+                          const previousInstruction = previousExercise?.cue?.trim();
                           setValue(`workouts.${index}.exercises.${exerciseIndex}.exerciseId`, exerciseId, {
                             shouldDirty: true,
                             shouldValidate: true,
                           });
+
+                          const currentInstruction = watch(
+                            `workouts.${index}.exercises.${exerciseIndex}.instruction` as const,
+                          )?.trim();
+                          const selectedExercise = exerciseOptions.find((exercise) => exercise.id === exerciseId);
+                          const nextInstruction = selectedExercise?.cue?.trim();
+
+                          if ((!currentInstruction || currentInstruction === previousInstruction) && nextInstruction) {
+                            setValue(`workouts.${index}.exercises.${exerciseIndex}.instruction`, nextInstruction, {
+                              shouldDirty: true,
+                              shouldValidate: true,
+                            });
+                          }
                         }}
                       />
                       <FieldError
@@ -556,7 +616,7 @@ export function ProgramWorkoutEditor({
                     ) : null}
                   </div>
 
-                  <div className="mt-4 px-4">
+                  <div className="mt-3 px-3">
                     <RequiredLabel htmlFor={`workout-${index}-instruction-${exerciseIndex}`}>Valmennusohje</RequiredLabel>
                     <Textarea
                       id={`workout-${index}-instruction-${exerciseIndex}`}
@@ -571,7 +631,7 @@ export function ProgramWorkoutEditor({
                     />
                   </div>
 
-                  <div className="mt-4 grid gap-4 px-4 [grid-template-columns:repeat(auto-fit,minmax(13rem,1fr))]">
+                  <div className="mt-3 grid gap-4 px-3 [grid-template-columns:repeat(auto-fit,minmax(13rem,1fr))]">
                     <div>
                       <RequiredLabel htmlFor={`workout-${index}-sets-${exerciseIndex}`}>Sarjat</RequiredLabel>
                       <Input
@@ -716,7 +776,7 @@ export function ProgramWorkoutEditor({
                       />
                     </div>
                   </div>
-                  <p className="mt-2 px-4 pb-4 text-xs text-[var(--text-subtle)]">
+                  <p className="mt-2 px-3 pb-3 text-xs text-[var(--text-subtle)]">
                     Aseta sama superset-kirjain liikkeille, jotka tehdään parina.
                   </p>
                 </>
@@ -732,7 +792,7 @@ export function ProgramWorkoutEditor({
           variant="secondary"
           onClick={() =>
             exerciseFields.append(
-              emptyProgramWorkoutExercise(Number(defaultRestSeconds) || 180),
+              emptyProgramWorkoutExercise(Number(defaultRestSeconds) || 120),
             )
           }
         >
@@ -740,10 +800,6 @@ export function ProgramWorkoutEditor({
           Lisää liike
         </Button>
       </div>
-
-      <p className="text-xs text-[var(--text-subtle)]">
-        Valittu treenialue: {splitLabel(watch(`workouts.${index}.splitType` as const))}
-      </p>
-    </fieldset>
+    </div>
   );
 }

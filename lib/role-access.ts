@@ -3,9 +3,8 @@ import { PROGRAMS_DASHBOARD_VIEW, type AthleteRole, type DashboardHomeView, type
 const coachWorkspaceViews: DashboardHomeView[] = [
   "overview",
   PROGRAMS_DASHBOARD_VIEW,
+  "athletes",
   "athlete-log",
-  "conversation",
-  "invites",
 ];
 
 const adminWorkspaceViews: DashboardHomeView[] = [

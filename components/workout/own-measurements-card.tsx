@@ -18,6 +18,29 @@ import { bodyMeasurementSchema } from "@/components/workout/schemas";
 
 type MeasurementMessageTone = "info" | "success" | "error";
 
+function getCompletedVolumeFromWorkout(
+  workout: { id: string; status: string; completedAt?: string | null; updatedAt: string },
+  session?: { completedAt?: string | null; setLogs: Array<{ done: boolean; actualReps?: number; actualLoad?: number }> },
+) {
+  if (workout.status !== "completed") {
+    return 0;
+  }
+
+  if (!session) {
+    return 0;
+  }
+
+  return session.setLogs.reduce((sum, log) => {
+    if (!log.done) {
+      return sum;
+    }
+
+    const reps = Math.max(0, log.actualReps ?? 0);
+    const load = Math.max(0, log.actualLoad ?? 0);
+    return sum + reps * load;
+  }, 0);
+}
+
 export function OwnMeasurementsCard({ sectionId = "overview-measurements" }: { sectionId?: string }) {
   const { currentUser, state, updateCurrentUserMeasurements } = useAppState();
   const [measurementDraft, setMeasurementDraft] = useState({
@@ -28,6 +51,7 @@ export function OwnMeasurementsCard({ sectionId = "overview-measurements" }: { s
   const [measurementMessageTone, setMeasurementMessageTone] = useState<MeasurementMessageTone>("info");
   const [isSavingMeasurements, setIsSavingMeasurements] = useState(false);
   const [isMeasurementFormExpanded, setIsMeasurementFormExpanded] = useState(false);
+  const [activeMeasurementTrend, setActiveMeasurementTrend] = useState<"weight" | "waist" | "volume">("weight");
 
   useEffect(() => {
     const latestWaistValue =
@@ -47,6 +71,7 @@ export function OwnMeasurementsCard({ sectionId = "overview-measurements" }: { s
   }, [currentUser?.id]);
   useEffect(() => {
     setIsMeasurementFormExpanded(false);
+    setActiveMeasurementTrend("weight");
   }, [currentUser?.id]);
 
   const canTrackOwnMeasurements = canTrackOwnTraining(currentUser?.role);
@@ -75,7 +100,10 @@ export function OwnMeasurementsCard({ sectionId = "overview-measurements" }: { s
     (currentUser.weightKg !== nextWeightKg || latestWaistCm !== nextWaistCm);
   const measurementDisclosureButtonId = `${sectionId}-disclosure`;
   const measurementDisclosurePanelId = `${sectionId}-panel`;
-
+  const sessionByWorkoutId = useMemo(
+    () => new Map(state.sessions.map((session) => [session.scheduledWorkoutId, session])),
+    [state.sessions],
+  );
   const weightTrendPoints = useMemo(
     () =>
       currentUser
@@ -105,6 +133,23 @@ export function OwnMeasurementsCard({ sectionId = "overview-measurements" }: { s
         : [],
     [bodyMeasurements, currentUser],
   );
+  const volumeTrendPoints = useMemo(
+    () =>
+      currentUser
+        ? state.scheduledWorkouts
+            .filter((workout) => workout.athleteId === currentUser.id && workout.status === "completed")
+            .map((workout) => {
+              const completedAt = workout.completedAt ?? sessionByWorkoutId.get(workout.id)?.completedAt ?? workout.updatedAt;
+              return {
+                date: completedAt,
+                value: getCompletedVolumeFromWorkout(workout, sessionByWorkoutId.get(workout.id)),
+              };
+            })
+            .sort((left, right) => left.date.localeCompare(right.date))
+            .slice(-12)
+        : [],
+    [currentUser, sessionByWorkoutId, state.scheduledWorkouts],
+  );
 
   if (!currentUser || !canTrackOwnMeasurements) {
     return null;
@@ -117,39 +162,36 @@ export function OwnMeasurementsCard({ sectionId = "overview-measurements" }: { s
           <p className="text-xs font-semibold tracking-[0.04em] text-[var(--text-subtle)]">Kehon seuranta</p>
           <CardTitle className="mt-2 text-2xl">Omat mitat ja kehitys</CardTitle>
           <CardDescription className="mt-2 max-w-3xl">
-            Sama oma paino- ja vyötäröseuranta näkyy tässä myös coachille ja adminille. Kun kirjaat uuden mittauksen, seuranta päivittyy automaattisesti.
+            Näet viimeisimmät mittasi ja niiden kehityksen.
           </CardDescription>
         </div>
-        <div className="grid w-full gap-3 sm:grid-cols-2 xl:w-auto xl:min-w-[38rem] xl:grid-cols-4">
-          <div className="rounded-2xl border border-dashed border-[var(--border)] bg-[color-mix(in_srgb,var(--surface-2)_74%,var(--surface))] px-4 py-4">
-            <div className="flex items-center justify-between gap-3">
-              <p className="text-xs font-semibold tracking-[0.04em] text-[var(--text-subtle)]">Pituus</p>
-              <Badge className="border-[var(--border)] bg-[var(--surface)] text-[10px] text-[var(--text-subtle)]">
-                Profiilissa
+        <div className="grid w-full gap-2 sm:grid-cols-2 lg:grid-cols-4">
+          <div className="rounded-2xl border border-dashed border-[var(--border)] bg-[color-mix(in_srgb,var(--surface-2)_74%,var(--surface))] px-3 py-2.5">
+            <div className="flex items-center justify-between gap-2">
+              <p className="text-[11px] font-semibold tracking-[0.04em] text-[var(--text-subtle)]">Pituus</p>
+              <Badge className="border-[var(--border)] bg-[var(--surface)] px-2 py-0.5 text-[9px] text-[var(--text-subtle)]">
+                Profiili
               </Badge>
             </div>
-            <p className="mt-2 text-lg font-semibold text-[var(--text)]">
+            <p className="mt-1 text-base font-semibold text-[var(--text)]">
               {currentUser.heightCm !== undefined ? `${currentUser.heightCm} cm` : "Ei asetettu"}
             </p>
-            <p className="mt-2 text-xs text-[var(--text-subtle)]">
-              Päivitä pituus tilin profiilista. Paino ja vyötärö kirjataan alle omaan mittaseurantaan.
-            </p>
           </div>
-          <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface-2)] px-4 py-4">
-            <p className="text-xs font-semibold tracking-[0.04em] text-[var(--text-subtle)]">Paino</p>
-            <p className="mt-2 text-lg font-semibold text-[var(--text)]">
+          <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface-2)] px-3 py-2.5">
+            <p className="text-[11px] font-semibold tracking-[0.04em] text-[var(--text-subtle)]">Paino</p>
+            <p className="mt-1 text-base font-semibold text-[var(--text)]">
               {currentUser.weightKg !== undefined ? `${currentUser.weightKg} kg` : "Ei asetettu"}
             </p>
           </div>
-          <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface-2)] px-4 py-4">
-            <p className="text-xs font-semibold tracking-[0.04em] text-[var(--text-subtle)]">Vyötärö</p>
-            <p className="mt-2 text-lg font-semibold text-[var(--text)]">
+          <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface-2)] px-3 py-2.5">
+            <p className="text-[11px] font-semibold tracking-[0.04em] text-[var(--text-subtle)]">Vyötärö</p>
+            <p className="mt-1 text-base font-semibold text-[var(--text)]">
               {latestWaistCm !== undefined ? `${latestWaistCm} cm` : "Ei asetettu"}
             </p>
           </div>
-          <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface-2)] px-4 py-4">
-            <p className="text-xs font-semibold tracking-[0.04em] text-[var(--text-subtle)]">Viimeisin mittaus</p>
-            <p className="mt-2 text-lg font-semibold text-[var(--text)]">
+          <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface-2)] px-3 py-2.5">
+            <p className="text-[11px] font-semibold tracking-[0.04em] text-[var(--text-subtle)]">Viimeisin mittaus</p>
+            <p className="mt-1 text-base font-semibold text-[var(--text)]">
               {latestBodyMeasurement ? formatDate(latestBodyMeasurement.measuredAt) : "Ei vielä"}
             </p>
           </div>
@@ -168,7 +210,7 @@ export function OwnMeasurementsCard({ sectionId = "overview-measurements" }: { s
           >
             <span className="block text-sm font-semibold text-[var(--text)]">Kirjaa uusi mittaus</span>
             <span className="mt-1 block text-sm text-[var(--text-muted)]">
-              Lisää tähän uusin mittaus, kun haluat päivittää oman seurannan. Voit täyttää vain ne kentät, joihin tuli muutos.
+              Päivitä paino tai vyötärö. Voit täyttää vain muuttuneet kentät.
             </span>
           </button>
           <button
@@ -246,8 +288,8 @@ export function OwnMeasurementsCard({ sectionId = "overview-measurements" }: { s
               >
                 {measurementMessage ||
                   (isMeasurementDirty
-                    ? "Tallennus päivittää viimeisimmän mittauksen ja trendit."
-                    : "Täytä yksi tai useampi kenttä, kun haluat tallentaa uuden mittauksen.")}
+                    ? "Tallennus päivittää mittauksen ja trendin."
+                    : "Täytä paino tai vyötärö tallentaaksesi uuden mittauksen.")}
               </p>
               <Button
                 type="button"
@@ -286,28 +328,91 @@ export function OwnMeasurementsCard({ sectionId = "overview-measurements" }: { s
         ) : null}
       </div>
 
-      <div className="mt-5 grid gap-4 xl:grid-cols-2">
-        <div>
-          <p className="text-xs font-semibold tracking-[0.04em] text-[var(--text-subtle)]">Painotrendi</p>
-          <MetricTrendChart
-            points={weightTrendPoints}
-            ariaLabel="Painon kehitystrendi"
-            emptyMessage="Lisää paino viimeisimpään mittaukseen, niin kehitystrendi alkaa piirtyä tähän."
-            helperText="Alarivillä näkyy kuukausi ja vuosi, oikealla painon asteikko."
-            valueLabel="Paino"
-            unit="kg"
-          />
+      <div className="mt-5 rounded-2xl border border-[var(--border)] bg-[var(--surface-2)] p-4">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+              <div>
+                <p className="text-sm font-semibold text-[var(--text)]">Kehitystrendi</p>
+                <p className="mt-1 text-sm text-[var(--text-muted)]">Valitse paino, vyötärö tai volyymi.</p>
+              </div>
+          <div className="grid w-full grid-cols-3 rounded-xl border border-[var(--border)] bg-[var(--surface)] p-1 sm:w-auto">
+            <button
+              type="button"
+              className={`w-full rounded-lg px-3 py-2 text-sm font-medium transition ${
+                activeMeasurementTrend === "weight"
+                  ? "bg-[color-mix(in_srgb,var(--accent)_10%,var(--surface))] text-[var(--accent)]"
+                  : "text-[var(--text-muted)]"
+              }`}
+              aria-pressed={activeMeasurementTrend === "weight"}
+              onClick={() => setActiveMeasurementTrend("weight")}
+            >
+              Paino
+            </button>
+            <button
+              type="button"
+              className={`w-full rounded-lg px-3 py-2 text-sm font-medium transition ${
+                activeMeasurementTrend === "waist"
+                  ? "bg-[color-mix(in_srgb,var(--accent)_10%,var(--surface))] text-[var(--accent)]"
+                  : "text-[var(--text-muted)]"
+              }`}
+              aria-pressed={activeMeasurementTrend === "waist"}
+              onClick={() => setActiveMeasurementTrend("waist")}
+            >
+              Vyötärö
+            </button>
+            <button
+              type="button"
+              className={`w-full rounded-lg px-3 py-2 text-sm font-medium transition ${
+                activeMeasurementTrend === "volume"
+                  ? "bg-[color-mix(in_srgb,var(--accent)_10%,var(--surface))] text-[var(--accent)]"
+                  : "text-[var(--text-muted)]"
+              }`}
+              aria-pressed={activeMeasurementTrend === "volume"}
+              onClick={() => setActiveMeasurementTrend("volume")}
+            >
+              Volyymi
+            </button>
+          </div>
         </div>
-        <div>
-          <p className="text-xs font-semibold tracking-[0.04em] text-[var(--text-subtle)]">Vyötärötrendi</p>
-          <MetricTrendChart
-            points={waistTrendPoints}
-            ariaLabel="Vyötärön kehitystrendi"
-            emptyMessage="Lisää vyötärö viimeisimpään mittaukseen, niin kehitystrendi alkaa piirtyä tähän."
-            helperText="Alarivillä näkyy kuukausi ja vuosi, oikealla vyötärön asteikko."
-            valueLabel="Vyötärö"
-            unit="cm"
-          />
+        <div className="mt-4">
+          {activeMeasurementTrend === "weight" ? (
+            <>
+              <p className="text-xs font-semibold tracking-[0.04em] text-[var(--text-subtle)]">Painotrendi</p>
+              <MetricTrendChart
+                points={weightTrendPoints}
+                ariaLabel="Painon kehitystrendi"
+                emptyMessage="Lisää paino viimeisimpään mittaukseen, niin kehitystrendi alkaa piirtyä tähän."
+                helperText="Alarivillä näkyy kuukausi ja vuosi, oikealla painon asteikko."
+                valueLabel="Paino"
+                unit="kg"
+              />
+            </>
+          ) : activeMeasurementTrend === "waist" ? (
+            <>
+              <p className="text-xs font-semibold tracking-[0.04em] text-[var(--text-subtle)]">Vyötärötrendi</p>
+              <MetricTrendChart
+                points={waistTrendPoints}
+                ariaLabel="Vyötärön kehitystrendi"
+                emptyMessage="Lisää vyötärö viimeisimpään mittaukseen, niin kehitystrendi alkaa piirtyä tähän."
+                helperText="Alarivillä näkyy kuukausi ja vuosi, oikealla vyötärön asteikko."
+                valueLabel="Vyötärö"
+                unit="cm"
+              />
+            </>
+          ) : (
+            <>
+              <p className="text-xs font-semibold tracking-[0.04em] text-[var(--text-subtle)]">Volyymitrendi</p>
+              <MetricTrendChart
+                points={volumeTrendPoints}
+                ariaLabel="Volyymin kehitystrendi"
+                emptyMessage="Kun saat treenejä valmiiksi, volyymitrendi näkyy tässä."
+                helperText="Alarivillä näkyy kuukausi ja vuosi, oikealla volyymin asteikko."
+                valueLabel="Volyymi"
+                unit="kg"
+                decimals={0}
+                useZeroBaseline
+              />
+            </>
+          )}
         </div>
       </div>
     </Card>
