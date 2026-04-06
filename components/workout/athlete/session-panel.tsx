@@ -1521,13 +1521,16 @@ export function AthleteSessionPanel({
             />
           </div>
           <div className="grid gap-4 lg:grid-cols-2">
-            <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-4">
+            <div className="rounded-xl border border-[var(--border)] bg-[var(--surface)] p-3">
               <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
-                <div className="w-full sm:max-w-[16rem]">
-                  <Label htmlFor={`${scheduledWorkoutId}-date`}>Päivämäärä</Label>
+                <div className="w-full sm:max-w-[15rem]">
+                  <Label htmlFor={`${scheduledWorkoutId}-date`} className="mb-1.5 text-xs">
+                    Päivämäärä
+                  </Label>
                   <Input
                     id={`${scheduledWorkoutId}-date`}
                     type="date"
+                    className="px-3 py-2.5 text-sm"
                     value={scheduledDateDraft}
                     onChange={(event) => {
                       setScheduledDateDraft(event.target.value);
@@ -1535,8 +1538,8 @@ export function AthleteSessionPanel({
                       setDateMessageTone(null);
                     }}
                   />
-                  <p className="mt-2 text-xs text-[var(--text-subtle)]">
-                    Päivittää myös valmiin treenin toteutuspäivän samaan päivään.
+                  <p className="mt-1.5 text-xs text-[var(--text-subtle)]">
+                    Päivittää myös toteutuspäivän samaan päivään.
                   </p>
                 </div>
                 <Button
@@ -1544,7 +1547,7 @@ export function AthleteSessionPanel({
                   variant={isDateDirty ? "secondary" : "ghost"}
                   disabled={!isDateDirty || !scheduledDateDraft}
                   loading={isSavingDate}
-                  loadingText="Tallennetaan päivää..."
+                  loadingText="Tallennetaan..."
                   className="w-full sm:w-auto"
                   onClick={async () => {
                     setIsSavingDate(true);
@@ -1557,20 +1560,23 @@ export function AthleteSessionPanel({
                     }
                   }}
                 >
-                  Tallenna päivä
+                  Tallenna
                 </Button>
               </div>
               <InlineFeedback
                 message={dateMessage}
                 tone={dateMessageTone}
-                idleMessage="Muokkaa treenin päivämäärää, jos haluat siirtää toteutuksen oikealle päivälle."
-                className="mt-3 text-sm"
+                idleMessage="Siirrä treeni oikealle päivälle tarvittaessa."
+                className="mt-2 text-sm"
               />
             </div>
-            <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-4">
+
+            <div className="rounded-xl border border-[var(--border)] bg-[var(--surface)] p-3">
               <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
-                <div className="w-full sm:max-w-[16rem]">
-                  <Label htmlFor={`${scheduledWorkoutId}-duration`}>Kesto</Label>
+                <div className="w-full sm:max-w-[15rem]">
+                  <Label htmlFor={`${scheduledWorkoutId}-duration`} className="mb-1.5 text-xs">
+                    Kesto
+                  </Label>
                   <Input
                     id={`${scheduledWorkoutId}-duration`}
                     type="text"
@@ -1578,7 +1584,8 @@ export function AthleteSessionPanel({
                     autoComplete="off"
                     autoCorrect="off"
                     spellCheck={false}
-                    placeholder="Esim. 45:00 tai 01:15:00"
+                    placeholder="45:00 tai 01:15:00"
+                    className="px-3 py-2.5 text-sm"
                     value={durationDraft}
                     onChange={(event) => {
                       setDurationDraft(event.target.value);
@@ -1586,16 +1593,14 @@ export function AthleteSessionPanel({
                       setDurationMessageTone(null);
                     }}
                   />
-                  <p className="mt-2 text-xs text-[var(--text-subtle)]">
-                    Hyvaksyy muodot `mm:ss` ja `hh:mm:ss`.
-                  </p>
+                  <p className="mt-1.5 text-xs text-[var(--text-subtle)]">Muodot `mm:ss` ja `hh:mm:ss`.</p>
                 </div>
                 <Button
                   type="button"
                   variant={isDurationDirty ? "secondary" : "ghost"}
                   disabled={!isDurationDirty}
                   loading={isSavingDuration}
-                  loadingText="Tallennetaan kestoa..."
+                  loadingText="Tallennetaan..."
                   className="w-full sm:w-auto"
                   onClick={async () => {
                     const parsedDuration = parseDurationInput(durationDraft);
@@ -1615,14 +1620,14 @@ export function AthleteSessionPanel({
                     }
                   }}
                 >
-                  Tallenna kesto
+                  Tallenna
                 </Button>
               </div>
               <InlineFeedback
                 message={durationMessage}
                 tone={durationMessageTone}
-                idleMessage="Muokkaa treenin kokonaiskestoa, jos ajastin jäi liian pitkäksi tai lyhyeksi."
-                className="mt-3 text-sm"
+                idleMessage="Korjaa kesto, jos ajastin jäi vääräksi."
+                className="mt-2 text-sm"
               />
             </div>
           </div>
