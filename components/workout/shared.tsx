@@ -128,7 +128,7 @@ export function ProgressRing({
         aria-valuemax={100}
         aria-valuemin={0}
         aria-valuenow={safePercent}
-        className="relative grid size-[8.5rem] place-items-center rounded-full border border-[var(--border)] shadow-[inset_0_1px_0_var(--shadow-soft)]"
+        className="relative grid size-[8.5rem] place-items-center"
         role="progressbar"
       >
         <svg className="absolute inset-0 size-full -rotate-90" viewBox="0 0 144 144" aria-hidden="true">

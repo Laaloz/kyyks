@@ -1,6 +1,6 @@
 "use client";
 
-import { ArrowLeft, ChevronDown, ChevronUp, MoreHorizontal } from "lucide-react";
+import { ArrowLeft, BookOpen, ChevronDown, ChevronUp, MoreHorizontal } from "lucide-react";
 import {
   startTransition,
   useEffect,
@@ -42,6 +42,63 @@ type WorkoutOrderMetadata = {
   primaryTimestamp: string;
   secondaryTimestamp: string;
 };
+
+function CoachInstructionDialog({
+  exerciseName,
+  instruction,
+  onClose,
+}: {
+  exerciseName: string;
+  instruction: string;
+  onClose: () => void;
+}) {
+  useEffect(() => {
+    const handleKeyDown = (event: globalThis.KeyboardEvent) => {
+      if (event.key === "Escape") {
+        onClose();
+      }
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [onClose]);
+
+  return (
+    <div
+      className="fixed inset-0 z-40 flex items-end justify-center bg-[color:color-mix(in_srgb,var(--background)_54%,transparent)] p-4 sm:items-center"
+      role="presentation"
+      onClick={onClose}
+    >
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="coach-instruction-title"
+        aria-describedby="coach-instruction-description"
+        className="w-full max-w-lg rounded-3xl border border-[var(--border-strong)] bg-[var(--surface)] p-4 shadow-[0_24px_60px_-24px_var(--shadow)]"
+        onClick={(event) => event.stopPropagation()}
+      >
+        <p className="text-[11px] font-semibold tracking-[0.06em] text-[var(--accent)]">Valmentajan ohje</p>
+        <h3
+          id="coach-instruction-title"
+          className="mt-2 font-[family-name:var(--font-display)] text-2xl font-semibold text-[var(--text)]"
+        >
+          {exerciseName}
+        </h3>
+        <p
+          id="coach-instruction-description"
+          className="mt-3 max-h-[60vh] overflow-y-auto whitespace-pre-line text-sm leading-6 text-[var(--text-muted)]"
+        >
+          {instruction}
+        </p>
+        <div className="mt-5 flex justify-end">
+          <Button type="button" variant="ghost" onClick={onClose}>
+            Sulje
+          </Button>
+        </div>
+      </div>
+    </div>
+  );
+}
 
 function getWorkoutOrderTimestamps(
   workout: AppState["scheduledWorkouts"][number],
@@ -91,7 +148,8 @@ type WorkoutInsight = {
   muscleGroupLiftedKg: Record<HistoryMuscleGroupKey, number>;
 };
 
-type AthleteLogMode = "library" | "workout";
+type AthleteLogMode = "overview" | "workout";
+type AthleteLogTab = "training" | "history";
 type AthleteOverviewFocusTarget = "measurements";
 type MeasurementMessageTone = "info" | "success" | "error";
 
@@ -197,7 +255,10 @@ export function AthleteDashboard({
   } = useAppState();
   const [selectedWorkoutId, setSelectedWorkoutId] = useState<string | null>(null);
   const [workoutMessage, setWorkoutMessage] = useState<string>("");
-  const [athleteLogMode, setAthleteLogMode] = useState<AthleteLogMode>("library");
+  const [openWorkoutInstruction, setOpenWorkoutInstruction] = useState<{ exerciseName: string; instruction: string } | null>(null);
+  const [athleteLogMode, setAthleteLogMode] = useState<AthleteLogMode>("overview");
+  const [athleteLogTab, setAthleteLogTab] = useState<AthleteLogTab>("training");
+  const [athleteLogReturnTab, setAthleteLogReturnTab] = useState<AthleteLogTab>("training");
   const [dismissedActiveWorkoutId, setDismissedActiveWorkoutId] = useState<string | null>(null);
   const [historyFocusWorkoutId, setHistoryFocusWorkoutId] = useState<string | null>(null);
   const [pendingStartWorkoutId, setPendingStartWorkoutId] = useState<string | null>(null);
@@ -236,14 +297,14 @@ export function AthleteDashboard({
   const historyMenuRef = useRef<HTMLDivElement | null>(null);
   const measurementsSectionRef = useRef<HTMLDivElement | null>(null);
   const closeWorkoutView = () => {
-    setDismissedActiveWorkoutId(selectedWorkoutId ?? activeWorkout?.id ?? null);
     setSelectedWorkoutId(null);
     setHistoryFocusWorkoutId(null);
     setCorrectionModeWorkoutId(null);
     setOpenHistoryMenuWorkoutId(null);
     setHistoryMenuAnchorRect(null);
     setHistoryMenuStyle(null);
-    setAthleteLogMode("library");
+    setAthleteLogMode("overview");
+    setAthleteLogTab(athleteLogReturnTab);
   };
   useEffect(() => {
     setSelectedHistoryWorkoutByGroup({});
@@ -409,7 +470,7 @@ export function AthleteDashboard({
     }
 
     setSelectedWorkoutId(null);
-    setAthleteLogMode("library");
+    setAthleteLogMode("overview");
   }, [athleteLogMode, highlightedWorkout, pendingStartWorkoutId, pendingWorkoutTransition, selectedWorkoutId, workouts]);
 
   const selectedWorkoutCompletionCount =
@@ -454,13 +515,6 @@ export function AthleteDashboard({
         ? resolveScheduledProgramWorkout(state, selectedWorkout)
         : undefined,
     [selectedWorkout, state.plans],
-  );
-  const selectedWorkoutDescription = useMemo(
-    () =>
-      selectedWorkout
-        ? resolveScheduledWorkoutDescription(state, selectedWorkout)
-        : undefined,
-    [selectedWorkout, state.plans, state.templates],
   );
   const workoutInsights = useMemo(() => buildWorkoutInsights(state), [state]);
   const selectedWorkoutStatus = selectedWorkout ? resolveWorkoutStatus(selectedWorkout) : undefined;
@@ -568,7 +622,10 @@ export function AthleteDashboard({
         .slice(-12),
     [getWorkoutOrderMetadata, sessionByWorkoutId, workoutInsights, workouts],
   );
-  const openWorkoutView = (scheduledWorkoutId: string, options?: { correctionMode?: boolean }) => {
+  const openWorkoutView = (
+    scheduledWorkoutId: string,
+    options?: { correctionMode?: boolean; returnTab?: AthleteLogTab },
+  ) => {
     setDismissedActiveWorkoutId(null);
     setHistoryFocusWorkoutId(null);
     setSelectedWorkoutId(scheduledWorkoutId);
@@ -576,6 +633,7 @@ export function AthleteDashboard({
     setOpenHistoryMenuWorkoutId(null);
     setHistoryMenuAnchorRect(null);
     setHistoryMenuStyle(null);
+    setAthleteLogReturnTab(options?.returnTab ?? "training");
     setAthleteLogMode("workout");
   };
   const toggleHistoryGroup = (groupKey: string, nextExpanded: boolean) => {
@@ -594,6 +652,7 @@ export function AthleteDashboard({
     setOpenHistoryMenuWorkoutId(null);
     setHistoryMenuAnchorRect(null);
     setHistoryMenuStyle(null);
+    setAthleteLogReturnTab("training");
     setAthleteLogMode("workout");
     onOpenWorkoutLog?.();
 
@@ -609,12 +668,16 @@ export function AthleteDashboard({
     }
 
     setPendingWorkoutTransition(null);
-    setAthleteLogMode("library");
+    setAthleteLogMode("overview");
     setSelectedWorkoutId(null);
     setWorkoutMessage(result.message);
     notify({ tone: "danger", message: result.message });
   };
-  const openOrResumeWorkout = async (scheduledWorkoutId: string, sourceKey: string) => {
+  const openOrResumeWorkout = async (
+    scheduledWorkoutId: string,
+    sourceKey: string,
+    options?: { returnTab?: AthleteLogTab },
+  ) => {
     const workout = workouts.find((item) => item.id === scheduledWorkoutId);
     if (!workout) {
       return;
@@ -638,7 +701,7 @@ export function AthleteDashboard({
         await withMinimumDelay(Promise.resolve());
       }
 
-      openWorkoutView(scheduledWorkoutId);
+      openWorkoutView(scheduledWorkoutId, { returnTab: options?.returnTab });
       onOpenWorkoutLog?.();
     } finally {
       setPendingWorkoutTransition((current) =>
@@ -966,7 +1029,7 @@ export function AthleteDashboard({
   );
 
   useEffect(() => {
-    if (view !== "athlete-log" || athleteLogMode !== "library" || !historyFocusWorkoutId) {
+    if (view !== "athlete-log" || athleteLogMode !== "overview" || athleteLogTab !== "history" || !historyFocusWorkoutId) {
       return;
     }
 
@@ -975,7 +1038,7 @@ export function AthleteDashboard({
     }, 80);
 
     return () => window.clearTimeout(scrollTimer);
-  }, [athleteLogMode, historyFocusWorkoutId, view]);
+  }, [athleteLogMode, athleteLogTab, historyFocusWorkoutId, view]);
 
   useEffect(() => {
     if (!historyFocusWorkoutId) {
@@ -1186,7 +1249,8 @@ export function AthleteDashboard({
                       className="w-full"
                       disabled={!athletePrograms.length}
                       onClick={() => {
-                        setAthleteLogMode("library");
+                        setAthleteLogMode("overview");
+                        setAthleteLogTab("training");
                         onOpenWorkoutLog?.();
                       }}
                     >
@@ -1510,16 +1574,6 @@ export function AthleteDashboard({
                     Valitse treeni listalta ja avaa se tähän näkymään.
                   </CardDescription>
                 ) : null}
-                {selectedWorkoutDescription ? (
-                  <p className="mt-4 max-w-3xl text-sm leading-6 text-[var(--text-muted)]">
-                    {selectedWorkoutDescription}
-                  </p>
-                ) : null}
-                {selectedProgramWorkout ? (
-                  <p className="mt-3 max-w-3xl text-sm text-[var(--text-muted)]">
-                    {deriveProgramWorkoutGuidance(selectedProgramWorkout)}
-                  </p>
-                ) : null}
               </div>
               <Button
                 type="button"
@@ -1567,7 +1621,7 @@ export function AthleteDashboard({
                 selectedSession={selectedSession}
                 scheduledWorkoutId={selectedWorkout.id}
                 scheduledWorkoutTitle={normalizeWorkoutHistoryTitle(selectedWorkout.title)}
-                scheduledWorkoutDescription={selectedWorkoutDescription}
+                scheduledWorkoutDescription={undefined}
                 scheduledWorkoutGuidance={selectedProgramWorkout ? deriveProgramWorkoutGuidance(selectedProgramWorkout) : undefined}
                 scheduledDate={selectedWorkout.completedAt ?? selectedSession?.completedAt ?? selectedWorkout.scheduledDate}
                 isSessionSyncing={pendingStartWorkoutId === selectedWorkout.id}
@@ -1632,7 +1686,9 @@ export function AthleteDashboard({
                       setSelectedWorkoutId(null);
                       setHistoryFocusWorkoutId(completedWorkoutId);
                       setCorrectionModeWorkoutId(null);
-                      setAthleteLogMode("library");
+                      setAthleteLogTab("history");
+                      setAthleteLogReturnTab("history");
+                      setAthleteLogMode("overview");
                       window.setTimeout(() => setPendingWorkoutTransition(null), 900);
                       return;
                     }
@@ -1668,7 +1724,9 @@ export function AthleteDashboard({
                     setDismissedActiveWorkoutId(selectedWorkout.id);
                     setSelectedWorkoutId(null);
                     setCorrectionModeWorkoutId(null);
-                    setAthleteLogMode("library");
+                    setAthleteLogTab("training");
+                    setAthleteLogReturnTab("training");
+                    setAthleteLogMode("overview");
                     notify({ tone: "info", message: "Treeni keskeytettiin." });
                     window.setTimeout(() => setPendingWorkoutTransition(null), 900);
                   } else {
@@ -1689,7 +1747,8 @@ export function AthleteDashboard({
                   setPendingWorkoutTransition({ type: "delete" });
                   setSelectedWorkoutId(null);
                   setCorrectionModeWorkoutId(null);
-                  setAthleteLogMode("library");
+                  setAthleteLogTab(athleteLogReturnTab);
+                  setAthleteLogMode("overview");
 
                   const result = await deleteWorkout(deletedWorkoutId);
                   console.info("[workout-ui] delete-result", {
@@ -1729,7 +1788,48 @@ export function AthleteDashboard({
             )}
           </Card>
         ) : (
-          <div className="grid gap-6 xl:grid-cols-[minmax(0,1.08fr)_minmax(22rem,0.92fr)] xl:items-start">
+          <div className="space-y-4">
+            <div
+              role="tablist"
+              aria-label="Treeninäkymän välilehdet"
+              className="grid grid-cols-2 gap-1 rounded-[1.1rem] border border-[color-mix(in_srgb,var(--border)_88%,var(--surface))] bg-[color-mix(in_srgb,var(--surface)_78%,var(--surface-2))] p-1"
+            >
+              <button
+                type="button"
+                role="tab"
+                id="athlete-log-tab-training"
+                aria-selected={athleteLogTab === "training"}
+                aria-controls="athlete-log-panel-training"
+                className={cn(
+                  "inline-flex min-h-10 items-center justify-center rounded-xl px-3 py-2 text-sm font-semibold transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--background)]",
+                  athleteLogTab === "training"
+                    ? "border border-[color-mix(in_srgb,var(--accent)_22%,var(--border))] bg-[color-mix(in_srgb,var(--accent)_10%,var(--surface))] text-[var(--accent)] shadow-[0_8px_18px_-20px_var(--accent)]"
+                    : "border border-transparent bg-transparent text-[var(--text-muted)] hover:border-[var(--border-strong)] hover:bg-[var(--surface)] hover:text-[var(--text)]",
+                )}
+                onClick={() => setAthleteLogTab("training")}
+              >
+                Treeni
+              </button>
+              <button
+                type="button"
+                role="tab"
+                id="athlete-log-tab-history"
+                aria-selected={athleteLogTab === "history"}
+                aria-controls="athlete-log-panel-history"
+                className={cn(
+                  "inline-flex min-h-10 items-center justify-center rounded-xl px-3 py-2 text-sm font-semibold transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--background)]",
+                  athleteLogTab === "history"
+                    ? "border border-[color-mix(in_srgb,var(--accent)_22%,var(--border))] bg-[color-mix(in_srgb,var(--accent)_10%,var(--surface))] text-[var(--accent)] shadow-[0_8px_18px_-20px_var(--accent)]"
+                    : "border border-transparent bg-transparent text-[var(--text-muted)] hover:border-[var(--border-strong)] hover:bg-[var(--surface)] hover:text-[var(--text)]",
+                )}
+                onClick={() => setAthleteLogTab("history")}
+              >
+                Historia
+              </button>
+            </div>
+
+            {athleteLogTab === "training" ? (
+            <div role="tabpanel" id="athlete-log-panel-training" aria-labelledby="athlete-log-tab-training">
             <Card>
               <p className="text-xs font-semibold tracking-[0.04em] text-[var(--text-subtle)]">Ohjelman treenit</p>
               <CardTitle className="text-2xl">Valitse seuraava treeni</CardTitle>
@@ -1897,30 +1997,37 @@ export function AthleteDashboard({
                                 : latestCompletionLabel
                                   ? `Viimeksi ${latestCompletionLabel.toLowerCase()}`
                                   : "Ei vielä toteutuksia.";
+                          const workoutGuidance = deriveProgramWorkoutGuidance(workout);
 
                           return (
                             <div
                               key={workout.id}
                               className="flex h-full w-full flex-col rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-4 shadow-[0_1px_0_0_var(--shadow-soft),0_10px_24px_-20px_var(--shadow)]"
                             >
-                              <div className="flex items-center justify-between gap-3.5">
+                              <div className="flex items-start justify-between gap-3.5">
                                 <div className="min-w-0">
                                   <p className="text-base font-semibold text-[var(--text)]">{workout.name}</p>
                                   <p className="mt-1 text-xs text-[var(--text-subtle)]">
                                     {workout.exercises.length} liikettä · {setCount} sarjaa · oletuslepo {workout.defaultRestSeconds}s
                                   </p>
-                                  <p className="mt-2 text-sm leading-6 text-[var(--text-muted)]">
-                                    {deriveProgramWorkoutGuidance(workout)}
-                                  </p>
                                 </div>
+                                <button
+                                  type="button"
+                                  aria-label={`${workout.name} ohje`}
+                                  title="Ohje"
+                                  className="inline-flex size-8.5 shrink-0 items-center justify-center rounded-full border border-[color-mix(in_srgb,var(--accent)_22%,var(--border))] bg-[color-mix(in_srgb,var(--accent)_7%,var(--surface))] text-[var(--accent)] shadow-[0_4px_12px_-14px_var(--accent)] transition hover:border-[color-mix(in_srgb,var(--accent)_36%,var(--border))] hover:bg-[color-mix(in_srgb,var(--accent)_10%,var(--surface))] hover:opacity-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--background)]"
+                                  onClick={() => setOpenWorkoutInstruction({ exerciseName: workout.name, instruction: workoutGuidance })}
+                                >
+                                  <BookOpen className="size-3.5" aria-hidden="true" />
+                                </button>
+                              </div>
+                              <p className="mt-3 text-sm text-[var(--text-muted)]">{workoutSummary}</p>
+                              <div className="mt-3 flex flex-wrap gap-2">
                                 {activeScheduled ? (
                                   <Badge className={statusTone(activeScheduledStatus ?? activeScheduled.status)}>
                                     {workoutStatusLabel(activeScheduledStatus ?? activeScheduled.status)}
                                   </Badge>
                                 ) : null}
-                              </div>
-                              <p className="mt-3 text-sm text-[var(--text-muted)]">{workoutSummary}</p>
-                              <div className="mt-3 flex flex-wrap gap-2">
                                 {completionCount > 0 ? (
                                   <Badge className="border-[var(--border)] bg-[var(--surface-2)] text-[11px] text-[var(--text-subtle)] sm:text-xs">
                                     {completionCount} toteutusta
@@ -1988,7 +2095,11 @@ export function AthleteDashboard({
                 </p>
               )}
             </Card>
-            <div ref={historySectionRef}>
+            </div>
+            ) : null}
+
+            {athleteLogTab === "history" ? (
+            <div ref={historySectionRef} role="tabpanel" id="athlete-log-panel-history" aria-labelledby="athlete-log-tab-history">
               <Card>
                 <p className="text-xs font-semibold tracking-[0.04em] text-[var(--text-subtle)]">Treenihistoria</p>
                 <CardTitle className="text-2xl">Historia</CardTitle>
@@ -2103,7 +2214,9 @@ export function AthleteDashboard({
                                               setOpenHistoryMenuWorkoutId(null);
                                               setHistoryMenuAnchorRect(null);
                                               setHistoryMenuStyle(null);
-                                              void openOrResumeWorkout(workout.id, `history-menu-${workout.id}`);
+                                              void openOrResumeWorkout(workout.id, `history-menu-${workout.id}`, {
+                                                returnTab: "history",
+                                              });
                                             }}
                                           >
                                             Jatka treeniä
@@ -2118,7 +2231,10 @@ export function AthleteDashboard({
                                               setOpenHistoryMenuWorkoutId(null);
                                               setHistoryMenuAnchorRect(null);
                                               setHistoryMenuStyle(null);
-                                              openWorkoutView(workout.id, { correctionMode: true });
+                                              openWorkoutView(workout.id, {
+                                                correctionMode: true,
+                                                returnTab: "history",
+                                              });
                                             }}
                                           >
                                             Muokkaa
@@ -2287,9 +2403,17 @@ export function AthleteDashboard({
                 )}
               </Card>
             </div>
+            ) : null}
           </div>
         )
       )}
+      {openWorkoutInstruction ? (
+        <CoachInstructionDialog
+          exerciseName={openWorkoutInstruction.exerciseName}
+          instruction={openWorkoutInstruction.instruction}
+          onClose={() => setOpenWorkoutInstruction(null)}
+        />
+      ) : null}
     </div>
   );
 }
@@ -2672,12 +2796,10 @@ function resolveScheduledWorkoutDescription(
   state: AppState,
   scheduledWorkout: AppState["scheduledWorkouts"][number],
 ) {
-  if (scheduledWorkout.trainingPlanId) {
-    const plan = state.plans.find((item) => item.id === scheduledWorkout.trainingPlanId);
-    const description = plan?.description?.trim();
-    if (description) {
-      return description;
-    }
+  const programWorkout = resolveScheduledProgramWorkout(state, scheduledWorkout);
+  const workoutGuidance = programWorkout?.guidance?.trim();
+  if (workoutGuidance) {
+    return workoutGuidance;
   }
 
   if (scheduledWorkout.templateId) {
