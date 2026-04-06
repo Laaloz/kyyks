@@ -63,6 +63,12 @@ export const metadata: Metadata = {
   title: "rooki.fit",
   description: "Coach-first training platform for building workout plans and tracking execution.",
   applicationName: "rooki.fit",
+  manifest: "/manifest.webmanifest",
+  appleWebApp: {
+    capable: true,
+    statusBarStyle: "default",
+    title: "rooki.fit",
+  },
   icons: {
     icon: "/icon.svg",
     shortcut: "/icon.svg",
@@ -83,8 +89,20 @@ export default function RootLayout({
     <html lang="fi" suppressHydrationWarning>
       <head>
         <meta id="theme-color-meta" name="theme-color" content="#f3f7fc" />
+        <meta name="mobile-web-app-capable" content="yes" />
         <Script id="theme-init" strategy="beforeInteractive">
           {themeInitScript}
+        </Script>
+        <Script id="service-worker-register" strategy="afterInteractive">
+          {`
+            if ("serviceWorker" in navigator) {
+              window.addEventListener("load", () => {
+                navigator.serviceWorker.register("/sw.js").catch(() => {
+                  // Best-effort registration for Android installability.
+                });
+              });
+            }
+          `}
         </Script>
       </head>
       <body suppressHydrationWarning>
