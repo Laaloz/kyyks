@@ -40,7 +40,6 @@ import { calculateSessionDurationSeconds, getCoachConversationAthletes, splitLab
 import { withMinimumDelay } from "@/lib/min-delay";
 import { deriveProgramWorkoutGuidance } from "@/lib/program-workout-guidance";
 import { buildScheduledWorkoutExerciseOrder } from "@/lib/workout-exercise-order";
-import { buildWorkoutConversationContextOptions } from "@/lib/workout-conversation-context";
 import { buildWorkoutHistoryTitleMap } from "@/lib/workout-history-title";
 import { getProgramStatus, isProgramActive } from "@/lib/program-status";
 import { isAdminRole } from "@/lib/role-access";
@@ -938,9 +937,6 @@ export function CoachDashboard({
           onSend={addConversationComment}
           selectedAthleteId={selectedAthleteId}
           onSelectAthlete={setSelectedAthleteId}
-          plans={state.plans}
-          scheduledWorkouts={state.scheduledWorkouts}
-          templates={state.templates}
           users={state.users}
         />
       ) : null}
@@ -3421,9 +3417,6 @@ function CoachConversationView({
   onSend,
   selectedAthleteId,
   onSelectAthlete,
-  plans,
-  scheduledWorkouts,
-  templates,
   users,
 }: {
   athletes: Array<{ id: string; fullName: string; email: string }>;
@@ -3437,9 +3430,6 @@ function CoachConversationView({
   ) => Promise<{ ok: true; scheduledWorkoutId?: string } | { ok: false; message: string }>;
   selectedAthleteId: string;
   onSelectAthlete: (athleteId: string) => void;
-  plans: AppState["plans"];
-  scheduledWorkouts: AppState["scheduledWorkouts"];
-  templates: AppState["templates"];
   users: AppState["users"];
 }) {
   const athleteSelectOptions = useMemo(() => {
@@ -3506,36 +3496,6 @@ function CoachConversationView({
     markConversationRead({ athleteId: selectedAthleteId });
   }, [markConversationRead, selectedAthleteId]);
 
-  const contextOptions = useMemo(() => {
-    const selectedAthletePlans = plans.filter((plan) => plan.athleteId === selectedAthleteId && isProgramActive(plan));
-    const selectedAthleteWorkouts = scheduledWorkouts.filter(
-      (workout) => workout.athleteId === selectedAthleteId,
-    );
-
-    return [
-      { id: "general", label: "Yleinen keskustelu", contextType: "general" as const },
-      ...buildWorkoutConversationContextOptions({
-        workouts: selectedAthleteWorkouts,
-        plans: selectedAthletePlans,
-        templates,
-      }),
-      ...selectedAthletePlans.map((plan) => ({
-        id: `program-${plan.id}`,
-        label: `Ohjelma: ${plan.title}`,
-        contextType: "program" as const,
-        contextId: plan.id,
-        contextLabel: plan.title,
-      })),
-    ];
-  }, [plans, scheduledWorkouts, selectedAthleteId, templates]);
-  const workoutOccurrenceLabelById = useMemo(() => {
-    const selectedAthleteWorkouts = scheduledWorkouts.filter((workout) => workout.athleteId === selectedAthleteId);
-    const titleMap = buildWorkoutHistoryTitleMap(selectedAthleteWorkouts);
-    return new Map(
-      Array.from(titleMap.entries()).map(([workoutId, info]) => [workoutId, info.occurrenceLabel]),
-    );
-  }, [scheduledWorkouts, selectedAthleteId]);
-
   if (!athletes.length) {
     return (
       <Card>
@@ -3549,21 +3509,16 @@ function CoachConversationView({
 
   return (
     <ConversationPanel
-      heading="Treenaajan keskusteluvirta"
-      description="Seuraa yhdestä paikasta treenaajan ja valmentajan viestejä."
+      heading=""
+      description=""
       entries={filteredEntries}
       users={users}
       currentRole={currentRole}
       currentUserId={currentUserId}
-      emptyMessage="Valitulle treenaajalle ei ole vielä viestejä keskusteluvirrassa."
-      contextOptions={contextOptions}
-      occurrenceLabelByWorkoutId={workoutOccurrenceLabelById}
-      onSend={(body, option) =>
+      emptyMessage="Ei viestejä vielä."
+      onSend={(body) =>
         onSend(body, {
-          scheduledWorkoutId: option.contextType === "workout" ? option.contextId : undefined,
-          trainingPlanId: option.contextType === "program" ? option.contextId : undefined,
-          athleteId: option.contextType === "general" ? selectedAthleteId : undefined,
-          contextLabel: option.contextLabel,
+          athleteId: selectedAthleteId,
         })
       }
       headerSlot={

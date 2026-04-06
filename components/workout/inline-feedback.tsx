@@ -26,10 +26,15 @@ export function InlineFeedback({
         : tone === "info"
           ? "text-[var(--accent)]"
           : "text-[var(--text-subtle)]";
+  const content = isPending ? pendingMessage : message || idleMessage || null;
+
+  if (!content) {
+    return null;
+  }
 
   return (
     <p aria-live="polite" className={`${colorClass} ${className}`.trim()}>
-      {isPending ? pendingMessage : message || idleMessage || null}
+      {content}
     </p>
   );
 }

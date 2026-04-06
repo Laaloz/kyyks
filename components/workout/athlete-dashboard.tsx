@@ -27,7 +27,6 @@ import { deriveProgramWorkoutGuidance } from "@/lib/program-workout-guidance";
 import { isProgramActive } from "@/lib/program-status";
 import { canTrackOwnTraining } from "@/lib/role-access";
 import { buildScheduledWorkoutExerciseOrder } from "@/lib/workout-exercise-order";
-import { buildWorkoutConversationContextOptions } from "@/lib/workout-conversation-context";
 import { buildWorkoutHistoryTitleMap, normalizeWorkoutHistoryTitle } from "@/lib/workout-history-title";
 import { cn } from "@/lib/utils";
 import type { AppState, ConversationEntry, WorkoutSession } from "@/lib/types";
@@ -423,13 +422,6 @@ export function AthleteDashboard({
         .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()),
     [currentUser?.id, state.conversationEntries],
   );
-  const adminConversationTarget = useMemo(
-    () =>
-      state.users
-        .filter((user) => user.role === "admin" && user.status === "active")
-        .sort((left, right) => left.fullName.localeCompare(right.fullName, "fi"))[0],
-    [state.users],
-  );
   const progress = selectedWorkout ? getSessionProgress(state, selectedWorkout.id) : null;
   const inProgressCount = workouts.filter((item) => resolveWorkoutStatus(item) === "in_progress").length;
   useEffect(() => {
@@ -777,13 +769,6 @@ export function AthleteDashboard({
     () => buildWorkoutHistoryTitleMap(workoutHistory),
     [workoutHistory],
   );
-  const workoutOccurrenceLabelById = useMemo(
-    () =>
-      new Map(
-        Array.from(workoutHistoryTitles.entries()).map(([workoutId, info]) => [workoutId, info.occurrenceLabel]),
-      ),
-    [workoutHistoryTitles],
-  );
   const latestNoteByWorkoutId = useMemo(() => {
     const sessionById = new Map(state.sessions.map((session) => [session.id, session]));
     const notesByWorkoutId = new Map<string, { body: string; updatedAt: string }>();
@@ -997,37 +982,6 @@ export function AthleteDashboard({
 
     return groupByWorkoutId;
   }, [groupedWorkoutHistory]);
-  const conversationContextOptions = useMemo(
-    () => [
-      { id: "general", label: "Yleinen keskustelu", contextType: "general" as const, recipientType: "coach" as const },
-      ...(adminConversationTarget
-        ? [
-            {
-              id: "admin-support",
-              label: "Admin: bugi tai ilmoitus",
-              contextType: "general" as const,
-              recipientType: "admin" as const,
-              recipientUserId: adminConversationTarget.id,
-            },
-          ]
-        : []),
-      ...buildWorkoutConversationContextOptions({
-        workouts,
-        plans: athletePrograms,
-        templates: state.templates,
-      }),
-      ...athletePrograms.map((program) => ({
-        id: `program-${program.id}`,
-        label: `Ohjelma: ${program.title}`,
-        contextType: "program" as const,
-        contextId: program.id,
-        contextLabel: program.title,
-        recipientType: "coach" as const,
-      })),
-    ],
-    [adminConversationTarget, athletePrograms, state.templates, workouts],
-  );
-
   useEffect(() => {
     if (view !== "athlete-log" || athleteLogMode !== "overview" || athleteLogTab !== "history" || !historyFocusWorkoutId) {
       return;
@@ -1539,22 +1493,16 @@ export function AthleteDashboard({
 
       {view === "conversation" && currentUser ? (
         <ConversationPanel
-          heading="Yhteinen keskustelu"
-          description="Löydät yhdestä paikasta valmentajan viestit, omat kommenttisi ja adminille lähetetyt ilmoitukset."
+          heading=""
+          description=""
           entries={athleteConversationEntries}
           users={state.users}
           currentRole={currentUser.role}
           currentUserId={currentUser.id}
-          emptyMessage="Tähän näkymään ilmestyvät viestit heti, kun niitä syntyy."
-          contextOptions={conversationContextOptions}
-          occurrenceLabelByWorkoutId={workoutOccurrenceLabelById}
-          onSend={(body, option) =>
+          emptyMessage="Ei viestejä vielä."
+          onSend={(body) =>
             addConversationComment(body, {
-              type: option.recipientType === "admin" ? "admin_message" : "comment",
-              targetAdminUserId: option.recipientType === "admin" ? option.recipientUserId : undefined,
-              scheduledWorkoutId: option.contextType === "workout" ? option.contextId : undefined,
-              trainingPlanId: option.contextType === "program" ? option.contextId : undefined,
-              contextLabel: option.contextLabel,
+              type: "comment",
             })
           }
         />

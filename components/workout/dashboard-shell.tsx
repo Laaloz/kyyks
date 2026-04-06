@@ -375,7 +375,13 @@ export function DashboardShell() {
   };
 
   return (
-    <div className="mx-auto flex min-h-screen max-w-7xl flex-col gap-4 px-4 py-4 pb-28 lg:gap-6 sm:px-6 lg:px-8 lg:pb-4">
+    <div
+      className={`mx-auto flex max-w-7xl flex-col px-4 py-4 sm:px-6 lg:px-8 ${
+        view === "conversation"
+          ? "h-[100svh] overflow-hidden gap-4 pb-28 lg:gap-4 lg:pb-4"
+          : "min-h-screen gap-4 pb-28 lg:gap-6 lg:pb-4"
+      }`}
+    >
       {shouldShowMeasurementReminder && isMeasurementReminderOpen ? (
         <MeasurementReminderDialog
           weightDue={weightReminderDue}
@@ -558,11 +564,17 @@ export function DashboardShell() {
         </div>
       </header>
 
-      <main id="main-content">
+      <main id="main-content" className={view === "conversation" ? "flex min-h-0 flex-1" : undefined}>
         {view === "settings" ? (
           <UserSettingsPanel />
         ) : (
-          <div role="tabpanel" id={activePanelId} aria-labelledby={activeTabId} tabIndex={0}>
+          <div
+            role="tabpanel"
+            id={activePanelId}
+            aria-labelledby={activeTabId}
+            tabIndex={0}
+            className={view === "conversation" ? "flex min-h-0 flex-1" : undefined}
+          >
             {view === "athlete-log" ? (
               <AthleteDashboard
                 view={view}
