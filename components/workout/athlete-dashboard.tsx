@@ -1,6 +1,6 @@
 "use client";
 
-import { ChevronDown, ChevronLeft, ChevronUp, MoreHorizontal } from "lucide-react";
+import { ArrowLeft, ChevronDown, ChevronUp, MoreHorizontal } from "lucide-react";
 import {
   startTransition,
   useEffect,
@@ -1499,8 +1499,8 @@ export function AthleteDashboard({
       {view === "athlete-log" && (
         athleteLogMode === "workout" ? (
           <Card className="border-[var(--border-strong)] max-md:rounded-none max-md:border-0 max-md:bg-transparent max-md:p-0 max-md:shadow-none">
-            <div className="flex flex-wrap items-start justify-between gap-4">
-              <div className="min-w-0">
+            <div className="flex items-start justify-between gap-4">
+              <div className="min-w-0 flex-1">
                 <p className="text-xs font-semibold tracking-[0.04em] text-[var(--text-subtle)]">Treeni</p>
                 <CardTitle className="text-2xl">
                   {selectedWorkout ? normalizeWorkoutHistoryTitle(selectedWorkout.title) : "Aktiivinen treeni"}
@@ -1511,12 +1511,12 @@ export function AthleteDashboard({
                   </CardDescription>
                 ) : null}
                 {selectedWorkoutDescription ? (
-                  <p className="mt-4 max-w-3xl text-sm leading-7 text-[var(--text-muted)]">
+                  <p className="mt-4 max-w-3xl text-sm leading-6 text-[var(--text-muted)]">
                     {selectedWorkoutDescription}
                   </p>
                 ) : null}
                 {selectedProgramWorkout ? (
-                  <p className="mt-3 max-w-3xl text-sm leading-7 text-[var(--text-muted)]">
+                  <p className="mt-3 max-w-3xl text-sm text-[var(--text-muted)]">
                     {deriveProgramWorkoutGuidance(selectedProgramWorkout)}
                   </p>
                 ) : null}
@@ -1524,40 +1524,39 @@ export function AthleteDashboard({
               <Button
                 type="button"
                 variant="ghost"
-                className="gap-1.5"
+                className="mt-0.5 size-10 shrink-0 rounded-full p-0"
+                aria-label="Takaisin treenilistaan"
                 onClick={closeWorkoutView}
               >
-                <ChevronLeft className="size-4" aria-hidden="true" />
-                <span className="sm:hidden">Takaisin</span>
-                <span className="hidden sm:inline">Takaisin treenilistaan</span>
+                <ArrowLeft className="size-4" aria-hidden="true" />
               </Button>
             </div>
             {progress ? (
-              <div className="mt-4 rounded-2xl border border-[var(--border-strong)] bg-[var(--surface-2)] p-4">
-                <div className="flex items-center justify-between gap-4">
+              <div className="mt-4 rounded-2xl border border-[var(--border-strong)] bg-[var(--surface-2)] p-3">
+                <div className="flex items-center justify-between gap-3">
                   <div>
                     <div className="inline-flex items-center gap-1">
                       <p className="text-sm font-semibold tracking-[0.04em] text-[var(--text-subtle)]">Edistyminen</p>
                       <InfoTooltip text="Näyttää tämän treenin valmiit sarjat suhteessa kaikkiin sarjoihin." />
                     </div>
-                    <p className="mt-1 font-[family-name:var(--font-display)] text-2xl font-semibold text-[var(--text)]">
+                    <p className="mt-0.5 font-[family-name:var(--font-display)] text-xl font-semibold text-[var(--text)]">
                       {progress.completedSets}/{progress.totalSets} sarjaa
                     </p>
                   </div>
                   <Badge>{progress.percent}%</Badge>
                 </div>
                 {selectedWorkout?.status === "completed" ? (
-                  <p className="mt-2 text-xs text-[var(--text-subtle)]">
+                  <p className="mt-1.5 text-xs text-[var(--text-subtle)]">
                     Nostettu yhteensä {formatLiftedKgValue(selectedWorkoutInsight?.liftedKg ?? 0)} ·{" "}
                     arvioitu kulutus {formatEstimatedCaloriesValue(selectedWorkoutInsight?.estimatedCalories ?? 0)}.
                   </p>
                 ) : (
-                  <p className="mt-2 text-xs text-[var(--text-subtle)]">
+                  <p className="mt-1.5 text-xs text-[var(--text-subtle)]">
                     Tämä treeni tehty aiemmin {selectedWorkoutCompletionCount} kertaa ·{" "}
                     {selectedWorkoutInsight?.exerciseCount ?? 0} liikettä / {selectedWorkoutInsight?.setCount ?? 0} sarjaa.
                   </p>
                 )}
-                <div className="mt-4 h-3 overflow-hidden rounded-full border border-[var(--border)] bg-[var(--surface-3)]">
+                <div className="mt-3 h-2.5 overflow-hidden rounded-full border border-[var(--border)] bg-[var(--surface-3)]">
                   <div className="h-full rounded-full bg-[var(--accent)]" style={{ width: `${progress.percent}%` }} />
                 </div>
               </div>

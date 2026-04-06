@@ -1460,15 +1460,6 @@ export function AthleteSessionPanel({
   if (isSessionSyncing) {
     return (
       <div className="mt-6 space-y-4">
-        <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface-2)] p-4">
-          <p className="font-medium text-[var(--text)]">{scheduledWorkoutTitle}</p>
-          {scheduledWorkoutDescription ? (
-            <p className="mt-2 max-w-3xl text-sm leading-6 text-[var(--text-muted)]">{scheduledWorkoutDescription}</p>
-          ) : null}
-          {scheduledWorkoutGuidance ? (
-            <p className="mt-2 max-w-3xl text-sm leading-6 text-[var(--text-muted)]">{scheduledWorkoutGuidance}</p>
-          ) : null}
-        </div>
         <div className="rounded-3xl border border-[var(--border-strong)] bg-[color:color-mix(in_srgb,var(--surface-2)_82%,var(--surface))] px-4 py-5 shadow-[0_12px_28px_-24px_var(--shadow)]">
           <div className="flex items-center gap-3">
             <span
@@ -1492,14 +1483,7 @@ export function AthleteSessionPanel({
 
   if (!selectedSession) {
     return (
-        <div className="mt-5 rounded-2xl border border-dashed border-[var(--border)] bg-[color:color-mix(in_srgb,var(--surface-2)_82%,var(--surface))] p-6 shadow-[0_10px_24px_-22px_var(--shadow)]">
-        <p className="font-medium text-[var(--text)]">{scheduledWorkoutTitle}</p>
-        {scheduledWorkoutDescription ? (
-          <p className="mt-2 max-w-3xl text-sm leading-6 text-[var(--text-muted)]">{scheduledWorkoutDescription}</p>
-        ) : null}
-        {scheduledWorkoutGuidance ? (
-          <p className="mt-2 max-w-3xl text-sm leading-6 text-[var(--text-muted)]">{scheduledWorkoutGuidance}</p>
-        ) : null}
+      <div className="mt-5 rounded-2xl border border-dashed border-[var(--border)] bg-[color:color-mix(in_srgb,var(--surface-2)_82%,var(--surface))] p-6 shadow-[0_10px_24px_-22px_var(--shadow)]">
         <p className="mt-2 text-sm leading-6 text-[var(--text-muted)]">
           Aloita treeni, niin sovellus luo sinulle sarjalokin automaattisesti ja tallentaa etenemisen jokaisen muutoksen jälkeen.
         </p>
