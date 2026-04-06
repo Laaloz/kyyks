@@ -209,7 +209,7 @@ export function OwnTrainingOverviewCard({
           </CardDescription>
         </div>
         <div className="grid gap-3 lg:grid-cols-[1.2fr_0.8fr]">
-          <div className="rounded-3xl border border-[var(--border)] bg-[var(--surface-2)] p-5">
+          <div className="rounded-3xl border border-[var(--border)] bg-[var(--surface-2)] p-4">
             <div className="grid gap-4 md:grid-cols-[auto_1fr] md:items-center">
               <ProgressRing label="Viikon eteneminen" percent={completionRate} showLabel={false} />
               <div className="space-y-4">
@@ -246,7 +246,7 @@ export function OwnTrainingOverviewCard({
             </div>
             </div>
           </div>
-          <div className="rounded-3xl border border-[var(--border)] bg-[var(--surface-2)] p-5">
+          <div className="rounded-3xl border border-[var(--border)] bg-[var(--surface-2)] p-4">
             <p className="text-xs font-semibold tracking-[0.04em] text-[var(--text-subtle)]">
               {highlightedState === "active" ? "Aktiivinen treeni" : "Seuraava askel"}
             </p>

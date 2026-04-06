@@ -2,6 +2,7 @@
 
 import { zodResolver } from "@hookform/resolvers/zod";
 import {
+  ArrowLeft,
   Check,
   ChevronDown,
   ChevronUp,
@@ -57,6 +58,7 @@ import {
 import { OwnTrainingOverviewCard, PROGRAMS_WORKSPACE_VIEW, workoutStatusBadgeClass, workoutStatusLabel, type WorkspaceView } from "@/components/workout/shared";
 
 type CoachHistoryMuscleGroupKey = "shoulders" | "arms" | "chest" | "abs" | "back" | "legs" | "other";
+type ProgramWorkspaceTab = "library" | "builder";
 
 type CoachWorkoutInsight = {
   exerciseCount: number;
@@ -754,6 +756,7 @@ export function CoachDashboard({
   const isEditingProgram = Boolean(editingProgramId);
   const isSavingProgram = form.formState.isSubmitting;
   const [composerView, setComposerView] = useState<ComposerView>("details");
+  const [programWorkspaceTab, setProgramWorkspaceTab] = useState<ProgramWorkspaceTab>("library");
   const [activeWorkoutIndex, setActiveWorkoutIndex] = useState(0);
   const [activeExerciseIndex, setActiveExerciseIndex] = useState(0);
   const canEditProgramAthlete = !editingProgramId
@@ -797,6 +800,7 @@ export function CoachDashboard({
 
   const closeProgramEditing = (message?: string) => {
     resetComposer(form.getValues("athleteId"));
+    setProgramWorkspaceTab("library");
     setProgramMessage(message ?? "");
     setProgramMessageTone(message ? "success" : null);
   };
@@ -942,11 +946,68 @@ export function CoachDashboard({
       ) : null}
 
       {view === PROGRAMS_WORKSPACE_VIEW && (
-        <div className="grid gap-6 xl:grid-cols-[1.08fr_0.92fr]">
+        <div className="grid gap-4">
+          <div className="w-full rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-2">
+            <div className="grid w-full grid-cols-2 rounded-2xl border border-[var(--border)] bg-[var(--surface-2)] p-1">
+              <button
+                type="button"
+                className={cn(
+                  "min-w-0 rounded-xl px-4 py-2.5 text-sm font-semibold transition",
+                  programWorkspaceTab === "library"
+                    ? "border border-[color:color-mix(in_srgb,var(--accent)_18%,var(--border))] bg-[color:color-mix(in_srgb,var(--accent)_10%,var(--surface))] text-[var(--accent)] shadow-[0_8px_18px_-20px_var(--accent)]"
+                    : "border border-transparent text-[var(--text-muted)] hover:bg-[var(--surface)] hover:text-[var(--text)]",
+                )}
+                aria-pressed={programWorkspaceTab === "library"}
+                onClick={() => setProgramWorkspaceTab("library")}
+              >
+                Ohjelmakirjasto
+              </button>
+              <button
+                type="button"
+                className={cn(
+                  "min-w-0 rounded-xl px-4 py-2.5 text-sm font-semibold transition",
+                  programWorkspaceTab === "builder"
+                    ? "border border-[color:color-mix(in_srgb,var(--accent)_18%,var(--border))] bg-[color:color-mix(in_srgb,var(--accent)_10%,var(--surface))] text-[var(--accent)] shadow-[0_8px_18px_-20px_var(--accent)]"
+                    : "border border-transparent text-[var(--text-muted)] hover:bg-[var(--surface)] hover:text-[var(--text)]",
+                )}
+                aria-pressed={programWorkspaceTab === "builder"}
+                onClick={() => setProgramWorkspaceTab("builder")}
+              >
+                Rakenna ohjelma
+              </button>
+            </div>
+          </div>
+
+          {programWorkspaceTab === "builder" ? (
           <div ref={composerCardRef}>
-            <Card className="border-[var(--border-strong)]" id="coach-program-composer">
-              <p className="text-xs font-semibold text-[var(--text-subtle)]">Ohjelman rakentaja</p>
-              <CardTitle className="text-2xl">{editorTitle}</CardTitle>
+            <Card className="border-[var(--border-strong)] p-3 sm:p-4" id="coach-program-composer">
+              <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0 flex-1">
+                  <p className="text-xs font-semibold text-[var(--text-subtle)]">Ohjelman rakentaja</p>
+                  <CardTitle className="text-2xl">{editorTitle}</CardTitle>
+                </div>
+                {composerView !== "details" ? (
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    className="size-10 shrink-0 rounded-full p-0"
+                    aria-label="Takaisin"
+                    onClick={() => {
+                      if (composerView === "workouts") {
+                        setComposerView("details");
+                        return;
+                      }
+                      if (composerView === "workout_editor") {
+                        setComposerView("workouts");
+                        return;
+                      }
+                      setComposerView("workouts");
+                    }}
+                  >
+                    <ArrowLeft className="size-4" aria-hidden="true" />
+                  </Button>
+                ) : null}
+              </div>
             {isEditingProgram ? (
               <div className="mt-4 flex flex-wrap items-center gap-3 rounded-xl border border-[var(--border)] bg-[var(--surface-2)] p-3">
                 <Badge>Muokkaustila</Badge>
@@ -966,7 +1027,7 @@ export function CoachDashboard({
             ) : null}
 
             <form
-              className="mt-5 space-y-4"
+              className="mt-4 space-y-3"
               onSubmit={form.handleSubmit(async (values) => {
                 const payloadWorkouts = mapComposerWorkouts(values.workouts);
                 const result = isEditingProgram && editingProgramId
@@ -999,12 +1060,14 @@ export function CoachDashboard({
                   );
                   setProgramMessageTone("success");
                   resetComposer(values.athleteId);
+                  setProgramWorkspaceTab("library");
                   return;
                 }
 
                 setProgramMessage(`Ohjelma "${values.title}" tallennettiin aktiiviseksi.`);
                 setProgramMessageTone("success");
                 resetComposer(values.athleteId);
+                setProgramWorkspaceTab("library");
               }, async () => {
                 setProgramMessage(`Täydennä ${composerIssues.length} pakollista kohtaa ennen tallennusta.`);
                 setProgramMessageTone("danger");
@@ -1015,46 +1078,23 @@ export function CoachDashboard({
                 openIssueLocation(firstIssue);
               })}
             >
-              <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface-2)] p-3">
-                <div className="flex flex-wrap items-center justify-between gap-3">
-                  <div>
+              <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface-2)] px-3 py-2.5">
+                <div className="flex items-start gap-3">
+                  <div className="min-w-0 flex-1">
                     <div className="flex items-center gap-2">
                       <Badge>{activeComposerStep.step}</Badge>
                       <p className="text-sm font-semibold text-[var(--text)]">{activeComposerStep.title}</p>
                     </div>
-                    <p className="mt-1 text-sm text-[var(--text-muted)]">{activeComposerStep.description}</p>
+                    <p className="mt-0.5 text-sm text-[var(--text-muted)]">{activeComposerStep.description}</p>
                   </div>
-                  {composerView !== "details" ? (
-                    <Button
-                      type="button"
-                      variant="secondary"
-                      className="w-full sm:w-auto"
-                      onClick={() => {
-                        if (composerView === "workouts") {
-                          setComposerView("details");
-                          return;
-                        }
-                        if (composerView === "workout_editor") {
-                          setComposerView("workouts");
-                          return;
-                        }
-                        setComposerView("workouts");
-                      }}
-                    >
-                      Takaisin
-                    </Button>
-                  ) : null}
                 </div>
-                <p className="mt-2 text-xs font-medium text-[var(--text-subtle)]">
+                <p className="mt-1.5 text-xs font-medium text-[var(--text-subtle)]">
                   `*` merkityt kentät ovat pakollisia.
                 </p>
               </div>
 
                   {composerView === "details" ? (
-                <div className="space-y-3 rounded-xl border border-[var(--border)] bg-[var(--surface-2)] p-4">
-                    <p className="text-sm font-medium text-[var(--text-subtle)]">
-                      1. Viikon treeniohjelman tiedot
-                    </p>
+                <div className="space-y-3">
                     <div className="grid gap-4 md:grid-cols-2">
                       <div>
                         <RequiredLabel htmlFor="program-composer-title">Ohjelman nimi</RequiredLabel>
@@ -1110,13 +1150,7 @@ export function CoachDashboard({
               ) : null}
 
               {composerView === "workouts" ? (
-                <div className="space-y-3 rounded-xl border border-[var(--border)] bg-[var(--surface-2)] p-4">
-                  <p className="text-sm font-medium text-[var(--text-subtle)]">
-                    2. Päivät
-                  </p>
-                  <p className="text-sm text-[var(--text-muted)]">
-                    Lisää ohjelmaan päivät ja täytä niiden perustiedot. Liikkeet lisäät seuraavassa vaiheessa.
-                  </p>
+                <div className="space-y-3">
                   <div className="grid gap-3">
                     {workoutFields.fields.map((field, index) => {
                       const workout = watchedWorkouts[index];
@@ -1386,7 +1420,7 @@ export function CoachDashboard({
                                     setComposerView("workout_editor");
                                   }}
                                 >
-                                  {hasNoExercises ? "Liikkeet" : `Liikkeet (${workout.exercises.length})`}
+                                  {hasNoExercises ? "Lisää liikkeet" : `Muokkaa liikkeitä (${workout.exercises.length})`}
                                 </Button>
                                 </div>
                               </div>
@@ -1415,18 +1449,26 @@ export function CoachDashboard({
               ) : null}
 
               {composerView === "workout_editor" ? (
-                <div className="space-y-4 rounded-xl border border-[var(--border)] bg-[var(--surface-2)] p-4">
-                  <p className="text-[0.875rem] font-medium text-[var(--text-subtle)]">
-                    3. Liikkeet
-                  </p>
+                <div className="space-y-4">
                   <div className="flex flex-wrap items-center justify-between gap-3">
                     <div>
-                      <p className="mt-1 text-sm text-[var(--text-muted)]">
-                        Muokkaat nyt yhden valitun päivän liikkeitä.
-                      </p>
-                      <p className="mt-2 text-xs font-semibold text-[var(--text-subtle)]">
-                        Ohjelma &gt; Päivä {activeWorkoutIndex + 1} / {getComposerWorkoutLabel(activeWorkout, activeWorkoutIndex)}
-                      </p>
+                      <div className="inline-flex flex-wrap items-center gap-2 rounded-xl border border-[var(--border)] bg-[var(--surface-2)] px-3 py-2">
+                        <span className="text-[11px] font-semibold uppercase tracking-[0.06em] text-[var(--text-subtle)]">
+                          Ohjelma
+                        </span>
+                        <span className="text-[var(--text-subtle)]" aria-hidden="true">
+                          /
+                        </span>
+                        <span className="text-sm font-semibold text-[var(--text)]">
+                          Päivä {activeWorkoutIndex + 1}
+                        </span>
+                        <span className="text-[var(--text-subtle)]" aria-hidden="true">
+                          /
+                        </span>
+                        <span className="text-sm text-[var(--text-muted)]">
+                          {getComposerWorkoutLabel(activeWorkout, activeWorkoutIndex)}
+                        </span>
+                      </div>
                     </div>
                   </div>
 
@@ -1458,23 +1500,20 @@ export function CoachDashboard({
               ) : null}
 
               {composerView === "review" ? (
-                <div className="space-y-5 rounded-xl border border-[var(--border)] bg-[var(--surface-2)] p-4">
-                  <p className="text-[0.875rem] font-medium text-[var(--text-subtle)]">
-                    4. Tarkistus
-                  </p>
-                  <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface-2)] p-4">
+                <div className="space-y-4">
+                  <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface-2)] p-3">
                     <p className="text-sm font-semibold text-[var(--text)]">Yhteenveto</p>
                     <p className="mt-2 text-sm text-[var(--text-muted)]">
                       {watchedProgramTitle?.trim() || "Nimeämätön ohjelma"} · {activeAthleteName} · {watchedWorkouts.length} päivää · {totalExerciseCount} liikettä · {totalSetCount} sarjaa
                     </p>
                   </div>
 
-                  <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface-2)] p-4">
+                  <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface-2)] p-3">
                     <div className="flex items-center gap-2">
                       <ClipboardList className="size-4 text-[var(--text-subtle)]" />
                       <p className="text-sm font-semibold text-[var(--text)]">Tarkistuslista</p>
                     </div>
-                    <div className="mt-4 space-y-2">
+                    <div className="mt-3 space-y-2">
                       {composerIssues.length ? (
                         composerIssues.map((issue) => (
                           <button
@@ -1494,14 +1533,14 @@ export function CoachDashboard({
 
                   <div>
                     <p className="text-sm font-semibold text-[var(--text)]">Päivien sisältö</p>
-                    <div className="mt-4 space-y-3">
+                    <div className="mt-3 space-y-3">
                       {watchedWorkouts.map((workout, index) => {
                         const workoutIssues = composerIssues.filter((issue) => issue.workoutIndex === index).length;
 
                         return (
                           <div
                             key={`review-workout-${index}`}
-                            className="rounded-xl border border-[var(--border)] bg-[var(--surface)] p-4"
+                            className="rounded-xl border border-[var(--border)] bg-[var(--surface)] p-3"
                           >
                             <div className="flex flex-wrap items-center gap-2">
                               <p className="text-sm font-semibold text-[var(--text)]">
@@ -1517,7 +1556,7 @@ export function CoachDashboard({
                               <p className="mt-2 text-sm text-[var(--text-muted)]">{workout.guidance.trim()}</p>
                             ) : null}
                             {workout?.exercises.length ? (
-                              <div className="mt-3 space-y-2">
+                              <div className="mt-2.5 space-y-2">
                                 {workout.exercises.map((exercise, exerciseIndex) => {
                                   const isCustom = exercise.exerciseId === CUSTOM_EXERCISE_VALUE;
                                   const exerciseName =
@@ -1533,7 +1572,7 @@ export function CoachDashboard({
                                   return (
                                     <div
                                       key={`review-workout-${index}-exercise-${exerciseIndex}`}
-                                      className="rounded-xl border border-[var(--border)] bg-[var(--surface-2)] px-3 py-3"
+                                      className="rounded-xl border border-[var(--border)] bg-[var(--surface-2)] px-3 py-2.5"
                                     >
                                       <div className="flex flex-wrap items-center gap-2">
                                         <p className="text-sm font-medium text-[var(--text)]">
@@ -1570,7 +1609,7 @@ export function CoachDashboard({
               {programMessage ? (
                 <InlineFeedback message={programMessage} tone={programMessageTone} className="text-sm" />
               ) : null}
-              <div className="sticky bottom-3 z-10 rounded-2xl border border-[var(--border)] bg-[color:color-mix(in_oklab,var(--surface)_92%,var(--background))] p-3 shadow-[0_16px_40px_-28px_var(--shadow)] backdrop-blur">
+              <div className="rounded-2xl bg-[color:color-mix(in_oklab,var(--surface)_92%,var(--background))] shadow-[0_16px_40px_-28px_var(--shadow)] backdrop-blur">
                 <div className="flex flex-wrap items-center justify-between gap-3">
                   <p className="text-sm text-[var(--text-subtle)]">
                     {composerView === "details"
@@ -1656,7 +1695,9 @@ export function CoachDashboard({
             </form>
             </Card>
           </div>
+          ) : null}
 
+          {programWorkspaceTab === "library" ? (
           <div className="grid gap-6">
             <Card>
               <p className="text-xs font-semibold text-[var(--text-subtle)]">Ohjelmakirjasto</p>
@@ -1664,7 +1705,7 @@ export function CoachDashboard({
               <CardDescription className="mt-2">
                 Pidä käytössä oleva ohjelma selvästi esillä ja siirrä aiemmat versiot talteen vertailua varten.
               </CardDescription>
-              <div className="mt-5 space-y-6">
+              <div className="mt-5 space-y-5">
                 <section className="space-y-3">
                   <div className="flex items-center justify-between gap-3">
                     <div>
@@ -1676,7 +1717,7 @@ export function CoachDashboard({
                     <Badge>{activeCoachPrograms.length}</Badge>
                   </div>
                   {activeCoachPrograms.length ? (
-                    <div className="grid gap-4">
+                    <div className="grid gap-3">
                       {activeCoachPrograms.map((program) => {
                         const athleteName =
                           program.athleteId === currentUser?.id
@@ -1686,40 +1727,42 @@ export function CoachDashboard({
                         const canDeleteProgram = canDeleteProgramFromState(state, program.id);
 
                         return (
-                          <div key={program.id} className="rounded-2xl border-2 border-[var(--accent-strong)] bg-[color:color-mix(in_oklab,var(--accent)_10%,var(--surface))] p-5 shadow-[0_1px_0_0_var(--shadow-soft),0_10px_26px_-20px_var(--accent)]">
+                          <div key={program.id} className="rounded-2xl border border-[color:color-mix(in_oklab,var(--accent)_32%,var(--border))] bg-[color:color-mix(in_oklab,var(--accent)_10%,var(--surface))] p-3 shadow-[0_1px_0_0_var(--shadow-soft),0_10px_26px_-20px_var(--accent)]">
                             <div className="flex items-start justify-between gap-3">
-                              <div>
+                              <div className="min-w-0 flex-1">
                                 <div className="flex flex-wrap items-center gap-2">
-                                  <p className="text-lg font-semibold text-[var(--text)]">{program.title}</p>
+                                  <p className="text-base font-semibold text-[var(--text)]">{program.title}</p>
                                   <Badge className="border-[var(--accent-strong)] bg-[var(--surface)] text-[var(--accent-strong)]">
                                     Käytössä nyt
                                   </Badge>
-                                  <Badge>{program.workouts?.length ?? 0} treeniä</Badge>
                                   {isActiveEditorTarget ? <Badge>Aktiivinen muokkaus</Badge> : null}
                                 </div>
-                                <p className="mt-1 text-sm text-[var(--text-muted)]">Treenaaja: {athleteName}</p>
+                                <p className="mt-1 text-xs text-[var(--text-subtle)]">
+                                  Treenaaja: {athleteName} · {program.workouts?.length ?? 0} treeniä
+                                </p>
                                 {program.description ? (
-                                  <p className="mt-3 max-w-2xl text-sm leading-6 text-[var(--text-muted)]">{program.description}</p>
+                                  <p className="mt-2 text-sm leading-6 text-[var(--text-muted)]">{program.description}</p>
                                 ) : null}
                               </div>
                             </div>
 
-                            <div className="mt-3 flex flex-wrap gap-2">
+                            <div className="mt-2.5 flex flex-wrap gap-1.5">
                               {(program.workouts ?? []).map((workout) => (
                                 <Badge key={workout.id}>{workout.name}</Badge>
                               ))}
                             </div>
 
-                            <div className="mt-4 flex flex-wrap items-center gap-3">
+                            <div className="mt-3 flex flex-wrap items-center gap-2">
                               <Button
                                 type="button"
-                                variant={isActiveEditorTarget ? "secondary" : "secondary"}
+                                variant="secondary"
                                 onClick={() => {
                                   if (isActiveEditorTarget) {
                                     closeProgramEditing("Muokkaustila suljettiin.");
                                     return;
                                   }
                                   form.reset(buildProgramComposerValues(program, state.exercises));
+                                  setProgramWorkspaceTab("builder");
                                   setEditingProgramId(program.id);
                                   setComposerView("details");
                                   setActiveWorkoutIndex(0);
@@ -1733,29 +1776,29 @@ export function CoachDashboard({
                               >
                                 {isActiveEditorTarget ? "Sulje muokkaus" : "Muokkaa ohjelmaa"}
                               </Button>
-                              <Button
-                                type="button"
-                                variant="ghost"
-                                onClick={async () => {
-                                  const result = await setProgramStatus(program.id, "archived");
-                                  if (!result.ok) {
-                                    setProgramMessage(result.message);
-                                    setProgramMessageTone("danger");
-                                    return;
-                                  }
-
-                                  setProgramMessage(`Ohjelma "${program.title}" siirrettiin aiempiin ohjelmiin.`);
-                                  setProgramMessageTone("success");
-                                }}
-                              >
-                                Poista käytöstä
-                              </Button>
                               <details className="relative">
-                                <summary className="inline-flex list-none items-center justify-center rounded-xl border border-[var(--border)] bg-[var(--surface)] px-3 py-2 text-[var(--text-muted)] transition hover:border-[var(--border-strong)] hover:bg-[var(--surface-2)] hover:text-[var(--text)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--surface)]">
+                                <summary className="inline-flex size-10 list-none items-center justify-center rounded-full border border-[var(--border)] bg-[var(--surface)] p-0 text-[var(--text-muted)] transition hover:border-[var(--border-strong)] hover:bg-[var(--surface-2)] hover:text-[var(--text)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--surface)]">
                                   <MoreHorizontal className="size-4" aria-hidden="true" />
                                   <span className="sr-only">Avaa ohjelman lisätoiminnot</span>
                                 </summary>
-                                <div className="absolute right-0 top-[calc(100%+0.5rem)] z-10 min-w-48 rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-2 shadow-[0_18px_45px_-24px_var(--shadow)]">
+                                <div className="absolute right-0 top-[calc(100%+0.5rem)] z-10 min-w-60 max-w-[calc(100vw-1rem)] rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-2 shadow-[0_18px_45px_-24px_var(--shadow)]">
+                                  <button
+                                    type="button"
+                                    className="flex w-full items-center rounded-xl px-3 py-2 text-left text-sm font-semibold text-[var(--text)] transition hover:bg-[var(--surface-2)]"
+                                    onClick={async () => {
+                                      const result = await setProgramStatus(program.id, "archived");
+                                      if (!result.ok) {
+                                        setProgramMessage(result.message);
+                                        setProgramMessageTone("danger");
+                                        return;
+                                      }
+
+                                      setProgramMessage(`Ohjelma "${program.title}" siirrettiin aiempiin ohjelmiin.`);
+                                      setProgramMessageTone("success");
+                                    }}
+                                  >
+                                    Poista käytöstä
+                                  </button>
                                   <button
                                     type="button"
                                     disabled={!canDeleteProgram}
@@ -1787,13 +1830,13 @@ export function CoachDashboard({
                                       setProgramMessageTone("success");
                                     }}
                                   >
-                                    Poista näkyvistä
+                                    Poista
                                   </button>
                                 </div>
                               </details>
                             </div>
-                            <p className="mt-3 text-xs text-[var(--text-subtle)]">
-                              Poista näkyvistä piilottaa ohjelman listoilta, mutta säilyttää treenihistorian uusien ohjelmien autofillia varten.
+                            <p className="mt-2.5 text-xs text-[var(--text-subtle)]">
+                              Poista piilottaa ohjelman listoilta, mutta säilyttää treenihistorian uusien ohjelmien autofillia varten.
                             </p>
                           </div>
                         );
@@ -1820,7 +1863,7 @@ export function CoachDashboard({
                     <Badge>{archivedCoachPrograms.length}</Badge>
                   </div>
                   {archivedCoachPrograms.length ? (
-                    <div className="grid gap-4">
+                    <div className="grid gap-3">
                       {archivedCoachPrograms.map((program) => {
                         const athleteName =
                           program.athleteId === currentUser?.id
@@ -1830,29 +1873,30 @@ export function CoachDashboard({
                         const canDeleteProgram = canDeleteProgramFromState(state, program.id);
 
                         return (
-                          <div key={program.id} className="rounded-2xl border-2 border-[var(--border)] bg-[var(--surface-2)] p-5">
+                          <div key={program.id} className="rounded-2xl border border-[var(--border)] bg-[var(--surface-2)] p-3">
                             <div className="flex items-start justify-between gap-3">
-                              <div>
+                              <div className="min-w-0 flex-1">
                                 <div className="flex flex-wrap items-center gap-2">
-                                  <p className="text-lg font-semibold text-[var(--text)]">{program.title}</p>
+                                  <p className="text-base font-semibold text-[var(--text)]">{program.title}</p>
                                   <Badge>Aiempi ohjelma</Badge>
-                                  <Badge>{program.workouts?.length ?? 0} treeniä</Badge>
                                   {isActiveEditorTarget ? <Badge>Aktiivinen muokkaus</Badge> : null}
                                 </div>
-                                <p className="mt-1 text-sm text-[var(--text-muted)]">Treenaaja: {athleteName}</p>
+                                <p className="mt-1 text-xs text-[var(--text-subtle)]">
+                                  Treenaaja: {athleteName} · {program.workouts?.length ?? 0} treeniä
+                                </p>
                                 {program.description ? (
-                                  <p className="mt-3 max-w-2xl text-sm leading-6 text-[var(--text-muted)]">{program.description}</p>
+                                  <p className="mt-2 text-sm leading-6 text-[var(--text-muted)]">{program.description}</p>
                                 ) : null}
                               </div>
                             </div>
 
-                            <div className="mt-3 flex flex-wrap gap-2">
+                            <div className="mt-2.5 flex flex-wrap gap-1.5">
                               {(program.workouts ?? []).map((workout) => (
                                 <Badge key={workout.id}>{workout.name}</Badge>
                               ))}
                             </div>
 
-                            <div className="mt-4 flex flex-wrap items-center gap-3">
+                            <div className="mt-3 flex flex-wrap items-center gap-2">
                               <Button
                                 type="button"
                                 variant="secondary"
@@ -1872,35 +1916,36 @@ export function CoachDashboard({
                               >
                                 Ota käyttöön
                               </Button>
-                              <Button
-                                type="button"
-                                variant="ghost"
-                                onClick={() => {
-                                  if (isActiveEditorTarget) {
-                                    closeProgramEditing("Muokkaustila suljettiin.");
-                                    return;
-                                  }
-                                  form.reset(buildProgramComposerValues(program, state.exercises));
-                                  setEditingProgramId(program.id);
-                                  setComposerView("details");
-                                  setActiveWorkoutIndex(0);
-                                  setActiveExerciseIndex(0);
-                                  setProgramMessage("");
-                                  setProgramMessageTone(null);
-                                  window.requestAnimationFrame(() => {
-                                    const composer = document.getElementById("coach-program-composer");
-                                    composer?.scrollIntoView({ behavior: "smooth", block: "start" });
-                                  });
-                                }}
-                              >
-                                {isActiveEditorTarget ? "Sulje muokkaus" : "Muokkaa sisältöä"}
-                              </Button>
                               <details className="relative">
-                                <summary className="inline-flex list-none items-center justify-center rounded-xl border border-[var(--border)] bg-[var(--surface)] px-3 py-2 text-[var(--text-muted)] transition hover:border-[var(--border-strong)] hover:bg-[var(--surface-2)] hover:text-[var(--text)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--surface)]">
+                                <summary className="inline-flex size-10 list-none items-center justify-center rounded-full border border-[var(--border)] bg-[var(--surface)] p-0 text-[var(--text-muted)] transition hover:border-[var(--border-strong)] hover:bg-[var(--surface-2)] hover:text-[var(--text)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--surface)]">
                                   <MoreHorizontal className="size-4" aria-hidden="true" />
                                   <span className="sr-only">Avaa ohjelman lisätoiminnot</span>
                                 </summary>
-                                <div className="absolute right-0 top-[calc(100%+0.5rem)] z-10 min-w-48 rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-2 shadow-[0_18px_45px_-24px_var(--shadow)]">
+                                <div className="absolute right-0 top-[calc(100%+0.5rem)] z-10 min-w-60 max-w-[calc(100vw-1rem)] rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-2 shadow-[0_18px_45px_-24px_var(--shadow)]">
+                                  <button
+                                    type="button"
+                                    className="flex w-full items-center rounded-xl px-3 py-2 text-left text-sm font-semibold text-[var(--text)] transition hover:bg-[var(--surface-2)]"
+                                    onClick={() => {
+                                      if (isActiveEditorTarget) {
+                                        closeProgramEditing("Muokkaustila suljettiin.");
+                                        return;
+                                      }
+                                      form.reset(buildProgramComposerValues(program, state.exercises));
+                                      setProgramWorkspaceTab("builder");
+                                      setEditingProgramId(program.id);
+                                      setComposerView("details");
+                                      setActiveWorkoutIndex(0);
+                                      setActiveExerciseIndex(0);
+                                      setProgramMessage("");
+                                      setProgramMessageTone(null);
+                                      window.requestAnimationFrame(() => {
+                                        const composer = document.getElementById("coach-program-composer");
+                                        composer?.scrollIntoView({ behavior: "smooth", block: "start" });
+                                      });
+                                    }}
+                                  >
+                                    {isActiveEditorTarget ? "Sulje muokkaus" : "Muokkaa ohjelmaa"}
+                                  </button>
                                   <button
                                     type="button"
                                     disabled={!canDeleteProgram}
@@ -1932,13 +1977,13 @@ export function CoachDashboard({
                                       setProgramMessageTone("success");
                                     }}
                                   >
-                                    Poista näkyvistä
+                                    Poista
                                   </button>
                                 </div>
                               </details>
                             </div>
-                            <p className="mt-3 text-xs text-[var(--text-subtle)]">
-                              Poista näkyvistä piilottaa myös arkistoidun ohjelman listoilta, mutta säilyttää historian uusien ohjelmien autofillia varten.
+                            <p className="mt-2.5 text-xs text-[var(--text-subtle)]">
+                              Poista piilottaa myös arkistoidun ohjelman listoilta, mutta säilyttää historian uusien ohjelmien autofillia varten.
                             </p>
                           </div>
                         );
@@ -1956,6 +2001,7 @@ export function CoachDashboard({
               </div>
             </Card>
           </div>
+          ) : null}
         </div>
       )}
 
@@ -2510,6 +2556,7 @@ function CoachAthleteInsights({
                       ariaLabel="Painon kehitystrendi"
                       emptyMessage="Painomittauksia ei ole vielä kirjattu."
                       helperText="Alarivillä näkyy kuukausi ja vuosi, oikealla painon asteikko."
+                      compactHelperText="Alarivillä näkyy kuukausi ja vuosi. Tarkka arvo näkyy pisteen kohdalla."
                       valueLabel="Paino"
                       unit="kg"
                     />
@@ -2522,6 +2569,7 @@ function CoachAthleteInsights({
                       ariaLabel="Vyötärön kehitystrendi"
                       emptyMessage="Vyötärömittauksia ei ole vielä kirjattu."
                       helperText="Alarivillä näkyy kuukausi ja vuosi, oikealla vyötärön asteikko."
+                      compactHelperText="Alarivillä näkyy kuukausi ja vuosi. Tarkka arvo näkyy pisteen kohdalla."
                       valueLabel="Vyötärö"
                       unit="cm"
                     />
@@ -2534,6 +2582,7 @@ function CoachAthleteInsights({
                       ariaLabel="Volyymin kehitystrendi"
                       emptyMessage="Ei valmiita treenejä graafiin vielä."
                       helperText="Alarivillä näkyy kuukausi ja vuosi, oikealla volyymin asteikko."
+                      compactHelperText="Alarivillä näkyy kuukausi ja vuosi. Tarkka arvo näkyy pisteen kohdalla."
                       valueLabel="Volyymi"
                       unit="kg"
                       decimals={0}
@@ -2594,7 +2643,7 @@ function CoachAthleteInsights({
                           ? formatDateWithWeekday(selectedRow.completedAt)
                           : formatDate(selectedRow.completedAt);
                       return (
-                        <div key={group.key} className="rounded-3xl border border-[var(--border)] bg-[var(--surface)] p-5">
+                        <div key={group.key} className="rounded-3xl border border-[var(--border)] bg-[var(--surface)] p-4">
                           <div className="flex flex-col gap-4">
                             <div className="flex flex-wrap items-start justify-between gap-3">
                               <div className="min-w-0">

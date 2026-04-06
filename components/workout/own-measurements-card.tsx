@@ -382,6 +382,7 @@ export function OwnMeasurementsCard({ sectionId = "overview-measurements" }: { s
                 ariaLabel="Painon kehitystrendi"
                 emptyMessage="Lisää paino viimeisimpään mittaukseen, niin kehitystrendi alkaa piirtyä tähän."
                 helperText="Alarivillä näkyy kuukausi ja vuosi, oikealla painon asteikko."
+                compactHelperText="Alarivillä näkyy kuukausi ja vuosi. Tarkka arvo näkyy pisteen kohdalla."
                 valueLabel="Paino"
                 unit="kg"
               />
@@ -394,6 +395,7 @@ export function OwnMeasurementsCard({ sectionId = "overview-measurements" }: { s
                 ariaLabel="Vyötärön kehitystrendi"
                 emptyMessage="Lisää vyötärö viimeisimpään mittaukseen, niin kehitystrendi alkaa piirtyä tähän."
                 helperText="Alarivillä näkyy kuukausi ja vuosi, oikealla vyötärön asteikko."
+                compactHelperText="Alarivillä näkyy kuukausi ja vuosi. Tarkka arvo näkyy pisteen kohdalla."
                 valueLabel="Vyötärö"
                 unit="cm"
               />
@@ -406,6 +408,7 @@ export function OwnMeasurementsCard({ sectionId = "overview-measurements" }: { s
                 ariaLabel="Volyymin kehitystrendi"
                 emptyMessage="Kun saat treenejä valmiiksi, volyymitrendi näkyy tässä."
                 helperText="Alarivillä näkyy kuukausi ja vuosi, oikealla volyymin asteikko."
+                compactHelperText="Alarivillä näkyy kuukausi ja vuosi. Tarkka arvo näkyy pisteen kohdalla."
                 valueLabel="Volyymi"
                 unit="kg"
                 decimals={0}

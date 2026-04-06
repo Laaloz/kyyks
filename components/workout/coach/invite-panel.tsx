@@ -125,7 +125,7 @@ export function CoachInvitePanel() {
               </p>
             ) : (
               pendingInvites.map((invite) => (
-                <div key={invite.id} className="rounded-xl border-2 border-[var(--border)] bg-[var(--surface-2)] p-5">
+                <div key={invite.id} className="rounded-xl border-2 border-[var(--border)] bg-[var(--surface-2)] p-4">
                   <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
                     <div>
                       <p className="font-medium text-[var(--text)]">{invite.email}</p>
@@ -176,7 +176,7 @@ export function CoachInvitePanel() {
           <CardTitle>Oma rosteri</CardTitle>
           <div className="mt-5 grid gap-3">
             {athletes.map((athlete) => (
-              <div key={athlete.id} className="rounded-xl border-2 border-[var(--border)] bg-[var(--surface-2)] p-5">
+              <div key={athlete.id} className="rounded-xl border-2 border-[var(--border)] bg-[var(--surface-2)] p-4">
                 <div className="flex items-center justify-between">
                   <div>
                     <p className="font-medium text-[var(--text)]">{athlete.fullName}</p>

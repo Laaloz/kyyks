@@ -23,7 +23,7 @@ export function MeasurementReminderDialog({
         aria-modal="true"
         aria-labelledby="measurement-reminder-title"
         aria-describedby="measurement-reminder-description"
-        className="w-full max-w-lg rounded-3xl border border-[var(--border-strong)] bg-[var(--surface)] p-5 shadow-[0_24px_60px_-24px_var(--shadow)]"
+        className="w-full max-w-lg rounded-3xl border border-[var(--border-strong)] bg-[var(--surface)] p-4 shadow-[0_24px_60px_-24px_var(--shadow)]"
       >
         <p className="text-xs font-semibold tracking-[0.08em] text-[var(--accent)]">Perjantain muistutus</p>
         <h3

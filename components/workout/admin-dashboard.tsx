@@ -204,7 +204,7 @@ export function AdminDashboard({
           />
 
           <Card className="border-[var(--border-strong)]">
-            <div className="grid gap-5 xl:grid-cols-[1.1fr_0.9fr] xl:items-end">
+            <div className="grid gap-4 xl:grid-cols-[1.1fr_0.9fr] xl:items-end">
               <div className="space-y-3">
                 <p className="text-xs font-semibold tracking-[0.04em] text-[var(--text-subtle)]">Hallintanäkymä</p>
                 <CardTitle className="text-2xl">Admin näkee nyt yhdellä silmäyksellä mitä verkossa tapahtuu</CardTitle>
@@ -512,7 +512,7 @@ export function AdminDashboard({
               ) : (
                 overview.coachLoad.map(({ coach, athleteCount, programCount, pendingInviteCount }) => {
                   return (
-                    <div key={coach.id} className="rounded-xl border-2 border-[var(--border)] bg-[var(--surface-2)] p-5">
+                    <div key={coach.id} className="rounded-xl border-2 border-[var(--border)] bg-[var(--surface-2)] p-4">
                       <div className="flex items-center justify-between gap-4">
                         <div>
                           <p className="font-medium text-[var(--text)]">{coach.fullName}</p>
@@ -668,7 +668,7 @@ export function AdminDashboard({
                     : null;
 
                   return (
-                    <div key={invite.id} className="rounded-xl border-2 border-[var(--border)] bg-[var(--surface-2)] p-5">
+                    <div key={invite.id} className="rounded-xl border-2 border-[var(--border)] bg-[var(--surface-2)] p-4">
                       <div className="flex items-start justify-between gap-4">
                         <div>
                           <p className="font-medium text-[var(--text)]">{invite.email}</p>

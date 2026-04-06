@@ -21,6 +21,7 @@ type MetricTrendChartProps = {
   ariaLabel: string;
   emptyMessage: string;
   helperText?: string;
+  compactHelperText?: string;
   valueLabel: string;
   unit: string;
   decimals?: number;
@@ -51,6 +52,7 @@ export function MetricTrendChart({
   ariaLabel,
   emptyMessage,
   helperText,
+  compactHelperText,
   valueLabel,
   unit,
   decimals = 1,
@@ -121,15 +123,15 @@ export function MetricTrendChart({
   }
 
   return (
-    <div className="mt-3 min-w-0 max-w-full overflow-hidden" role="img" aria-label={ariaLabel}>
-      <div className="h-60 min-h-[15rem] min-w-0 max-w-full w-full overflow-hidden rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-3">
-        <div className="h-full min-w-0 max-w-full w-full overflow-hidden">
+    <div className="mt-3 min-w-0 max-w-full" role="img" aria-label={ariaLabel}>
+      <div className="h-60 min-h-[15rem] min-w-0 max-w-full w-full rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-3">
+        <div className="h-full min-w-0 max-w-full w-full pr-2 sm:pr-3">
           <ResponsiveContainer width="100%" height="100%">
             <LineChart
               data={chartData}
               margin={{
                 top: 8,
-                right: isCompactViewport ? 0 : 8,
+                right: isCompactViewport ? 4 : 18,
                 bottom: isCompactViewport ? 8 : 12,
                 left: isCompactViewport ? 0 : 4,
               }}
@@ -154,7 +156,7 @@ export function MetricTrendChart({
                 tick={{ fill: "var(--text-subtle)", fontSize: 12 }}
                 tickLine={false}
                 axisLine={false}
-                width={isCompactViewport ? 36 : 56}
+                width={isCompactViewport ? 40 : 68}
                 hide={isCompactViewport}
               />
               <Tooltip
@@ -195,8 +197,10 @@ export function MetricTrendChart({
           </ResponsiveContainer>
         </div>
       </div>
-      {helperText ? (
-        <p className="mt-2 text-xs text-[var(--text-subtle)]">{helperText}</p>
+      {helperText || compactHelperText ? (
+        <p className="mt-2 text-xs text-[var(--text-subtle)]">
+          {isCompactViewport && compactHelperText ? compactHelperText : helperText}
+        </p>
       ) : null}
     </div>
   );

@@ -149,7 +149,7 @@ function CoachInstructionDialog({
         aria-modal="true"
         aria-labelledby="coach-instruction-title"
         aria-describedby="coach-instruction-description"
-        className="w-full max-w-lg rounded-3xl border border-[var(--border-strong)] bg-[var(--surface)] p-5 shadow-[0_24px_60px_-24px_var(--shadow)]"
+        className="w-full max-w-lg rounded-3xl border border-[var(--border-strong)] bg-[var(--surface)] p-4 shadow-[0_24px_60px_-24px_var(--shadow)]"
         onClick={(event) => event.stopPropagation()}
       >
         <p className="text-[11px] font-semibold tracking-[0.06em] text-[var(--accent)]">Valmentajan ohje</p>
@@ -199,6 +199,7 @@ function getHiddenFloatingMenuStyle(anchor: AnchorRect): CSSProperties {
     position: "fixed",
     top: anchor.bottom + floatingMenuOffset,
     left: Math.max(floatingMenuPadding, anchor.right - 180),
+    maxWidth: `calc(100vw - ${floatingMenuPadding * 2}px)`,
     visibility: "hidden",
   };
 }
@@ -225,7 +226,9 @@ function getFloatingMenuStyle(anchor: AnchorRect, menuElement: HTMLElement): CSS
     position: "fixed",
     top,
     left,
+    maxWidth: viewportWidth - floatingMenuPadding * 2,
     maxHeight: viewportHeight - floatingMenuPadding * 2,
+    overflowX: "hidden",
     overflowY: "auto",
   };
 }
@@ -1864,7 +1867,7 @@ export function AthleteSessionPanel({
                     <div
                       ref={secondaryActionsMenuRef}
                       role="menu"
-                      className="z-20 min-w-40 rounded-xl border border-[var(--border)] bg-[var(--surface)] p-1 shadow-[0_12px_30px_-20px_var(--shadow)]"
+                      className="z-20 min-w-40 max-w-[calc(100vw-1rem)] rounded-xl border border-[var(--border)] bg-[var(--surface)] p-1 shadow-[0_12px_30px_-20px_var(--shadow)]"
                       style={
                         secondaryActionsMenuStyle ??
                         (secondaryActionsAnchorRect
@@ -1969,7 +1972,7 @@ export function AthleteSessionPanel({
                     <div
                       ref={secondaryActionsMenuRef}
                       role="menu"
-                      className="z-20 min-w-40 rounded-xl border border-[var(--border)] bg-[var(--surface)] p-1 shadow-[0_12px_30px_-20px_var(--shadow)]"
+                      className="z-20 min-w-40 max-w-[calc(100vw-1rem)] rounded-xl border border-[var(--border)] bg-[var(--surface)] p-1 shadow-[0_12px_30px_-20px_var(--shadow)]"
                       style={
                         secondaryActionsMenuStyle ??
                         (secondaryActionsAnchorRect

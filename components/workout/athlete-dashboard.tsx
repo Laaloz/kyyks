@@ -131,6 +131,7 @@ function getHiddenFloatingMenuStyle(anchor: AnchorRect): CSSProperties {
     position: "fixed",
     top: anchor.bottom + floatingMenuOffset,
     left: Math.max(floatingMenuPadding, anchor.right - 180),
+    maxWidth: `calc(100vw - ${floatingMenuPadding * 2}px)`,
     visibility: "hidden",
   };
 }
@@ -157,7 +158,9 @@ function getFloatingMenuStyle(anchor: AnchorRect, menuElement: HTMLElement): CSS
     position: "fixed",
     top,
     left,
+    maxWidth: viewportWidth - floatingMenuPadding * 2,
     maxHeight: viewportHeight - floatingMenuPadding * 2,
+    overflowX: "hidden",
     overflowY: "auto",
   };
 }
@@ -1091,7 +1094,7 @@ export function AthleteDashboard({
               </CardDescription>
             </div>
             <div className="grid gap-3 lg:grid-cols-[1.2fr_0.8fr]">
-              <div className="rounded-3xl border border-[var(--border)] bg-[var(--surface-2)] p-5">
+              <div className="rounded-3xl border border-[var(--border)] bg-[var(--surface-2)] p-4">
                 <div className="grid gap-4 md:grid-cols-[auto_1fr] md:items-center">
                   <ProgressRing label="Viikon eteneminen" percent={weeklyInsights.completionRate} showLabel={false} />
                   <div className="space-y-4">
@@ -1138,7 +1141,7 @@ export function AthleteDashboard({
                   </div>
                 </div>
               </div>
-              <div className="rounded-3xl border border-[var(--border)] bg-[var(--surface-2)] p-5">
+              <div className="rounded-3xl border border-[var(--border)] bg-[var(--surface-2)] p-4">
                 <p className="text-xs font-semibold tracking-[0.04em] text-[var(--text-subtle)]">
                   {highlightedWorkoutState === "active"
                     ? "Aktiivinen treeni"
@@ -1430,6 +1433,7 @@ export function AthleteDashboard({
                     ariaLabel="Painon kehitystrendi"
                     emptyMessage="Lisää paino viimeisimpään mittaukseen, niin kehitystrendi alkaa piirtyä tähän."
                     helperText="Alarivillä näkyy kuukausi ja vuosi, oikealla painon asteikko."
+                    compactHelperText="Alarivillä näkyy kuukausi ja vuosi. Tarkka arvo näkyy pisteen kohdalla."
                     valueLabel="Paino"
                     unit="kg"
                   />
@@ -1442,6 +1446,7 @@ export function AthleteDashboard({
                     ariaLabel="Vyötärön kehitystrendi"
                     emptyMessage="Lisää vyötärö viimeisimpään mittaukseen, niin kehitystrendi alkaa piirtyä tähän."
                     helperText="Alarivillä näkyy kuukausi ja vuosi, oikealla vyötärön asteikko."
+                    compactHelperText="Alarivillä näkyy kuukausi ja vuosi. Tarkka arvo näkyy pisteen kohdalla."
                     valueLabel="Vyötärö"
                     unit="cm"
                   />
@@ -1454,6 +1459,7 @@ export function AthleteDashboard({
                     ariaLabel="Volyymin kehitystrendi"
                     emptyMessage="Kun saat treenejä valmiiksi, volyymitrendi näkyy tässä."
                     helperText="Alarivillä näkyy kuukausi ja vuosi, oikealla volyymin asteikko."
+                    compactHelperText="Alarivillä näkyy kuukausi ja vuosi. Tarkka arvo näkyy pisteen kohdalla."
                     valueLabel="Volyymi"
                     unit="kg"
                     decimals={0}
@@ -2081,7 +2087,7 @@ export function AthleteDashboard({
                                       <div
                                         ref={historyMenuRef}
                                         role="menu"
-                                        className="z-20 min-w-36 rounded-xl border border-[var(--border)] bg-[var(--surface)] p-1 shadow-[0_12px_30px_-20px_var(--shadow)]"
+                                        className="z-20 min-w-36 max-w-[calc(100vw-1rem)] rounded-xl border border-[var(--border)] bg-[var(--surface)] p-1 shadow-[0_12px_30px_-20px_var(--shadow)]"
                                         style={
                                           historyMenuStyle ??
                                           (historyMenuAnchorRect

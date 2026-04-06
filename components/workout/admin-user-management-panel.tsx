@@ -98,7 +98,7 @@ export function AdminUserManagementPanel() {
   }
 
   return (
-    <div className="grid gap-6 xl:grid-cols-[0.92fr_1.08fr]">
+    <div className="grid gap-6">
       <Card className="border-[var(--border-strong)]">
         <p className="text-xs font-semibold tracking-[0.04em] text-[var(--text-subtle)]">Käyttäjähallinta</p>
         <CardTitle className="text-2xl">Hallitse käyttäjiä turvallisesti</CardTitle>
@@ -137,15 +137,120 @@ export function AdminUserManagementPanel() {
 
             {selectedManagedUser ? (
               <div className="mt-4 grid gap-4 rounded-2xl border-2 border-[var(--border)] bg-[var(--surface-2)] p-4">
-                <div>
-                  <p className="font-medium text-[var(--text)]">{selectedManagedUser.fullName}</p>
-                  <p className="text-sm text-[var(--text-muted)]">{selectedManagedUser.email}</p>
-                  <div className="mt-2 flex flex-wrap gap-2">
-                    <Badge>{roleLabel(selectedManagedUser.role)}</Badge>
-                    <Badge>{selectedManagedUser.status === "active" ? "Aktiivinen" : "Kutsu odottaa"}</Badge>
-                    {(selectedManagedUser.role === "athlete" || selectedManagedUser.role === "independent_athlete") && selectedManagedAthleteCoachIds.length > 0 ? (
-                      <Badge>Valmentajia: {selectedManagedAthleteCoachIds.length}</Badge>
-                    ) : null}
+                <div className="flex flex-wrap items-start justify-between gap-3">
+                  <div>
+                    <p className="font-medium text-[var(--text)]">{selectedManagedUser.fullName}</p>
+                    <p className="text-sm text-[var(--text-muted)]">{selectedManagedUser.email}</p>
+                    <div className="mt-2 flex flex-wrap gap-2">
+                      <Badge>{roleLabel(selectedManagedUser.role)}</Badge>
+                      <Badge>{selectedManagedUser.status === "active" ? "Aktiivinen" : "Kutsu odottaa"}</Badge>
+                      {(selectedManagedUser.role === "athlete" || selectedManagedUser.role === "independent_athlete") &&
+                      selectedManagedAthleteCoachIds.length > 0 ? (
+                        <Badge>Valmentajia: {selectedManagedAthleteCoachIds.length}</Badge>
+                      ) : null}
+                    </div>
+                  </div>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <Button
+                      type="button"
+                      variant="primary"
+                      disabled={selectedManagedUser.status !== "active"}
+                      onClick={() => {
+                        const result = startAdminImpersonation(selectedManagedUser.id);
+                        setAdminMessage(result.ok ? `Vaihdoit käyttäjäksi: ${selectedManagedUser.fullName}.` : result.message);
+                        setAdminMessageTone(result.ok ? "success" : "danger");
+                        notify({
+                          tone: result.ok ? "success" : "danger",
+                          message: result.ok ? "Käyttäjän vaihto aktivoitiin." : result.message,
+                        });
+                      }}
+                    >
+                      Vaihda käyttäjäksi
+                    </Button>
+                    <details className="relative">
+                      <summary className="inline-flex size-10 list-none items-center justify-center rounded-full border border-[var(--border)] bg-[var(--surface)] p-0 text-[var(--text-muted)] transition hover:border-[var(--border-strong)] hover:bg-[var(--surface-2)] hover:text-[var(--text)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--surface)]">
+                        <MoreHorizontal className="size-4" aria-hidden="true" />
+                        <span className="sr-only">Avaa käyttäjän lisätoiminnot</span>
+                      </summary>
+                      <div className="absolute right-0 top-[calc(100%+0.5rem)] z-10 min-w-60 max-w-[calc(100vw-1rem)] rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-2 shadow-[0_18px_45px_-24px_var(--shadow)]">
+                        <button
+                          type="button"
+                          disabled={selectedManagedUser.status !== "active" || isSendingManagedPasswordReset}
+                          className="flex w-full items-center rounded-xl px-3 py-2 text-left text-sm font-semibold text-[var(--text)] transition hover:bg-[var(--surface-2)] disabled:cursor-not-allowed disabled:text-[var(--text-subtle)] disabled:hover:bg-transparent"
+                          onClick={async () => {
+                            setIsSendingManagedPasswordReset(true);
+                            try {
+                              const result = await withMinimumDelay(adminSendPasswordResetEmail(selectedManagedUser.id));
+                              setAdminMessage(result.message);
+                              setAdminMessageTone(result.ok ? "success" : "danger");
+                              setPreviewResetUrl(result.ok ? (result.previewUrl ?? "") : "");
+                              notify({ tone: result.ok ? "success" : "danger", message: result.message });
+                            } finally {
+                              setIsSendingManagedPasswordReset(false);
+                            }
+                          }}
+                        >
+                          {isSendingManagedPasswordReset ? (
+                            <>
+                              <span
+                                aria-hidden="true"
+                                className="mr-2 size-4 animate-spin rounded-full border-2 border-current border-r-transparent"
+                              />
+                              Lähetetään nollauslinkkiä...
+                            </>
+                          ) : (
+                            <>
+                              <Mail className="mr-2 size-4" />
+                              Lähetä salasanan nollaus
+                            </>
+                          )}
+                        </button>
+                        <button
+                          type="button"
+                          disabled={isDeletingManagedUser}
+                          className="flex w-full items-center rounded-xl px-3 py-2 text-left text-sm font-semibold text-[var(--danger)] transition hover:bg-[var(--surface-2)] disabled:cursor-not-allowed disabled:text-[var(--text-subtle)] disabled:hover:bg-transparent"
+                          onClick={async () => {
+                            const confirmed = window.confirm(
+                              `Poistetaanko käyttäjä ${selectedManagedUser.fullName}? Tämä poistaa myös käyttäjään liittyvät kutsut, roolitukset ja treenidatan.`,
+                            );
+                            if (!confirmed) {
+                              return;
+                            }
+
+                            setIsDeletingManagedUser(true);
+                            try {
+                              const result = await adminDeleteUser(selectedManagedUser.id);
+                              setAdminMessage(result.ok ? "Käyttäjä poistettiin turvallisesti." : result.message);
+                              setAdminMessageTone(result.ok ? "success" : "danger");
+                              if (result.ok) {
+                                setPreviewResetUrl("");
+                              }
+                              notify({
+                                tone: result.ok ? "success" : "danger",
+                                message: result.ok ? "Käyttäjä poistettiin." : result.message,
+                              });
+                            } finally {
+                              setIsDeletingManagedUser(false);
+                            }
+                          }}
+                        >
+                          {isDeletingManagedUser ? (
+                            <>
+                              <span
+                                aria-hidden="true"
+                                className="mr-2 size-4 animate-spin rounded-full border-2 border-current border-r-transparent"
+                              />
+                              Poistetaan käyttäjää...
+                            </>
+                          ) : (
+                            <>
+                              <ShieldAlert className="mr-2 size-4" />
+                              Poista käyttäjä
+                            </>
+                          )}
+                        </button>
+                      </div>
+                    </details>
                   </div>
                 </div>
 
@@ -237,7 +342,10 @@ export function AdminUserManagementPanel() {
                       )}
                     </div>
                     <div>
-                      <div id="admin-managed-coaches" className="grid gap-2 rounded-xl border border-[var(--border)] bg-[var(--surface-2)] p-3">
+                      <div
+                        id="admin-managed-coaches"
+                        className="grid gap-2"
+                      >
                         {assignableCoaches.map((user) => {
                           const checked = selectedManagedCoachIds.includes(user.id);
                           return (
@@ -285,112 +393,6 @@ export function AdminUserManagementPanel() {
             ) : null}
           </>
         )}
-      </Card>
-
-      <div className="grid gap-6">
-        <Card>
-          <p className="text-xs font-semibold tracking-[0.04em] text-[var(--text-subtle)]">Pikatoiminnot</p>
-          <CardTitle className="text-2xl">Toimi valitun käyttäjän puolesta</CardTitle>
-          <CardDescription className="mt-2">
-            Vaihda käyttäjäksi, lähetä nollauslinkki tai poista käyttäjä hallitusti. Kaikki toimet kohdistuvat valittuun
-            käyttäjään.
-          </CardDescription>
-
-          {selectedManagedUser ? (
-            <div className="mt-6 grid gap-3 rounded-2xl border-2 border-[var(--border)] bg-[var(--surface-2)] p-4">
-              <div className="flex flex-wrap items-center gap-2">
-                <Button
-                  type="button"
-                  variant="primary"
-                  disabled={selectedManagedUser.status !== "active"}
-                  onClick={() => {
-                    const result = startAdminImpersonation(selectedManagedUser.id);
-                    setAdminMessage(result.ok ? `Vaihdoit käyttäjäksi: ${selectedManagedUser.fullName}.` : result.message);
-                    setAdminMessageTone(result.ok ? "success" : "danger");
-                    notify({ tone: result.ok ? "success" : "danger", message: result.ok ? "Käyttäjän vaihto aktivoitiin." : result.message });
-                  }}
-                >
-                  Vaihda käyttäjäksi
-                </Button>
-                <Button
-                  type="button"
-                  variant="secondary"
-                  disabled={selectedManagedUser.status !== "active"}
-                  loading={isSendingManagedPasswordReset}
-                  loadingText="Lähetetään nollauslinkkiä..."
-                  onClick={async () => {
-                    setIsSendingManagedPasswordReset(true);
-                    try {
-                      const result = await withMinimumDelay(adminSendPasswordResetEmail(selectedManagedUser.id));
-                      setAdminMessage(result.message);
-                      setAdminMessageTone(result.ok ? "success" : "danger");
-                      setPreviewResetUrl(result.ok ? (result.previewUrl ?? "") : "");
-                      notify({ tone: result.ok ? "success" : "danger", message: result.message });
-                    } finally {
-                      setIsSendingManagedPasswordReset(false);
-                    }
-                  }}
-                >
-                  <Mail className="mr-2 size-4" />
-                  Lähetä salasanan nollaus
-                </Button>
-                <details className="relative">
-                  <summary className="inline-flex list-none items-center justify-center rounded-xl border border-[var(--border)] bg-[var(--surface)] px-3 py-2.5 text-[var(--text-muted)] transition hover:border-[var(--border-strong)] hover:bg-[var(--surface-2)] hover:text-[var(--text)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--surface)]">
-                    <MoreHorizontal className="size-4" aria-hidden="true" />
-                    <span className="sr-only">Avaa käyttäjän lisätoiminnot</span>
-                  </summary>
-                  <div className="absolute left-0 top-[calc(100%+0.5rem)] z-10 min-w-52 rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-2 shadow-[0_18px_45px_-24px_var(--shadow)]">
-                    <button
-                      type="button"
-                      disabled={isDeletingManagedUser}
-                      className="flex w-full items-center rounded-xl px-3 py-2 text-left text-sm font-semibold text-[var(--danger)] transition hover:bg-[var(--surface-2)]"
-                      onClick={async () => {
-                        const confirmed = window.confirm(
-                          `Poistetaanko käyttäjä ${selectedManagedUser.fullName}? Tämä poistaa myös käyttäjään liittyvät kutsut, roolitukset ja treenidatan.`,
-                        );
-                        if (!confirmed) {
-                          return;
-                        }
-
-                        setIsDeletingManagedUser(true);
-                        try {
-                          const result = await adminDeleteUser(selectedManagedUser.id);
-                          setAdminMessage(result.ok ? "Käyttäjä poistettiin turvallisesti." : result.message);
-                          setAdminMessageTone(result.ok ? "success" : "danger");
-                          if (result.ok) {
-                            setPreviewResetUrl("");
-                          }
-                          notify({ tone: result.ok ? "success" : "danger", message: result.ok ? "Käyttäjä poistettiin." : result.message });
-                        } finally {
-                          setIsDeletingManagedUser(false);
-                        }
-                      }}
-                    >
-                      {isDeletingManagedUser ? (
-                        <>
-                          <span
-                            aria-hidden="true"
-                            className="mr-2 size-4 animate-spin rounded-full border-2 border-current border-r-transparent"
-                          />
-                          Poistetaan käyttäjää...
-                        </>
-                      ) : (
-                        <>
-                          <ShieldAlert className="mr-2 size-4" />
-                          Poista käyttäjä
-                        </>
-                      )}
-                    </button>
-                  </div>
-                </details>
-              </div>
-            </div>
-          ) : (
-            <p className="mt-6 rounded-xl border-2 border-[var(--border)] bg-[var(--surface-2)] px-4 py-3 text-sm text-[var(--text-muted)]">
-              Valitse ensin käyttäjä vasemmalta aloittaaksesi hallinnan.
-            </p>
-          )}
-
           <p
             aria-live="polite"
             className={`mt-4 text-sm ${
@@ -403,7 +405,7 @@ export function AdminUserManagementPanel() {
           >
             {adminMessage ||
               (selectedManagedUser
-                ? "Päivitä rooli, vastuuhenkilöt tai käytä pikatoimintoja."
+                ? "Päivitä rooli, vastuuhenkilöt tai käytä valitun käyttäjän toimintoja."
                 : "Valitse käyttäjä aloittaaksesi hallinnan.")}
           </p>
 
@@ -430,8 +432,7 @@ export function AdminUserManagementPanel() {
               </a>
             </div>
           ) : null}
-        </Card>
-      </div>
+      </Card>
     </div>
   );
 }
