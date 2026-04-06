@@ -78,26 +78,36 @@ export function roleHeadline(role: Role) {
 export function MetricGrid({
   metrics,
   role,
+  compact = false,
 }: {
   metrics: Array<{ label: string; value: number; icon: ComponentType<{ className?: string }> }>;
   role: Role | null;
+  compact?: boolean;
 }) {
   return (
-    <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+    <div className={`grid md:grid-cols-2 xl:grid-cols-4 ${compact ? "gap-2.5" : "gap-4"}`}>
       {metrics.map((metric) => (
         <Card
           key={metric.label}
-          className="border-[var(--border-strong)] bg-[var(--surface)]"
+          className={`border-[var(--border-strong)] bg-[var(--surface)] ${compact ? "rounded-2xl px-3.5 py-3" : ""}`}
         >
-          <div className="flex items-start justify-between gap-4">
-            <div>
-              <p className="text-xs font-semibold tracking-[0.03em] text-[var(--text-subtle)]">{metric.label}</p>
-              <p className="mt-4 font-[family-name:var(--font-display)] text-4xl font-semibold text-[var(--text)]">
+          <div className={`flex justify-between ${compact ? "items-center gap-3" : "items-start gap-4"}`}>
+            <div className={compact ? "min-w-0 flex-1" : ""}>
+              <p className={`font-semibold tracking-[0.03em] text-[var(--text-subtle)] ${compact ? "text-[11px]" : "text-xs"}`}>
+                {metric.label}
+              </p>
+              <p
+                className={`font-[family-name:var(--font-display)] font-semibold text-[var(--text)] ${
+                  compact ? "mt-1 text-[1.7rem] leading-none" : "mt-4 text-4xl"
+                }`}
+              >
                 {metric.value}
               </p>
             </div>
-            <div className={`rounded-xl border bg-[var(--surface-2)] p-3 ${metricTone(role)}`}>
-              <metric.icon className="size-6 text-[var(--accent)]" />
+            <div
+              className={`shrink-0 rounded-xl border bg-[var(--surface-2)] ${compact ? "p-2" : "p-3"} ${metricTone(role)}`}
+            >
+              <metric.icon className={`${compact ? "size-5" : "size-6"} text-[var(--accent)]`} />
             </div>
           </div>
         </Card>
