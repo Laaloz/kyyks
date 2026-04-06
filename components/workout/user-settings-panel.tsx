@@ -1,7 +1,7 @@
 "use client";
 
 import { zodResolver } from "@hookform/resolvers/zod";
-import { Bell, Ellipsis, HousePlus, KeyRound, Mail, MoonStar, Ruler, Share, UserRound, UserRoundCog, Waves } from "lucide-react";
+import { Bell, Ellipsis, HousePlus, KeyRound, Mail, Ruler, Share, UserRound, Waves } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
@@ -21,13 +21,13 @@ import { PROGRAMS_DASHBOARD_VIEW, type DashboardHomeView, type Role, type ThemeM
 import { useAppState } from "@/providers/app-state-provider";
 
 const dashboardViewLabel: Record<DashboardHomeView, string> = {
-  overview: "Yleiskuva",
-  athletes: "Treenaajat",
-  users: "Käyttäjät",
-  [PROGRAMS_DASHBOARD_VIEW]: "Ohjelmat",
+  overview: "Koti",
+  athletes: "Tiimi",
+  users: "Hallinta",
+  [PROGRAMS_DASHBOARD_VIEW]: "Ohjelma",
   invites: "Kutsut",
   "athlete-log": "Treeni",
-  conversation: "Keskustelu",
+  conversation: "Chat",
 };
 
 const themeModeLabel: Record<ThemeMode, string> = {
@@ -55,6 +55,7 @@ function parseLoadIncrement(value: string) {
 
 const SETTINGS_SAVE_MIN_LOADING_MS = 350;
 const PROFILE_IMAGE_HELPER_TEXT = "JPG, PNG, WebP tai AVIF. Maksimikoko 5 Mt.";
+type SettingsSection = "profile" | "preferences";
 
 type DeferredInstallPromptEvent = Event & {
   prompt: () => Promise<void>;
@@ -90,6 +91,7 @@ export function UserSettingsPanel({ adminOnly = false }: { adminOnly?: boolean }
   const [isSendingOwnPasswordReset, setIsSendingOwnPasswordReset] = useState(false);
   const [isSavingProfile, setIsSavingProfile] = useState(false);
   const [isUploadingProfileImage, setIsUploadingProfileImage] = useState(false);
+  const [activeSection, setActiveSection] = useState<SettingsSection>("profile");
   const [deferredInstallPrompt, setDeferredInstallPrompt] = useState<DeferredInstallPromptEvent | null>(null);
   const [isInstalledToHomeScreen, setIsInstalledToHomeScreen] = useState(false);
   const latestOwnWaistCm = useMemo(
@@ -344,7 +346,46 @@ export function UserSettingsPanel({ adminOnly = false }: { adminOnly?: boolean }
   const installStatusBadge = isInstalledToHomeScreen ? "Kotivalikossa" : "Selaimessa";
 
   return (
-    <div className="grid gap-6 lg:grid-cols-[1.05fr_0.95fr]">
+    <div className="space-y-4">
+      <div
+        role="tablist"
+        aria-label="Tilin asetusten osiot"
+        className="grid grid-cols-2 gap-1 rounded-[1.1rem] border border-[color-mix(in_srgb,var(--border)_88%,var(--surface))] bg-[color-mix(in_srgb,var(--surface)_78%,var(--surface-2))] p-1"
+      >
+        <button
+          type="button"
+          role="tab"
+          id="settings-section-tab-profile"
+          aria-selected={activeSection === "profile"}
+          aria-controls="settings-section-panel-profile"
+          className={`inline-flex min-h-10 items-center justify-center rounded-xl px-3 py-2 text-sm font-semibold transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--background)] ${
+            activeSection === "profile"
+              ? "border border-[color-mix(in_srgb,var(--accent)_22%,var(--border))] bg-[color-mix(in_srgb,var(--accent)_10%,var(--surface))] text-[var(--accent)] shadow-[0_8px_18px_-20px_var(--accent)]"
+              : "border border-transparent bg-transparent text-[var(--text-muted)] hover:border-[var(--border-strong)] hover:bg-[var(--surface)] hover:text-[var(--text)]"
+          }`}
+          onClick={() => setActiveSection("profile")}
+        >
+          Profiili
+        </button>
+        <button
+          type="button"
+          role="tab"
+          id="settings-section-tab-preferences"
+          aria-selected={activeSection === "preferences"}
+          aria-controls="settings-section-panel-preferences"
+          className={`inline-flex min-h-10 items-center justify-center rounded-xl px-3 py-2 text-sm font-semibold transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--background)] ${
+            activeSection === "preferences"
+              ? "border border-[color-mix(in_srgb,var(--accent)_22%,var(--border))] bg-[color-mix(in_srgb,var(--accent)_10%,var(--surface))] text-[var(--accent)] shadow-[0_8px_18px_-20px_var(--accent)]"
+              : "border border-transparent bg-transparent text-[var(--text-muted)] hover:border-[var(--border-strong)] hover:bg-[var(--surface)] hover:text-[var(--text)]"
+          }`}
+          onClick={() => setActiveSection("preferences")}
+        >
+          Asetukset
+        </button>
+      </div>
+
+      {activeSection === "profile" ? (
+      <div role="tabpanel" id="settings-section-panel-profile" aria-labelledby="settings-section-tab-profile">
       <Card className="border-[var(--border-strong)]">
         <p className="text-xs font-semibold tracking-[0.04em] text-[var(--text-subtle)]">Tili</p>
         <CardTitle className="text-2xl">Profiili</CardTitle>
@@ -353,26 +394,6 @@ export function UserSettingsPanel({ adminOnly = false }: { adminOnly?: boolean }
         </CardDescription>
 
         <div className="mt-6 space-y-4">
-          <div className="flex items-center gap-4 rounded-2xl border-2 border-[var(--border)] bg-[var(--surface-2)] p-4">
-            <div className="flex size-16 shrink-0 items-center justify-center overflow-hidden rounded-full border border-[var(--border-strong)] bg-[var(--surface)]">
-              {profileImageSrc ? (
-                <img
-                  src={profileImageSrc}
-                  alt=""
-                  className="size-full object-cover"
-                />
-              ) : (
-                <UserRound className="size-7 text-[var(--text-subtle)]" aria-hidden="true" />
-              )}
-            </div>
-            <div className="space-y-1">
-              <p className="text-sm font-semibold text-[var(--text)]">Headerin profiilikuva</p>
-              <p className="text-xs text-[var(--text-subtle)]">
-                Lataa profiilikuva suoraan laitteelta. Jos kuvaa ei ole asetettu, näytämme profiili-ikonin.
-              </p>
-            </div>
-          </div>
-
           <div>
             <Label htmlFor="account-full-name">Koko nimi</Label>
             <Input
@@ -420,7 +441,18 @@ export function UserSettingsPanel({ adminOnly = false }: { adminOnly?: boolean }
                   });
               }}
             />
-            <div className="flex flex-wrap items-center gap-3">
+            <div className="flex flex-wrap items-center gap-3 rounded-xl border-2 border-[var(--border)] bg-[var(--surface-2)] p-3">
+              <div className="flex size-14 shrink-0 items-center justify-center overflow-hidden rounded-full border border-[var(--border-strong)] bg-[var(--surface)]">
+                {profileImageSrc ? (
+                  <img
+                    src={profileImageSrc}
+                    alt=""
+                    className="size-full object-cover"
+                  />
+                ) : (
+                  <UserRound className="size-6 text-[var(--text-subtle)]" aria-hidden="true" />
+                )}
+              </div>
               <Button
                 type="button"
                 variant="secondary"
@@ -455,7 +487,9 @@ export function UserSettingsPanel({ adminOnly = false }: { adminOnly?: boolean }
                 Poista kuva
               </Button>
             </div>
-            <p className="mt-2 text-xs text-[var(--text-subtle)]">{PROFILE_IMAGE_HELPER_TEXT}</p>
+            <p className="mt-2 text-xs text-[var(--text-subtle)]">
+              Lataa kuva suoraan laitteelta. Jos kuvaa ei ole asetettu, näytämme profiili-ikonin. {PROFILE_IMAGE_HELPER_TEXT}
+            </p>
           </div>
 
           <div>
@@ -510,16 +544,19 @@ export function UserSettingsPanel({ adminOnly = false }: { adminOnly?: boolean }
           </Button>
         </div>
 
-        <div className="mt-6 rounded-xl border-2 border-[var(--border)] bg-[var(--surface-2)] p-4">
-          <p className="text-xs font-semibold tracking-[0.03em] text-[var(--text-subtle)]">Turvallisuus</p>
-          <p className="mt-2 text-lg font-semibold text-[var(--text)]">Salasanan nollaus</p>
-          <p className="mt-2 text-sm text-[var(--text-muted)]">
-            Lähetä turvallinen nollauslinkki omaan sähköpostiisi. Linkki on kertakäyttöinen ja vanhenee automaattisesti.
-          </p>
-          <div className="mt-4 flex flex-wrap items-center gap-3">
+        <div className="mt-5 rounded-xl border border-[var(--border)] bg-[var(--surface-2)] px-4 py-3">
+          <p className="text-[11px] font-semibold tracking-[0.04em] text-[var(--text-subtle)]">Turvallisuus</p>
+          <div className="mt-2 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <div className="min-w-0">
+              <p className="text-sm font-semibold text-[var(--text)]">Salasanan nollaus</p>
+              <p className="mt-1 text-xs leading-5 text-[var(--text-muted)]">
+                Lähetä kertakäyttöinen nollauslinkki omaan sähköpostiisi.
+              </p>
+            </div>
             <Button
               type="button"
               variant="secondary"
+              className="w-full sm:w-auto"
               loading={isSendingOwnPasswordReset}
               loadingText="Lähetetään nollauslinkkiä..."
               onClick={async () => {
@@ -537,14 +574,17 @@ export function UserSettingsPanel({ adminOnly = false }: { adminOnly?: boolean }
               <KeyRound className="mr-2 size-4" />
               Lähetä nollauslinkki
             </Button>
-            {passwordResetMessage ? (
-              <InlineFeedback message={passwordResetMessage} tone={passwordResetMessageTone} className="text-sm" />
-            ) : null}
           </div>
+          {passwordResetMessage ? (
+            <InlineFeedback message={passwordResetMessage} tone={passwordResetMessageTone} className="mt-3 text-sm" />
+          ) : null}
         </div>
       </Card>
+      </div>
+      ) : null}
 
-      <div className="grid gap-6">
+      {activeSection === "preferences" ? (
+      <div role="tabpanel" id="settings-section-panel-preferences" aria-labelledby="settings-section-tab-preferences" className="grid gap-6">
         <Card>
           <p className="text-xs font-semibold tracking-[0.04em] text-[var(--text-subtle)]">Asetukset</p>
           <CardTitle className="text-2xl">Sovelluksen asetukset</CardTitle>
@@ -596,51 +636,49 @@ export function UserSettingsPanel({ adminOnly = false }: { adminOnly?: boolean }
               </p>
             </div>
 
-            <div
-              role="group"
-              aria-labelledby="settings-weekly-measurements-label"
-              className="space-y-3 rounded-xl border-2 border-[var(--border)] bg-[var(--surface-2)] p-4"
-            >
-              <p
-                id="settings-weekly-measurements-label"
-                className="text-xs font-semibold tracking-[0.03em] text-[var(--text-subtle)]"
-              >
-                Viikoittaiset mittausilmoitukset
-              </p>
-              <label className="flex items-center gap-3">
+            <div className="space-y-2 rounded-xl border-2 border-[var(--border)] bg-[var(--surface-2)] p-3">
+              <label className="flex items-start justify-between gap-3 rounded-lg px-1 py-1.5">
+                <span className="min-w-0">
+                  <span
+                    id="settings-weekly-measurements-label"
+                    className="block text-sm font-semibold text-[var(--text)]"
+                  >
+                    Viikkomuistutus
+                  </span>
+                  <span className="mt-0.5 block text-xs leading-5 text-[var(--text-subtle)]">
+                    Näytä perjantain muistutus painon ja vyötärön päivittämiseen.
+                  </span>
+                </span>
                 <input
                   type="checkbox"
-                  className="size-4 accent-[var(--accent)]"
+                  aria-labelledby="settings-weekly-measurements-label"
+                  className="mt-0.5 size-4 shrink-0 accent-[var(--accent)]"
                   disabled={isSavingSettings}
                   {...form.register("weeklyMeasurementReminders")}
                 />
-                <span className="text-sm text-[var(--text-muted)]">
-                  Näytä perjantain viikkomuistutus painon ja vyötärön päivittämiseen
-                </span>
               </label>
-            </div>
 
-            <div
-              role="group"
-              aria-labelledby="settings-email-notifications-label"
-              className="space-y-3 rounded-xl border-2 border-[var(--border)] bg-[var(--surface-2)] p-4"
-            >
-              <p
-                id="settings-email-notifications-label"
-                className="text-xs font-semibold tracking-[0.03em] text-[var(--text-subtle)]"
-              >
-                Sähköposti-ilmoitukset
-              </p>
-              <label className="flex items-center gap-3">
+              <div className="border-t border-[var(--border)]" />
+
+              <label className="flex items-start justify-between gap-3 rounded-lg px-1 py-1.5">
+                <span className="min-w-0">
+                  <span
+                    id="settings-email-notifications-label"
+                    className="block text-sm font-semibold text-[var(--text)]"
+                  >
+                    Sähköposti-ilmoitukset
+                  </span>
+                  <span className="mt-0.5 block text-xs leading-5 text-[var(--text-subtle)]">
+                    Lähetä sähköposti uusista treeneistä ja ohjelmapäivityksistä.
+                  </span>
+                </span>
                 <input
                   type="checkbox"
-                  className="size-4 accent-[var(--accent)]"
+                  aria-labelledby="settings-email-notifications-label"
+                  className="mt-0.5 size-4 shrink-0 accent-[var(--accent)]"
                   disabled={isSavingSettings}
                   {...form.register("emailNotifications")}
                 />
-                <span className="text-sm text-[var(--text-muted)]">
-                  Lähetä sähköposti uusista treeneistä ja ohjelmapäivityksistä
-                </span>
               </label>
             </div>
 
@@ -738,83 +776,8 @@ export function UserSettingsPanel({ adminOnly = false }: { adminOnly?: boolean }
             ) : null}
           </div>
         </Card>
-
-        {isAthleteRole(currentUser.role) ? (
-          <Card>
-            <p className="text-xs font-semibold tracking-[0.04em] text-[var(--text-subtle)]">Mitat</p>
-            <CardTitle className="text-2xl">Kehon seuranta</CardTitle>
-            <CardDescription className="mt-2">
-              Paino ja vyötärö pysyvät erillään profiilitiedoista, jotta muuttuvia mittauksia on helpompi seurata.
-            </CardDescription>
-            <div className="mt-6 grid gap-3">
-              <div className="flex items-center justify-between rounded-xl border-2 border-[var(--border)] bg-[var(--surface-2)] px-4 py-3">
-                <span className="inline-flex items-center gap-2 text-sm text-[var(--text-muted)]">
-                  <Waves className="size-4 text-[var(--accent-secondary)]" />
-                  Paino
-                </span>
-                <Badge>{currentUser.weightKg !== undefined ? `${currentUser.weightKg} kg` : "Ei asetettu"}</Badge>
-              </div>
-              <div className="flex items-center justify-between rounded-xl border-2 border-[var(--border)] bg-[var(--surface-2)] px-4 py-3">
-                <span className="inline-flex items-center gap-2 text-sm text-[var(--text-muted)]">
-                  <Ruler className="size-4 text-[var(--accent-tertiary)]" />
-                  Vyötärö
-                </span>
-                <Badge>{latestOwnWaistCm !== undefined ? `${latestOwnWaistCm} cm` : "Ei asetettu"}</Badge>
-              </div>
-            </div>
-          </Card>
-        ) : null}
-
-        <Card>
-          <p className="text-xs font-semibold tracking-[0.04em] text-[var(--text-subtle)]">Yhteenveto</p>
-          <CardTitle className="text-2xl">Tilin yhteenveto</CardTitle>
-          <CardDescription className="mt-2">
-            Näet tässä roolin, teeman, ilmoitustilan ja valitun aloitussivun yhdellä silmäyksellä.
-          </CardDescription>
-          <div className="mt-6 grid gap-3">
-            <div className="flex items-center justify-between rounded-xl border-2 border-[var(--border)] bg-[var(--surface-2)] px-4 py-3">
-              <span className="text-sm text-[var(--text-muted)]">Rooli</span>
-              <Badge>{roleLabel(currentUser.role)}</Badge>
-            </div>
-            <div className="flex items-center justify-between rounded-xl border-2 border-[var(--border)] bg-[var(--surface-2)] px-4 py-3">
-              <span className="inline-flex items-center gap-2 text-sm text-[var(--text-muted)]">
-                <MoonStar className="size-4 text-[var(--accent)]" />
-                Teema
-              </span>
-              <Badge>{themeModeLabel[currentUser.settings?.themeMode ?? "light"]}</Badge>
-            </div>
-            <div className="flex items-center justify-between rounded-xl border-2 border-[var(--border)] bg-[var(--surface-2)] px-4 py-3">
-              <span className="inline-flex items-center gap-2 text-sm text-[var(--text-muted)]">
-                <Waves className="size-4 text-[var(--accent)]" />
-                Kuorman säätöaskel
-              </span>
-              <Badge>{loadIncrementLabel[currentUser.settings?.loadIncrementKg ?? 2.5]}</Badge>
-            </div>
-            <div className="flex items-center justify-between rounded-xl border-2 border-[var(--border)] bg-[var(--surface-2)] px-4 py-3">
-              <span className="inline-flex items-center gap-2 text-sm text-[var(--text-muted)]">
-                <UserRoundCog className="size-4 text-[var(--accent)]" />
-                Aloitussivu
-              </span>
-              <Badge>{dashboardViewLabel[resolveDefaultView(currentUser.role, currentUser.settings?.defaultDashboardView)]}</Badge>
-            </div>
-            <div className="flex items-center justify-between rounded-xl border-2 border-[var(--border)] bg-[var(--surface-2)] px-4 py-3">
-              <span className="inline-flex items-center gap-2 text-sm text-[var(--text-muted)]">
-                <Bell className="size-4 text-[var(--accent-secondary)]" />
-                Ilmoitukset
-              </span>
-              <Badge>{currentUser.settings?.emailNotifications ? "Päällä" : "Pois"}</Badge>
-            </div>
-            <div className="flex items-center justify-between rounded-xl border-2 border-[var(--border)] bg-[var(--surface-2)] px-4 py-3">
-              <span className="inline-flex items-center gap-2 text-sm text-[var(--text-muted)]">
-                <Bell className="size-4 text-[var(--accent-secondary)]" />
-                Viikkomuistutus
-              </span>
-              <Badge>{currentUser.settings?.weeklyMeasurementReminders ?? true ? "Päällä" : "Pois"}</Badge>
-            </div>
-          </div>
-        </Card>
-
       </div>
+      ) : null}
     </div>
   );
 }

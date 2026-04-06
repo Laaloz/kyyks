@@ -141,7 +141,6 @@ export function DashboardShell() {
     view === "settings" ? resolveInitialView(currentUser.role, currentUser.settings?.defaultDashboardView) : view;
   const activeTabId = `workspace-tab-${activePrimaryView}`;
   const activePanelId = `workspace-panel-${activePrimaryView}`;
-  const activeViewLabel = navLabelByView[view];
   const shouldHideMobileBottomNav = isMobileWorkoutDetailOpen;
   const measurementReminder = getMeasurementReminderState(state, currentUser);
   const weeklyMeasurementRemindersEnabled = currentUser.settings?.weeklyMeasurementReminders ?? true;
@@ -387,128 +386,70 @@ export function DashboardShell() {
       ) : null}
 
       <header
-        className="z-20 px-0 py-0 lg:rounded-3xl lg:border lg:border-[var(--border-strong)] lg:bg-[linear-gradient(180deg,var(--surface)_0%,var(--surface-2)_100%)] lg:px-5 lg:py-4 lg:shadow-[0_1px_0_0_var(--shadow-soft),0_14px_30px_-20px_var(--shadow)]"
+        className="z-20 px-0 py-0 lg:rounded-3xl lg:border lg:border-[var(--border-strong)] lg:bg-[linear-gradient(180deg,var(--surface)_0%,var(--surface-2)_100%)] lg:px-4 lg:py-3.5 lg:shadow-[0_1px_0_0_var(--shadow-soft),0_14px_30px_-20px_var(--shadow)]"
       >
         <div className="flex flex-col gap-4">
-          <div className="grid gap-3 lg:grid-cols-[minmax(0,1.65fr)_minmax(16rem,0.95fr)]">
-            <section className="min-w-0">
-              <div className="flex items-center justify-between gap-3">
-                <div className="min-w-0">
-                  <h1 className="truncate font-[family-name:var(--font-display)] text-[1rem] font-semibold leading-tight text-[var(--text)] sm:pr-2 sm:text-[1.65rem] sm:leading-[1.02]">
-                    {currentUser.fullName}
-                  </h1>
-                  <p className="mt-1 text-sm text-[var(--text-subtle)]">{todayLabel}</p>
-                </div>
-                <div className="flex shrink-0 items-center gap-2">
-                  {shouldShowMeasurementReminder ? (
-                    <Button
-                      onClick={() => setIsMeasurementReminderOpen(true)}
-                      type="button"
-                      variant="secondary"
-                      className="size-10 !rounded-full !border-[var(--accent)] !bg-[var(--accent)] !px-0 !py-0 !text-white shadow-[inset_0_0_0_1px_var(--accent-strong),0_10px_24px_-16px_var(--accent)] sm:size-11"
-                      aria-label="Avaa kehon seurannan muistutus"
-                      title="Avaa kehon seurannan muistutus"
-                    >
-                      <BellRing className="size-5" aria-hidden="true" />
-                      <span className="sr-only">Avaa kehon seurannan muistutus</span>
-                    </Button>
-                  ) : null}
-                  <Button
-                    onClick={() => setView("settings")}
-                    type="button"
-                    variant="secondary"
-                    className={`size-10 overflow-hidden !rounded-full !border-[var(--border-strong)] !bg-[var(--surface)] !px-0 !py-0 sm:size-11 ${
-                      view === "settings" ? "!border-[var(--accent)] !text-[var(--accent)]" : "!text-[var(--text)]"
-                    }`}
-                    aria-label="Avaa tilin asetukset"
-                    aria-pressed={view === "settings"}
-                    title="Avaa tilin asetukset"
-                  >
-                    {profileImageSrc && !profileImageFailed ? (
-                      <img
-                        src={profileImageSrc}
-                        alt=""
-                        className="size-full object-cover"
-                        onError={() => setProfileImageFailed(true)}
-                      />
-                    ) : (
-                      <UserRound className="size-5" aria-hidden="true" />
-                    )}
-                    <span className="sr-only">Avaa tilin asetukset</span>
-                  </Button>
-                </div>
+          <section className="min-w-0">
+            <div className="flex items-center justify-between gap-3">
+              <div className="min-w-0">
+                <h1 className="truncate font-[family-name:var(--font-display)] text-[1rem] font-semibold leading-tight text-[var(--text)] sm:pr-2 sm:text-[1.65rem] sm:leading-[1.02]">
+                  {currentUser.fullName}
+                </h1>
+                <p className="mt-1 text-sm text-[var(--text-subtle)]">{todayLabel}</p>
               </div>
-            </section>
-
-            <aside className="hidden rounded-[1.75rem] border border-[var(--border)] bg-[var(--surface)] px-4 py-4 shadow-[0_10px_24px_-22px_var(--shadow)] sm:px-5 lg:block">
-              <div className="flex h-full flex-col gap-4">
-                <div className="space-y-3">
-                  <div className="inline-flex items-center gap-2 rounded-full border border-[var(--border)] bg-[var(--surface-2)] px-3 py-1 text-xs font-semibold uppercase tracking-[0.08em] text-[var(--text-subtle)]">
-                    Profiili ja toiminnot
-                  </div>
-                  <div className="space-y-1">
-                    <p className="font-[family-name:var(--font-display)] text-xl font-semibold leading-tight text-[var(--text)]">
-                      {currentUser.fullName}
-                    </p>
-                    <p className="text-sm leading-6 text-[var(--text-muted)]">
-                      {isImpersonating && authenticatedUser
-                        ? `Admin-ohjaus aktiivinen. Alkuperäinen käyttäjä: ${authenticatedUser.fullName}.`
-                        : "Avaa omat asetukset tai kirjaudu ulos suoraan tästä ilman erillistä valikkoa."}
-                    </p>
-                  </div>
-                </div>
-
-                <div className="flex flex-col gap-2 sm:flex-row lg:flex-col">
-                  {shouldShowMeasurementReminder ? (
-                    <Button
-                      onClick={() => setIsMeasurementReminderOpen(true)}
-                      type="button"
-                      variant="secondary"
-                      className="h-11 justify-center gap-2 rounded-2xl border-[var(--accent)] bg-[var(--surface)] px-4 text-[var(--accent)] shadow-[0_0_0_1px_var(--accent)] sm:flex-1 lg:w-full"
-                    >
-                      <BellRing className="size-4" aria-hidden="true" />
-                      Kehon seuranta
-                    </Button>
-                  ) : null}
+              <div className="flex shrink-0 items-center gap-2">
+                {shouldShowMeasurementReminder ? (
                   <Button
-                    onClick={() => setView("settings")}
+                    onClick={() => setIsMeasurementReminderOpen(true)}
                     type="button"
                     variant="secondary"
-                    className={`h-11 justify-center gap-2 rounded-2xl px-4 sm:flex-1 lg:w-full ${
-                      view === "settings"
-                        ? "!border-[var(--accent)] !bg-[var(--surface)] !text-[var(--accent)] shadow-[0_0_0_1px_var(--accent)]"
-                        : ""
-                    }`}
-                    aria-pressed={view === "settings"}
+                    className="size-10 !rounded-full !border-[var(--accent)] !bg-[var(--accent)] !px-0 !py-0 !text-white shadow-[inset_0_0_0_1px_var(--accent-strong),0_10px_24px_-16px_var(--accent)] sm:size-11"
+                    aria-label="Avaa kehon seurannan muistutus"
+                    title="Avaa kehon seurannan muistutus"
                   >
-                    <UserRoundCog className={`size-4 ${view === "settings" ? "text-[var(--accent)]" : ""}`} aria-hidden="true" />
-                    Tili
+                    <BellRing className="size-5" aria-hidden="true" />
+                    <span className="sr-only">Avaa kehon seurannan muistutus</span>
                   </Button>
-                  <Button
-                    onClick={() => {
-                      void handleLogout();
-                    }}
-                    type="button"
-                    variant="secondary"
-                    className="h-11 justify-center gap-2 rounded-2xl px-4 sm:flex-1 lg:w-full"
-                  >
-                    <LogOut className="size-4" aria-hidden="true" />
-                    Kirjaudu ulos
-                  </Button>
-                </div>
-
-                <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface-2)] px-3 py-3">
-                  <p className="text-xs font-semibold uppercase tracking-[0.08em] text-[var(--text-subtle)]">
-                    Nyt aktiivisena
-                  </p>
-                  <p className="mt-1 text-sm font-semibold text-[var(--text)]">{activeViewLabel}</p>
-                  <p className="mt-1 text-sm leading-6 text-[var(--text-muted)]">
-                    Käytä alla olevaa navigaatiota vaihtaaksesi näkymää nopeasti.
-                  </p>
-                </div>
+                ) : null}
+                <Button
+                  onClick={() => setView("settings")}
+                  type="button"
+                  variant="secondary"
+                  className={`size-10 overflow-hidden !rounded-full !border-[var(--border-strong)] !bg-[var(--surface)] !px-0 !py-0 sm:size-11 ${
+                    view === "settings" ? "!border-[var(--accent)] !text-[var(--accent)]" : "!text-[var(--text)]"
+                  }`}
+                  aria-label="Avaa tilin asetukset"
+                  aria-pressed={view === "settings"}
+                  title="Avaa tilin asetukset"
+                >
+                  {profileImageSrc && !profileImageFailed ? (
+                    <img
+                      src={profileImageSrc}
+                      alt=""
+                      className="size-full object-cover"
+                      onError={() => setProfileImageFailed(true)}
+                    />
+                  ) : (
+                    <UserRound className="size-5" aria-hidden="true" />
+                  )}
+                  <span className="sr-only">Avaa tilin asetukset</span>
+                </Button>
+                <Button
+                  onClick={() => {
+                    void handleLogout();
+                  }}
+                  type="button"
+                  variant="secondary"
+                  className="hidden size-10 !rounded-full !border-[var(--border-strong)] !bg-[var(--surface)] !px-0 !py-0 !text-[var(--text)] sm:size-11 lg:inline-flex"
+                  aria-label="Kirjaudu ulos"
+                  title="Kirjaudu ulos"
+                >
+                  <LogOut className="size-5" aria-hidden="true" />
+                  <span className="sr-only">Kirjaudu ulos</span>
+                </Button>
               </div>
-            </aside>
-          </div>
+            </div>
+          </section>
 
           <div className="hidden lg:block">
             {view === "conversation" && unreadConversationCount > 0 ? (
