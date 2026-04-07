@@ -8,11 +8,13 @@ import { createSupabaseServerClient } from "@/lib/supabase/server";
 const settingsSchema = z.object({
   fullName: z.string().trim().min(2),
   profileImageUrl: z.union([z.string().trim().url(), z.literal("")]).transform((value) => (value === "" ? null : value)),
-  defaultDashboardView: z.enum(["overview", "templates", "invites", "athlete-log", "conversation", "athletes", "users"]),
+  defaultDashboardView: z.enum(["overview", "nutrition", "templates", "invites", "athlete-log", "conversation", "athletes", "users"]),
   emailNotifications: z.boolean(),
   weeklyMeasurementReminders: z.boolean(),
   themeMode: z.enum(["light", "dark", "mallu"]),
   loadIncrementKg: z.union([z.literal(1), z.literal(2.5), z.literal(5)]),
+  age: z.number().int().min(13).max(100).nullable().optional(),
+  sex: z.enum(["female", "male", "other"]).nullable().optional(),
 });
 
 export async function PATCH(request: Request) {
@@ -43,19 +45,28 @@ export async function PATCH(request: Request) {
   const adminSupabase = createSupabaseAdminClient();
 
   const clientForUpdate = adminSupabase ?? supabase;
+  const updatePayload: Record<string, string | number | boolean | null> = {
+    full_name: parsed.data.fullName,
+    profile_image_url: parsed.data.profileImageUrl,
+    default_dashboard_view: parsed.data.defaultDashboardView,
+    email_notifications: parsed.data.emailNotifications,
+    weekly_measurement_reminders: parsed.data.weeklyMeasurementReminders,
+    theme_mode: parsed.data.themeMode,
+    load_increment_kg: parsed.data.loadIncrementKg,
+    updated_at: timestamp,
+  };
+
+  if (Object.prototype.hasOwnProperty.call(parsed.data, "age")) {
+    updatePayload.age = parsed.data.age ?? null;
+  }
+
+  if (Object.prototype.hasOwnProperty.call(parsed.data, "sex")) {
+    updatePayload.sex = parsed.data.sex ?? null;
+  }
 
   const { error } = await clientForUpdate
     .from("profiles")
-    .update({
-      full_name: parsed.data.fullName,
-      profile_image_url: parsed.data.profileImageUrl,
-      default_dashboard_view: parsed.data.defaultDashboardView,
-      email_notifications: parsed.data.emailNotifications,
-      weekly_measurement_reminders: parsed.data.weeklyMeasurementReminders,
-      theme_mode: parsed.data.themeMode,
-      load_increment_kg: parsed.data.loadIncrementKg,
-      updated_at: timestamp,
-    })
+    .update(updatePayload)
     .eq("id", user.id);
 
   if (error) {

@@ -13,6 +13,7 @@ export const PROGRAMS_DASHBOARD_VIEW = "templates";
 // The current coach workspace uses it as the programs/program builder view.
 export type DashboardHomeView =
   | "overview"
+  | "nutrition"
   | typeof PROGRAMS_DASHBOARD_VIEW
   | "invites"
   | "athlete-log"
@@ -22,6 +23,16 @@ export type DashboardHomeView =
 export type MuscleGroupKey = "shoulders" | "arms" | "chest" | "abs" | "back" | "legs" | "other";
 export type ThemeMode = "light" | "dark" | "mallu";
 export type LoadIncrement = 1 | 2.5 | 5;
+export type ProfileSex = "female" | "male" | "other";
+export type NutritionGoal = "maintain" | "gain" | "lose";
+export type NutritionActivityLevel = "low" | "moderate" | "high";
+export type NutritionOwnerRole = "admin" | "coach";
+export type IngredientSource = "fineli" | "open_food_facts" | "manual";
+export type IngredientUnit = "g" | "ml" | "pcs";
+export type IngredientRole = "main" | "spice" | "garnish";
+export type IngredientScalingMode = "linear" | "fixed" | "text_only";
+export type MealTag = "breakfast" | "lunch" | "snack" | "dinner" | "evening_snack";
+export type PurchaseUnit = "g" | "kg" | "ml" | "l" | "pcs" | "pack";
 
 export interface UserSettings {
   defaultDashboardView: DashboardHomeView;
@@ -39,6 +50,8 @@ export interface UserProfile {
   email: string;
   status: UserStatus;
   demoPassword?: string;
+  age?: number;
+  sex?: ProfileSex;
   heightCm?: number;
   weightKg?: number;
   waistCm?: number;
@@ -55,6 +68,122 @@ export interface BodyMeasurement {
   waistCm?: number;
   measuredAt: string;
   createdAt: string;
+}
+
+export interface MacroTarget {
+  kcal: number;
+  proteinG: number;
+  carbsG: number;
+  fatG: number;
+}
+
+export interface NutritionProfile {
+  id: string;
+  userId: string;
+  goal: NutritionGoal;
+  activityLevel: NutritionActivityLevel;
+  mealsPerDay: number;
+  targetKcal: number;
+  proteinG: number;
+  carbsG: number;
+  fatG: number;
+  calculationMode: "auto" | "manual_override";
+  coachNotes?: string;
+  dietaryFlags: string[];
+  allergies: string[];
+  createdBy: string;
+  updatedBy: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface Ingredient {
+  id: string;
+  name: string;
+  source: IngredientSource;
+  sourceExternalId?: string;
+  ownerRole: NutritionOwnerRole;
+  createdBy: string;
+  defaultPurchaseUnit?: PurchaseUnit;
+  gramsPerUnit?: number;
+  kcalPer100: number;
+  proteinPer100: number;
+  carbsPer100: number;
+  fatPer100: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface RecipeIngredient {
+  id: string;
+  ingredientId?: string;
+  ingredientName: string;
+  quantity?: number;
+  unit: IngredientUnit;
+  displayQuantity?: string;
+  displayUnit?: string;
+  normalizedQuantity?: number;
+  ingredientRole: IngredientRole;
+  scalingMode: IngredientScalingMode;
+}
+
+export interface RecipeNutritionSummary extends MacroTarget {
+  servings: number;
+}
+
+export interface Recipe {
+  id: string;
+  name: string;
+  description?: string;
+  instructions: string;
+  mealTag: MealTag;
+  ownerRole: NutritionOwnerRole;
+  createdBy: string;
+  defaultServings: number;
+  minServings: number;
+  maxServings: number;
+  ingredients: RecipeIngredient[];
+  nutritionPerRecipe?: RecipeNutritionSummary;
+  nutritionPerServing?: RecipeNutritionSummary;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface MealPlanTemplateItem {
+  id: string;
+  mealTag: MealTag;
+  recipeId: string;
+  sortOrder: number;
+}
+
+export interface MealPlanTemplate {
+  id: string;
+  name: string;
+  description?: string;
+  ownerRole: NutritionOwnerRole;
+  createdBy: string;
+  items: MealPlanTemplateItem[];
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface AssignedMealPlanItem {
+  id: string;
+  mealTag: MealTag;
+  recipeId: string;
+  sortOrder: number;
+}
+
+export interface AssignedMealPlan {
+  id: string;
+  athleteId: string;
+  templateId: string;
+  assignedBy: string;
+  name: string;
+  items: AssignedMealPlanItem[];
+  active: boolean;
+  assignedAt: string;
+  updatedAt: string;
 }
 
 export interface CoachAthleteAssignment {
@@ -263,6 +392,11 @@ export interface PasswordResetRequest {
 export interface AppState {
   users: UserProfile[];
   bodyMeasurements: BodyMeasurement[];
+  nutritionProfiles: NutritionProfile[];
+  ingredientsCatalog: Ingredient[];
+  recipes: Recipe[];
+  mealPlanTemplates: MealPlanTemplate[];
+  assignedMealPlans: AssignedMealPlan[];
   assignments: CoachAthleteAssignment[];
   exercises: Exercise[];
   templates: WorkoutTemplate[];
@@ -344,6 +478,73 @@ export interface InviteInput {
   email: string;
   role: Exclude<Role, "admin">;
   coachId?: string;
+}
+
+export interface NutritionProfileInput {
+  userId: string;
+  goal: NutritionGoal;
+  activityLevel: NutritionActivityLevel;
+  mealsPerDay: number;
+  calculationMode: "auto" | "manual_override";
+  targetKcal?: number;
+  proteinG?: number;
+  carbsG?: number;
+  fatG?: number;
+  coachNotes?: string;
+  dietaryFlags?: string[];
+  allergies?: string[];
+}
+
+export interface IngredientInput {
+  id?: string;
+  name: string;
+  source: IngredientSource;
+  sourceExternalId?: string;
+  defaultPurchaseUnit?: PurchaseUnit;
+  gramsPerUnit?: number;
+  kcalPer100: number;
+  proteinPer100: number;
+  carbsPer100: number;
+  fatPer100: number;
+}
+
+export interface RecipeIngredientInput {
+  ingredientId?: string;
+  ingredientName?: string;
+  quantity?: number;
+  unit: IngredientUnit;
+  displayQuantity?: string;
+  displayUnit?: string;
+  ingredientRole: IngredientRole;
+  scalingMode: IngredientScalingMode;
+}
+
+export interface RecipeInput {
+  id?: string;
+  name: string;
+  description?: string;
+  instructions: string;
+  mealTag: MealTag;
+  defaultServings: number;
+  minServings: number;
+  maxServings: number;
+  ingredients: RecipeIngredientInput[];
+}
+
+export interface MealPlanTemplateInput {
+  id?: string;
+  name: string;
+  description?: string;
+  items: Array<{
+    mealTag: MealTag;
+    recipeId: string;
+    sortOrder: number;
+  }>;
+}
+
+export interface AssignedMealPlanInput {
+  athleteId: string;
+  templateId: string;
 }
 
 export interface WorkoutUpdateInput {

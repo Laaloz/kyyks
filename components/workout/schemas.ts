@@ -32,7 +32,7 @@ export const userSettingsSchema = z.object({
   profileImageUrl: z.union([z.string().trim().url("Anna kelvollinen kuvan URL-osoite."), z.literal("")]).transform((value) =>
     value === "" ? undefined : value,
   ),
-  defaultDashboardView: z.enum(["overview", "templates", "invites", "athlete-log", "conversation", "athletes", "users"]),
+  defaultDashboardView: z.enum(["overview", "nutrition", "templates", "invites", "athlete-log", "conversation", "athletes", "users"]),
   emailNotifications: z.boolean(),
   weeklyMeasurementReminders: z.boolean(),
   themeMode: z.enum(["light", "dark", "mallu"]),
@@ -43,6 +43,87 @@ export const bodyMeasurementSchema = z.object({
   heightCm: optionalNumberField(z.number().min(80).max(250)),
   weightKg: optionalNumberField(z.number().min(20).max(350)),
   waistCm: optionalNumberField(z.number().min(30).max(250)),
+});
+
+export const nutritionProfileSchema = z.object({
+  userId: z.string().min(1, "Valitse käyttäjä."),
+  goal: z.enum(["maintain", "gain", "lose"]),
+  activityLevel: z.enum(["low", "moderate", "high"]),
+  mealsPerDay: z.coerce.number().min(3).max(6),
+  calculationMode: z.enum(["auto", "manual_override"]),
+  targetKcal: optionalNumberField(z.number().min(1200).max(6000)),
+  proteinG: optionalNumberField(z.number().min(50).max(400)),
+  carbsG: optionalNumberField(z.number().min(50).max(800)),
+  fatG: optionalNumberField(z.number().min(20).max(250)),
+  coachNotes: z.string().max(400).optional(),
+  dietaryFlags: z.array(z.string()).default([]),
+  allergies: z.array(z.string()).default([]),
+});
+
+export const ingredientSchema = z.object({
+  id: z.string().optional(),
+  name: z.string().trim().min(2, "Anna raaka-aineelle nimi."),
+  source: z.enum(["fineli", "open_food_facts", "manual"]),
+  sourceExternalId: z.string().optional(),
+  defaultPurchaseUnit: z.enum(["g", "kg", "ml", "l", "pcs", "pack"]).optional(),
+  gramsPerUnit: optionalNumberField(z.number().min(1).max(100000)),
+  kcalPer100: z.coerce.number().min(0).max(1000),
+  proteinPer100: z.coerce.number().min(0).max(100),
+  carbsPer100: z.coerce.number().min(0).max(100),
+  fatPer100: z.coerce.number().min(0).max(100),
+});
+
+export const recipeIngredientSchema = z.object({
+  ingredientId: z.string().optional(),
+  ingredientName: z.string().optional(),
+  quantity: optionalNumberField(z.number().min(0).max(100000)),
+  unit: z.enum(["g", "ml", "pcs"]),
+  displayQuantity: z.string().optional(),
+  displayUnit: z.string().optional(),
+  ingredientRole: z.enum(["main", "spice", "garnish"]),
+  scalingMode: z.enum(["linear", "fixed", "text_only"]),
+}).refine(
+  (value) => Boolean(value.ingredientId || value.ingredientName?.trim()),
+  {
+    message: "Valitse tai nimeä raaka-aine.",
+    path: ["ingredientName"],
+  },
+);
+
+export const recipeSchema = z.object({
+  id: z.string().optional(),
+  name: z.string().trim().min(2, "Anna reseptille nimi."),
+  description: z.string().max(280).optional(),
+  instructions: z.string().trim().min(8, "Kirjoita valmistusohje."),
+  mealTag: z.enum(["breakfast", "lunch", "snack", "dinner", "evening_snack"]),
+  defaultServings: z.coerce.number().min(1).max(20),
+  minServings: z.coerce.number().min(1).max(20),
+  maxServings: z.coerce.number().min(1).max(20),
+  ingredients: z.array(recipeIngredientSchema).min(1, "Lisää vähintään yksi raaka-aine."),
+}).refine(
+  (value) => value.minServings <= value.defaultServings && value.defaultServings <= value.maxServings,
+  {
+    message: "Annosrajojen pitää sisältää oletusannosmäärä.",
+    path: ["defaultServings"],
+  },
+);
+
+export const mealPlanTemplateSchema = z.object({
+  id: z.string().optional(),
+  name: z.string().trim().min(2, "Anna ateriapohjalle nimi."),
+  description: z.string().max(280).optional(),
+  items: z.array(
+    z.object({
+      mealTag: z.enum(["breakfast", "lunch", "snack", "dinner", "evening_snack"]),
+      recipeId: z.string().min(1, "Valitse resepti."),
+      sortOrder: z.coerce.number().min(0).max(20),
+    }),
+  ).min(1, "Lisää vähintään yksi ateria."),
+});
+
+export const assignedMealPlanSchema = z.object({
+  athleteId: z.string().min(1, "Valitse treenaaja."),
+  templateId: z.string().min(1, "Valitse ateriapohja."),
 });
 
 export const inviteSchema = z
@@ -82,6 +163,10 @@ export const templateSchema = z.object({
 export const acceptInviteSchema = z.object({
   fullName: z.string().min(2, "Anna koko nimi."),
   password: z.string().min(6, "Salasanan pitää olla vähintään 6 merkkiä."),
+  age: optionalNumberField(z.number().int().min(13).max(100)),
+  sex: optionalEnumField(["female", "male", "other"]),
+  heightCm: optionalNumberField(z.number().min(80).max(250)),
+  weightKg: optionalNumberField(z.number().min(20).max(350)),
 });
 
 export const resetPasswordSchema = z

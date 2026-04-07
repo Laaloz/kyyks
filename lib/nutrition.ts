@@ -1,0 +1,411 @@
+import { makeId } from "@/lib/utils";
+import type {
+  AssignedMealPlan,
+  AssignedMealPlanInput,
+  AppState,
+  Ingredient,
+  IngredientInput,
+  IngredientScalingMode,
+  MacroTarget,
+  MealPlanTemplate,
+  MealPlanTemplateInput,
+  MealTag,
+  NutritionActivityLevel,
+  NutritionProfile,
+  NutritionProfileInput,
+  NutritionGoal,
+  ProfileSex,
+  Recipe,
+  RecipeIngredient,
+  RecipeInput,
+  UserProfile,
+} from "@/lib/types";
+
+function nowIso() {
+  return new Date().toISOString();
+}
+
+function roundNutrition(value: number) {
+  return Math.round(value * 10) / 10;
+}
+
+export function mealTagLabel(mealTag: MealTag) {
+  switch (mealTag) {
+    case "breakfast":
+      return "Aamupala";
+    case "lunch":
+      return "Lounas";
+    case "snack":
+      return "Välipala";
+    case "dinner":
+      return "Illallinen";
+    case "evening_snack":
+      return "Iltapala";
+  }
+}
+
+export function calculateMacroTarget(input: {
+  age?: number;
+  heightCm?: number;
+  weightKg?: number;
+  sex?: ProfileSex;
+  goal: NutritionGoal;
+  activityLevel: NutritionActivityLevel;
+}): MacroTarget | null {
+  const weightKg = input.weightKg;
+  const heightCm = input.heightCm;
+  const age = input.age;
+  const sex = input.sex;
+  if (!weightKg || !heightCm || !age || !sex) {
+    return null;
+  }
+
+  const activityMultiplier = {
+    low: 1.35,
+    moderate: 1.55,
+    high: 1.75,
+  }[input.activityLevel];
+
+  const goalAdjustment = {
+    lose: -350,
+    maintain: 0,
+    gain: 250,
+  }[input.goal];
+
+  const sexConstant = {
+    female: -161,
+    male: 5,
+    other: -78,
+  }[sex];
+  const bmr = 10 * weightKg + 6.25 * heightCm - 5 * age + sexConstant;
+  const targetKcal = Math.max(1200, Math.round(bmr * activityMultiplier + goalAdjustment));
+  const proteinFactor = input.goal === "gain" ? 2 : input.goal === "lose" ? 2.2 : 1.8;
+  const proteinG = Math.max(90, roundNutrition(weightKg * proteinFactor));
+  const fatG = Math.max(45, roundNutrition(weightKg * 0.8));
+  const remainingKcal = Math.max(0, targetKcal - proteinG * 4 - fatG * 9);
+  const carbsG = roundNutrition(remainingKcal / 4);
+
+  return {
+    kcal: targetKcal,
+    proteinG,
+    carbsG,
+    fatG,
+  };
+}
+
+export function getMissingMacroProfileFields(user: Pick<UserProfile, "age" | "sex" | "heightCm" | "weightKg">) {
+  const missing: Array<"age" | "sex" | "heightCm" | "weightKg"> = [];
+
+  if (!user.age) {
+    missing.push("age");
+  }
+  if (!user.sex) {
+    missing.push("sex");
+  }
+  if (!user.heightCm) {
+    missing.push("heightCm");
+  }
+  if (!user.weightKg) {
+    missing.push("weightKg");
+  }
+
+  return missing;
+}
+
+function resolveIngredientNutritionContribution(
+  ingredient: Ingredient | undefined,
+  recipeIngredient: RecipeIngredient,
+  servings: number,
+) {
+  if (!ingredient || recipeIngredient.scalingMode === "text_only") {
+    return { kcal: 0, proteinG: 0, carbsG: 0, fatG: 0 };
+  }
+
+  const baseQuantity = recipeIngredient.normalizedQuantity ?? recipeIngredient.quantity ?? 0;
+  const quantity =
+    recipeIngredient.scalingMode === "linear"
+      ? baseQuantity * (servings <= 0 ? 1 : servings)
+      : baseQuantity;
+  const multiplier = quantity / 100;
+
+  return {
+    kcal: ingredient.kcalPer100 * multiplier,
+    proteinG: ingredient.proteinPer100 * multiplier,
+    carbsG: ingredient.carbsPer100 * multiplier,
+    fatG: ingredient.fatPer100 * multiplier,
+  };
+}
+
+export function scaleRecipeIngredient(
+  ingredient: RecipeIngredient,
+  servings: number,
+  defaultServings: number,
+) {
+  const safeDefaultServings = defaultServings > 0 ? defaultServings : 1;
+  const ratio = servings > 0 ? servings / safeDefaultServings : 1;
+  const isScalable = ingredient.scalingMode === "linear";
+  const sourceQuantity = ingredient.quantity ?? ingredient.normalizedQuantity;
+  const scaledQuantity = sourceQuantity !== undefined && isScalable ? roundNutrition(sourceQuantity * ratio) : sourceQuantity;
+
+  return {
+    ...ingredient,
+    quantity: scaledQuantity,
+    normalizedQuantity:
+      ingredient.normalizedQuantity !== undefined && isScalable
+        ? roundNutrition(ingredient.normalizedQuantity * ratio)
+        : ingredient.normalizedQuantity,
+  };
+}
+
+export function calculateRecipeNutrition(
+  recipe: Pick<Recipe, "defaultServings" | "ingredients">,
+  ingredients: Ingredient[],
+) {
+  const ingredientById = new Map(ingredients.map((ingredient) => [ingredient.id, ingredient]));
+  const totals = recipe.ingredients.reduce(
+    (sum, item) => {
+      const contribution = resolveIngredientNutritionContribution(
+        item.ingredientId ? ingredientById.get(item.ingredientId) : undefined,
+        item,
+        1,
+      );
+      return {
+        kcal: sum.kcal + contribution.kcal,
+        proteinG: sum.proteinG + contribution.proteinG,
+        carbsG: sum.carbsG + contribution.carbsG,
+        fatG: sum.fatG + contribution.fatG,
+      };
+    },
+    { kcal: 0, proteinG: 0, carbsG: 0, fatG: 0 },
+  );
+
+  const servings = recipe.defaultServings > 0 ? recipe.defaultServings : 1;
+  return {
+    nutritionPerRecipe: {
+      servings,
+      kcal: Math.round(totals.kcal),
+      proteinG: roundNutrition(totals.proteinG),
+      carbsG: roundNutrition(totals.carbsG),
+      fatG: roundNutrition(totals.fatG),
+    },
+    nutritionPerServing: {
+      servings: 1,
+      kcal: Math.round(totals.kcal / servings),
+      proteinG: roundNutrition(totals.proteinG / servings),
+      carbsG: roundNutrition(totals.carbsG / servings),
+      fatG: roundNutrition(totals.fatG / servings),
+    },
+  };
+}
+
+export function upsertNutritionProfile(
+  state: AppState,
+  actorId: string,
+  input: NutritionProfileInput,
+) {
+  const timestamp = nowIso();
+  const current = state.nutritionProfiles.find((profile) => profile.userId === input.userId);
+  const user = state.users.find((candidate) => candidate.id === input.userId);
+  const calculatedTarget = calculateMacroTarget({
+    age: user?.age,
+    heightCm: user?.heightCm,
+    weightKg: user?.weightKg,
+    sex: user?.sex,
+    goal: input.goal,
+    activityLevel: input.activityLevel,
+  });
+
+  const nextTarget =
+    input.calculationMode === "manual_override"
+      ? {
+          kcal: input.targetKcal ?? current?.targetKcal ?? calculatedTarget?.kcal ?? 2000,
+          proteinG: input.proteinG ?? current?.proteinG ?? calculatedTarget?.proteinG ?? 140,
+          carbsG: input.carbsG ?? current?.carbsG ?? calculatedTarget?.carbsG ?? 220,
+          fatG: input.fatG ?? current?.fatG ?? calculatedTarget?.fatG ?? 70,
+        }
+      : {
+          kcal: calculatedTarget?.kcal ?? current?.targetKcal ?? 2000,
+          proteinG: calculatedTarget?.proteinG ?? current?.proteinG ?? 140,
+          carbsG: calculatedTarget?.carbsG ?? current?.carbsG ?? 220,
+          fatG: calculatedTarget?.fatG ?? current?.fatG ?? 70,
+        };
+
+  const nextProfile: NutritionProfile = {
+    id: current?.id ?? makeId("nutrition_profile"),
+    userId: input.userId,
+    goal: input.goal,
+    activityLevel: input.activityLevel,
+    mealsPerDay: input.mealsPerDay,
+    targetKcal: nextTarget.kcal,
+    proteinG: nextTarget.proteinG,
+    carbsG: nextTarget.carbsG,
+    fatG: nextTarget.fatG,
+    calculationMode: input.calculationMode,
+    coachNotes: input.coachNotes?.trim() || undefined,
+    dietaryFlags: input.dietaryFlags ?? current?.dietaryFlags ?? [],
+    allergies: input.allergies ?? current?.allergies ?? [],
+    createdBy: current?.createdBy ?? actorId,
+    updatedBy: actorId,
+    createdAt: current?.createdAt ?? timestamp,
+    updatedAt: timestamp,
+  };
+
+  return {
+    ...state,
+    nutritionProfiles: current
+      ? state.nutritionProfiles.map((profile) => (profile.id === current.id ? nextProfile : profile))
+      : [nextProfile, ...state.nutritionProfiles],
+  };
+}
+
+export function upsertIngredient(state: AppState, actorId: string, input: IngredientInput) {
+  const timestamp = nowIso();
+  const current = input.id ? state.ingredientsCatalog.find((ingredient) => ingredient.id === input.id) : undefined;
+  const nextIngredient: Ingredient = {
+    id: current?.id ?? makeId("ingredient"),
+    name: input.name.trim(),
+    source: input.source,
+    sourceExternalId: input.sourceExternalId?.trim() || undefined,
+    ownerRole: "admin",
+    createdBy: current?.createdBy ?? actorId,
+    defaultPurchaseUnit: input.defaultPurchaseUnit,
+    gramsPerUnit: input.gramsPerUnit,
+    kcalPer100: input.kcalPer100,
+    proteinPer100: input.proteinPer100,
+    carbsPer100: input.carbsPer100,
+    fatPer100: input.fatPer100,
+    createdAt: current?.createdAt ?? timestamp,
+    updatedAt: timestamp,
+  };
+
+  return {
+    ...state,
+    ingredientsCatalog: current
+      ? state.ingredientsCatalog.map((ingredient) => (ingredient.id === current.id ? nextIngredient : ingredient))
+      : [nextIngredient, ...state.ingredientsCatalog],
+  };
+}
+
+export function upsertRecipe(state: AppState, actorId: string, input: RecipeInput) {
+  const timestamp = nowIso();
+  const current = input.id ? state.recipes.find((recipe) => recipe.id === input.id) : undefined;
+  const nextRecipeBase: Recipe = {
+    id: current?.id ?? makeId("recipe"),
+    name: input.name.trim(),
+    description: input.description?.trim() || undefined,
+    instructions: input.instructions.trim(),
+    mealTag: input.mealTag,
+    ownerRole: "admin",
+    createdBy: current?.createdBy ?? actorId,
+    defaultServings: input.defaultServings,
+    minServings: input.minServings,
+    maxServings: input.maxServings,
+    ingredients: input.ingredients.map((ingredient) => ({
+      id: makeId("recipe_ingredient"),
+      ingredientId: ingredient.ingredientId,
+      ingredientName: ingredient.ingredientName?.trim() || "",
+      quantity: ingredient.quantity,
+      unit: ingredient.unit,
+      displayQuantity: ingredient.displayQuantity?.trim() || undefined,
+      displayUnit: ingredient.displayUnit?.trim() || undefined,
+      normalizedQuantity: ingredient.quantity,
+      ingredientRole: ingredient.ingredientRole,
+      scalingMode: ingredient.scalingMode,
+    })),
+    createdAt: current?.createdAt ?? timestamp,
+    updatedAt: timestamp,
+  };
+  const nutrition = calculateRecipeNutrition(nextRecipeBase, state.ingredientsCatalog);
+  const nextRecipe: Recipe = {
+    ...nextRecipeBase,
+    ...nutrition,
+  };
+
+  return {
+    ...state,
+    recipes: current
+      ? state.recipes.map((recipe) => (recipe.id === current.id ? nextRecipe : recipe))
+      : [nextRecipe, ...state.recipes],
+  };
+}
+
+export function upsertMealPlanTemplate(state: AppState, actorId: string, input: MealPlanTemplateInput) {
+  const timestamp = nowIso();
+  const current = input.id ? state.mealPlanTemplates.find((template) => template.id === input.id) : undefined;
+  const nextTemplate: MealPlanTemplate = {
+    id: current?.id ?? makeId("meal_template"),
+    name: input.name.trim(),
+    description: input.description?.trim() || undefined,
+    ownerRole: "admin",
+    createdBy: current?.createdBy ?? actorId,
+    items: input.items.map((item) => ({
+      id: makeId("meal_template_item"),
+      mealTag: item.mealTag,
+      recipeId: item.recipeId,
+      sortOrder: item.sortOrder,
+    })),
+    createdAt: current?.createdAt ?? timestamp,
+    updatedAt: timestamp,
+  };
+
+  return {
+    ...state,
+    mealPlanTemplates: current
+      ? state.mealPlanTemplates.map((template) => (template.id === current.id ? nextTemplate : template))
+      : [nextTemplate, ...state.mealPlanTemplates],
+  };
+}
+
+export function assignMealPlan(state: AppState, actorId: string, input: AssignedMealPlanInput) {
+  const template = state.mealPlanTemplates.find((candidate) => candidate.id === input.templateId);
+  if (!template) {
+    return state;
+  }
+
+  const timestamp = nowIso();
+  const nextAssigned: AssignedMealPlan = {
+    id: makeId("assigned_meal_plan"),
+    athleteId: input.athleteId,
+    templateId: template.id,
+    assignedBy: actorId,
+    name: template.name,
+    items: template.items.map((item) => ({
+      id: makeId("assigned_meal_plan_item"),
+      mealTag: item.mealTag,
+      recipeId: item.recipeId,
+      sortOrder: item.sortOrder,
+    })),
+    active: true,
+    assignedAt: timestamp,
+    updatedAt: timestamp,
+  };
+
+  return {
+    ...state,
+    assignedMealPlans: [
+      nextAssigned,
+      ...state.assignedMealPlans.map((plan) =>
+        plan.athleteId === input.athleteId ? { ...plan, active: false, updatedAt: timestamp } : plan,
+      ),
+    ],
+  };
+}
+
+export function getActiveMealPlanForAthlete(state: AppState, athleteId: string) {
+  return state.assignedMealPlans.find((plan) => plan.athleteId === athleteId && plan.active) ?? null;
+}
+
+export function getMealPlanRecipes(state: AppState, assignedMealPlan: AssignedMealPlan | null) {
+  if (!assignedMealPlan) {
+    return [];
+  }
+
+  const recipeById = new Map(state.recipes.map((recipe) => [recipe.id, recipe]));
+  return assignedMealPlan.items
+    .slice()
+    .sort((left, right) => left.sortOrder - right.sortOrder)
+    .flatMap((item) => {
+      const recipe = recipeById.get(item.recipeId);
+      return recipe ? [{ mealTag: item.mealTag, recipe }] : [];
+    });
+}

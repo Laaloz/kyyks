@@ -14,6 +14,7 @@ Sovellus tukee tällä hetkellä ainakin nämä ydinkäyttäjäpolut:
 - adminin käyttäjä- ja coach-athlete-hallinta
 - coachin ohjelmien rakennus, muokkaus, ajastus ja kutsujen hallinta
 - athlete-näkymän treenin käynnistys, sarjaloggaus, muistiinpanot ja mittaukset
+- admin-vetoinen ravintodomain: raaka-aineet, reseptit, ateriapohjat ja athleteille jaettavat ruokalistat
 - roolipohjainen dashboard ja keskusteluketjut
 
 ## Käyttötilat
@@ -75,6 +76,28 @@ Pidä domain-logiikka [`lib/domain.ts`](/Users/laalo/Omat projektit/rookiapp/lib
 - `npm run build`
 - `npm run typecheck`
 - `npm test`
+- `npm run import:fineli -- /polku/resultset.csv --dry-run`
+
+## Fineli-import
+Jos sinulla on Fineli-export CSV-muodossa, voit esikatsella tai importata sen `ingredient_catalog`-tauluun.
+
+Esikatselu:
+
+```bash
+npm run import:fineli -- /Users/laalo/Downloads/resultset.csv --dry-run
+```
+
+Tuonti Supabaseen:
+
+```bash
+FINELI_CREATED_BY=<admin-user-uuid> npm run import:fineli -- /Users/laalo/Downloads/resultset.csv
+```
+
+Huomiot:
+- skripti odottaa Fineli-tyyppistä `;`-eroteltua CSV:tä
+- ympäristömuuttujat `NEXT_PUBLIC_SUPABASE_URL` ja `SUPABASE_SERVICE_ROLE_KEY` pitää olla asetettuina
+- `FINELI_CREATED_BY` tai `FINELI_ADMIN_USER_ID` pitää osoittaa olemassa olevaan admin-käyttäjän UUID:hen
+- skripti muuntaa `kJ -> kcal` ja normalisoi arvot kuten `N/A` ja `<0.1`
 
 ## Rakenne
 - [`app`](/Users/laalo/Omat projektit/rookiapp/app): App Router -sivut ja API-routet

@@ -74,6 +74,8 @@ function mapStoredProfileRecord(profile: {
   weekly_measurement_reminders: boolean;
   theme_mode: "light" | "dark" | "mallu";
   load_increment_kg: 1 | 2.5 | 5 | null;
+  age?: number | null;
+  sex?: "female" | "male" | "other" | null;
   height_cm: number | null;
   weight_kg: number | null;
   waist_cm: number | null;
@@ -87,11 +89,14 @@ function mapStoredProfileRecord(profile: {
     profileImageUrl: profile.profile_image_url ?? undefined,
     email: profile.email,
     status: profile.status,
+    age: profile.age ?? undefined,
+    sex: profile.sex ?? undefined,
     heightCm: profile.height_cm ?? undefined,
     weightKg: profile.weight_kg ?? undefined,
     waistCm: profile.waist_cm ?? undefined,
     settings: {
       defaultDashboardView:
+        profile.default_dashboard_view === "nutrition" ||
         profile.default_dashboard_view === PROGRAMS_DASHBOARD_VIEW ||
         profile.default_dashboard_view === "invites" ||
         profile.default_dashboard_view === "athlete-log" ||
@@ -134,12 +139,20 @@ async function upsertActiveProfileFromInvite({
   authUserId,
   email,
   fullName,
+  age,
+  sex,
+  heightCm,
+  weightKg,
   invite,
 }: {
   admin: AdminClient;
   authUserId: string;
   email: string;
   fullName?: string | null;
+  age?: number;
+  sex?: "female" | "male" | "other";
+  heightCm?: number;
+  weightKg?: number;
   invite: ActivationInviteRecord;
 }) {
   const normalizedEmail = normalizeEmail(email);
@@ -157,6 +170,10 @@ async function upsertActiveProfileFromInvite({
       weekly_measurement_reminders: true,
       theme_mode: "light",
       load_increment_kg: 2.5,
+      age: age ?? null,
+      sex: sex ?? null,
+      height_cm: heightCm ?? null,
+      weight_kg: weightKg ?? null,
       created_at: createdAt,
       updated_at: createdAt,
     });
@@ -266,12 +283,20 @@ async function finalizeInviteProfileActivation({
   authUserId,
   email,
   fullName,
+  age,
+  sex,
+  heightCm,
+  weightKg,
   invite,
 }: {
   admin: AdminClient;
   authUserId: string;
   email: string;
   fullName?: string | null;
+  age?: number;
+  sex?: "female" | "male" | "other";
+  heightCm?: number;
+  weightKg?: number;
   invite: ActivationInviteRecord;
 }) {
   const profileResult = await upsertActiveProfileFromInvite({
@@ -279,6 +304,10 @@ async function finalizeInviteProfileActivation({
     authUserId,
     email,
     fullName,
+    age,
+    sex,
+    heightCm,
+    weightKg,
     invite,
   });
 
@@ -676,7 +705,7 @@ export async function listVisiblePendingInvites({
   const { data: profiles, error: profilesError } = await admin
     .from("profiles")
     .select(
-      "id, role, status, full_name, profile_image_url, email, default_dashboard_view, email_notifications, weekly_measurement_reminders, theme_mode, load_increment_kg, height_cm, weight_kg, waist_cm, created_at, updated_at",
+      "id, role, status, full_name, profile_image_url, email, default_dashboard_view, email_notifications, weekly_measurement_reminders, theme_mode, load_increment_kg, age, sex, height_cm, weight_kg, waist_cm, created_at, updated_at",
     )
     .eq("status", "active")
     .in("email", normalizedEmails);
@@ -803,10 +832,18 @@ export async function acceptInviteOnServer({
   token,
   fullName,
   password,
+  age,
+  sex,
+  heightCm,
+  weightKg,
 }: {
   token: string;
   fullName: string;
   password: string;
+  age?: number;
+  sex?: "female" | "male" | "other";
+  heightCm?: number;
+  weightKg?: number;
 }) {
   const admin = createSupabaseAdminClient();
   if (!admin) {
@@ -855,6 +892,10 @@ export async function acceptInviteOnServer({
       authUserId: existingProfile.id,
       email: normalizedInviteEmail,
       fullName: trimmedName,
+      age,
+      sex,
+      heightCm,
+      weightKg,
       invite,
     });
 
@@ -889,6 +930,10 @@ export async function acceptInviteOnServer({
       authUserId: existingAuthUser.id,
       email: normalizedInviteEmail,
       fullName: trimmedName,
+      age,
+      sex,
+      heightCm,
+      weightKg,
       invite,
     });
 
@@ -922,6 +967,10 @@ export async function acceptInviteOnServer({
     authUserId: authUser.id,
     email: normalizedInviteEmail,
     fullName: trimmedName,
+    age,
+    sex,
+    heightCm,
+    weightKg,
     invite,
   });
 

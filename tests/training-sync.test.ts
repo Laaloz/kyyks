@@ -57,6 +57,19 @@ function createSupabaseMock() {
       return { data: [], error: null };
     }
 
+    if (
+      state.table === "nutrition_profiles" ||
+      state.table === "ingredient_catalog" ||
+      state.table === "recipes" ||
+      state.table === "recipe_ingredients" ||
+      state.table === "meal_plan_templates" ||
+      state.table === "meal_plan_template_items" ||
+      state.table === "assigned_meal_plans" ||
+      state.table === "assigned_meal_plan_items"
+    ) {
+      return { data: [], error: null };
+    }
+
     if (state.table === "coach_athlete_assignments") {
       return { data: [], error: null };
     }
@@ -221,10 +234,10 @@ describe("loadVisibleSupabaseAppState", () => {
           call.values[0] === "session-target",
       ),
     ).toBe(true);
-    expect(snapshot.sessions).toHaveLength(1);
-    expect(snapshot.sessions[0]?.id).toBe("session-target");
-    expect(snapshot.sessions[0]?.setLogs).toHaveLength(1);
-    expect(snapshot.sessions[0]?.setLogs[0]).toMatchObject({
+    expect(snapshot.sessions ?? []).toHaveLength(1);
+    expect(snapshot.sessions?.[0]?.id).toBe("session-target");
+    expect(snapshot.sessions?.[0]?.setLogs ?? []).toHaveLength(1);
+    expect(snapshot.sessions?.[0]?.setLogs[0]).toMatchObject({
       id: "log-target",
       actualReps: 5,
       actualLoad: 100,

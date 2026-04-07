@@ -11,7 +11,7 @@ import { z } from "zod";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardDescription, CardTitle } from "@/components/ui/card";
-import { Input, Label } from "@/components/ui/field";
+import { Input, Label, Select } from "@/components/ui/field";
 import { hCaptchaSiteKey, isHCaptchaConfigured, isSupabaseConfigured } from "@/lib/config";
 import { isInviteExpired } from "@/lib/domain";
 import { useAppState } from "@/providers/app-state-provider";
@@ -50,11 +50,15 @@ export function InviteAcceptView({ token, initialInvite }: { token: string; init
   const captchaRef = useRef<HCaptcha | null>(null);
   const formId = useId();
   const requiresCaptcha = isSupabaseConfigured && isHCaptchaConfigured;
-  const form = useForm<z.infer<typeof acceptInviteSchema>>({
+  const form = useForm<z.input<typeof acceptInviteSchema>, unknown, z.output<typeof acceptInviteSchema>>({
     resolver: zodResolver(acceptInviteSchema),
     defaultValues: {
       fullName: "",
       password: "",
+      age: undefined,
+      sex: undefined,
+      heightCm: undefined,
+      weightKg: undefined,
     },
   });
 
@@ -107,6 +111,10 @@ export function InviteAcceptView({ token, initialInvite }: { token: string; init
               setIsSubmitting(true);
               const result = await acceptInvite(token, values.fullName, values.password, {
                 captchaToken: captchaToken ?? undefined,
+                age: values.age,
+                sex: values.sex,
+                heightCm: values.heightCm,
+                weightKg: values.weightKg,
               });
               setIsSubmitting(false);
 
@@ -138,6 +146,35 @@ export function InviteAcceptView({ token, initialInvite }: { token: string; init
               <div>
                 <Label htmlFor={`${formId}-new-password`}>Salasana</Label>
                 <Input id={`${formId}-new-password`} type="password" autoComplete="new-password" {...form.register("password")} />
+              </div>
+            </fieldset>
+            <fieldset className="space-y-4 rounded-xl border-2 border-[var(--border)] bg-[var(--surface-2)] p-4">
+              <legend className="px-2 text-sm font-semibold tracking-[0.03em] text-[var(--text-subtle)]">Valinnaiset profiilitiedot</legend>
+              <p className="text-sm text-[var(--text-muted)]">
+                Voit täydentää nämä nyt, niin ravintoprofiilin autolaskenta toimii myöhemmin paremmin. Kentät eivät ole pakollisia.
+              </p>
+              <div className="grid gap-4 sm:grid-cols-2">
+                <div>
+                  <Label htmlFor={`${formId}-age`}>Ikä</Label>
+                  <Input id={`${formId}-age`} type="number" inputMode="numeric" min={13} max={100} step="1" {...form.register("age")} />
+                </div>
+                <div>
+                  <Label htmlFor={`${formId}-sex`}>Sukupuoli</Label>
+                  <Select id={`${formId}-sex`} {...form.register("sex")}>
+                    <option value="">Valitse</option>
+                    <option value="female">Nainen</option>
+                    <option value="male">Mies</option>
+                    <option value="other">Muu</option>
+                  </Select>
+                </div>
+                <div>
+                  <Label htmlFor={`${formId}-height`}>Pituus (cm)</Label>
+                  <Input id={`${formId}-height`} type="number" inputMode="decimal" min={80} max={250} step="0.5" {...form.register("heightCm")} />
+                </div>
+                <div>
+                  <Label htmlFor={`${formId}-weight`}>Paino (kg)</Label>
+                  <Input id={`${formId}-weight`} type="number" inputMode="decimal" min={20} max={350} step="0.1" {...form.register("weightKg")} />
+                </div>
               </div>
             </fieldset>
             {requiresCaptcha ? (

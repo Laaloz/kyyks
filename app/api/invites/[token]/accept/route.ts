@@ -8,6 +8,10 @@ const requestSchema = z.object({
   fullName: z.string().min(2),
   password: z.string().min(6),
   captchaToken: z.string().optional(),
+  age: z.number().int().min(13).max(100).optional(),
+  sex: z.enum(["female", "male", "other"]).optional(),
+  heightCm: z.number().min(80).max(250).optional(),
+  weightKg: z.number().min(20).max(350).optional(),
 });
 
 export async function POST(request: Request, context: { params: Promise<{ token: string }> }) {
@@ -27,6 +31,10 @@ export async function POST(request: Request, context: { params: Promise<{ token:
     token,
     fullName: parsed.data.fullName,
     password: parsed.data.password,
+    age: parsed.data.age,
+    sex: parsed.data.sex,
+    heightCm: parsed.data.heightCm,
+    weightKg: parsed.data.weightKg,
   });
 
   if (!result.ok) {

@@ -20,6 +20,7 @@ import { InfoTooltip } from "@/components/ui/tooltip";
 import { AthleteSessionPanel } from "@/components/workout/athlete/session-panel";
 import { ConversationPanel } from "@/components/workout/conversation-panel";
 import { MetricTrendChart } from "@/components/workout/metric-trend-chart";
+import { NutritionAthleteCard } from "@/components/workout/nutrition-athlete-card";
 import { estimateStrengthCalories, getMeasurementsForUser, getWeightAtMoment } from "@/lib/body-metrics";
 import { calculateSessionDurationSeconds, getSessionProgress } from "@/lib/domain";
 import { withMinimumDelay } from "@/lib/min-delay";
@@ -1490,6 +1491,8 @@ export function AthleteDashboard({
           </Card>
         </div>
       ) : null}
+
+      {view === "overview" && currentUser ? <NutritionAthleteCard state={state} user={currentUser} /> : null}
 
       {view === "conversation" && currentUser ? (
         <ConversationPanel

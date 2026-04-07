@@ -11,6 +11,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardDescription, CardTitle } from "@/components/ui/card";
 import { Input, Label, Select } from "@/components/ui/field";
+import { NutritionAdminPanel } from "@/components/workout/nutrition-admin-panel";
 import { OwnMeasurementsCard } from "@/components/workout/own-measurements-card";
 import { getAdminCoachingCoverage, getAdminOverviewAthleteGroups } from "@/lib/admin-overview";
 import { getInviteLifecycleLabel, getVisiblePendingInvites } from "@/lib/invite-status";
@@ -196,6 +197,7 @@ export function AdminDashboard({
 
   return (
     <div className="grid gap-6">
+      {view === "nutrition" ? <NutritionAdminPanel /> : null}
       {view === "overview" ? (
         <>
           <div

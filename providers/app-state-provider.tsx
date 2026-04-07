@@ -29,6 +29,14 @@ import {
 } from "@/lib/auth-tokens";
 import { defaultGlobalExercises } from "@/lib/demo-data";
 import { getVisiblePendingInvites } from "@/lib/invite-status";
+import {
+  assignMealPlan,
+  calculateMacroTarget,
+  upsertIngredient,
+  upsertMealPlanTemplate,
+  upsertNutritionProfile,
+  upsertRecipe,
+} from "@/lib/nutrition";
 import { getProgramStatus, isProgramActive } from "@/lib/program-status";
 import {
   canActAsCoach,
@@ -44,14 +52,19 @@ import {
 import { createSupabaseBrowserClient } from "@/lib/supabase/client";
 import type {
   AppState,
+  AssignedMealPlanInput,
   ConversationEntry,
   ConversationEntryType,
   DashboardHomeView,
   Exercise,
+  IngredientInput,
   InviteInput,
+  MealPlanTemplateInput,
+  NutritionProfileInput,
   PasswordResetRequest,
   ProgramBuilderInput,
   ProgramUpdateInput,
+  RecipeInput,
   Role,
   ScheduledWorkout,
   UserProfile,
@@ -151,15 +164,17 @@ function warnIfOptimisticServerIdLeak(kind: "workout" | "program" | "template", 
 }
 
 export function preserveActiveWorkoutShells(previous: AppState, snapshot: SupabaseVisibleAppStateSnapshot) {
-  const snapshotWorkoutIds = new Set(snapshot.scheduledWorkouts.map((workout) => workout.id));
-  const snapshotSessionWorkoutIds = new Set(snapshot.sessions.map((session) => session.scheduledWorkoutId));
+  const snapshotScheduledWorkouts = snapshot.scheduledWorkouts ?? [];
+  const snapshotSessions = snapshot.sessions ?? [];
+  const snapshotWorkoutIds = new Set(snapshotScheduledWorkouts.map((workout) => workout.id));
+  const snapshotSessionWorkoutIds = new Set(snapshotSessions.map((session) => session.scheduledWorkoutId));
 
   const optimisticWorkouts = previous.scheduledWorkouts.filter(
     (workout) =>
       workout.id.startsWith("workout_") &&
       workout.status === "in_progress" &&
       !snapshotWorkoutIds.has(workout.id) &&
-      !snapshot.scheduledWorkouts.some(
+      !snapshotScheduledWorkouts.some(
         (candidate) =>
           candidate.athleteId === workout.athleteId &&
           candidate.programWorkoutId === workout.programWorkoutId &&
@@ -176,8 +191,8 @@ export function preserveActiveWorkoutShells(previous: AppState, snapshot: Supaba
   );
 
   return {
-    scheduledWorkouts: [...snapshot.scheduledWorkouts, ...optimisticWorkouts],
-    sessions: [...snapshot.sessions, ...optimisticSessions],
+    scheduledWorkouts: [...snapshotScheduledWorkouts, ...optimisticWorkouts],
+    sessions: [...snapshotSessions, ...optimisticSessions],
   };
 }
 
@@ -653,6 +668,31 @@ function normalizeState(raw: AppState): AppState {
   return {
     ...raw,
     bodyMeasurements: normalizedBodyMeasurements,
+    nutritionProfiles: (raw.nutritionProfiles ?? []).map((profile) => {
+      const user = normalizedUsers.find((candidate) => candidate.id === profile.userId);
+      const autoTarget = calculateMacroTarget({
+        age: user?.age,
+        heightCm: user?.heightCm,
+        weightKg: user?.weightKg,
+        sex: user?.sex,
+        goal: profile.goal,
+        activityLevel: profile.activityLevel,
+      });
+
+      return {
+        ...profile,
+        dietaryFlags: profile.dietaryFlags ?? [],
+        allergies: profile.allergies ?? [],
+        targetKcal: profile.calculationMode === "auto" ? autoTarget?.kcal ?? profile.targetKcal : profile.targetKcal,
+        proteinG: profile.calculationMode === "auto" ? autoTarget?.proteinG ?? profile.proteinG : profile.proteinG,
+        carbsG: profile.calculationMode === "auto" ? autoTarget?.carbsG ?? profile.carbsG : profile.carbsG,
+        fatG: profile.calculationMode === "auto" ? autoTarget?.fatG ?? profile.fatG : profile.fatG,
+      };
+    }),
+    ingredientsCatalog: raw.ingredientsCatalog ?? [],
+    recipes: raw.recipes ?? [],
+    mealPlanTemplates: raw.mealPlanTemplates ?? [],
+    assignedMealPlans: raw.assignedMealPlans ?? [],
     users: normalizedUsers,
     exercises: Array.from(mergedExerciseById.values()),
     passwordResetRequests: (raw.passwordResetRequests ?? []).filter(
@@ -797,6 +837,8 @@ type UserSettingsInput = {
   weeklyMeasurementReminders: boolean;
   themeMode: "light" | "dark" | "mallu";
   loadIncrementKg: 1 | 2.5 | 5;
+  age?: number | null;
+  sex?: "female" | "male" | "other" | null;
 };
 
 type UserMeasurementInput = {
@@ -835,6 +877,8 @@ function removeUserFromState(previous: AppState, targetUser: UserProfile): AppSt
   return {
     ...previous,
     users: previous.users.filter((user) => user.id !== targetUser.id),
+    nutritionProfiles: previous.nutritionProfiles.filter((profile) => profile.userId !== targetUser.id),
+    assignedMealPlans: previous.assignedMealPlans.filter((plan) => plan.athleteId !== targetUser.id),
     assignments: previous.assignments.filter(
       (assignment) => assignment.coachId !== targetUser.id && assignment.athleteId !== targetUser.id,
     ),
@@ -1054,6 +1098,8 @@ type SupabaseProfileRecord = {
   weekly_measurement_reminders: boolean;
   theme_mode: "light" | "dark" | "mallu";
   load_increment_kg: 1 | 2.5 | 5 | null;
+  age?: number | null;
+  sex?: "female" | "male" | "other" | null;
   height_cm: number | null;
   weight_kg: number | null;
   waist_cm: number | null;
@@ -1079,6 +1125,11 @@ function createEmptyAppState(): AppState {
   return {
     users: [],
     bodyMeasurements: [],
+    nutritionProfiles: [],
+    ingredientsCatalog: [],
+    recipes: [],
+    mealPlanTemplates: [],
+    assignedMealPlans: [],
     assignments: [],
     exercises: defaultGlobalExercises,
     templates: [],
@@ -1236,6 +1287,8 @@ function mapSupabaseProfileToUser(profile: SupabaseProfileRecord): UserProfile {
     profileImageUrl: profile.profile_image_url ?? undefined,
     email: profile.email,
     status: profile.status,
+    age: profile.age ?? undefined,
+    sex: profile.sex ?? undefined,
     heightCm: profile.height_cm ?? undefined,
     weightKg: profile.weight_kg ?? undefined,
     waistCm: profile.waist_cm ?? undefined,
@@ -1444,10 +1497,15 @@ type SupabaseInviteDirectorySnapshot = {
   activeProfiles?: UserProfile[];
 };
 
-type SupabaseVisibleAppStateSnapshot = Pick<
+type SupabaseVisibleAppStateSnapshot = Partial<Pick<
   AppState,
   | "users"
   | "bodyMeasurements"
+  | "nutritionProfiles"
+  | "ingredientsCatalog"
+  | "recipes"
+  | "mealPlanTemplates"
+  | "assignedMealPlans"
   | "assignments"
   | "exercises"
   | "templates"
@@ -1456,7 +1514,7 @@ type SupabaseVisibleAppStateSnapshot = Pick<
   | "sessions"
   | "notes"
   | "conversationEntries"
->;
+>>;
 
 export function reconcileSupabaseInviteDirectory(
   previous: AppState,
@@ -1528,10 +1586,10 @@ export function reconcileSupabaseVisibleState(
   const filteredSnapshot: SupabaseVisibleAppStateSnapshot = suppressedWorkoutIds.size
     ? {
         ...snapshot,
-        scheduledWorkouts: snapshot.scheduledWorkouts.filter((workout) => !suppressedWorkoutIds.has(workout.id)),
-        sessions: snapshot.sessions.filter((session) => !suppressedWorkoutIds.has(session.scheduledWorkoutId)),
-        notes: snapshot.notes.filter((note) => {
-          const session = snapshot.sessions.find((item) => item.id === note.sessionId);
+        scheduledWorkouts: (snapshot.scheduledWorkouts ?? []).filter((workout) => !suppressedWorkoutIds.has(workout.id)),
+        sessions: (snapshot.sessions ?? []).filter((session) => !suppressedWorkoutIds.has(session.scheduledWorkoutId)),
+        notes: (snapshot.notes ?? []).filter((note) => {
+          const session = (snapshot.sessions ?? []).find((item) => item.id === note.sessionId);
           return session ? !suppressedWorkoutIds.has(session.scheduledWorkoutId) : true;
         }),
       }
@@ -1589,6 +1647,11 @@ export function reconcileSupabaseVisibleState(
     ...previous,
     users: [...(snapshot.users ?? previous.users), ...preservedInvitedUsers],
     bodyMeasurements: snapshotMode === "workouts" ? previous.bodyMeasurements : (filteredSnapshot.bodyMeasurements ?? previous.bodyMeasurements),
+    nutritionProfiles: snapshotMode === "workouts" ? previous.nutritionProfiles : (filteredSnapshot.nutritionProfiles ?? previous.nutritionProfiles),
+    ingredientsCatalog: snapshotMode === "workouts" ? previous.ingredientsCatalog : (filteredSnapshot.ingredientsCatalog ?? previous.ingredientsCatalog),
+    recipes: snapshotMode === "workouts" ? previous.recipes : (filteredSnapshot.recipes ?? previous.recipes),
+    mealPlanTemplates: snapshotMode === "workouts" ? previous.mealPlanTemplates : (filteredSnapshot.mealPlanTemplates ?? previous.mealPlanTemplates),
+    assignedMealPlans: snapshotMode === "workouts" ? previous.assignedMealPlans : (filteredSnapshot.assignedMealPlans ?? previous.assignedMealPlans),
     assignments: snapshotMode === "workouts" ? previous.assignments : (filteredSnapshot.assignments ?? previous.assignments),
     exercises: snapshotMode === "workouts" ? previous.exercises : (filteredSnapshot.exercises ?? previous.exercises),
     templates: snapshotMode === "workouts" ? previous.templates : (filteredSnapshot.templates ?? previous.templates),
@@ -1888,9 +1951,9 @@ async function fetchSupabaseProfile(supabase: NonNullable<ReturnType<typeof crea
 
   const { data, error } = await supabase
     .from("profiles")
-    .select(
-      "id, role, status, full_name, profile_image_url, email, default_dashboard_view, email_notifications, weekly_measurement_reminders, theme_mode, load_increment_kg, height_cm, weight_kg, waist_cm, created_at, updated_at",
-    )
+            .select(
+              "id, role, status, full_name, profile_image_url, email, default_dashboard_view, email_notifications, weekly_measurement_reminders, theme_mode, load_increment_kg, age, sex, height_cm, weight_kg, waist_cm, created_at, updated_at",
+            )
     .eq("id", userId)
     .maybeSingle();
 
@@ -2104,6 +2167,11 @@ interface AppStateContextValue {
   uploadCurrentUserProfileImage: (file: File) => Promise<ActionResult>;
   removeCurrentUserProfileImage: () => Promise<ActionResult>;
   updateCurrentUserMeasurements: (input: UserMeasurementInput) => Promise<ActionResult>;
+  saveNutritionProfile: (input: NutritionProfileInput) => Promise<ActionResult>;
+  saveIngredient: (input: IngredientInput) => Promise<ActionResult>;
+  saveRecipe: (input: RecipeInput) => Promise<ActionResult>;
+  saveMealPlanTemplate: (input: MealPlanTemplateInput) => Promise<ActionResult>;
+  assignMealPlanTemplate: (input: AssignedMealPlanInput) => Promise<ActionResult>;
   requestCurrentUserPasswordReset: () => Promise<PasswordResetRequestResult>;
   requestPasswordResetForEmail: (input: PublicPasswordResetRequestInput) => Promise<PasswordResetRequestResult>;
   adminSendPasswordResetEmail: (userId: string) => Promise<PasswordResetRequestResult>;
@@ -2113,7 +2181,18 @@ interface AppStateContextValue {
   adminDeleteUser: (userId: string) => Promise<ActionResult>;
   createInvite: (input: InviteInput) => Promise<ActionResult>;
   resendInvite: (inviteId: string) => Promise<ActionResult>;
-  acceptInvite: (token: string, fullName: string, password: string, options?: { captchaToken?: string }) => Promise<LoginResult>;
+  acceptInvite: (
+    token: string,
+    fullName: string,
+    password: string,
+    options?: {
+      captchaToken?: string;
+      age?: number;
+      sex?: "female" | "male" | "other";
+      heightCm?: number;
+      weightKg?: number;
+    },
+  ) => Promise<LoginResult>;
   createProgram: (input: ProgramBuilderInput) => Promise<CreateProgramResult>;
   updateProgram: (programId: string, patch: ProgramUpdateInput) => Promise<ActionResult>;
   setProgramStatus: (programId: string, status: "active" | "archived" | "removed") => Promise<ActionResult>;
@@ -3498,6 +3577,10 @@ function findResolvedUserIdInSnapshot(
 
         const fullName = input.fullName.trim();
         const profileImageUrl = input.profileImageUrl?.trim() || undefined;
+        const hasAgeInput = Object.prototype.hasOwnProperty.call(input, "age");
+        const hasSexInput = Object.prototype.hasOwnProperty.call(input, "sex");
+        const age = hasAgeInput ? input.age ?? undefined : currentUser.age;
+        const sex = hasSexInput ? input.sex ?? undefined : currentUser.sex;
         if (fullName.length < 2) {
           return { ok: false, message: "Nimen pitää olla vähintään 2 merkkiä." };
         }
@@ -3515,10 +3598,13 @@ function findResolvedUserIdInSnapshot(
         const hasChanges =
           currentUser.fullName !== fullName ||
           currentUser.profileImageUrl !== profileImageUrl ||
+          currentUser.age !== age ||
+          currentUser.sex !== sex ||
           currentSettings.defaultDashboardView !== nextSettings.defaultDashboardView ||
           currentSettings.emailNotifications !== nextSettings.emailNotifications ||
           currentSettings.weeklyMeasurementReminders !== nextSettings.weeklyMeasurementReminders ||
-          currentSettings.themeMode !== nextSettings.themeMode;
+          currentSettings.themeMode !== nextSettings.themeMode ||
+          currentSettings.loadIncrementKg !== nextSettings.loadIncrementKg;
 
         if (!hasChanges) {
           return { ok: true, message: "Ei tallennettavia muutoksia." };
@@ -3532,6 +3618,8 @@ function findResolvedUserIdInSnapshot(
                   ...user,
                   fullName,
                   profileImageUrl,
+                  age,
+                  sex,
                   updatedAt: timestamp,
                   settings: normalizeUserSettings(user.role, {
                     ...user.settings,
@@ -3565,6 +3653,8 @@ function findResolvedUserIdInSnapshot(
                 weeklyMeasurementReminders: input.weeklyMeasurementReminders,
                 themeMode: input.themeMode,
                 loadIncrementKg: input.loadIncrementKg,
+                ...(hasAgeInput ? { age: input.age ?? null } : {}),
+                ...(hasSexInput ? { sex: input.sex ?? null } : {}),
               }),
             });
 
@@ -3744,6 +3834,125 @@ function findResolvedUserIdInSnapshot(
 
         setState((previous) => applyPartialUserMeasurementUpdate(previous, currentUser.id, input, timestamp));
 
+        return { ok: true };
+      },
+      async saveNutritionProfile(input) {
+        if (!currentUser || currentUser.role !== "admin") {
+          return { ok: false, message: "Vain admin voi hallita ravintoprofiileja." };
+        }
+
+        if (!state.users.some((user) => user.id === input.userId && isAthleteRole(user.role))) {
+          return { ok: false, message: "Valitse aktiivinen treenaaja ravintoprofiilille." };
+        }
+
+        if (supabase) {
+          const response = await fetch("/api/nutrition/profile", {
+            method: "PATCH",
+            headers: {
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify(input),
+          });
+          const payload = (await response.json().catch(() => null)) as { message?: string } | null;
+          if (!response.ok) {
+            await refreshSupabaseVisibleState();
+            return { ok: false, message: payload?.message ?? "Ravintoprofiilin tallennus epäonnistui." };
+          }
+        }
+
+        setState((previous) => upsertNutritionProfile(previous, currentUser.id, input));
+        return { ok: true };
+      },
+      async saveIngredient(input) {
+        if (!currentUser || currentUser.role !== "admin") {
+          return { ok: false, message: "Vain admin voi hallita raaka-aineita." };
+        }
+
+        if (supabase) {
+          const response = await fetch("/api/nutrition/ingredients", {
+            method: input.id ? "PATCH" : "POST",
+            headers: {
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify(input),
+          });
+          const payload = (await response.json().catch(() => null)) as { message?: string } | null;
+          if (!response.ok) {
+            await refreshSupabaseVisibleState();
+            return { ok: false, message: payload?.message ?? "Raaka-aineen tallennus epäonnistui." };
+          }
+        }
+
+        setState((previous) => upsertIngredient(previous, currentUser.id, input));
+        return { ok: true };
+      },
+      async saveRecipe(input) {
+        if (!currentUser || currentUser.role !== "admin") {
+          return { ok: false, message: "Vain admin voi hallita reseptejä." };
+        }
+
+        if (supabase) {
+          const response = await fetch("/api/nutrition/recipes", {
+            method: input.id ? "PATCH" : "POST",
+            headers: {
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify(input),
+          });
+          const payload = (await response.json().catch(() => null)) as { message?: string } | null;
+          if (!response.ok) {
+            await refreshSupabaseVisibleState();
+            return { ok: false, message: payload?.message ?? "Reseptin tallennus epäonnistui." };
+          }
+        }
+
+        setState((previous) => upsertRecipe(previous, currentUser.id, input));
+        return { ok: true };
+      },
+      async saveMealPlanTemplate(input) {
+        if (!currentUser || currentUser.role !== "admin") {
+          return { ok: false, message: "Vain admin voi hallita ateriapohjia." };
+        }
+
+        if (supabase) {
+          const response = await fetch("/api/nutrition/meal-plans", {
+            method: input.id ? "PATCH" : "POST",
+            headers: {
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify(input),
+          });
+          const payload = (await response.json().catch(() => null)) as { message?: string } | null;
+          if (!response.ok) {
+            await refreshSupabaseVisibleState();
+            return { ok: false, message: payload?.message ?? "Ateriapohjan tallennus epäonnistui." };
+          }
+        }
+
+        setState((previous) => upsertMealPlanTemplate(previous, currentUser.id, input));
+        return { ok: true };
+      },
+      async assignMealPlanTemplate(input) {
+        if (!currentUser || currentUser.role !== "admin") {
+          return { ok: false, message: "Vain admin voi jakaa ateriapohjia." };
+        }
+
+        if (supabase) {
+          const response = await fetch("/api/nutrition/meal-plans/assign", {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify(input),
+          });
+          const payload = (await response.json().catch(() => null)) as { message?: string } | null;
+          if (!response.ok) {
+            await refreshSupabaseVisibleState();
+            return { ok: false, message: payload?.message ?? "Ateriapohjan jako epäonnistui." };
+          }
+        }
+
+        setState((previous) => assignMealPlan(previous, currentUser.id, input));
         return { ok: true };
       },
       async requestCurrentUserPasswordReset() {
@@ -4582,7 +4791,15 @@ function findResolvedUserIdInSnapshot(
             headers: {
               "Content-Type": "application/json",
             },
-            body: JSON.stringify({ fullName, password, captchaToken: options?.captchaToken }),
+            body: JSON.stringify({
+              fullName,
+              password,
+              captchaToken: options?.captchaToken,
+              age: options?.age,
+              sex: options?.sex,
+              heightCm: options?.heightCm,
+              weightKg: options?.weightKg,
+            }),
           });
           const payload = (await response.json().catch(() => null)) as { message?: string; email?: string } | null;
 

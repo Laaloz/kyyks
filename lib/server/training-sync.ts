@@ -6,10 +6,15 @@ import { isAthleteRole } from "@/lib/role-access";
 import {
   PROGRAMS_DASHBOARD_VIEW,
   type AppState,
+  type AssignedMealPlan,
   type BodyMeasurement,
   type CoachAthleteAssignment,
   type ConversationEntry,
   type Exercise,
+  type Ingredient,
+  type MealPlanTemplate,
+  type NutritionProfile,
+  type Recipe,
   type ScheduledWorkout,
   type TrainingPlan,
   type UserProfile,
@@ -36,6 +41,8 @@ type ProfileRow = {
   weekly_measurement_reminders: boolean;
   theme_mode: "light" | "dark" | "mallu";
   load_increment_kg: 1 | 2.5 | 5 | null;
+  age?: number | string | null;
+  sex?: "female" | "male" | "other" | null;
   height_cm: number | string | null;
   weight_kg: number | string | null;
   waist_cm: number | string | null;
@@ -159,10 +166,119 @@ type ConversationEntryRow = {
   created_at: string;
 };
 
-export type SupabaseVisibleAppStateSnapshot = Pick<
+type NutritionProfileRow = {
+  id: string;
+  user_id: string;
+  goal: NutritionProfile["goal"];
+  activity_level: NutritionProfile["activityLevel"];
+  meals_per_day: number;
+  target_kcal: number;
+  protein_g: number;
+  carbs_g: number;
+  fat_g: number;
+  calculation_mode: NutritionProfile["calculationMode"];
+  coach_notes: string | null;
+  dietary_flags: string[] | null;
+  allergies: string[] | null;
+  created_by: string;
+  updated_by: string;
+  created_at: string;
+  updated_at: string;
+};
+
+type IngredientRow = {
+  id: string;
+  name: string;
+  source: Ingredient["source"];
+  source_external_id: string | null;
+  owner_role: Ingredient["ownerRole"];
+  created_by: string;
+  default_purchase_unit: Ingredient["defaultPurchaseUnit"] | null;
+  grams_per_unit: number | string | null;
+  kcal_per_100: number | string;
+  protein_per_100: number | string;
+  carbs_per_100: number | string;
+  fat_per_100: number | string;
+  created_at: string;
+  updated_at: string;
+};
+
+type RecipeIngredientRow = {
+  id: string;
+  recipe_id: string;
+  ingredient_id: string | null;
+  ingredient_name: string;
+  quantity: number | string | null;
+  unit: Recipe["ingredients"][number]["unit"];
+  display_quantity: string | null;
+  display_unit: string | null;
+  normalized_quantity: number | string | null;
+  ingredient_role: Recipe["ingredients"][number]["ingredientRole"];
+  scaling_mode: Recipe["ingredients"][number]["scalingMode"];
+  sort_order: number;
+};
+
+type RecipeRow = {
+  id: string;
+  name: string;
+  description: string | null;
+  instructions: string;
+  meal_tag: Recipe["mealTag"];
+  owner_role: Recipe["ownerRole"];
+  created_by: string;
+  default_servings: number;
+  min_servings: number;
+  max_servings: number;
+  created_at: string;
+  updated_at: string;
+};
+
+type MealPlanTemplateItemRow = {
+  id: string;
+  template_id: string;
+  meal_tag: MealPlanTemplate["items"][number]["mealTag"];
+  recipe_id: string;
+  sort_order: number;
+};
+
+type MealPlanTemplateRow = {
+  id: string;
+  name: string;
+  description: string | null;
+  owner_role: MealPlanTemplate["ownerRole"];
+  created_by: string;
+  created_at: string;
+  updated_at: string;
+};
+
+type AssignedMealPlanItemRow = {
+  id: string;
+  assigned_plan_id: string;
+  meal_tag: AssignedMealPlan["items"][number]["mealTag"];
+  recipe_id: string;
+  sort_order: number;
+};
+
+type AssignedMealPlanRow = {
+  id: string;
+  athlete_id: string;
+  template_id: string;
+  assigned_by: string;
+  name: string;
+  active: boolean;
+  assigned_at: string;
+  updated_at: string;
+};
+
+export type SupabaseVisibleAppStateSnapshot = Partial<Pick<
   AppState,
   | "users"
   | "bodyMeasurements"
+  | "nutritionProfiles"
+  | "ingredientsCatalog"
+  | "recipes"
+  | "mealPlanTemplates"
+  | "assignedMealPlans"
   | "assignments"
   | "exercises"
   | "templates"
@@ -171,7 +287,7 @@ export type SupabaseVisibleAppStateSnapshot = Pick<
   | "sessions"
   | "notes"
   | "conversationEntries"
-> & { mode?: "full" | "workouts" };
+>> & { mode?: "full" | "workouts" };
 
 function toNumberOrUndefined(value: number | string | null | undefined) {
   if (value === null || value === undefined || value === "") {
@@ -190,12 +306,15 @@ function mapProfileRow(profile: ProfileRow): UserProfile {
     profileImageUrl: profile.profile_image_url ?? undefined,
     email: profile.email,
     status: profile.status,
+    age: toNumberOrUndefined(profile.age),
+    sex: profile.sex ?? undefined,
     heightCm: toNumberOrUndefined(profile.height_cm),
     weightKg: toNumberOrUndefined(profile.weight_kg),
     waistCm: toNumberOrUndefined(profile.waist_cm),
     settings: {
       defaultDashboardView:
         profile.default_dashboard_view === "overview" ||
+        profile.default_dashboard_view === "nutrition" ||
         profile.default_dashboard_view === "athletes" ||
         profile.default_dashboard_view === PROGRAMS_DASHBOARD_VIEW ||
         profile.default_dashboard_view === "invites" ||
@@ -224,6 +343,47 @@ function mapBodyMeasurementRow(entry: BodyMeasurementRow): BodyMeasurement {
     waistCm: toNumberOrUndefined(entry.waist_cm),
     measuredAt: entry.measured_at,
     createdAt: entry.created_at,
+  };
+}
+
+function mapNutritionProfileRow(entry: NutritionProfileRow): NutritionProfile {
+  return {
+    id: entry.id,
+    userId: entry.user_id,
+    goal: entry.goal,
+    activityLevel: entry.activity_level,
+    mealsPerDay: entry.meals_per_day,
+    targetKcal: entry.target_kcal,
+    proteinG: entry.protein_g,
+    carbsG: entry.carbs_g,
+    fatG: entry.fat_g,
+    calculationMode: entry.calculation_mode,
+    coachNotes: entry.coach_notes ?? undefined,
+    dietaryFlags: entry.dietary_flags ?? [],
+    allergies: entry.allergies ?? [],
+    createdBy: entry.created_by,
+    updatedBy: entry.updated_by,
+    createdAt: entry.created_at,
+    updatedAt: entry.updated_at,
+  };
+}
+
+function mapIngredientRow(entry: IngredientRow): Ingredient {
+  return {
+    id: entry.id,
+    name: entry.name,
+    source: entry.source,
+    sourceExternalId: entry.source_external_id ?? undefined,
+    ownerRole: entry.owner_role,
+    createdBy: entry.created_by,
+    defaultPurchaseUnit: entry.default_purchase_unit ?? undefined,
+    gramsPerUnit: toNumberOrUndefined(entry.grams_per_unit),
+    kcalPer100: toNumberOrUndefined(entry.kcal_per_100) ?? 0,
+    proteinPer100: toNumberOrUndefined(entry.protein_per_100) ?? 0,
+    carbsPer100: toNumberOrUndefined(entry.carbs_per_100) ?? 0,
+    fatPer100: toNumberOrUndefined(entry.fat_per_100) ?? 0,
+    createdAt: entry.created_at,
+    updatedAt: entry.updated_at,
   };
 }
 
@@ -328,6 +488,14 @@ export async function loadVisibleSupabaseAppState(
   const [
     profilesResult,
     bodyMeasurementsResult,
+    nutritionProfilesResult,
+    ingredientsResult,
+    recipesResult,
+    recipeIngredientsResult,
+    mealPlanTemplatesResult,
+    mealPlanTemplateItemsResult,
+    assignedMealPlansResult,
+    assignedMealPlanItemsResult,
     assignmentsResult,
     exercisesResult,
     plansResult,
@@ -340,7 +508,7 @@ export async function loadVisibleSupabaseAppState(
       ? supabase
           .from("profiles")
           .select(
-            "id, role, status, full_name, profile_image_url, email, default_dashboard_view, email_notifications, weekly_measurement_reminders, theme_mode, load_increment_kg, height_cm, weight_kg, waist_cm, created_at, updated_at",
+            "id, role, status, full_name, profile_image_url, email, default_dashboard_view, email_notifications, weekly_measurement_reminders, theme_mode, load_increment_kg, age, sex, height_cm, weight_kg, waist_cm, created_at, updated_at",
           )
           .order("created_at", { ascending: false })
       : Promise.resolve({ data: [] as ProfileRow[], error: null }),
@@ -351,6 +519,57 @@ export async function loadVisibleSupabaseAppState(
           .limit(lite ? 60 : isAdminViewer ? 500 : 200)
           .order("measured_at", { ascending: false })
       : Promise.resolve({ data: [] as BodyMeasurementRow[], error: null }),
+    mode === "full"
+      ? supabase
+          .from("nutrition_profiles")
+          .select("id, user_id, goal, activity_level, meals_per_day, target_kcal, protein_g, carbs_g, fat_g, calculation_mode, coach_notes, dietary_flags, allergies, created_by, updated_by, created_at, updated_at")
+          .order("updated_at", { ascending: false })
+      : Promise.resolve({ data: [] as NutritionProfileRow[], error: null }),
+    mode === "full"
+      ? supabase
+          .from("ingredient_catalog")
+          .select("id, name, source, source_external_id, owner_role, created_by, default_purchase_unit, grams_per_unit, kcal_per_100, protein_per_100, carbs_per_100, fat_per_100, created_at, updated_at")
+          .order("name", { ascending: true })
+      : Promise.resolve({ data: [] as IngredientRow[], error: null }),
+    mode === "full"
+      ? supabase
+          .from("recipes")
+          .select("id, name, description, instructions, meal_tag, owner_role, created_by, default_servings, min_servings, max_servings, created_at, updated_at")
+          .order("updated_at", { ascending: false })
+      : Promise.resolve({ data: [] as RecipeRow[], error: null }),
+    mode === "full"
+      ? supabase
+          .from("recipe_ingredients")
+          .select("id, recipe_id, ingredient_id, ingredient_name, quantity, unit, display_quantity, display_unit, normalized_quantity, ingredient_role, scaling_mode, sort_order")
+          .order("recipe_id", { ascending: true })
+          .order("sort_order", { ascending: true })
+      : Promise.resolve({ data: [] as RecipeIngredientRow[], error: null }),
+    mode === "full"
+      ? supabase
+          .from("meal_plan_templates")
+          .select("id, name, description, owner_role, created_by, created_at, updated_at")
+          .order("updated_at", { ascending: false })
+      : Promise.resolve({ data: [] as MealPlanTemplateRow[], error: null }),
+    mode === "full"
+      ? supabase
+          .from("meal_plan_template_items")
+          .select("id, template_id, meal_tag, recipe_id, sort_order")
+          .order("template_id", { ascending: true })
+          .order("sort_order", { ascending: true })
+      : Promise.resolve({ data: [] as MealPlanTemplateItemRow[], error: null }),
+    mode === "full"
+      ? supabase
+          .from("assigned_meal_plans")
+          .select("id, athlete_id, template_id, assigned_by, name, active, assigned_at, updated_at")
+          .order("assigned_at", { ascending: false })
+      : Promise.resolve({ data: [] as AssignedMealPlanRow[], error: null }),
+    mode === "full"
+      ? supabase
+          .from("assigned_meal_plan_items")
+          .select("id, assigned_plan_id, meal_tag, recipe_id, sort_order")
+          .order("assigned_plan_id", { ascending: true })
+          .order("sort_order", { ascending: true })
+      : Promise.resolve({ data: [] as AssignedMealPlanItemRow[], error: null }),
     mode === "full"
       ? supabase
           .from("coach_athlete_assignments")
@@ -396,6 +615,14 @@ export async function loadVisibleSupabaseAppState(
 
   throwIfQueryFailed("Profiles", profilesResult);
   throwIfQueryFailed("Body measurements", bodyMeasurementsResult);
+  throwIfQueryFailed("Nutrition profiles", nutritionProfilesResult);
+  throwIfQueryFailed("Ingredients", ingredientsResult);
+  throwIfQueryFailed("Recipes", recipesResult);
+  throwIfQueryFailed("Recipe ingredients", recipeIngredientsResult);
+  throwIfQueryFailed("Meal plan templates", mealPlanTemplatesResult);
+  throwIfQueryFailed("Meal plan template items", mealPlanTemplateItemsResult);
+  throwIfQueryFailed("Assigned meal plans", assignedMealPlansResult);
+  throwIfQueryFailed("Assigned meal plan items", assignedMealPlanItemsResult);
   throwIfQueryFailed("Assignments", assignmentsResult);
   throwIfQueryFailed("Exercises", exercisesResult);
   throwIfQueryFailed("Training plans", plansResult);
@@ -427,6 +654,85 @@ export async function loadVisibleSupabaseAppState(
   const bodyMeasurements = (bodyMeasurementsResult.data ?? []).map((entry) =>
     mapBodyMeasurementRow(entry as BodyMeasurementRow),
   );
+  const nutritionProfiles = (nutritionProfilesResult.data ?? []).map((entry) =>
+    mapNutritionProfileRow(entry as NutritionProfileRow),
+  );
+  const ingredientsCatalog = (ingredientsResult.data ?? []).map((entry) => mapIngredientRow(entry as IngredientRow));
+  const recipeIngredientsByRecipeId = new Map<string, Recipe["ingredients"]>();
+  ((recipeIngredientsResult.data ?? []) as RecipeIngredientRow[]).forEach((entry) => {
+    const existing = recipeIngredientsByRecipeId.get(entry.recipe_id) ?? [];
+    existing.push({
+      id: entry.id,
+      ingredientId: entry.ingredient_id ?? undefined,
+      ingredientName: entry.ingredient_name,
+      quantity: toNumberOrUndefined(entry.quantity),
+      unit: entry.unit,
+      displayQuantity: entry.display_quantity ?? undefined,
+      displayUnit: entry.display_unit ?? undefined,
+      normalizedQuantity: toNumberOrUndefined(entry.normalized_quantity),
+      ingredientRole: entry.ingredient_role,
+      scalingMode: entry.scaling_mode,
+    });
+    recipeIngredientsByRecipeId.set(entry.recipe_id, existing);
+  });
+  const recipes = ((recipesResult.data ?? []) as RecipeRow[]).map((entry) => ({
+    id: entry.id,
+    name: entry.name,
+    description: entry.description ?? undefined,
+    instructions: entry.instructions,
+    mealTag: entry.meal_tag,
+    ownerRole: entry.owner_role,
+    createdBy: entry.created_by,
+    defaultServings: entry.default_servings,
+    minServings: entry.min_servings,
+    maxServings: entry.max_servings,
+    ingredients: recipeIngredientsByRecipeId.get(entry.id) ?? [],
+    createdAt: entry.created_at,
+    updatedAt: entry.updated_at,
+  }));
+  const mealPlanTemplateItemsByTemplateId = new Map<string, MealPlanTemplate["items"]>();
+  ((mealPlanTemplateItemsResult.data ?? []) as MealPlanTemplateItemRow[]).forEach((entry) => {
+    const existing = mealPlanTemplateItemsByTemplateId.get(entry.template_id) ?? [];
+    existing.push({
+      id: entry.id,
+      mealTag: entry.meal_tag,
+      recipeId: entry.recipe_id,
+      sortOrder: entry.sort_order,
+    });
+    mealPlanTemplateItemsByTemplateId.set(entry.template_id, existing);
+  });
+  const mealPlanTemplates = ((mealPlanTemplatesResult.data ?? []) as MealPlanTemplateRow[]).map((entry) => ({
+    id: entry.id,
+    name: entry.name,
+    description: entry.description ?? undefined,
+    ownerRole: entry.owner_role,
+    createdBy: entry.created_by,
+    items: mealPlanTemplateItemsByTemplateId.get(entry.id) ?? [],
+    createdAt: entry.created_at,
+    updatedAt: entry.updated_at,
+  }));
+  const assignedMealPlanItemsByPlanId = new Map<string, AssignedMealPlan["items"]>();
+  ((assignedMealPlanItemsResult.data ?? []) as AssignedMealPlanItemRow[]).forEach((entry) => {
+    const existing = assignedMealPlanItemsByPlanId.get(entry.assigned_plan_id) ?? [];
+    existing.push({
+      id: entry.id,
+      mealTag: entry.meal_tag,
+      recipeId: entry.recipe_id,
+      sortOrder: entry.sort_order,
+    });
+    assignedMealPlanItemsByPlanId.set(entry.assigned_plan_id, existing);
+  });
+  const assignedMealPlans = ((assignedMealPlansResult.data ?? []) as AssignedMealPlanRow[]).map((entry) => ({
+    id: entry.id,
+    athleteId: entry.athlete_id,
+    templateId: entry.template_id,
+    assignedBy: entry.assigned_by,
+    name: entry.name,
+    items: assignedMealPlanItemsByPlanId.get(entry.id) ?? [],
+    active: entry.active,
+    assignedAt: entry.assigned_at,
+    updatedAt: entry.updated_at,
+  }));
   const assignments = (assignmentsResult.data ?? []).map((entry) =>
     mapAssignmentRow(entry as AssignmentRow),
   );
@@ -498,6 +804,11 @@ export async function loadVisibleSupabaseAppState(
     mode,
     users,
     bodyMeasurements,
+    nutritionProfiles,
+    ingredientsCatalog,
+    recipes,
+    mealPlanTemplates,
+    assignedMealPlans,
     assignments,
     exercises,
     templates,

@@ -111,6 +111,11 @@ describe("GET /api/app-state", () => {
     loadVisibleSupabaseAppStateMock.mockResolvedValue({
       users: [],
       bodyMeasurements: [],
+      nutritionProfiles: [],
+      ingredientsCatalog: [],
+      recipes: [],
+      mealPlanTemplates: [],
+      assignedMealPlans: [],
       assignments: [],
       exercises: [],
       templates: [],

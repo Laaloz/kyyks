@@ -36,6 +36,11 @@ describe("fetchSupabaseVisibleStateSnapshotWithClient", () => {
         JSON.stringify({
           users: [],
           bodyMeasurements: [],
+          nutritionProfiles: [],
+          ingredientsCatalog: [],
+          recipes: [],
+          mealPlanTemplates: [],
+          assignedMealPlans: [],
           assignments: [],
           exercises: [],
           templates: [],

@@ -1,0 +1,111 @@
+"use client";
+
+import { Card, CardDescription, CardTitle } from "@/components/ui/card";
+import { mealTagLabel, getActiveMealPlanForAthlete, getMealPlanRecipes, calculateRecipeNutrition } from "@/lib/nutrition";
+import type { AppState, UserProfile } from "@/lib/types";
+
+export function NutritionAthleteCard({
+  state,
+  user,
+}: {
+  state: AppState;
+  user: UserProfile;
+}) {
+  const nutritionProfile = state.nutritionProfiles.find((profile) => profile.userId === user.id) ?? null;
+  const assignedPlan = getActiveMealPlanForAthlete(state, user.id);
+  const mealPlanRecipes = getMealPlanRecipes(state, assignedPlan);
+
+  if (!nutritionProfile && !assignedPlan) {
+    return null;
+  }
+
+  const total = mealPlanRecipes.reduce(
+    (sum, item) => {
+      const recipeNutrition = item.recipe.nutritionPerServing ?? calculateRecipeNutrition(item.recipe, state.ingredientsCatalog).nutritionPerServing;
+      return {
+        kcal: sum.kcal + recipeNutrition.kcal,
+        proteinG: sum.proteinG + recipeNutrition.proteinG,
+        carbsG: sum.carbsG + recipeNutrition.carbsG,
+        fatG: sum.fatG + recipeNutrition.fatG,
+      };
+    },
+    { kcal: 0, proteinG: 0, carbsG: 0, fatG: 0 },
+  );
+
+  return (
+    <Card className="border-[var(--border-strong)]">
+      <div className="space-y-5">
+        <div>
+          <p className="text-xs font-semibold tracking-[0.04em] text-[var(--text-subtle)]">Ruokalista</p>
+          <CardTitle className="mt-2 text-2xl">Päivän ateriat</CardTitle>
+          <CardDescription className="mt-2">
+            Näet tämän hetken aktiivisen ateriapohjan, annokset sekä karkean osuvuuden päivän tavoitteeseen.
+          </CardDescription>
+        </div>
+
+        {nutritionProfile ? (
+          <div className="grid gap-3 sm:grid-cols-4">
+            <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface-2)] px-4 py-3">
+              <p className="text-xs font-semibold tracking-[0.04em] text-[var(--text-subtle)]">Tavoite kcal</p>
+              <p className="mt-1 text-xl font-semibold text-[var(--text)]">{nutritionProfile.targetKcal}</p>
+            </div>
+            <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface-2)] px-4 py-3">
+              <p className="text-xs font-semibold tracking-[0.04em] text-[var(--text-subtle)]">Proteiini</p>
+              <p className="mt-1 text-xl font-semibold text-[var(--text)]">{nutritionProfile.proteinG} g</p>
+            </div>
+            <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface-2)] px-4 py-3">
+              <p className="text-xs font-semibold tracking-[0.04em] text-[var(--text-subtle)]">Hiilarit</p>
+              <p className="mt-1 text-xl font-semibold text-[var(--text)]">{nutritionProfile.carbsG} g</p>
+            </div>
+            <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface-2)] px-4 py-3">
+              <p className="text-xs font-semibold tracking-[0.04em] text-[var(--text-subtle)]">Rasva</p>
+              <p className="mt-1 text-xl font-semibold text-[var(--text)]">{nutritionProfile.fatG} g</p>
+            </div>
+          </div>
+        ) : null}
+
+        {assignedPlan ? (
+          <>
+            <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface-2)] p-4">
+              <p className="text-sm font-semibold text-[var(--text)]">{assignedPlan.name}</p>
+              <p className="mt-1 text-sm text-[var(--text-muted)]">
+                Päivän yhteenveto: {total.kcal} kcal · P {Math.round(total.proteinG)} g · H {Math.round(total.carbsG)} g · R {Math.round(total.fatG)} g
+              </p>
+            </div>
+
+            <div className="grid gap-3">
+              {mealPlanRecipes.map((item) => {
+                const recipeNutrition = item.recipe.nutritionPerServing ?? calculateRecipeNutrition(item.recipe, state.ingredientsCatalog).nutritionPerServing;
+                return (
+                  <div key={`${item.mealTag}-${item.recipe.id}`} className="rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-4">
+                    <div className="flex items-start justify-between gap-4">
+                      <div>
+                        <p className="text-xs font-semibold tracking-[0.04em] text-[var(--text-subtle)]">{mealTagLabel(item.mealTag)}</p>
+                        <p className="mt-1 text-lg font-semibold text-[var(--text)]">{item.recipe.name}</p>
+                        <p className="mt-1 text-sm text-[var(--text-muted)]">{item.recipe.description ?? "Valmis ateriasuositus päivän rytmiin."}</p>
+                      </div>
+                      <div className="text-right text-sm text-[var(--text-muted)]">
+                        <p>{recipeNutrition.kcal} kcal</p>
+                        <p>P {Math.round(recipeNutrition.proteinG)} g</p>
+                        <p>H {Math.round(recipeNutrition.carbsG)} g</p>
+                        <p>R {Math.round(recipeNutrition.fatG)} g</p>
+                      </div>
+                    </div>
+                    <div className="mt-3 border-t border-[var(--border)] pt-3">
+                      <p className="text-xs font-semibold tracking-[0.04em] text-[var(--text-subtle)]">Ohjeet</p>
+                      <p className="mt-1 text-sm text-[var(--text-muted)]">{item.recipe.instructions}</p>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </>
+        ) : (
+          <div className="rounded-2xl border border-dashed border-[var(--border-strong)] bg-[var(--surface-2)] px-4 py-5 text-sm text-[var(--text-muted)]">
+            Tälle käyttäjälle ei ole vielä jaettu aktiivista ateriapohjaa.
+          </div>
+        )}
+      </div>
+    </Card>
+  );
+}

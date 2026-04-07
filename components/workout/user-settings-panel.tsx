@@ -17,11 +17,12 @@ import { roleLabel } from "@/components/workout/shared";
 import { getMeasurementsForUser } from "@/lib/body-metrics";
 import { withMinimumDelay } from "@/lib/min-delay";
 import { canTrackOwnTraining, getDashboardViewsForRole, getDefaultDashboardView, isAthleteRole } from "@/lib/role-access";
-import { PROGRAMS_DASHBOARD_VIEW, type DashboardHomeView, type Role, type ThemeMode } from "@/lib/types";
+import { PROGRAMS_DASHBOARD_VIEW, type DashboardHomeView, type ProfileSex, type Role, type ThemeMode } from "@/lib/types";
 import { useAppState } from "@/providers/app-state-provider";
 
 const dashboardViewLabel: Record<DashboardHomeView, string> = {
   overview: "Koti",
+  nutrition: "Ravinto",
   athletes: "Tiimi",
   users: "Hallinta",
   [PROGRAMS_DASHBOARD_VIEW]: "Ohjelma",
@@ -102,6 +103,8 @@ export function UserSettingsPanel({ adminOnly = false }: { adminOnly?: boolean }
     [currentUser, state],
   );
   const [isTriggeringInstallPrompt, setIsTriggeringInstallPrompt] = useState(false);
+  const [ageDraft, setAgeDraft] = useState(currentUser?.age !== undefined ? String(currentUser.age) : "");
+  const [sexDraft, setSexDraft] = useState<ProfileSex | "">(currentUser?.sex ?? "");
   const [heightCmDraft, setHeightCmDraft] = useState(currentUser?.heightCm !== undefined ? String(currentUser.heightCm) : "");
   const profileImageInputRef = useRef<HTMLInputElement | null>(null);
 
@@ -142,6 +145,8 @@ export function UserSettingsPanel({ adminOnly = false }: { adminOnly?: boolean }
       themeMode: currentUser.settings?.themeMode ?? "light",
       loadIncrementKg: currentUser.settings?.loadIncrementKg ?? 2.5,
     });
+    setAgeDraft(currentUser.age !== undefined ? String(currentUser.age) : "");
+    setSexDraft(currentUser.sex ?? "");
     setHeightCmDraft(currentUser.heightCm !== undefined ? String(currentUser.heightCm) : "");
   }, [currentUser, form]);
 
@@ -176,6 +181,8 @@ export function UserSettingsPanel({ adminOnly = false }: { adminOnly?: boolean }
     const isProfileFormValid = await form.trigger(["fullName"]);
     const trimmedFullName = profileName.trim();
     const parsedMeasurements = bodyMeasurementSchema.safeParse({ heightCm: heightCmDraft, weightKg: "", waistCm: "" });
+    const parsedAge = ageDraft.trim() ? Number(ageDraft) : undefined;
+    const parsedSex = sexDraft || undefined;
 
     if (!isProfileFormValid) {
       setProfileMessage("Tarkista profiilin tiedot ja yritä uudelleen.");
@@ -198,6 +205,14 @@ export function UserSettingsPanel({ adminOnly = false }: { adminOnly?: boolean }
       return;
     }
 
+    if (parsedAge !== undefined && (!Number.isInteger(parsedAge) || parsedAge < 13 || parsedAge > 100)) {
+      const nextMessage = "Anna ikä väliltä 13-100.";
+      setProfileMessage(nextMessage);
+      setProfileMessageTone("danger");
+      notify({ tone: "danger", message: nextMessage });
+      return;
+    }
+
     setIsSavingProfile(true);
     try {
       const settingsResult = await withMinimumDelay(
@@ -209,6 +224,8 @@ export function UserSettingsPanel({ adminOnly = false }: { adminOnly?: boolean }
           weeklyMeasurementReminders: settingsWeeklyMeasurementReminders,
           themeMode: settingsThemeMode,
           loadIncrementKg: settingsLoadIncrementKg,
+          age: parsedAge ?? null,
+          sex: parsedSex ?? null,
         }),
       );
 
@@ -240,6 +257,8 @@ export function UserSettingsPanel({ adminOnly = false }: { adminOnly?: boolean }
   const isProfileDirty =
     Boolean(currentUser) &&
     (profileName.trim() !== currentUser.fullName ||
+      (ageDraft.trim() ? Number(ageDraft) : undefined) !== currentUser.age ||
+      (sexDraft || undefined) !== currentUser.sex ||
       (heightCmDraft.trim() ? Number(heightCmDraft.replace(",", ".")) : undefined) !== currentUser.heightCm);
   const profileImageSrc = currentUser.profileImageUrl
     ? `${currentUser.profileImageUrl}${currentUser.profileImageUrl.includes("?") ? "&" : "?"}v=${encodeURIComponent(currentUser.updatedAt)}`
@@ -498,6 +517,43 @@ export function UserSettingsPanel({ adminOnly = false }: { adminOnly?: boolean }
             <p className="mt-2 text-xs text-[var(--text-subtle)]">
               Sähköpostia hallitaan kutsu- ja käyttäjähallinnan kautta.
             </p>
+          </div>
+
+          <div>
+            <Label htmlFor="account-age">Ikä</Label>
+            <Input
+              id="account-age"
+              type="number"
+              inputMode="numeric"
+              min={13}
+              max={100}
+              step="1"
+              placeholder="Esim. 29"
+              value={ageDraft}
+              disabled={isSavingProfile || !canTrackOwnTraining(currentUser.role)}
+              onChange={(event) => {
+                setAgeDraft(event.target.value);
+                setProfileMessage("");
+              }}
+            />
+          </div>
+
+          <div>
+            <Label htmlFor="account-sex">Sukupuoli</Label>
+            <Select
+              id="account-sex"
+              value={sexDraft}
+              disabled={isSavingProfile || !canTrackOwnTraining(currentUser.role)}
+              onChange={(event) => {
+                setSexDraft(event.target.value as ProfileSex | "");
+                setProfileMessage("");
+              }}
+            >
+              <option value="">Valitse</option>
+              <option value="female">Nainen</option>
+              <option value="male">Mies</option>
+              <option value="other">Muu</option>
+            </Select>
           </div>
 
           <div>

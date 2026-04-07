@@ -62,7 +62,8 @@ describe("role access helpers", () => {
     expect(getDashboardViewsForRole("admin")).toContain("conversation");
     expect(getDashboardViewsForRole("admin")).toContain("athlete-log");
     expect(getDashboardViewsForRole("admin")).toContain("templates");
-    expect(getDashboardViewsForRole("coach")).toContain("conversation");
+    expect(getDashboardViewsForRole("admin")).toContain("nutrition");
+    expect(getDashboardViewsForRole("coach")).not.toContain("conversation");
     expect(getDashboardViewsForRole("independent_athlete")).toContain("templates");
     expect(getDashboardViewsForRole("independent_athlete")).not.toContain("invites");
     expect(getDefaultDashboardView("admin")).toBe("overview");

@@ -10,6 +10,7 @@ const coachWorkspaceViews: DashboardHomeView[] = [
 const adminWorkspaceViews: DashboardHomeView[] = [
   "athlete-log",
   "overview",
+  "nutrition",
   "athletes",
   PROGRAMS_DASHBOARD_VIEW,
   "conversation",

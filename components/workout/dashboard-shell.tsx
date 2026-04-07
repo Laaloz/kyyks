@@ -1,6 +1,6 @@
 "use client";
 
-import { BellRing, Dumbbell, Home, LogOut, MessageSquare, MoreHorizontal, ScrollText, UserPlus, UserRound, UserRoundCog, Users, type LucideIcon } from "lucide-react";
+import { BellRing, Dumbbell, Home, LogOut, MessageSquare, MoreHorizontal, ScrollText, UserPlus, UserRound, UserRoundCog, Users, UtensilsCrossed, type LucideIcon } from "lucide-react";
 import { useEffect, useRef, useState, type KeyboardEvent } from "react";
 
 import { AdminDashboard } from "@/components/workout/admin-dashboard";
@@ -34,7 +34,7 @@ function mobilePrimaryNavItemsForRole(role: Role): PrimaryWorkspaceView[] {
   }
 
   if (role === "admin") {
-    return ["athlete-log", "overview", "athletes", "users"];
+    return ["athlete-log", "overview", "nutrition", "users"];
   }
 
   return ["athlete-log", "overview", PROGRAMS_WORKSPACE_VIEW, "athletes"];
@@ -115,6 +115,7 @@ export function DashboardShell() {
   const navItems = navItemsForRole(currentUser.role);
   const navLabelByView: Record<WorkspaceView, string> = {
     overview: "Koti",
+    nutrition: "Ravinto",
     athletes: "Tiimi",
     users: "Hallinta",
     [PROGRAMS_WORKSPACE_VIEW]: "Ohjelma",
@@ -126,6 +127,7 @@ export function DashboardShell() {
   const mobileNavLabelByView = navLabelByView;
   const navIconByView: Record<PrimaryWorkspaceView, LucideIcon> = {
     overview: Home,
+    nutrition: UtensilsCrossed,
     athletes: Users,
     users: UserRoundCog,
     [PROGRAMS_WORKSPACE_VIEW]: ScrollText,
