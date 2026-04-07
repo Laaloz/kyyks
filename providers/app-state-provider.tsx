@@ -331,9 +331,9 @@ export function applyPartialUserMeasurementUpdate(
     return previous;
   }
 
-  const hasHeightInput = Object.prototype.hasOwnProperty.call(input, "heightCm");
-  const hasWeightInput = Object.prototype.hasOwnProperty.call(input, "weightKg");
-  const hasWaistInput = Object.prototype.hasOwnProperty.call(input, "waistCm");
+  const hasHeightInput = Object.prototype.hasOwnProperty.call(input, "heightCm") && input.heightCm !== undefined;
+  const hasWeightInput = Object.prototype.hasOwnProperty.call(input, "weightKg") && input.weightKg !== undefined;
+  const hasWaistInput = Object.prototype.hasOwnProperty.call(input, "waistCm") && input.waistCm !== undefined;
   const heightCm = hasHeightInput ? input.heightCm : currentUser.heightCm;
   const weightKg = hasWeightInput ? input.weightKg : currentUser.weightKg;
   const waistCm = hasWaistInput ? input.waistCm : currentUser.waistCm;
@@ -3783,9 +3783,9 @@ function findResolvedUserIdInSnapshot(
         }
 
         const timestamp = new Date().toISOString();
-        const hasHeightInput = Object.prototype.hasOwnProperty.call(input, "heightCm");
-        const hasWeightInput = Object.prototype.hasOwnProperty.call(input, "weightKg");
-        const hasWaistInput = Object.prototype.hasOwnProperty.call(input, "waistCm");
+        const hasHeightInput = Object.prototype.hasOwnProperty.call(input, "heightCm") && input.heightCm !== undefined;
+        const hasWeightInput = Object.prototype.hasOwnProperty.call(input, "weightKg") && input.weightKg !== undefined;
+        const hasWaistInput = Object.prototype.hasOwnProperty.call(input, "waistCm") && input.waistCm !== undefined;
         const heightCm = hasHeightInput ? input.heightCm : currentUser.heightCm;
         const weightKg = hasWeightInput ? input.weightKg : currentUser.weightKg;
         const waistCm = hasWaistInput ? input.waistCm : currentUser.waistCm;

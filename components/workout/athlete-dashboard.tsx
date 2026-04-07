@@ -1384,7 +1384,18 @@ export function AthleteDashboard({
 
                       setIsSavingMeasurements(true);
                       try {
-                        const result = await withMinimumDelay(updateCurrentUserMeasurements(parsed.data));
+                        const measurementInput: { heightCm?: number; weightKg?: number; waistCm?: number } = {};
+                        if (parsed.data.heightCm !== undefined) {
+                          measurementInput.heightCm = parsed.data.heightCm;
+                        }
+                        if (parsed.data.weightKg !== undefined) {
+                          measurementInput.weightKg = parsed.data.weightKg;
+                        }
+                        if (parsed.data.waistCm !== undefined) {
+                          measurementInput.waistCm = parsed.data.waistCm;
+                        }
+
+                        const result = await withMinimumDelay(updateCurrentUserMeasurements(measurementInput));
                         setMeasurementMessage(result.ok ? "Mittatiedot tallennettu." : result.message);
                         setMeasurementMessageTone(result.ok ? "success" : "error");
                       } finally {

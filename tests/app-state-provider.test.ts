@@ -1261,4 +1261,35 @@ describe("applyPartialUserMeasurementUpdate", () => {
     expect(newestMeasurement?.weightKg).toBeUndefined();
     expect(newestMeasurement?.waistCm).toBeUndefined();
   });
+
+  it("does not clear height when height is undefined in payload", () => {
+    const state = cloneDemoState();
+    const athleteId = "user_athlete_1";
+    state.users = state.users.map((user) =>
+      user.id === athleteId
+        ? {
+            ...user,
+            heightCm: 181,
+            weightKg: 80,
+            waistCm: 86,
+          }
+        : user,
+    );
+
+    const nextState = applyPartialUserMeasurementUpdate(
+      state,
+      athleteId,
+      { heightCm: undefined, weightKg: 78.5 },
+      "2026-03-25T10:10:00.000Z",
+    );
+    const nextUser = nextState.users.find((user) => user.id === athleteId);
+    const newestMeasurement = nextState.bodyMeasurements[0];
+
+    expect(nextUser?.heightCm).toBe(181);
+    expect(nextUser?.weightKg).toBe(78.5);
+    expect(nextUser?.waistCm).toBe(86);
+    expect(newestMeasurement?.heightCm).toBeUndefined();
+    expect(newestMeasurement?.weightKg).toBe(78.5);
+    expect(newestMeasurement?.waistCm).toBeUndefined();
+  });
 });

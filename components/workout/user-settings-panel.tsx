@@ -236,8 +236,13 @@ export function UserSettingsPanel({ adminOnly = false }: { adminOnly?: boolean }
         return;
       }
 
+      const measurementInput: { heightCm?: number } = {};
+      if (parsedMeasurements.data.heightCm !== undefined) {
+        measurementInput.heightCm = parsedMeasurements.data.heightCm;
+      }
+
       const measurementResult = await withMinimumDelay(
-        updateCurrentUserMeasurements({ heightCm: parsedMeasurements.data.heightCm }),
+        updateCurrentUserMeasurements(measurementInput),
       );
 
       if (!measurementResult.ok) {

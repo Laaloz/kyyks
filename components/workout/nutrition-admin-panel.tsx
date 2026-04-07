@@ -7,12 +7,11 @@ import { Button } from "@/components/ui/button";
 import { Card, CardDescription, CardTitle } from "@/components/ui/card";
 import { Input, Label, Select, Textarea } from "@/components/ui/field";
 import { InlineFeedback } from "@/components/workout/inline-feedback";
-import { getMissingMacroProfileFields, mealTagLabel } from "@/lib/nutrition";
+import { getMissingMacroProfileFields, joinRecipeInstructionSteps, mealTagLabel } from "@/lib/nutrition";
 import { isAthleteRole } from "@/lib/role-access";
 import type {
   IngredientRole,
   IngredientScalingMode,
-  IngredientSource,
   MealTag,
   NutritionActivityLevel,
   NutritionGoal,
@@ -64,6 +63,10 @@ function emptyRecipeIngredientDraft(): RecipeIngredientDraft {
   };
 }
 
+function emptyRecipeStepDraft() {
+  return "";
+}
+
 function stringifyList(value: string[]) {
   return value.join(", ");
 }
@@ -102,7 +105,6 @@ type NutritionProfileFormState = {
 
 type IngredientFormState = {
   name: string;
-  source: IngredientSource;
   defaultPurchaseUnit: PurchaseUnit;
   gramsPerUnit: string;
   kcalPer100: string;
@@ -184,7 +186,6 @@ export function NutritionAdminPanel() {
   }));
   const [ingredientForm, setIngredientForm] = useState<IngredientFormState>({
     name: "",
-    source: "manual" as const,
     defaultPurchaseUnit: "g" as const,
     gramsPerUnit: "",
     kcalPer100: "",
@@ -195,12 +196,12 @@ export function NutritionAdminPanel() {
   const [recipeForm, setRecipeForm] = useState({
     name: "",
     description: "",
-    instructions: "",
     mealTag: "lunch" as MealTag,
     defaultServings: "4",
     minServings: "2",
     maxServings: "8",
   });
+  const [recipeSteps, setRecipeSteps] = useState<string[]>([emptyRecipeStepDraft()]);
   const [recipeIngredients, setRecipeIngredients] = useState<RecipeIngredientDraft[]>([
     emptyRecipeIngredientDraft(),
   ]);
@@ -253,7 +254,7 @@ export function NutritionAdminPanel() {
   const handleSaveIngredient = async () => {
     const result = await saveIngredient({
       name: ingredientForm.name,
-      source: ingredientForm.source,
+      source: "manual",
       defaultPurchaseUnit: ingredientForm.defaultPurchaseUnit,
       gramsPerUnit: ingredientForm.gramsPerUnit ? Number(ingredientForm.gramsPerUnit) : undefined,
       kcalPer100: Number(ingredientForm.kcalPer100),
@@ -266,7 +267,6 @@ export function NutritionAdminPanel() {
     if (result.ok) {
       setIngredientForm({
         name: "",
-        source: "manual",
         defaultPurchaseUnit: "g",
         gramsPerUnit: "",
         kcalPer100: "",
@@ -281,7 +281,7 @@ export function NutritionAdminPanel() {
     const result = await saveRecipe({
       name: recipeForm.name,
       description: recipeForm.description,
-      instructions: recipeForm.instructions,
+      instructions: joinRecipeInstructionSteps(recipeSteps),
       mealTag: recipeForm.mealTag,
       defaultServings: Number(recipeForm.defaultServings),
       minServings: Number(recipeForm.minServings),
@@ -303,12 +303,12 @@ export function NutritionAdminPanel() {
       setRecipeForm({
         name: "",
         description: "",
-        instructions: "",
         mealTag: "lunch",
         defaultServings: "4",
         minServings: "2",
         maxServings: "8",
       });
+      setRecipeSteps([emptyRecipeStepDraft()]);
       setRecipeIngredients([emptyRecipeIngredientDraft()]);
     }
   };
@@ -829,9 +829,71 @@ export function NutritionAdminPanel() {
                         <Label htmlFor="recipe-max">Max annokset</Label>
                         <Input id="recipe-max" value={recipeForm.maxServings} onChange={(event) => setRecipeForm((current) => ({ ...current, maxServings: event.target.value }))} />
                       </div>
-                      <div className="md:col-span-2">
-                        <Label htmlFor="recipe-instructions">Ohjeet</Label>
-                        <Textarea id="recipe-instructions" value={recipeForm.instructions} onChange={(event) => setRecipeForm((current) => ({ ...current, instructions: event.target.value }))} />
+                      <div className="md:col-span-2 space-y-3">
+                        <div className="flex items-center justify-between gap-3">
+                          <div>
+                            <Label>Ohjeet steppeinä</Label>
+                            <p className="text-xs text-[var(--text-muted)]">Kirjoita valmistus vaiheittain. Järjestys tallennetaan automaattisesti.</p>
+                          </div>
+                          <Button type="button" variant="secondary" onClick={() => setRecipeSteps((current) => [...current, emptyRecipeStepDraft()])}>Lisää step</Button>
+                        </div>
+                        {recipeSteps.map((step, index) => (
+                          <div key={`recipe-step-${index}`} className="space-y-2 rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-3">
+                            <div className="flex items-center justify-between gap-3">
+                              <p className="text-sm font-semibold text-[var(--text)]">Vaihe {index + 1}</p>
+                              <div className="flex items-center gap-2">
+                                <Button
+                                  type="button"
+                                  variant="ghost"
+                                  className="px-3 py-2 text-sm"
+                                  disabled={index === 0}
+                                  onClick={() => setRecipeSteps((current) => {
+                                    if (index === 0) {
+                                      return current;
+                                    }
+                                    const next = [...current];
+                                    [next[index - 1], next[index]] = [next[index], next[index - 1]];
+                                    return next;
+                                  })}
+                                >
+                                  Ylos
+                                </Button>
+                                <Button
+                                  type="button"
+                                  variant="ghost"
+                                  className="px-3 py-2 text-sm"
+                                  disabled={index === recipeSteps.length - 1}
+                                  onClick={() => setRecipeSteps((current) => {
+                                    if (index === current.length - 1) {
+                                      return current;
+                                    }
+                                    const next = [...current];
+                                    [next[index], next[index + 1]] = [next[index + 1], next[index]];
+                                    return next;
+                                  })}
+                                >
+                                  Alas
+                                </Button>
+                                {recipeSteps.length > 1 ? (
+                                  <Button
+                                    type="button"
+                                    variant="ghost"
+                                    className="px-3 py-2 text-sm"
+                                    onClick={() => setRecipeSteps((current) => current.filter((_, rowIndex) => rowIndex !== index))}
+                                  >
+                                    Poista
+                                  </Button>
+                                ) : null}
+                              </div>
+                            </div>
+                            <Textarea
+                              id={`recipe-step-${index}`}
+                              value={step}
+                              onChange={(event) => setRecipeSteps((current) => current.map((row, rowIndex) => rowIndex === index ? event.target.value : row))}
+                              placeholder="Esim. Kypsenna riisi pakkauksen ohjeen mukaan."
+                            />
+                          </div>
+                        ))}
                       </div>
                     </div>
 
@@ -975,14 +1037,6 @@ export function NutritionAdminPanel() {
                       <div className="md:col-span-2">
                         <Label htmlFor="ingredient-name">Nimi</Label>
                         <Input id="ingredient-name" value={ingredientForm.name} onChange={(event) => setIngredientForm((current) => ({ ...current, name: event.target.value }))} />
-                      </div>
-                      <div>
-                        <Label htmlFor="ingredient-source">Lähde</Label>
-                        <Select id="ingredient-source" value={ingredientForm.source} onChange={(event) => setIngredientForm((current) => ({ ...current, source: event.target.value as IngredientSource }))}>
-                          <option value="manual">Manual</option>
-                          <option value="fineli">Fineli</option>
-                          <option value="open_food_facts">Open Food Facts</option>
-                        </Select>
                       </div>
                       <div>
                         <Label htmlFor="ingredient-unit">Ostoyksikkö</Label>

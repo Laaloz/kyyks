@@ -6,7 +6,9 @@ import {
   calculateMacroTarget,
   calculateRecipeNutrition,
   getActiveMealPlanForAthlete,
+  joinRecipeInstructionSteps,
   scaleRecipeIngredient,
+  splitRecipeInstructions,
 } from "@/lib/nutrition";
 
 describe("nutrition helpers", () => {
@@ -34,6 +36,30 @@ describe("nutrition helpers", () => {
     });
 
     expect(target).toBeNull();
+  });
+
+  it("sets lower calorie target for weight-loss than maintenance", () => {
+    const maintain = calculateMacroTarget({
+      age: 31,
+      heightCm: 184,
+      weightKg: 95,
+      sex: "male",
+      goal: "maintain",
+      activityLevel: "moderate",
+    });
+    const lose = calculateMacroTarget({
+      age: 31,
+      heightCm: 184,
+      weightKg: 95,
+      sex: "male",
+      goal: "lose",
+      activityLevel: "moderate",
+    });
+
+    expect(maintain).not.toBeNull();
+    expect(lose).not.toBeNull();
+    expect(lose!.kcal).toBeLessThan(maintain!.kcal);
+    expect(lose!.kcal).toBeLessThanOrEqual(2300);
   });
 
   it("scales linear recipe ingredients but keeps fixed spices stable", () => {
@@ -95,5 +121,27 @@ describe("nutrition helpers", () => {
     const activePlans = assigned.assignedMealPlans.filter((plan) => plan.athleteId === "user_athlete_1" && plan.active);
     expect(activePlans).toHaveLength(1);
     expect(getActiveMealPlanForAthlete(assigned, "user_athlete_1")?.templateId).toBe("meal_template_1");
+  });
+
+  it("converts recipe steps to numbered instruction text", () => {
+    const instructions = joinRecipeInstructionSteps([
+      "Kypsenna riisi pakkauksen ohjeen mukaan.",
+      "Paista kana pannulla.",
+      "Yhdista ainekset ja tarjoile.",
+    ]);
+
+    expect(instructions).toBe(
+      "1. Kypsenna riisi pakkauksen ohjeen mukaan.\n2. Paista kana pannulla.\n3. Yhdista ainekset ja tarjoile.",
+    );
+  });
+
+  it("splits numbered instruction text into clean steps", () => {
+    const steps = splitRecipeInstructions("1. Kypsenna riisi.\n2. Paista kana.\n3. Tarjoile.");
+
+    expect(steps).toEqual([
+      "Kypsenna riisi.",
+      "Paista kana.",
+      "Tarjoile.",
+    ]);
   });
 });

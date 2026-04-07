@@ -25,6 +25,38 @@ function nowIso() {
   return new Date().toISOString();
 }
 
+export function splitRecipeInstructions(instructions: string) {
+  const normalized = instructions
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .map((line) => line.replace(/^(?:\d+[.)]|[-*])\s+/, "").trim())
+    .filter(Boolean);
+
+  if (normalized.length > 1) {
+    return normalized;
+  }
+
+  const sentenceBased = instructions
+    .split(/(?<=[.!?])\s+/)
+    .map((segment) => segment.trim())
+    .filter(Boolean);
+
+  return sentenceBased.length > 0 ? sentenceBased : [""];
+}
+
+export function joinRecipeInstructionSteps(steps: string[]) {
+  const sanitized = steps
+    .map((step) => step.trim())
+    .filter(Boolean);
+
+  if (sanitized.length === 0) {
+    return "";
+  }
+
+  return sanitized.map((step, index) => `${index + 1}. ${step}`).join("\n");
+}
+
 function roundNutrition(value: number) {
   return Math.round(value * 10) / 10;
 }
@@ -61,15 +93,15 @@ export function calculateMacroTarget(input: {
   }
 
   const activityMultiplier = {
-    low: 1.35,
-    moderate: 1.55,
-    high: 1.75,
+    low: 1.2,
+    moderate: 1.4,
+    high: 1.6,
   }[input.activityLevel];
 
   const goalAdjustment = {
-    lose: -350,
+    lose: -450,
     maintain: 0,
-    gain: 250,
+    gain: 200,
   }[input.goal];
 
   const sexConstant = {

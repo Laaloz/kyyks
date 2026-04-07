@@ -1,7 +1,13 @@
 "use client";
 
 import { Card, CardDescription, CardTitle } from "@/components/ui/card";
-import { mealTagLabel, getActiveMealPlanForAthlete, getMealPlanRecipes, calculateRecipeNutrition } from "@/lib/nutrition";
+import {
+  mealTagLabel,
+  getActiveMealPlanForAthlete,
+  getMealPlanRecipes,
+  calculateRecipeNutrition,
+  splitRecipeInstructions,
+} from "@/lib/nutrition";
 import type { AppState, UserProfile } from "@/lib/types";
 
 export function NutritionAthleteCard({
@@ -93,7 +99,11 @@ export function NutritionAthleteCard({
                     </div>
                     <div className="mt-3 border-t border-[var(--border)] pt-3">
                       <p className="text-xs font-semibold tracking-[0.04em] text-[var(--text-subtle)]">Ohjeet</p>
-                      <p className="mt-1 text-sm text-[var(--text-muted)]">{item.recipe.instructions}</p>
+                      <ol className="mt-1 list-decimal space-y-1 pl-4 text-sm text-[var(--text-muted)]">
+                        {splitRecipeInstructions(item.recipe.instructions).map((step, index) => (
+                          <li key={`${item.recipe.id}-step-${index}`}>{step}</li>
+                        ))}
+                      </ol>
                     </div>
                   </div>
                 );
