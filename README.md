@@ -99,6 +99,61 @@ Huomiot:
 - `FINELI_CREATED_BY` tai `FINELI_ADMIN_USER_ID` pitää osoittaa olemassa olevaan admin-käyttäjän UUID:hen
 - skripti muuntaa `kJ -> kcal` ja normalisoi arvot kuten `N/A` ja `<0.1`
 
+## Ravinnon autolaskenta
+Ravintoprofiilin `Auto`-tila antaa suuntaa-antavan aloitussuosituksen, jota tarkennetaan myöhemmin painotrendin, kylläisyyden, jaksamisen ja treenitehon perusteella.
+
+Autolaskenta vaatii:
+- `ikä`
+- `sukupuoli`
+- `pituus`
+- `paino`
+- `tavoite`
+- `aktiivisuustaso`
+
+Jos jokin näistä puuttuu, automaattista makrolaskentaa ei voida muodostaa luotettavasti.
+
+Energian laskenta:
+
+```text
+targetKcal = paino_kg * tavoitekerroin + aktiivisuuslisä + kokolisä - ikävähennys
+```
+
+Tavoitekertoimet:
+- `lose`: `22.35 kcal / kg`
+- `maintain`: `26.2 kcal / kg`
+- `gain`: `29.3 kcal / kg`
+
+Aktiivisuuslisä:
+- `low`: `-150 kcal`
+- `moderate`: `0 kcal`
+- `high`: `+175 kcal`
+
+Kokolisä:
+- `male`: `max(0, (pituus - 175) * 2)`
+- `female`: `max(0, (pituus - 165) * 1.5)`
+- `other`: `max(0, (pituus - 170) * 1.75)`
+
+Ikävähennys:
+- `max(0, ikä - 35) * 4`
+
+Makrot:
+- proteiini:
+  - `lose`: `1.65 g / kg`
+  - `maintain`: `1.75 g / kg`
+  - `gain`: `1.85 g / kg`
+- rasva:
+  - `lose`: `0.66 g / kg`
+  - `maintain`: `0.76 g / kg`
+  - `gain`: `0.82 g / kg`
+- hiilarit:
+  - loput kaloreista proteiinin ja rasvan jälkeen
+
+Laskennan periaate:
+- proteiini asetetaan ensin tavoitteen mukaan
+- rasvalle asetetaan tavoitteen mukainen minimitaso
+- hiilarit täyttävät loppukalorit
+- arvo on tarkoitettu aloituspisteeksi, ei lopulliseksi “oikeaksi” makroksi
+
 ## Rakenne
 - [`app`](/Users/laalo/Omat projektit/rookiapp/app): App Router -sivut ja API-routet
 - [`components`](/Users/laalo/Omat projektit/rookiapp/components): käyttöliittymä ja roolikohtaiset näkymät

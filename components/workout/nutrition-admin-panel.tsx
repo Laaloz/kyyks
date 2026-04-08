@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardDescription, CardTitle } from "@/components/ui/card";
 import { Input, Label, Select, Textarea } from "@/components/ui/field";
 import { InlineFeedback } from "@/components/workout/inline-feedback";
-import { getMissingMacroProfileFields, joinRecipeInstructionSteps, mealTagLabel } from "@/lib/nutrition";
+import { calculateMacroTarget, getMacroGoalGuidance, getMissingMacroProfileFields, joinRecipeInstructionSteps, mealTagLabel } from "@/lib/nutrition";
 import { isAthleteRole } from "@/lib/role-access";
 import type {
   IngredientRole,
@@ -353,6 +353,32 @@ export function NutritionAdminPanel() {
   const selectedAthleteName = athleteUsers.find((user) => user.id === selectedAthleteId)?.fullName ?? "Ei valittu";
   const selectedAthlete = state.users.find((user) => user.id === selectedAthleteId) ?? null;
   const missingAutoFields = selectedAthlete ? getMissingMacroProfileFields(selectedAthlete) : [];
+  const autoPreviewTarget = selectedAthlete
+    ? calculateMacroTarget({
+        age: selectedAthlete.age,
+        sex: selectedAthlete.sex,
+        heightCm: selectedAthlete.heightCm,
+        weightKg: selectedAthlete.weightKg,
+        goal: profileForm.goal,
+        activityLevel: profileForm.activityLevel,
+      })
+    : null;
+  const displayedTargetKcal =
+    profileForm.calculationMode === "auto"
+      ? autoPreviewTarget?.kcal ?? selectedProfile?.targetKcal ?? (profileForm.targetKcal ? Number(profileForm.targetKcal) : undefined)
+      : (profileForm.targetKcal ? Number(profileForm.targetKcal) : undefined);
+  const displayedProtein =
+    profileForm.calculationMode === "auto"
+      ? autoPreviewTarget?.proteinG ?? selectedProfile?.proteinG ?? (profileForm.proteinG ? Number(profileForm.proteinG) : undefined)
+      : (profileForm.proteinG ? Number(profileForm.proteinG) : undefined);
+  const displayedCarbs =
+    profileForm.calculationMode === "auto"
+      ? autoPreviewTarget?.carbsG ?? selectedProfile?.carbsG ?? (profileForm.carbsG ? Number(profileForm.carbsG) : undefined)
+      : (profileForm.carbsG ? Number(profileForm.carbsG) : undefined);
+  const displayedFat =
+    profileForm.calculationMode === "auto"
+      ? autoPreviewTarget?.fatG ?? selectedProfile?.fatG ?? (profileForm.fatG ? Number(profileForm.fatG) : undefined)
+      : (profileForm.fatG ? Number(profileForm.fatG) : undefined);
   const athleteWithPlanCount = new Set(state.assignedMealPlans.filter((plan) => plan.active).map((plan) => plan.athleteId)).size;
   const ingredientCatalogPreview = state.ingredientsCatalog.slice(0, 8);
   const recipePreview = state.recipes.slice(0, 4);
@@ -478,12 +504,12 @@ export function NutritionAdminPanel() {
                     <div className="mt-4 grid grid-cols-2 gap-3 text-sm">
                       <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-3">
                         <p className="text-[var(--text-muted)]">Tavoite</p>
-                        <p className="mt-1 font-semibold text-[var(--text)]">{profileForm.targetKcal || "Auto"} kcal</p>
+                        <p className="mt-1 font-semibold text-[var(--text)]">{displayedTargetKcal ?? "Auto"} kcal</p>
                       </div>
                       <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-3">
                         <p className="text-[var(--text-muted)]">Makrot</p>
                         <p className="mt-1 font-semibold text-[var(--text)]">
-                          {profileForm.proteinG || "-"} / {profileForm.carbsG || "-"} / {profileForm.fatG || "-"}
+                          {displayedProtein ?? "-"} / {displayedCarbs ?? "-"} / {displayedFat ?? "-"}
                         </p>
                       </div>
                     </div>
@@ -597,6 +623,20 @@ export function NutritionAdminPanel() {
                       <p className="mt-1 text-sm text-[var(--text-muted)]">
                         kcal ja makrot lasketaan käyttäjän iän, sukupuolen, pituuden, painon, tavoitteen ja aktiivisuustason perusteella.
                       </p>
+                      <p className="mt-2 text-sm text-[var(--text-muted)]">
+                        Tämä on suuntaa-antava aloitussuositus, jota tarkennetaan painotrendin, kylläisyyden, jaksamisen ja treenitehon perusteella.
+                      </p>
+                      <p className="mt-2 text-sm text-[var(--text-muted)]">
+                        {getMacroGoalGuidance(profileForm.goal)}
+                      </p>
+                      <div className="mt-3 rounded-2xl border border-[var(--border)] bg-[var(--surface-2)] p-3">
+                        <p className="text-sm font-semibold text-[var(--text)]">Miten auto laskee?</p>
+                        <div className="mt-2 space-y-2 text-sm text-[var(--text-muted)]">
+                          <p>Energia arvioidaan painon, tavoitteen, aktiivisuustason, pituuden ja iän perusteella.</p>
+                          <p>Proteiini asetetaan ensin tavoitteen mukaan, rasvalle asetetaan minimitaso ja hiilarit täyttävät loput kalorit.</p>
+                          <p>Arvo on aloituspiste, jota säädetään myöhemmin seurannan perusteella.</p>
+                        </div>
+                      </div>
                       {missingAutoFields.length > 0 ? (
                         <div className="mt-3 rounded-2xl border border-[color-mix(in_srgb,var(--danger)_35%,var(--border))] bg-[color-mix(in_srgb,var(--danger)_8%,var(--surface))] p-3">
                           <p className="text-sm font-semibold text-[var(--text)]">Puuttuvat tiedot autolaskennasta</p>
@@ -725,16 +765,19 @@ export function NutritionAdminPanel() {
                       <Badge>{profileForm.calculationMode === "auto" ? "Auto" : "Manuaalinen"}</Badge>
                       <Badge>{profileForm.activityLevel === "low" ? "Matala aktiivisuus" : profileForm.activityLevel === "moderate" ? "Kohtalainen aktiivisuus" : "Korkea aktiivisuus"}</Badge>
                     </div>
+                    {profileForm.calculationMode === "auto" ? (
+                      <p className="mt-2 text-sm text-[var(--text-muted)]">Aloitussuositus, tarkennetaan seurannalla.</p>
+                    ) : null}
                   </div>
                   <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-4">
                     <p className="text-xs font-semibold tracking-[0.04em] text-[var(--text-subtle)]">Energia</p>
-                    <p className="mt-2 text-2xl font-semibold text-[var(--text)]">{profileForm.targetKcal || "Auto"}</p>
+                    <p className="mt-2 text-2xl font-semibold text-[var(--text)]">{displayedTargetKcal ?? "Auto"}</p>
                     <p className="mt-1 text-sm text-[var(--text-muted)]">kcal / päivä</p>
                   </div>
                   <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-4">
                     <p className="text-xs font-semibold tracking-[0.04em] text-[var(--text-subtle)]">Makrot</p>
                     <p className="mt-2 text-lg font-semibold text-[var(--text)]">
-                      P {profileForm.proteinG || "-"} / H {profileForm.carbsG || "-"} / R {profileForm.fatG || "-"}
+                      P {displayedProtein ?? "-"} / H {displayedCarbs ?? "-"} / R {displayedFat ?? "-"}
                     </p>
                     <p className="mt-1 text-sm text-[var(--text-muted)]">grammaa per päivä</p>
                   </div>

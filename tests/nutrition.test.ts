@@ -23,8 +23,62 @@ describe("nutrition helpers", () => {
     });
 
     expect(target).not.toBeNull();
-    expect(target?.kcal).toBeGreaterThan(1800);
-    expect(target?.proteinG).toBeGreaterThan(100);
+    expect(target?.kcal).toBeGreaterThan(1700);
+    expect(target?.proteinG).toBeGreaterThan(110);
+  });
+
+  it("keeps a 98 kg / 180 cm cut target close to the requested macro split", () => {
+    const target = calculateMacroTarget({
+      age: 30,
+      sex: "male",
+      heightCm: 180,
+      weightKg: 98,
+      goal: "lose",
+      activityLevel: "moderate",
+    });
+
+    expect(target).not.toBeNull();
+    expect(target?.kcal).toBeGreaterThanOrEqual(2175);
+    expect(target?.kcal).toBeLessThanOrEqual(2225);
+    expect(target?.proteinG).toBeGreaterThanOrEqual(155);
+    expect(target?.proteinG).toBeLessThanOrEqual(170);
+    expect(target?.carbsG).toBeGreaterThanOrEqual(235);
+    expect(target?.carbsG).toBeLessThanOrEqual(250);
+    expect(target?.fatG).toBeGreaterThanOrEqual(60);
+    expect(target?.fatG).toBeLessThanOrEqual(70);
+  });
+
+  it("raises calories and carbs from cut to maintain to gain", () => {
+    const cut = calculateMacroTarget({
+      age: 30,
+      sex: "male",
+      heightCm: 180,
+      weightKg: 98,
+      goal: "lose",
+      activityLevel: "moderate",
+    });
+    const maintain = calculateMacroTarget({
+      age: 30,
+      sex: "male",
+      heightCm: 180,
+      weightKg: 98,
+      goal: "maintain",
+      activityLevel: "moderate",
+    });
+    const gain = calculateMacroTarget({
+      age: 30,
+      sex: "male",
+      heightCm: 180,
+      weightKg: 98,
+      goal: "gain",
+      activityLevel: "moderate",
+    });
+
+    expect(cut && maintain && gain).toBeTruthy();
+    expect((maintain?.kcal ?? 0)).toBeGreaterThan(cut?.kcal ?? 0);
+    expect((gain?.kcal ?? 0)).toBeGreaterThan(maintain?.kcal ?? 0);
+    expect((maintain?.carbsG ?? 0)).toBeGreaterThan(cut?.carbsG ?? 0);
+    expect((gain?.carbsG ?? 0)).toBeGreaterThan(maintain?.carbsG ?? 0);
   });
 
   it("returns null when auto calculation profile data is incomplete", () => {

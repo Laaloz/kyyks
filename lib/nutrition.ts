@@ -76,6 +76,17 @@ export function mealTagLabel(mealTag: MealTag) {
   }
 }
 
+export function getMacroGoalGuidance(goal: NutritionGoal) {
+  switch (goal) {
+    case "lose":
+      return "Pudotuksessa energia pidetään maltillisesti miinuksella, proteiini korkealla ja hiilarit riittävän ylhäällä treenin tueksi.";
+    case "maintain":
+      return "Ylläpidossa tavoite on vakaa painotrendi, hyvä treeniteho ja makrot jotka ovat helppo pitää arjessa tasaisina.";
+    case "gain":
+      return "Kasvatuksessa energia nostetaan maltillisesti ylös, jotta paino nousee hallitusti ilman turhan aggressiivista ylisyöntiä.";
+  }
+}
+
 export function calculateMacroTarget(input: {
   age?: number;
   heightCm?: number;
@@ -92,28 +103,44 @@ export function calculateMacroTarget(input: {
     return null;
   }
 
-  const activityMultiplier = {
-    low: 1.2,
-    moderate: 1.4,
-    high: 1.6,
+  const activityKcalAdjustment = {
+    low: -150,
+    moderate: 0,
+    high: 175,
   }[input.activityLevel];
 
-  const goalAdjustment = {
-    lose: -450,
-    maintain: 0,
-    gain: 200,
+  const goalKcalPerKg = {
+    lose: 22.35,
+    maintain: 26.2,
+    gain: 29.3,
   }[input.goal];
 
-  const sexConstant = {
-    female: -161,
-    male: 5,
-    other: -78,
-  }[sex];
-  const bmr = 10 * weightKg + 6.25 * heightCm - 5 * age + sexConstant;
-  const targetKcal = Math.max(1200, Math.round(bmr * activityMultiplier + goalAdjustment));
-  const proteinFactor = input.goal === "gain" ? 2 : input.goal === "lose" ? 2.2 : 1.8;
-  const proteinG = Math.max(90, roundNutrition(weightKg * proteinFactor));
-  const fatG = Math.max(45, roundNutrition(weightKg * 0.8));
+  const bodySizeAdjustment =
+    sex === "male"
+      ? Math.max(0, (heightCm - 175) * 2)
+      : sex === "female"
+        ? Math.max(0, (heightCm - 165) * 1.5)
+        : Math.max(0, (heightCm - 170) * 1.75);
+  const ageAdjustment = Math.max(0, age - 35) * 4;
+
+  const targetKcal = Math.max(
+    1200,
+    Math.round(weightKg * goalKcalPerKg + activityKcalAdjustment + bodySizeAdjustment - ageAdjustment),
+  );
+
+  const proteinPerKg = {
+    lose: 1.65,
+    maintain: 1.75,
+    gain: 1.85,
+  }[input.goal];
+  const fatPerKg = {
+    lose: 0.66,
+    maintain: 0.76,
+    gain: 0.82,
+  }[input.goal];
+
+  const proteinG = Math.max(90, roundNutrition(weightKg * proteinPerKg));
+  const fatG = Math.max(45, roundNutrition(weightKg * fatPerKg));
   const remainingKcal = Math.max(0, targetKcal - proteinG * 4 - fatG * 9);
   const carbsG = roundNutrition(remainingKcal / 4);
 
