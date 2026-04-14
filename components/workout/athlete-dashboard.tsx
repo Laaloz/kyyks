@@ -23,6 +23,7 @@ import { MetricTrendChart } from "@/components/workout/metric-trend-chart";
 import { NutritionAthleteCard } from "@/components/workout/nutrition-athlete-card";
 import { estimateStrengthCalories, getMeasurementsForUser, getWeightAtMoment } from "@/lib/body-metrics";
 import { calculateSessionDurationSeconds, getSessionProgress } from "@/lib/domain";
+import { buildExerciseProgressCatalog, type ExerciseProgressCatalog } from "@/lib/exercise-progress";
 import { withMinimumDelay } from "@/lib/min-delay";
 import { deriveProgramWorkoutGuidance } from "@/lib/program-workout-guidance";
 import { isProgramActive } from "@/lib/program-status";
@@ -281,6 +282,7 @@ export function AthleteDashboard({
   const [isSavingMeasurements, setIsSavingMeasurements] = useState(false);
   const [isMeasurementFormExpanded, setIsMeasurementFormExpanded] = useState(false);
   const [activeMeasurementTrend, setActiveMeasurementTrend] = useState<"weight" | "waist" | "volume">("weight");
+  const [selectedExerciseProgressKey, setSelectedExerciseProgressKey] = useState("");
   const [isCompletingWorkout, setIsCompletingWorkout] = useState(false);
   const [pendingWorkoutTransition, setPendingWorkoutTransition] = useState<
     | { type: "open"; scheduledWorkoutId: string; workoutName: string; sourceKey: string }
@@ -311,6 +313,9 @@ export function AthleteDashboard({
   }, [currentUser?.id]);
   useEffect(() => {
     setExpandedHistoryGroups({});
+  }, [currentUser?.id]);
+  useEffect(() => {
+    setSelectedExerciseProgressKey("");
   }, [currentUser?.id]);
   useEffect(() => {
     const latestWaistValue =
@@ -770,6 +775,27 @@ export function AthleteDashboard({
     () => buildWorkoutHistoryTitleMap(workoutHistory),
     [workoutHistory],
   );
+  const exerciseProgressCatalog = useMemo<ExerciseProgressCatalog>(
+    () => (currentUser ? buildExerciseProgressCatalog(state, currentUser.id) : { exercises: [], summaries: new Map() }),
+    [currentUser?.id, state],
+  );
+  const exerciseProgressOptions = exerciseProgressCatalog.exercises;
+  useEffect(() => {
+    if (exerciseProgressOptions.length === 0) {
+      if (selectedExerciseProgressKey) {
+        setSelectedExerciseProgressKey("");
+      }
+      return;
+    }
+
+    const selectionExists = exerciseProgressOptions.some((exercise) => exercise.key === selectedExerciseProgressKey);
+    if (!selectionExists) {
+      setSelectedExerciseProgressKey(exerciseProgressOptions[0]?.key ?? "");
+    }
+  }, [exerciseProgressOptions, selectedExerciseProgressKey]);
+  const selectedExerciseProgress =
+    exerciseProgressCatalog.summaries.get(selectedExerciseProgressKey) ??
+    (exerciseProgressOptions[0] ? exerciseProgressCatalog.summaries.get(exerciseProgressOptions[0].key) : undefined);
   const latestNoteByWorkoutId = useMemo(() => {
     const sessionById = new Map(state.sessions.map((session) => [session.id, session]));
     const notesByWorkoutId = new Map<string, { body: string; updatedAt: string }>();
@@ -2068,6 +2094,84 @@ export function AthleteDashboard({
                 <CardDescription className="mt-2">
                   Historia on ryhmitelty treeneittäin. Valitse toteutus päivämäärän mukaan tai avaa treeni tarkasteluun ja korjaukseen.
                 </CardDescription>
+                <div className="mt-5 rounded-2xl border border-[var(--border)] bg-[var(--surface-2)] p-4">
+                  <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                    <div>
+                      <p className="text-sm font-semibold text-[var(--text)]">Liikekohtainen kehitys</p>
+                      <p className="mt-1 text-sm text-[var(--text-muted)]">
+                        Seuraa valitun liikkeen arvioidun yhden toiston maksimin (e1RM) kehitystä, parasta työsarjaa ja viimeisintä kuormallista toteumaa.
+                      </p>
+                    </div>
+                    {exerciseProgressOptions.length > 0 ? (
+                      <div className="w-full sm:w-[18rem]">
+                        <Label htmlFor="athlete-history-exercise-progress" className="text-xs">
+                          Valitse liike
+                        </Label>
+                        <Select
+                          id="athlete-history-exercise-progress"
+                          className="mt-2"
+                          value={selectedExerciseProgress?.exerciseKey ?? ""}
+                          onChange={(event) => setSelectedExerciseProgressKey(event.target.value)}
+                        >
+                          {exerciseProgressOptions.map((exercise) => (
+                            <option key={exercise.key} value={exercise.key}>
+                              {exercise.exerciseName}
+                            </option>
+                          ))}
+                        </Select>
+                      </div>
+                    ) : null}
+                  </div>
+
+                  {exerciseProgressOptions.length === 0 ? (
+                    <p className="mt-4 rounded-2xl border border-[var(--border)] bg-[var(--surface)] px-4 py-3 text-sm text-[var(--text-muted)]">
+                      Kun saat ensimmäiset toteutuneet sarjat historiaan, tähän alkaa piirtyä liikekohtainen kehitys.
+                    </p>
+                  ) : selectedExerciseProgress ? (
+                    <>
+                      <div className="mt-4 grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
+                        <ExerciseProgressMetric
+                          label="Nykyinen e1RM"
+                          value={
+                            selectedExerciseProgress.currentEstimatedOneRepMax !== undefined
+                              ? `${formatLoadValue(selectedExerciseProgress.currentEstimatedOneRepMax)} kg`
+                              : "Ei dataa"
+                          }
+                          helper={
+                            selectedExerciseProgress.currentEstimatedOneRepMax !== undefined
+                              ? `Arvioitu yhden toiston maksimi. Viimeisin kuormallinen toteuma ${formatDate(selectedExerciseProgress.lastCompletedAt)}`
+                              : "Tarvitsee valmiista treenistä toteutuneen painon ja toistot, jotta yhden toiston maksimi voidaan arvioida."
+                          }
+                        />
+                        <ExerciseProgressMetric
+                          label="Paras työsarja"
+                          value={formatExerciseSetValue(selectedExerciseProgress.bestSet)}
+                          helper={formatExerciseSetHelper(selectedExerciseProgress.bestSet)}
+                        />
+                        <ExerciseProgressMetric
+                          label="Viimeisin toteuma"
+                          value={formatExerciseSetValue(selectedExerciseProgress.latestSet)}
+                          helper={formatExerciseSetHelper(selectedExerciseProgress.latestSet)}
+                        />
+                      </div>
+
+                      <div className="mt-4">
+                        <p className="text-xs font-semibold tracking-[0.04em] text-[var(--text-subtle)]">
+                          e1RM-trendi · {selectedExerciseProgress.exerciseName}
+                        </p>
+                        <MetricTrendChart
+                          points={selectedExerciseProgress.trendPoints}
+                          ariaLabel={`${selectedExerciseProgress.exerciseName} e1RM kehitystrendi`}
+                          emptyMessage="Valitulla liikkeellä ei ole vielä kuormallista toteumaa, josta e1RM voitaisiin arvioida."
+                          helperText="Kaavio näyttää kunkin treenikerran korkeimman e1RM-arvion valitulle liikkeelle."
+                          compactHelperText="Paina pistettä nähdäksesi treenikerran e1RM-arvion."
+                          valueLabel="e1RM"
+                          unit="kg"
+                        />
+                      </div>
+                    </>
+                  ) : null}
+                </div>
                 {workoutHistory.length === 0 ? (
                   <p className="mt-5 rounded-2xl border border-[var(--border)] bg-[var(--surface-2)] px-4 py-3 text-sm text-[var(--text-muted)]">
                     Historia on vielä tyhjä. Käynnistä ensimmäinen treeni ohjelmakorteista.
@@ -2819,6 +2923,14 @@ function formatLiftedKgValue(value: number) {
   return `${Math.round(value)} kg`;
 }
 
+function formatLoadValue(value: number) {
+  const decimals = Number.isInteger(value) ? 0 : 1;
+  return new Intl.NumberFormat("fi-FI", {
+    minimumFractionDigits: decimals,
+    maximumFractionDigits: decimals,
+  }).format(value);
+}
+
 function formatEstimatedCaloriesValue(value: number) {
   return `${Math.round(value)} kcal`;
 }
@@ -2834,6 +2946,46 @@ function HistoryMetric({ label, value }: { label: string; value: string }) {
       <p className="mt-1 text-sm font-medium text-[var(--text)]">{value}</p>
     </div>
   );
+}
+
+function ExerciseProgressMetric({ label, value, helper }: { label: string; value: string; helper: string }) {
+  return (
+    <div className="min-w-0 rounded-xl border border-[var(--border)] bg-[var(--surface)] px-3 py-3">
+      <p className="text-[11px] font-semibold tracking-[0.04em] text-[var(--text-subtle)]">{label}</p>
+      <p className="mt-1 text-sm font-medium text-[var(--text)]">{value}</p>
+      <p className="mt-1 text-xs leading-5 text-[var(--text-subtle)]">{helper}</p>
+    </div>
+  );
+}
+
+function formatExerciseSetValue(
+  summary?:
+    | {
+        actualLoad: number;
+        actualReps: number;
+      }
+    | undefined,
+) {
+  if (!summary) {
+    return "Ei dataa";
+  }
+
+  return `${formatLoadValue(summary.actualLoad)} kg x ${summary.actualReps}`;
+}
+
+function formatExerciseSetHelper(
+  summary?:
+    | {
+        estimatedOneRepMax: number;
+        completedAt: string;
+      }
+    | undefined,
+) {
+  if (!summary) {
+    return "Tarvitsee toteutuneen painon ja toistot valmiista treenistä.";
+  }
+
+  return `e1RM ${formatLoadValue(summary.estimatedOneRepMax)} kg · ${formatDate(summary.completedAt)}`;
 }
 
 function WorkoutMiniProgress({ workoutId }: { workoutId: string }) {
