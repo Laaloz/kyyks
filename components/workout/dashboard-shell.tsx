@@ -581,6 +581,7 @@ export function DashboardShell() {
               <AthleteDashboard
                 view={view}
                 onOpenWorkoutLog={() => setView("athlete-log")}
+                onOpenSettings={() => setView("settings")}
                 onWorkoutDetailModeChange={setIsMobileWorkoutDetailOpen}
                 overviewFocusTarget={athleteOverviewFocusTarget}
                 onOverviewFocusHandled={() => setAthleteOverviewFocusTarget(null)}
@@ -592,15 +593,21 @@ export function DashboardShell() {
                 view={view}
                 onOpenConversation={() => setView("conversation")}
                 onOpenWorkoutLog={() => setView("athlete-log")}
+                onOpenSettings={() => setView("settings")}
               />
             ) : currentUser.role === "admin" && view === "users" ? (
               <UserSettingsPanel adminOnly />
             ) : currentUser.role === "admin" ? (
-              <AdminDashboard view={view} onOpenWorkoutLog={() => setView("athlete-log")} />
+              <AdminDashboard
+                view={view}
+                onOpenWorkoutLog={() => setView("athlete-log")}
+                onOpenSettings={() => setView("settings")}
+              />
             ) : (
               <AthleteDashboard
                 view={view}
                 onOpenWorkoutLog={() => setView("athlete-log")}
+                onOpenSettings={() => setView("settings")}
                 onWorkoutDetailModeChange={setIsMobileWorkoutDetailOpen}
                 overviewFocusTarget={athleteOverviewFocusTarget}
                 onOverviewFocusHandled={() => setAthleteOverviewFocusTarget(null)}

@@ -15,7 +15,7 @@ import {
   Search,
   X,
 } from "lucide-react";
-import { useEffect, useId, useMemo, useRef, useState } from "react";
+import { type CSSProperties, useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { type Resolver, useFieldArray, useForm } from "react-hook-form";
 
 import { Badge } from "@/components/ui/badge";
@@ -27,6 +27,7 @@ import { ConversationPanel } from "@/components/workout/conversation-panel";
 import { InlineFeedback } from "@/components/workout/inline-feedback";
 import { MetricTrendChart } from "@/components/workout/metric-trend-chart";
 import { OwnMeasurementsCard } from "@/components/workout/own-measurements-card";
+import { PersonalNutritionSummaryCard } from "@/components/workout/personal-nutrition-summary-card";
 import { CoachInvitePanel } from "@/components/workout/coach/invite-panel";
 import { ProgramWorkoutEditor } from "@/components/workout/coach/program-workout-editor";
 import {
@@ -88,6 +89,67 @@ type ComposerIssue = {
 };
 
 type ComposerView = "details" | "workouts" | "workout_editor" | "review";
+type ProgramCopyTargetState = {
+  programId: string;
+  targetAthleteId: string;
+};
+type ProgramMenuAnchorRect = {
+  top: number;
+  right: number;
+  bottom: number;
+  left: number;
+};
+
+const programMenuPadding = 8;
+const programMenuOffset = 6;
+
+function toProgramMenuAnchorRect(rect: DOMRect): ProgramMenuAnchorRect {
+  return {
+    top: rect.top,
+    right: rect.right,
+    bottom: rect.bottom,
+    left: rect.left,
+  };
+}
+
+function getHiddenProgramMenuStyle(anchor: ProgramMenuAnchorRect): CSSProperties {
+  return {
+    position: "fixed",
+    top: anchor.bottom + programMenuOffset,
+    left: Math.max(programMenuPadding, anchor.right - 240),
+    maxWidth: `calc(100vw - ${programMenuPadding * 2}px)`,
+    visibility: "hidden",
+  };
+}
+
+function getProgramMenuStyle(anchor: ProgramMenuAnchorRect, menuElement: HTMLElement): CSSProperties {
+  const menuRect = menuElement.getBoundingClientRect();
+  const viewportWidth = window.innerWidth;
+  const viewportHeight = window.innerHeight;
+
+  const preferredLeft = anchor.right - menuRect.width;
+  const maxLeft = viewportWidth - menuRect.width - programMenuPadding;
+  const left = Math.max(programMenuPadding, Math.min(preferredLeft, maxLeft));
+
+  const spaceBelow = viewportHeight - anchor.bottom - programMenuPadding;
+  const spaceAbove = anchor.top - programMenuPadding;
+  const placeAbove = spaceBelow < menuRect.height && spaceAbove > spaceBelow;
+  const preferredTop = placeAbove
+    ? anchor.top - menuRect.height - programMenuOffset
+    : anchor.bottom + programMenuOffset;
+  const maxTop = viewportHeight - menuRect.height - programMenuPadding;
+  const top = Math.max(programMenuPadding, Math.min(preferredTop, maxTop));
+
+  return {
+    position: "fixed",
+    top,
+    left,
+    maxWidth: viewportWidth - programMenuPadding * 2,
+    maxHeight: viewportHeight - programMenuPadding * 2,
+    overflowX: "hidden",
+    overflowY: "auto",
+  };
+}
 
 function getComposerWorkoutLabel(
   workout: ProgramComposerFormValues["workouts"][number] | null | undefined,
@@ -612,6 +674,114 @@ function SearchableAthleteConversationSelect({
   );
 }
 
+function SearchableAthleteTargetSelect({
+  id,
+  selectedAthleteId,
+  athleteOptions,
+  onSelect,
+}: {
+  id: string;
+  selectedAthleteId: string;
+  athleteOptions: Array<{ id: string; fullName: string }>;
+  onSelect: (athleteId: string) => void;
+}) {
+  const [isOpen, setIsOpen] = useState(false);
+  const [query, setQuery] = useState("");
+  const rootRef = useRef<HTMLDivElement | null>(null);
+  const selectedAthlete = athleteOptions.find((athlete) => athlete.id === selectedAthleteId);
+
+  useEffect(() => {
+    if (!isOpen) {
+      return;
+    }
+
+    function handlePointerDown(event: MouseEvent) {
+      if (!rootRef.current?.contains(event.target as Node)) {
+        setIsOpen(false);
+      }
+    }
+
+    document.addEventListener("mousedown", handlePointerDown);
+    return () => document.removeEventListener("mousedown", handlePointerDown);
+  }, [isOpen]);
+
+  useEffect(() => {
+    if (!isOpen) {
+      setQuery("");
+    }
+  }, [isOpen]);
+
+  const filteredAthletes = useMemo(() => {
+    const normalizedQuery = query.trim().toLowerCase();
+    if (!normalizedQuery) {
+      return athleteOptions;
+    }
+
+    return athleteOptions.filter((athlete) => athlete.fullName.toLowerCase().includes(normalizedQuery));
+  }, [athleteOptions, query]);
+
+  return (
+    <div ref={rootRef} className="relative">
+      <button
+        id={id}
+        type="button"
+        className="flex w-full items-center justify-between rounded-xl border border-[var(--border)] bg-[var(--surface)] px-4 py-3 text-left text-sm text-[var(--text)] outline-none transition focus:border-[var(--accent)] focus-visible:ring-2 focus-visible:ring-[var(--accent)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--background)]"
+        aria-expanded={isOpen}
+        aria-haspopup="listbox"
+        onClick={() => setIsOpen((current) => !current)}
+      >
+        <span className={cn("truncate", !selectedAthlete ? "text-[var(--text-subtle)]" : "")}>
+          {selectedAthlete?.fullName ?? "Valitse käyttäjä"}
+        </span>
+        <ChevronDown className={cn("size-4 shrink-0 text-[var(--text-subtle)] transition", isOpen ? "rotate-180" : "")} />
+      </button>
+
+      {isOpen ? (
+        <div className="absolute left-0 right-0 top-[calc(100%+0.5rem)] z-20 overflow-hidden rounded-2xl border border-[var(--border)] bg-[var(--surface)] shadow-[0_18px_45px_-24px_var(--shadow)]">
+          <div className="border-b border-[var(--border)] p-3">
+            <div className="relative">
+              <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-[var(--text-subtle)]" />
+              <Input
+                value={query}
+                onChange={(event) => setQuery(event.target.value)}
+                placeholder="Hae käyttäjää"
+                className="pl-10"
+              />
+            </div>
+          </div>
+
+          <div className="max-h-72 overflow-y-auto p-2">
+            {filteredAthletes.length ? (
+              filteredAthletes.map((athlete) => (
+                <button
+                  key={athlete.id}
+                  type="button"
+                  className="flex w-full items-center justify-between rounded-xl px-3 py-3 text-left transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)] hover:bg-[var(--surface-2)]"
+                  onClick={() => {
+                    onSelect(athlete.id);
+                    setIsOpen(false);
+                  }}
+                >
+                  <span className="block min-w-0 truncate text-sm font-semibold text-[var(--text)]">
+                    {athlete.fullName}
+                  </span>
+                  {selectedAthleteId === athlete.id ? (
+                    <Check className="ml-3 size-4 shrink-0 text-[var(--accent-strong)]" aria-hidden="true" />
+                  ) : null}
+                </button>
+              ))
+            ) : (
+              <div className="rounded-xl border border-dashed border-[var(--border)] bg-[var(--surface-2)] px-3 py-4 text-sm text-[var(--text-muted)]">
+                Hakusanalla ei löytynyt käyttäjää.
+              </div>
+            )}
+          </div>
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
 const coachHistoryMuscleGroups: Array<{ key: CoachHistoryMuscleGroupKey; label: string }> = [
   { key: "shoulders", label: "Olkapää" },
   { key: "arms", label: "Kädet" },
@@ -626,10 +796,12 @@ export function CoachDashboard({
   view,
   onOpenConversation,
   onOpenWorkoutLog,
+  onOpenSettings,
 }: {
   view: WorkspaceView;
   onOpenConversation?: () => void;
   onOpenWorkoutLog?: () => void;
+  onOpenSettings?: () => void;
 }) {
   const {
     currentUser,
@@ -646,7 +818,12 @@ export function CoachDashboard({
   const [programMessage, setProgramMessage] = useState<string>("");
   const [programMessageTone, setProgramMessageTone] = useState<"success" | "danger" | null>(null);
   const [editingProgramId, setEditingProgramId] = useState<string | null>(null);
+  const [copyProgramState, setCopyProgramState] = useState<ProgramCopyTargetState | null>(null);
+  const [openProgramMenuId, setOpenProgramMenuId] = useState<string | null>(null);
+  const [programMenuAnchorRect, setProgramMenuAnchorRect] = useState<ProgramMenuAnchorRect | null>(null);
+  const [programMenuStyle, setProgramMenuStyle] = useState<CSSProperties | null>(null);
   const [selectedAthleteId, setSelectedAthleteId] = useState<string>("");
+  const programMenuRef = useRef<HTMLDivElement | null>(null);
 
   const athletes = currentUser
     ? isAdminRole(currentUser.role)
@@ -800,6 +977,10 @@ export function CoachDashboard({
   const closeProgramEditing = (message?: string) => {
     resetComposer(form.getValues("athleteId"));
     setProgramWorkspaceTab("library");
+    setCopyProgramState(null);
+    setOpenProgramMenuId(null);
+    setProgramMenuAnchorRect(null);
+    setProgramMenuStyle(null);
     setProgramMessage(message ?? "");
     setProgramMessageTone(message ? "success" : null);
   };
@@ -843,6 +1024,125 @@ export function CoachDashboard({
       composerCardRef.current?.scrollIntoView({ behavior, block: "start" });
     });
   };
+
+  const scrollBuilderIntoView = () => {
+    window.requestAnimationFrame(() => {
+      const composer = document.getElementById("coach-program-composer");
+      composer?.scrollIntoView({ behavior: "smooth", block: "start" });
+    });
+  };
+
+  const openProgramForEditing = (program: AppState["plans"][number]) => {
+    if (editingProgramId === program.id) {
+      closeProgramEditing("Muokkaustila suljettiin.");
+      return;
+    }
+
+    form.reset(buildProgramComposerValues(program, state.exercises));
+    setProgramWorkspaceTab("builder");
+    setEditingProgramId(program.id);
+    setComposerView("details");
+    setActiveWorkoutIndex(0);
+    setActiveExerciseIndex(0);
+    setCopyProgramState(null);
+    setProgramMessage("");
+    setProgramMessageTone(null);
+    scrollBuilderIntoView();
+  };
+
+  const getProgramCopyTargets = (program: AppState["plans"][number]) =>
+    programTargets.filter((target) => target.id !== program.athleteId);
+
+  const openProgramCopyPane = (program: AppState["plans"][number]) => {
+    const copyTargets = getProgramCopyTargets(program);
+    if (!copyTargets.length) {
+      return;
+    }
+
+    setCopyProgramState({
+      programId: program.id,
+      targetAthleteId: copyTargets[0].id,
+    });
+  };
+
+  const copyProgramToBuilder = (program: AppState["plans"][number]) => {
+    if (copyProgramState?.programId !== program.id) {
+      return;
+    }
+
+    const target = getProgramCopyTargets(program).find((item) => item.id === copyProgramState.targetAthleteId);
+    if (!target) {
+      return;
+    }
+
+    form.reset(buildProgramDraftFromProgram(program, state.exercises, target.id));
+    setEditingProgramId(null);
+    setProgramWorkspaceTab("builder");
+    setComposerView("details");
+    setActiveWorkoutIndex(0);
+    setActiveExerciseIndex(0);
+    setCopyProgramState(null);
+    setOpenProgramMenuId(null);
+    setProgramMenuAnchorRect(null);
+    setProgramMenuStyle(null);
+    setProgramMessage(`Ohjelma "${program.title}" kopioitiin käyttäjälle "${target.fullName}" uuden ohjelman pohjaksi.`);
+    setProgramMessageTone("success");
+    scrollBuilderIntoView();
+  };
+
+  useEffect(() => {
+    if (!openProgramMenuId) {
+      return;
+    }
+
+    const handlePointerDown = (event: MouseEvent) => {
+      const target = event.target as HTMLElement | null;
+      if (target?.closest("[data-program-menu-root='true']")) {
+        return;
+      }
+
+      setOpenProgramMenuId(null);
+      setProgramMenuAnchorRect(null);
+      setProgramMenuStyle(null);
+      setCopyProgramState(null);
+    };
+
+    window.addEventListener("mousedown", handlePointerDown);
+    return () => window.removeEventListener("mousedown", handlePointerDown);
+  }, [openProgramMenuId]);
+
+  useLayoutEffect(() => {
+    if (!openProgramMenuId || !programMenuAnchorRect || !programMenuRef.current) {
+      return;
+    }
+
+    setProgramMenuStyle(getProgramMenuStyle(programMenuAnchorRect, programMenuRef.current));
+  }, [openProgramMenuId, programMenuAnchorRect]);
+
+  useEffect(() => {
+    if (!openProgramMenuId) {
+      return;
+    }
+
+    const syncProgramMenuPosition = () => {
+      const trigger = document.querySelector<HTMLElement>(
+        `[data-program-menu-trigger-id="${openProgramMenuId}"]`,
+      );
+      if (!trigger) {
+        return;
+      }
+
+      setProgramMenuAnchorRect(toProgramMenuAnchorRect(trigger.getBoundingClientRect()));
+    };
+
+    syncProgramMenuPosition();
+    window.addEventListener("resize", syncProgramMenuPosition);
+    window.addEventListener("scroll", syncProgramMenuPosition, true);
+    return () => {
+      window.removeEventListener("resize", syncProgramMenuPosition);
+      window.removeEventListener("scroll", syncProgramMenuPosition, true);
+    };
+  }, [openProgramMenuId]);
 
   const scrollWorkoutCardIntoView = (workoutIndex: number) => {
     window.requestAnimationFrame(() => {
@@ -915,6 +1215,10 @@ export function CoachDashboard({
       ) : null}
 
       {view === "overview" ? <OwnMeasurementsCard sectionId="overview-measurements" /> : null}
+
+      {view === "overview" && currentUser ? (
+        <PersonalNutritionSummaryCard state={state} user={currentUser} onOpenSettings={onOpenSettings} />
+      ) : null}
 
       {view === "athletes" ? (
         <CoachAthleteInsights
@@ -1753,35 +2057,122 @@ export function CoachDashboard({
                                 type="button"
                                 variant="secondary"
                                 onClick={() => {
-                                  if (isActiveEditorTarget) {
-                                    closeProgramEditing("Muokkaustila suljettiin.");
-                                    return;
-                                  }
-                                  form.reset(buildProgramComposerValues(program, state.exercises));
-                                  setProgramWorkspaceTab("builder");
-                                  setEditingProgramId(program.id);
-                                  setComposerView("details");
-                                  setActiveWorkoutIndex(0);
-                                  setActiveExerciseIndex(0);
-                                  setProgramMessage("");
-                                  window.requestAnimationFrame(() => {
-                                    const composer = document.getElementById("coach-program-composer");
-                                    composer?.scrollIntoView({ behavior: "smooth", block: "start" });
-                                  });
+                                  openProgramForEditing(program);
                                 }}
                               >
                                 {isActiveEditorTarget ? "Sulje muokkaus" : "Muokkaa ohjelmaa"}
                               </Button>
-                              <details className="relative">
-                                <summary className="inline-flex size-10 list-none items-center justify-center rounded-full border border-[var(--border)] bg-[var(--surface)] p-0 text-[var(--text-muted)] transition hover:border-[var(--border-strong)] hover:bg-[var(--surface-2)] hover:text-[var(--text)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--surface)]">
+                              <div className="relative" data-program-menu-root="true">
+                                <button
+                                  type="button"
+                                  className="inline-flex size-10 list-none items-center justify-center rounded-full border border-[var(--border)] bg-[var(--surface)] p-0 text-[var(--text-muted)] transition hover:border-[var(--border-strong)] hover:bg-[var(--surface-2)] hover:text-[var(--text)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--surface)]"
+                                  data-program-menu-trigger-id={program.id}
+                                  aria-expanded={openProgramMenuId === program.id}
+                                  aria-haspopup="menu"
+                                  aria-label="Avaa ohjelman lisätoiminnot"
+                                  onClick={(event) => {
+                                    if (openProgramMenuId === program.id) {
+                                      setOpenProgramMenuId(null);
+                                      setProgramMenuAnchorRect(null);
+                                      setProgramMenuStyle(null);
+                                      setCopyProgramState(null);
+                                      return;
+                                    }
+
+                                    setProgramMenuAnchorRect(toProgramMenuAnchorRect(event.currentTarget.getBoundingClientRect()));
+                                    setOpenProgramMenuId(program.id);
+                                    setCopyProgramState(null);
+                                  }}
+                                >
                                   <MoreHorizontal className="size-4" aria-hidden="true" />
-                                  <span className="sr-only">Avaa ohjelman lisätoiminnot</span>
-                                </summary>
-                                <div className="absolute right-0 top-[calc(100%+0.5rem)] z-10 min-w-60 max-w-[calc(100vw-1rem)] rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-2 shadow-[0_18px_45px_-24px_var(--shadow)]">
+                                </button>
+                                {openProgramMenuId === program.id ? (
+                                  <div
+                                    ref={programMenuRef}
+                                    role="menu"
+                                    className="z-20 min-w-60 rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-2 shadow-[0_18px_45px_-24px_var(--shadow)]"
+                                    style={
+                                      programMenuStyle ??
+                                      (programMenuAnchorRect
+                                        ? getHiddenProgramMenuStyle(programMenuAnchorRect)
+                                        : undefined)
+                                    }
+                                  >
+                                  {(() => {
+                                    const copyTargets = getProgramCopyTargets(program);
+                                    const isCopyPaneOpen = copyProgramState?.programId === program.id;
+                                    const selectedCopyTargetId = isCopyPaneOpen ? copyProgramState.targetAthleteId : "";
+
+                                    return (
+                                      <>
+                                        <button
+                                          type="button"
+                                          disabled={!copyTargets.length}
+                                          className="flex w-full items-center rounded-xl px-3 py-2 text-left text-sm font-semibold text-[var(--text)] transition hover:bg-[var(--surface-2)] disabled:cursor-not-allowed disabled:text-[var(--text-subtle)] disabled:hover:bg-transparent"
+                                          onClick={() => {
+                                            if (!copyTargets.length) {
+                                              return;
+                                            }
+                                            openProgramCopyPane(program);
+                                          }}
+                                        >
+                                          Kopioi toiselle käyttäjälle
+                                        </button>
+                                        {!copyTargets.length ? (
+                                          <p className="px-3 pb-2 text-xs text-[var(--text-subtle)]">
+                                            Ei muita käyttäjiä kopiointia varten.
+                                          </p>
+                                        ) : null}
+                                        {isCopyPaneOpen ? (
+                                          <div className="mb-2 rounded-xl border border-[var(--border)] bg-[var(--surface-2)] p-3">
+                                            <p className="text-sm font-semibold text-[var(--text)]">Kopioi ohjelma toiselle käyttäjälle</p>
+                                            <p className="mt-1 text-xs text-[var(--text-subtle)]">
+                                              Kaikki päivät ja liikkeet kopioidaan uuden ohjelman pohjaksi.
+                                            </p>
+                                            <div className="mt-3">
+                                              <SearchableAthleteTargetSelect
+                                                id={`copy-program-target-${program.id}`}
+                                                selectedAthleteId={selectedCopyTargetId}
+                                                athleteOptions={copyTargets}
+                                                onSelect={(athleteId) =>
+                                                  setCopyProgramState((current) =>
+                                                    current && current.programId === program.id
+                                                      ? { ...current, targetAthleteId: athleteId }
+                                                      : current,
+                                                  )
+                                                }
+                                              />
+                                            </div>
+                                            <div className="mt-3 flex flex-wrap gap-2">
+                                              <Button
+                                                type="button"
+                                                variant="secondary"
+                                                onClick={() => copyProgramToBuilder(program)}
+                                              >
+                                                Kopioi pohjaksi
+                                              </Button>
+                                              <Button
+                                                type="button"
+                                                variant="ghost"
+                                                onClick={() => setCopyProgramState(null)}
+                                              >
+                                                Peruuta
+                                              </Button>
+                                            </div>
+                                          </div>
+                                        ) : null}
+                                      </>
+                                    );
+                                  })()}
                                   <button
                                     type="button"
+                                    role="menuitem"
                                     className="flex w-full items-center rounded-xl px-3 py-2 text-left text-sm font-semibold text-[var(--text)] transition hover:bg-[var(--surface-2)]"
                                     onClick={async () => {
+                                      setOpenProgramMenuId(null);
+                                      setProgramMenuAnchorRect(null);
+                                      setProgramMenuStyle(null);
+                                      setCopyProgramState(null);
                                       const result = await setProgramStatus(program.id, "archived");
                                       if (!result.ok) {
                                         setProgramMessage(result.message);
@@ -1797,6 +2188,7 @@ export function CoachDashboard({
                                   </button>
                                   <button
                                     type="button"
+                                    role="menuitem"
                                     disabled={!canDeleteProgram}
                                     className="flex w-full items-center rounded-xl px-3 py-2 text-left text-sm font-semibold text-[var(--danger)] transition hover:bg-[var(--surface-2)] disabled:cursor-not-allowed disabled:text-[var(--text-subtle)] disabled:hover:bg-transparent"
                                     onClick={async () => {
@@ -1820,6 +2212,10 @@ export function CoachDashboard({
                                       if (isActiveEditorTarget) {
                                         resetComposer(form.getValues("athleteId"));
                                       }
+                                      setOpenProgramMenuId(null);
+                                      setProgramMenuAnchorRect(null);
+                                      setProgramMenuStyle(null);
+                                      setCopyProgramState(null);
                                       setProgramMessage(
                                         `Ohjelma "${program.title}" poistettiin näkyvistä. Historia säilyy edelleen uusien ohjelmien taustalla.`,
                                       );
@@ -1828,8 +2224,9 @@ export function CoachDashboard({
                                   >
                                     Poista
                                   </button>
-                                </div>
-                              </details>
+                                  </div>
+                                ) : null}
+                              </div>
                             </div>
                             <p className="mt-2.5 text-xs text-[var(--text-subtle)]">
                               Poista piilottaa ohjelman listoilta, mutta säilyttää treenihistorian uusien ohjelmien autofillia varten.
@@ -1912,38 +2309,125 @@ export function CoachDashboard({
                               >
                                 Ota käyttöön
                               </Button>
-                              <details className="relative">
-                                <summary className="inline-flex size-10 list-none items-center justify-center rounded-full border border-[var(--border)] bg-[var(--surface)] p-0 text-[var(--text-muted)] transition hover:border-[var(--border-strong)] hover:bg-[var(--surface-2)] hover:text-[var(--text)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--surface)]">
+                              <div className="relative" data-program-menu-root="true">
+                                <button
+                                  type="button"
+                                  className="inline-flex size-10 list-none items-center justify-center rounded-full border border-[var(--border)] bg-[var(--surface)] p-0 text-[var(--text-muted)] transition hover:border-[var(--border-strong)] hover:bg-[var(--surface-2)] hover:text-[var(--text)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--surface)]"
+                                  data-program-menu-trigger-id={program.id}
+                                  aria-expanded={openProgramMenuId === program.id}
+                                  aria-haspopup="menu"
+                                  aria-label="Avaa ohjelman lisätoiminnot"
+                                  onClick={(event) => {
+                                    if (openProgramMenuId === program.id) {
+                                      setOpenProgramMenuId(null);
+                                      setProgramMenuAnchorRect(null);
+                                      setProgramMenuStyle(null);
+                                      setCopyProgramState(null);
+                                      return;
+                                    }
+
+                                    setProgramMenuAnchorRect(toProgramMenuAnchorRect(event.currentTarget.getBoundingClientRect()));
+                                    setOpenProgramMenuId(program.id);
+                                    setCopyProgramState(null);
+                                  }}
+                                >
                                   <MoreHorizontal className="size-4" aria-hidden="true" />
-                                  <span className="sr-only">Avaa ohjelman lisätoiminnot</span>
-                                </summary>
-                                <div className="absolute right-0 top-[calc(100%+0.5rem)] z-10 min-w-60 max-w-[calc(100vw-1rem)] rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-2 shadow-[0_18px_45px_-24px_var(--shadow)]">
+                                </button>
+                                {openProgramMenuId === program.id ? (
+                                  <div
+                                    ref={programMenuRef}
+                                    role="menu"
+                                    className="z-20 min-w-60 rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-2 shadow-[0_18px_45px_-24px_var(--shadow)]"
+                                    style={
+                                      programMenuStyle ??
+                                      (programMenuAnchorRect
+                                        ? getHiddenProgramMenuStyle(programMenuAnchorRect)
+                                        : undefined)
+                                    }
+                                  >
+                                  {(() => {
+                                    const copyTargets = getProgramCopyTargets(program);
+                                    const isCopyPaneOpen = copyProgramState?.programId === program.id;
+                                    const selectedCopyTargetId = isCopyPaneOpen ? copyProgramState.targetAthleteId : "";
+
+                                    return (
+                                      <>
+                                        <button
+                                          type="button"
+                                          disabled={!copyTargets.length}
+                                          className="flex w-full items-center rounded-xl px-3 py-2 text-left text-sm font-semibold text-[var(--text)] transition hover:bg-[var(--surface-2)] disabled:cursor-not-allowed disabled:text-[var(--text-subtle)] disabled:hover:bg-transparent"
+                                          onClick={() => {
+                                            if (!copyTargets.length) {
+                                              return;
+                                            }
+                                            openProgramCopyPane(program);
+                                          }}
+                                        >
+                                          Kopioi toiselle käyttäjälle
+                                        </button>
+                                        {!copyTargets.length ? (
+                                          <p className="px-3 pb-2 text-xs text-[var(--text-subtle)]">
+                                            Ei muita käyttäjiä kopiointia varten.
+                                          </p>
+                                        ) : null}
+                                        {isCopyPaneOpen ? (
+                                          <div className="mb-2 rounded-xl border border-[var(--border)] bg-[var(--surface-2)] p-3">
+                                            <p className="text-sm font-semibold text-[var(--text)]">Kopioi ohjelma toiselle käyttäjälle</p>
+                                            <p className="mt-1 text-xs text-[var(--text-subtle)]">
+                                              Kaikki päivät ja liikkeet kopioidaan uuden ohjelman pohjaksi.
+                                            </p>
+                                            <div className="mt-3">
+                                              <SearchableAthleteTargetSelect
+                                                id={`copy-program-target-${program.id}`}
+                                                selectedAthleteId={selectedCopyTargetId}
+                                                athleteOptions={copyTargets}
+                                                onSelect={(athleteId) =>
+                                                  setCopyProgramState((current) =>
+                                                    current && current.programId === program.id
+                                                      ? { ...current, targetAthleteId: athleteId }
+                                                      : current,
+                                                  )
+                                                }
+                                              />
+                                            </div>
+                                            <div className="mt-3 flex flex-wrap gap-2">
+                                              <Button
+                                                type="button"
+                                                variant="secondary"
+                                                onClick={() => copyProgramToBuilder(program)}
+                                              >
+                                                Kopioi pohjaksi
+                                              </Button>
+                                              <Button
+                                                type="button"
+                                                variant="ghost"
+                                                onClick={() => setCopyProgramState(null)}
+                                              >
+                                                Peruuta
+                                              </Button>
+                                            </div>
+                                          </div>
+                                        ) : null}
+                                      </>
+                                    );
+                                  })()}
                                   <button
                                     type="button"
+                                    role="menuitem"
                                     className="flex w-full items-center rounded-xl px-3 py-2 text-left text-sm font-semibold text-[var(--text)] transition hover:bg-[var(--surface-2)]"
                                     onClick={() => {
-                                      if (isActiveEditorTarget) {
-                                        closeProgramEditing("Muokkaustila suljettiin.");
-                                        return;
-                                      }
-                                      form.reset(buildProgramComposerValues(program, state.exercises));
-                                      setProgramWorkspaceTab("builder");
-                                      setEditingProgramId(program.id);
-                                      setComposerView("details");
-                                      setActiveWorkoutIndex(0);
-                                      setActiveExerciseIndex(0);
-                                      setProgramMessage("");
-                                      setProgramMessageTone(null);
-                                      window.requestAnimationFrame(() => {
-                                        const composer = document.getElementById("coach-program-composer");
-                                        composer?.scrollIntoView({ behavior: "smooth", block: "start" });
-                                      });
+                                      setOpenProgramMenuId(null);
+                                      setProgramMenuAnchorRect(null);
+                                      setProgramMenuStyle(null);
+                                      setCopyProgramState(null);
+                                      openProgramForEditing(program);
                                     }}
                                   >
                                     {isActiveEditorTarget ? "Sulje muokkaus" : "Muokkaa ohjelmaa"}
                                   </button>
                                   <button
                                     type="button"
+                                    role="menuitem"
                                     disabled={!canDeleteProgram}
                                     className="flex w-full items-center rounded-xl px-3 py-2 text-left text-sm font-semibold text-[var(--danger)] transition hover:bg-[var(--surface-2)] disabled:cursor-not-allowed disabled:text-[var(--text-subtle)] disabled:hover:bg-transparent"
                                     onClick={async () => {
@@ -1967,6 +2451,10 @@ export function CoachDashboard({
                                       if (isActiveEditorTarget) {
                                         resetComposer(form.getValues("athleteId"));
                                       }
+                                      setOpenProgramMenuId(null);
+                                      setProgramMenuAnchorRect(null);
+                                      setProgramMenuStyle(null);
+                                      setCopyProgramState(null);
                                       setProgramMessage(
                                         `Ohjelma "${program.title}" poistettiin näkyvistä. Historia säilyy edelleen uusien ohjelmien taustalla.`,
                                       );
@@ -1975,8 +2463,9 @@ export function CoachDashboard({
                                   >
                                     Poista
                                   </button>
-                                </div>
-                              </details>
+                                  </div>
+                                ) : null}
+                              </div>
                             </div>
                             <p className="mt-2.5 text-xs text-[var(--text-subtle)]">
                               Poista piilottaa myös arkistoidun ohjelman listoilta, mutta säilyttää historian uusien ohjelmien autofillia varten.
@@ -2096,6 +2585,27 @@ function buildProgramComposerValues(
           notes: firstSet?.notes ?? "",
         };
       }),
+    })),
+  };
+}
+
+export function buildProgramDraftFromProgram(
+  program: AppState["plans"][number],
+  exercises: AppState["exercises"],
+  targetAthleteId: string,
+): ProgramComposerFormValues {
+  const draft = buildProgramComposerValues(program, exercises);
+
+  return {
+    ...draft,
+    title: `${program.title} (kopio)`,
+    athleteId: targetAthleteId,
+    workouts: draft.workouts.map((workout) => ({
+      ...workout,
+      exercises: workout.exercises.map((exercise) => ({
+        ...exercise,
+        targetLoad: undefined,
+      })),
     })),
   };
 }

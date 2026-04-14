@@ -21,6 +21,7 @@ import { AthleteSessionPanel } from "@/components/workout/athlete/session-panel"
 import { ConversationPanel } from "@/components/workout/conversation-panel";
 import { MetricTrendChart } from "@/components/workout/metric-trend-chart";
 import { NutritionAthleteCard } from "@/components/workout/nutrition-athlete-card";
+import { PersonalNutritionSummaryCard } from "@/components/workout/personal-nutrition-summary-card";
 import { estimateStrengthCalories, getMeasurementsForUser, getWeightAtMoment } from "@/lib/body-metrics";
 import { calculateSessionDurationSeconds, getSessionProgress } from "@/lib/domain";
 import { buildExerciseProgressCatalog, type ExerciseProgressCatalog } from "@/lib/exercise-progress";
@@ -227,12 +228,14 @@ function getFloatingMenuStyle(anchor: AnchorRect, menuElement: HTMLElement): CSS
 export function AthleteDashboard({
   view,
   onOpenWorkoutLog,
+  onOpenSettings,
   onWorkoutDetailModeChange,
   overviewFocusTarget,
   onOverviewFocusHandled,
 }: {
   view: WorkspaceView;
   onOpenWorkoutLog?: () => void;
+  onOpenSettings?: () => void;
   onWorkoutDetailModeChange?: (isOpen: boolean) => void;
   overviewFocusTarget?: AthleteOverviewFocusTarget | null;
   onOverviewFocusHandled?: () => void;
@@ -1527,6 +1530,10 @@ export function AthleteDashboard({
           </div>
           </Card>
         </div>
+      ) : null}
+
+      {view === "overview" && currentUser ? (
+        <PersonalNutritionSummaryCard state={state} user={currentUser} onOpenSettings={onOpenSettings} />
       ) : null}
 
       {view === "overview" && currentUser ? <NutritionAthleteCard state={state} user={currentUser} /> : null}

@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import { cloneDemoState } from "@/lib/domain";
 import {
   assignMealPlan,
+  buildPersonalNutritionGoalComparison,
   calculateMacroTarget,
   calculateRecipeNutrition,
   getActiveMealPlanForAthlete,
@@ -114,6 +115,71 @@ describe("nutrition helpers", () => {
     expect(lose).not.toBeNull();
     expect(lose!.kcal).toBeLessThan(maintain!.kcal);
     expect(lose!.kcal).toBeLessThanOrEqual(2300);
+  });
+
+  it("builds personal comparison targets from active profile and keeps phase order", () => {
+    const comparison = buildPersonalNutritionGoalComparison(
+      {
+        age: 31,
+        heightCm: 184,
+        weightKg: 95,
+        sex: "male",
+      },
+      {
+        goal: "gain",
+        activityLevel: "moderate",
+        targetKcal: 3200,
+        proteinG: 190,
+        carbsG: 380,
+        fatG: 80,
+        calculationMode: "manual_override",
+      },
+    );
+
+    expect(comparison).not.toBeNull();
+    expect(comparison?.activeGoal).toBe("gain");
+    expect(comparison?.activeTarget.kcal).toBe(3200);
+    expect(comparison?.comparisonTargets.lose.kcal).toBeLessThan(comparison?.comparisonTargets.maintain.kcal ?? 0);
+    expect(comparison?.comparisonTargets.maintain.kcal).toBeLessThan(comparison?.comparisonTargets.gain.kcal ?? 0);
+    expect(comparison?.isEstimate).toBe(true);
+  });
+
+  it("returns null comparison when required profile data is missing", () => {
+    const comparison = buildPersonalNutritionGoalComparison(
+      {
+        heightCm: 168,
+        weightKg: 67.8,
+        sex: "female",
+      },
+      null,
+    );
+
+    expect(comparison).toBeNull();
+  });
+
+  it("defaults comparison targets to high activity when no profile exists", () => {
+    const comparison = buildPersonalNutritionGoalComparison(
+      {
+        age: 30,
+        heightCm: 180,
+        weightKg: 87,
+        sex: "male",
+      },
+      null,
+    );
+
+    const expectedMaintain = calculateMacroTarget({
+      age: 30,
+      heightCm: 180,
+      weightKg: 87,
+      sex: "male",
+      goal: "maintain",
+      activityLevel: "high",
+    });
+
+    expect(comparison).not.toBeNull();
+    expect(comparison?.activityLevel).toBe("high");
+    expect(comparison?.comparisonTargets.maintain.kcal).toBe(expectedMaintain?.kcal);
   });
 
   it("scales linear recipe ingredients but keeps fixed spices stable", () => {

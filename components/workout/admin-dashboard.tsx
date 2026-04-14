@@ -13,6 +13,7 @@ import { Card, CardDescription, CardTitle } from "@/components/ui/card";
 import { Input, Label, Select } from "@/components/ui/field";
 import { NutritionAdminPanel } from "@/components/workout/nutrition-admin-panel";
 import { OwnMeasurementsCard } from "@/components/workout/own-measurements-card";
+import { PersonalNutritionSummaryCard } from "@/components/workout/personal-nutrition-summary-card";
 import { getAdminCoachingCoverage, getAdminOverviewAthleteGroups } from "@/lib/admin-overview";
 import { getInviteLifecycleLabel, getVisiblePendingInvites } from "@/lib/invite-status";
 import { withMinimumDelay } from "@/lib/min-delay";
@@ -37,9 +38,11 @@ const adminOverviewTabs: Array<{ id: AdminOverviewTab; label: string; descriptio
 export function AdminDashboard({
   view,
   onOpenWorkoutLog,
+  onOpenSettings,
 }: {
   view: WorkspaceView;
   onOpenWorkoutLog?: () => void;
+  onOpenSettings?: () => void;
 }) {
   const { currentUser, state, notify, createInvite, resendInvite } = useAppState();
   const formId = useId();
@@ -256,6 +259,9 @@ export function AdminDashboard({
                   />
                 ) : null}
                 <OwnMeasurementsCard sectionId="overview-measurements" />
+                {currentUser ? (
+                  <PersonalNutritionSummaryCard state={state} user={currentUser} onOpenSettings={onOpenSettings} />
+                ) : null}
               </>
             ) : null}
 

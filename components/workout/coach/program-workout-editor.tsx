@@ -746,7 +746,7 @@ export function ProgramWorkoutEditor({
                     <div>
                       <div className="mb-1 flex items-center gap-1">
                         <RequiredLabel className="mb-0" htmlFor={`workout-${index}-load-${exerciseIndex}`} optional>Kuorma (kg)</RequiredLabel>
-                        <InfoTooltip text="Suosituslähtökuorma sarjalle. Treenaaja voi kirjata toteutuneen kuorman erikseen." />
+                        <InfoTooltip text="Valinnainen suosituslähtökuorma sarjalle. Tämä kenttä ei täyty automaattisesti tässä näkymässä. Kun treenaaja aloittaa treenin, toteutukseen voidaan ehdottaa kuormaa historiasta, jos aiempaa dataa löytyy." />
                       </div>
                       <Input
                         id={`workout-${index}-load-${exerciseIndex}`}

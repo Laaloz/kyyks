@@ -172,7 +172,7 @@ export function NutritionAdminPanel() {
   );
   const [profileForm, setProfileForm] = useState<NutritionProfileFormState>(() => ({
     goal: selectedProfile?.goal ?? "maintain",
-    activityLevel: selectedProfile?.activityLevel ?? "moderate",
+    activityLevel: selectedProfile?.activityLevel ?? "high",
     mealsPerDay: String(selectedProfile?.mealsPerDay ?? 5),
     calculationMode: selectedProfile?.calculationMode ?? "auto",
     targetKcal: selectedProfile ? String(selectedProfile.targetKcal) : "",
@@ -572,7 +572,7 @@ export function NutritionAdminPanel() {
                         const profile = state.nutritionProfiles.find((item) => item.userId === nextUserId) ?? null;
                         setProfileForm({
                           goal: profile?.goal ?? "maintain",
-                          activityLevel: profile?.activityLevel ?? "moderate",
+                          activityLevel: profile?.activityLevel ?? "high",
                           mealsPerDay: String(profile?.mealsPerDay ?? 5),
                           calculationMode: profile?.calculationMode ?? "auto",
                           targetKcal: profile ? String(profile.targetKcal) : "",

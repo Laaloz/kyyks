@@ -21,6 +21,20 @@ import type {
   UserProfile,
 } from "@/lib/types";
 
+export type PersonalNutritionGoalComparison = {
+  activeGoal: NutritionGoal;
+  activeTarget: MacroTarget;
+  activeTargetSource: "profile" | "auto_fallback";
+  comparisonTargets: Record<NutritionGoal, MacroTarget> | null;
+  guidanceByGoal: Record<NutritionGoal, string>;
+  activityLevel: NutritionActivityLevel;
+  hasCompleteProfile: boolean;
+  missingFields: Array<"age" | "sex" | "heightCm" | "weightKg">;
+  isEstimate: boolean;
+  hasNutritionProfile: boolean;
+  calculationMode?: NutritionProfile["calculationMode"];
+};
+
 function nowIso() {
   return new Date().toISOString();
 }
@@ -169,6 +183,104 @@ export function getMissingMacroProfileFields(user: Pick<UserProfile, "age" | "se
   }
 
   return missing;
+}
+
+export function buildPersonalNutritionGoalComparison(
+  user: Pick<UserProfile, "age" | "sex" | "heightCm" | "weightKg">,
+  nutritionProfile?: Pick<
+    NutritionProfile,
+    "goal" | "activityLevel" | "targetKcal" | "proteinG" | "carbsG" | "fatG" | "calculationMode"
+  > | null,
+): PersonalNutritionGoalComparison | null {
+  const missingFields = getMissingMacroProfileFields(user);
+  const hasCompleteProfile = missingFields.length === 0;
+  const activityLevel = nutritionProfile?.activityLevel ?? "high";
+  const comparisonTargets = {
+    lose: calculateMacroTarget({
+      age: user.age,
+      heightCm: user.heightCm,
+      weightKg: user.weightKg,
+      sex: user.sex,
+      goal: "lose",
+      activityLevel,
+    }),
+    maintain: calculateMacroTarget({
+      age: user.age,
+      heightCm: user.heightCm,
+      weightKg: user.weightKg,
+      sex: user.sex,
+      goal: "maintain",
+      activityLevel,
+    }),
+    gain: calculateMacroTarget({
+      age: user.age,
+      heightCm: user.heightCm,
+      weightKg: user.weightKg,
+      sex: user.sex,
+      goal: "gain",
+      activityLevel,
+    }),
+  } satisfies Record<NutritionGoal, MacroTarget | null>;
+
+  const guidanceByGoal = {
+    lose: getMacroGoalGuidance("lose"),
+    maintain: getMacroGoalGuidance("maintain"),
+    gain: getMacroGoalGuidance("gain"),
+  } satisfies Record<NutritionGoal, string>;
+
+  if (!comparisonTargets.lose || !comparisonTargets.maintain || !comparisonTargets.gain) {
+    if (!nutritionProfile) {
+      return null;
+    }
+
+    return {
+      activeGoal: nutritionProfile.goal,
+      activeTarget: {
+        kcal: nutritionProfile.targetKcal,
+        proteinG: nutritionProfile.proteinG,
+        carbsG: nutritionProfile.carbsG,
+        fatG: nutritionProfile.fatG,
+      },
+      activeTargetSource: "profile",
+      comparisonTargets: null,
+      guidanceByGoal,
+      activityLevel,
+      hasCompleteProfile,
+      missingFields,
+      isEstimate: true,
+      hasNutritionProfile: true,
+      calculationMode: nutritionProfile.calculationMode,
+    };
+  }
+
+  const activeGoal = nutritionProfile?.goal ?? "maintain";
+  const activeTarget =
+    nutritionProfile
+      ? {
+          kcal: nutritionProfile.targetKcal,
+          proteinG: nutritionProfile.proteinG,
+          carbsG: nutritionProfile.carbsG,
+          fatG: nutritionProfile.fatG,
+        }
+      : comparisonTargets[activeGoal];
+
+  return {
+    activeGoal,
+    activeTarget,
+    activeTargetSource: nutritionProfile ? "profile" : "auto_fallback",
+    comparisonTargets: {
+      lose: comparisonTargets.lose,
+      maintain: comparisonTargets.maintain,
+      gain: comparisonTargets.gain,
+    },
+    guidanceByGoal,
+    activityLevel,
+    hasCompleteProfile,
+    missingFields,
+    isEstimate: !nutritionProfile || !hasCompleteProfile || nutritionProfile.calculationMode === "manual_override",
+    hasNutritionProfile: Boolean(nutritionProfile),
+    calculationMode: nutritionProfile?.calculationMode,
+  };
 }
 
 function resolveIngredientNutritionContribution(
