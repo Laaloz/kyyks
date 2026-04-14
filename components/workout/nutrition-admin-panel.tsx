@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardDescription, CardTitle } from "@/components/ui/card";
 import { Input, Label, Select, Textarea } from "@/components/ui/field";
 import { InlineFeedback } from "@/components/workout/inline-feedback";
+import { getMeasurementsForUser } from "@/lib/body-metrics";
 import { calculateMacroTarget, getMacroGoalGuidance, getMissingMacroProfileFields, joinRecipeInstructionSteps, mealTagLabel } from "@/lib/nutrition";
 import { isAthleteRole } from "@/lib/role-access";
 import type {
@@ -352,6 +353,9 @@ export function NutritionAdminPanel() {
   const activeSectionMeta = sectionMeta.find((section) => section.id === activeSection) ?? sectionMeta[0];
   const selectedAthleteName = athleteUsers.find((user) => user.id === selectedAthleteId)?.fullName ?? "Ei valittu";
   const selectedAthlete = state.users.find((user) => user.id === selectedAthleteId) ?? null;
+  const selectedAthleteMeasurements = selectedAthlete ? getMeasurementsForUser(state, selectedAthlete.id) : [];
+  const latestWeightKg = selectedAthleteMeasurements.find((entry) => entry.weightKg !== undefined)?.weightKg ?? selectedAthlete?.weightKg;
+  const latestWaistCm = selectedAthleteMeasurements.find((entry) => entry.waistCm !== undefined)?.waistCm ?? selectedAthlete?.waistCm;
   const missingAutoFields = selectedAthlete ? getMissingMacroProfileFields(selectedAthlete) : [];
   const autoPreviewTarget = selectedAthlete
     ? calculateMacroTarget({
@@ -625,6 +629,21 @@ export function NutritionAdminPanel() {
                       </p>
                       <p className="mt-2 text-sm text-[var(--text-muted)]">
                         Tämä on suuntaa-antava aloitussuositus, jota tarkennetaan painotrendin, kylläisyyden, jaksamisen ja treenitehon perusteella.
+                      </p>
+                      <div className="mt-3 grid gap-3 md:grid-cols-2">
+                        <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-3">
+                          <p className="text-xs font-semibold tracking-[0.04em] text-[var(--text-subtle)]">Nykyinen paino</p>
+                          <p className="mt-1 text-lg font-semibold text-[var(--text)]">{latestWeightKg ?? "-"}</p>
+                          <p className="text-sm text-[var(--text-muted)]">kg</p>
+                        </div>
+                        <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-3">
+                          <p className="text-xs font-semibold tracking-[0.04em] text-[var(--text-subtle)]">Nykyinen vyötärö</p>
+                          <p className="mt-1 text-lg font-semibold text-[var(--text)]">{latestWaistCm ?? "-"}</p>
+                          <p className="text-sm text-[var(--text-muted)]">cm</p>
+                        </div>
+                      </div>
+                      <p className="mt-2 text-sm text-[var(--text-muted)]">
+                        Paino ja vyötärö päivitetään käyttäjän omasta profiilista ja mittaseurannasta.
                       </p>
                       <p className="mt-2 text-sm text-[var(--text-muted)]">
                         {getMacroGoalGuidance(profileForm.goal)}

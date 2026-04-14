@@ -1,7 +1,7 @@
 "use client";
 
 import { zodResolver } from "@hookform/resolvers/zod";
-import { Bell, Ellipsis, HousePlus, KeyRound, Mail, Ruler, Share, UserRound, Waves } from "lucide-react";
+import { Bell, Ellipsis, HousePlus, KeyRound, Mail, Ruler, Scale, Share, UserRound, Waves } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
@@ -95,10 +95,17 @@ export function UserSettingsPanel({ adminOnly = false }: { adminOnly?: boolean }
   const [activeSection, setActiveSection] = useState<SettingsSection>("profile");
   const [deferredInstallPrompt, setDeferredInstallPrompt] = useState<DeferredInstallPromptEvent | null>(null);
   const [isInstalledToHomeScreen, setIsInstalledToHomeScreen] = useState(false);
+  const latestOwnWeightKg = useMemo(
+    () =>
+      currentUser
+        ? getMeasurementsForUser(state, currentUser.id).find((entry) => entry.weightKg !== undefined)?.weightKg ?? currentUser.weightKg
+        : undefined,
+    [currentUser, state],
+  );
   const latestOwnWaistCm = useMemo(
     () =>
       currentUser
-        ? getMeasurementsForUser(state, currentUser.id).find((entry) => entry.waistCm !== undefined)?.waistCm
+        ? getMeasurementsForUser(state, currentUser.id).find((entry) => entry.waistCm !== undefined)?.waistCm ?? currentUser.waistCm
         : undefined,
     [currentUser, state],
   );
@@ -580,6 +587,37 @@ export function UserSettingsPanel({ adminOnly = false }: { adminOnly?: boolean }
             />
             <p className="mt-2 text-xs text-[var(--text-subtle)]">
               Pituus on pysyvä profiilitieto. Päivitä paino ja vyötärö edelleen yleiskuvan omasta mittaseurannasta.
+            </p>
+          </div>
+
+          <div className="sm:col-span-2">
+            <Label>Nykyiset mittatiedot</Label>
+            <div className="grid gap-3 sm:grid-cols-2">
+              <div className="flex items-center gap-3 rounded-xl border border-[var(--border)] bg-[var(--surface)] px-4 py-3">
+                <div className="flex h-10 w-10 items-center justify-center rounded-full bg-[color-mix(in_srgb,var(--accent)_14%,transparent)] text-[var(--accent)]">
+                  <Scale className="h-4 w-4" aria-hidden="true" />
+                </div>
+                <div className="min-w-0">
+                  <p className="text-[11px] font-semibold tracking-[0.04em] text-[var(--text-subtle)]">Paino</p>
+                  <p className="mt-0.5 text-base font-semibold text-[var(--text)]">
+                    {latestOwnWeightKg ?? "-"} <span className="text-sm font-medium text-[var(--text-muted)]">kg</span>
+                  </p>
+                </div>
+              </div>
+              <div className="flex items-center gap-3 rounded-xl border border-[var(--border)] bg-[var(--surface)] px-4 py-3">
+                <div className="flex h-10 w-10 items-center justify-center rounded-full bg-[color-mix(in_srgb,var(--accent)_14%,transparent)] text-[var(--accent)]">
+                  <Ruler className="h-4 w-4" aria-hidden="true" />
+                </div>
+                <div className="min-w-0">
+                  <p className="text-[11px] font-semibold tracking-[0.04em] text-[var(--text-subtle)]">Vyötärö</p>
+                  <p className="mt-0.5 text-base font-semibold text-[var(--text)]">
+                    {latestOwnWaistCm ?? "-"} <span className="text-sm font-medium text-[var(--text-muted)]">cm</span>
+                  </p>
+                </div>
+              </div>
+            </div>
+            <p className="mt-2 text-xs text-[var(--text-subtle)]">
+              Paino ja vyötärö päivittyvät mittaseurannan kautta, eivät tästä profiilin perustieto-osiosta.
             </p>
           </div>
 
