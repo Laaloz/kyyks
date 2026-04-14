@@ -261,7 +261,7 @@ function buildComposerIssues(values: ProgramComposerFormValues): ComposerIssue[]
   }
 
   if (!values.workouts.length) {
-    pushIssue("workouts", "Lisää vähintään yksi harjoitus ohjelmaan.");
+    pushIssue("workouts", "Lisää vähintään yksi päivä ohjelmaan.");
   }
 
   values.workouts.forEach((workout, workoutIndex) => {
@@ -270,7 +270,7 @@ function buildComposerIssues(values: ProgramComposerFormValues): ComposerIssue[]
     }
 
     if (!Number.isFinite(Number(workout.defaultRestSeconds)) || Number(workout.defaultRestSeconds) < 15) {
-      pushIssue(`workouts.${workoutIndex}.defaultRestSeconds`, "Lisää treenille oletuslepo.", workoutIndex);
+      pushIssue(`workouts.${workoutIndex}.defaultRestSeconds`, "Lisää päivälle oletuslepo.", workoutIndex);
     }
 
     if (!workout.exercises.length) {
@@ -1438,7 +1438,7 @@ export function CoachDashboard({
                       }}
                     >
                       <Plus className="mr-2 size-4" />
-                      Lisää treeni
+                      Lisää päivä
                     </Button>
                   </div>
                 </div>
