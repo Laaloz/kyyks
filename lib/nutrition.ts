@@ -254,6 +254,11 @@ export function buildPersonalNutritionGoalComparison(
   }
 
   const activeGoal = nutritionProfile?.goal ?? "maintain";
+  const resolvedComparisonTargets: Record<NutritionGoal, MacroTarget> = {
+    lose: comparisonTargets.lose,
+    maintain: comparisonTargets.maintain,
+    gain: comparisonTargets.gain,
+  };
   const activeTarget =
     nutritionProfile
       ? {
@@ -262,17 +267,13 @@ export function buildPersonalNutritionGoalComparison(
           carbsG: nutritionProfile.carbsG,
           fatG: nutritionProfile.fatG,
         }
-      : comparisonTargets[activeGoal];
+      : resolvedComparisonTargets[activeGoal];
 
   return {
     activeGoal,
     activeTarget,
     activeTargetSource: nutritionProfile ? "profile" : "auto_fallback",
-    comparisonTargets: {
-      lose: comparisonTargets.lose,
-      maintain: comparisonTargets.maintain,
-      gain: comparisonTargets.gain,
-    },
+    comparisonTargets: resolvedComparisonTargets,
     guidanceByGoal,
     activityLevel,
     hasCompleteProfile,
