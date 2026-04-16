@@ -198,6 +198,7 @@ async function upsertRecipe(supabase, recipe, createdBy, ingredientCatalogMap, t
       recipe_id: recipeId,
       ingredient_id: ingredientId,
       ingredient_name: row.ingredientName?.trim() || "",
+      group_label: row.groupLabel?.trim() || null,
       quantity: row.quantity ?? null,
       unit: row.unit,
       display_quantity: row.displayQuantity?.trim() || null,
@@ -219,6 +220,49 @@ async function upsertRecipe(supabase, recipe, createdBy, ingredientCatalogMap, t
     created: !existingRecipeId,
     unresolvedIngredients,
   };
+}
+
+async function pruneMissingRecipes(supabase, createdBy, keepRecipeIds) {
+  const { data, error } = await supabase
+    .from("recipes")
+    .select("id")
+    .eq("owner_role", "admin")
+    .eq("created_by", createdBy);
+
+  if (error) {
+    throw new Error(error.message || "Vanhojen reseptien haku epaonnistui.");
+  }
+
+  const staleRecipeIds = (data ?? [])
+    .map((row) => row.id)
+    .filter((id) => !keepRecipeIds.has(id));
+
+  if (staleRecipeIds.length === 0) {
+    return 0;
+  }
+
+  const [{ error: assignedItemsError }, { error: templateItemsError }, { error: recipeIngredientsError }] = await Promise.all([
+    supabase.from("assigned_meal_plan_items").delete().in("recipe_id", staleRecipeIds),
+    supabase.from("meal_plan_template_items").delete().in("recipe_id", staleRecipeIds),
+    supabase.from("recipe_ingredients").delete().in("recipe_id", staleRecipeIds),
+  ]);
+
+  if (assignedItemsError) {
+    throw new Error(assignedItemsError.message || "Vanhojen jaettujen ateriapohjarivien poisto epaonnistui.");
+  }
+  if (templateItemsError) {
+    throw new Error(templateItemsError.message || "Vanhojen ateriapohjarivien poisto epaonnistui.");
+  }
+  if (recipeIngredientsError) {
+    throw new Error(recipeIngredientsError.message || "Vanhojen reseptiraaka-aineiden poisto epaonnistui.");
+  }
+
+  const { error: recipesError } = await supabase.from("recipes").delete().in("id", staleRecipeIds);
+  if (recipesError) {
+    throw new Error(recipesError.message || "Vanhojen reseptien poisto epaonnistui.");
+  }
+
+  return staleRecipeIds.length;
 }
 
 async function main() {
@@ -251,9 +295,11 @@ async function main() {
   const unresolvedByRecipe = [];
   let createdCount = 0;
   let updatedCount = 0;
+  const keptRecipeIds = new Set();
 
   for (const recipe of recipes) {
     const result = await upsertRecipe(supabase, recipe, createdBy, ingredientCatalogMap, timestamp);
+    keptRecipeIds.add(result.recipeId);
     if (result.created) {
       createdCount += 1;
     } else {
@@ -268,10 +314,13 @@ async function main() {
     }
   }
 
+  const prunedCount = await pruneMissingRecipes(supabase, createdBy, keptRecipeIds);
+
   console.log(JSON.stringify({
     imported: recipes.length,
     created: createdCount,
     updated: updatedCount,
+    pruned: prunedCount,
     unresolvedIngredients: unresolvedByRecipe,
   }, null, 2));
 }

@@ -44,6 +44,7 @@ const allergyOptions = [
 type RecipeIngredientDraft = {
   ingredientId: string;
   ingredientName: string;
+  groupLabel: string;
   quantity: string;
   unit: "g" | "ml" | "pcs";
   displayQuantity: string;
@@ -56,6 +57,7 @@ function emptyRecipeIngredientDraft(): RecipeIngredientDraft {
   return {
     ingredientId: "",
     ingredientName: "",
+    groupLabel: "",
     quantity: "",
     unit: "g",
     displayQuantity: "",
@@ -416,6 +418,7 @@ export function NutritionAdminPanel() {
         ? recipe.ingredients.map((ingredient) => ({
             ingredientId: ingredient.ingredientId ?? "",
             ingredientName: ingredient.ingredientName,
+            groupLabel: ingredient.groupLabel ?? "",
             quantity: ingredient.quantity !== undefined ? String(ingredient.quantity) : "",
             unit: ingredient.unit,
             displayQuantity: ingredient.displayQuantity ?? "",
@@ -452,6 +455,7 @@ export function NutritionAdminPanel() {
         ? recipe.ingredients.map((ingredient) => ({
             ingredientId: ingredient.ingredientId ?? "",
             ingredientName: ingredient.ingredientName,
+            groupLabel: ingredient.groupLabel ?? "",
             quantity: ingredient.quantity !== undefined ? String(ingredient.quantity) : "",
             unit: ingredient.unit,
             displayQuantity: ingredient.displayQuantity ?? "",
@@ -528,6 +532,7 @@ export function NutritionAdminPanel() {
       ingredients: recipeIngredients.map((ingredient) => ({
         ingredientId: ingredient.ingredientId || undefined,
         ingredientName: ingredient.ingredientName,
+        groupLabel: ingredient.groupLabel || undefined,
         quantity: ingredient.quantity ? Number(ingredient.quantity) : undefined,
         unit: ingredient.unit,
         displayQuantity: ingredient.displayQuantity || undefined,
@@ -899,6 +904,7 @@ export function NutritionAdminPanel() {
           id: `draft-ingredient-${index}`,
           ingredientId: ingredient.ingredientId || undefined,
           ingredientName: ingredient.ingredientName.trim(),
+          groupLabel: ingredient.groupLabel.trim() || undefined,
           quantity: parsedQuantity,
           unit: ingredient.unit,
           displayQuantity: ingredient.displayQuantity.trim() || undefined,
@@ -1740,6 +1746,10 @@ export function NutritionAdminPanel() {
                           <div className="md:col-span-2">
                             <Label htmlFor={`recipe-ingredient-name-${index}`}>Rivin nimi</Label>
                             <Input id={`recipe-ingredient-name-${index}`} value={ingredient.ingredientName} onChange={(event) => setRecipeIngredients((current) => current.map((row, rowIndex) => rowIndex === index ? { ...row, ingredientName: event.target.value } : row))} />
+                          </div>
+                          <div className="md:col-span-2">
+                            <Label htmlFor={`recipe-ingredient-group-${index}`}>Ainesosaryhmä</Label>
+                            <Input id={`recipe-ingredient-group-${index}`} placeholder="Esim. Kastike, lisuke tai päälle" value={ingredient.groupLabel} onChange={(event) => setRecipeIngredients((current) => current.map((row, rowIndex) => rowIndex === index ? { ...row, groupLabel: event.target.value } : row))} />
                           </div>
                           <div>
                             <Label htmlFor={`recipe-ingredient-quantity-${index}`}>Makroihin käytettävä määrä</Label>

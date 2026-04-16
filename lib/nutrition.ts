@@ -620,6 +620,7 @@ export function upsertRecipe(state: AppState, actorId: string, input: RecipeInpu
         id: makeId("recipe_ingredient"),
         ingredientId: ingredient.ingredientId,
         ingredientName: ingredient.ingredientName?.trim() || "",
+        groupLabel: ingredient.groupLabel?.trim() || undefined,
         quantity: ingredient.quantity,
         unit: ingredient.unit,
         displayQuantity: ingredient.displayQuantity?.trim() || undefined,

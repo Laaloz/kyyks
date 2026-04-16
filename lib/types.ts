@@ -119,6 +119,7 @@ export interface RecipeIngredient {
   id: string;
   ingredientId?: string;
   ingredientName: string;
+  groupLabel?: string;
   quantity?: number;
   unit: IngredientUnit;
   displayQuantity?: string;
@@ -515,6 +516,7 @@ export interface IngredientInput {
 export interface RecipeIngredientInput {
   ingredientId?: string;
   ingredientName?: string;
+  groupLabel?: string;
   quantity?: number;
   unit: IngredientUnit;
   displayQuantity?: string;

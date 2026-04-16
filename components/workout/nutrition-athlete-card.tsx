@@ -39,6 +39,26 @@ function formatRecipeIngredientLine(ingredient: Recipe["ingredients"][number], i
   return ingredientName;
 }
 
+function groupRecipeIngredients(ingredients: Recipe["ingredients"]) {
+  const groups = new Map<string, Recipe["ingredients"]>();
+  for (const ingredient of ingredients) {
+    const key = ingredient.groupLabel?.trim() || "Ainekset";
+    const existing = groups.get(key) ?? [];
+    existing.push(ingredient);
+    groups.set(key, existing);
+  }
+  return Array.from(groups.entries()).map(([label, rows]) => ({ label, rows }));
+}
+
+function macroPill(label: string, value: string) {
+  return (
+    <div className="rounded-full border border-[var(--border)] bg-[var(--surface)] px-3 py-1.5 text-xs font-semibold text-[var(--text)]">
+      <span className="text-[var(--text-subtle)]">{label}</span>{" "}
+      <span>{value}</span>
+    </div>
+  );
+}
+
 function RecipeDetailDialog({
   mealTag,
   recipe,
@@ -87,6 +107,10 @@ function RecipeDetailDialog({
         ingredientsCatalog.map((ingredient) => [ingredient.id, ingredient.displayName?.trim() || ingredient.name]),
       ),
     [ingredientsCatalog],
+  );
+  const groupedIngredients = useMemo(
+    () => groupRecipeIngredients(scaledIngredients),
+    [scaledIngredients],
   );
 
   return (
@@ -212,27 +236,40 @@ function RecipeDetailDialog({
                 <p className="text-xs font-semibold tracking-[0.04em] text-[var(--text-subtle)]">Mitä tarvitset</p>
                 <p className="mt-1 text-sm text-[var(--text-muted)]">Raaka-aineet {selectedServings} annokselle.</p>
               </div>
-              <ul className="mt-4 space-y-2 text-sm text-[var(--text-muted)]">
-                {scaledIngredients.map((ingredient) => (
-                  <li key={`${recipe.id}-${ingredient.id}`} className="rounded-xl bg-[var(--surface)] px-3 py-3">
-                    {formatRecipeIngredientLine(
-                      ingredient,
-                      ingredient.ingredientId ? ingredientNameById.get(ingredient.ingredientId) ?? ingredient.ingredientName : ingredient.ingredientName,
-                    )}
-                  </li>
+              <div className="mt-4 space-y-4">
+                {groupedIngredients.map((group) => (
+                  <div key={`${recipe.id}-${group.label}`} className="rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-3">
+                    <div className="flex items-center justify-between gap-3">
+                      <p className="text-xs font-semibold tracking-[0.06em] text-[var(--accent)]">{group.label}</p>
+                      <p className="text-[11px] font-medium text-[var(--text-subtle)]">{group.rows.length} riviä</p>
+                    </div>
+                    <ul className="space-y-2 text-sm text-[var(--text-muted)]">
+                      {group.rows.map((ingredient) => (
+                        <li key={`${recipe.id}-${ingredient.id}`} className="rounded-xl bg-[var(--surface-2)] px-3 py-3 leading-6">
+                          {formatRecipeIngredientLine(
+                            ingredient,
+                            ingredient.ingredientId ? ingredientNameById.get(ingredient.ingredientId) ?? ingredient.ingredientName : ingredient.ingredientName,
+                          )}
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
                 ))}
-              </ul>
+              </div>
             </div>
 
             <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface-2)] p-4">
-              <p className="text-xs font-semibold tracking-[0.04em] text-[var(--text-subtle)]">Valmistus</p>
+              <div>
+                <p className="text-xs font-semibold tracking-[0.04em] text-[var(--text-subtle)]">Valmistus</p>
+                <p className="mt-1 text-sm text-[var(--text-muted)]">Seuraa vaiheet järjestyksessä. Ryhmät ainesosissa auttavat näkemään nopeasti mikä kuuluu kastikkeeseen, lisukkeeseen tai päälle.</p>
+              </div>
               <ol className="mt-4 space-y-3 pl-0 text-sm text-[var(--text-muted)]">
                 {splitRecipeInstructions(recipe.instructions).map((step, index) => (
-                  <li key={`${recipe.id}-step-${index}`} className="flex gap-3 rounded-xl bg-[var(--surface)] px-3 py-3">
+                  <li key={`${recipe.id}-step-${index}`} className="flex gap-3 rounded-xl border border-[var(--border)] bg-[var(--surface)] px-3 py-3">
                     <span className="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full border border-[var(--border)] text-xs font-semibold text-[var(--text)]">
                       {index + 1}
                     </span>
-                    <span>{step}</span>
+                    <span className="leading-6">{step}</span>
                   </li>
                 ))}
               </ol>
@@ -402,7 +439,7 @@ export function NutritionAthleteCard({
                       <p className="text-sm text-[var(--text-muted)]">{selectedMealItems.length} reseptiä</p>
                     </div>
 
-                    <div className="mt-4 space-y-3">
+                    <div className="mt-4 grid gap-3">
                       {selectedMealItems.map((item) => {
                         const recipeNutrition = resolveRecipeNutritionPreview(item.recipe, state.ingredientsCatalog).nutritionPerServing;
                         const isOpen = selectedRecipeId === item.recipe.id;
@@ -427,13 +464,16 @@ export function NutritionAthleteCard({
                                 <p className="mt-1 text-sm text-[var(--text-muted)]">
                                   {item.recipe.description ?? "Valmis ateriasuositus tämän ateriaryhmän sisälle."}
                                 </p>
+                                <div className="mt-3 flex flex-wrap gap-2">
+                                  {macroPill("kcal", `${recipeNutrition.kcal}`)}
+                                  {macroPill("P", `${Math.round(recipeNutrition.proteinG)} g`)}
+                                  {macroPill("H", `${Math.round(recipeNutrition.carbsG)} g`)}
+                                  {macroPill("R", `${Math.round(recipeNutrition.fatG)} g`)}
+                                </div>
                                 <p className="mt-3 text-sm font-medium text-[var(--text)]">{isOpen ? "Resepti auki" : "Avaa resepti"}</p>
                               </div>
-                              <div className="text-right text-sm text-[var(--text-muted)]">
-                                <p>{recipeNutrition.kcal} kcal</p>
-                                <p>P {Math.round(recipeNutrition.proteinG)} g</p>
-                                <p>H {Math.round(recipeNutrition.carbsG)} g</p>
-                                <p>R {Math.round(recipeNutrition.fatG)} g</p>
+                              <div className="shrink-0 rounded-full border border-[var(--border)] bg-[var(--surface)] px-3 py-1.5 text-xs font-semibold text-[var(--text)]">
+                                {isOpen ? "Auki" : "Avaa"}
                               </div>
                             </div>
                           </button>
