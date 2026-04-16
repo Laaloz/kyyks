@@ -17,9 +17,22 @@ function optionalEnumField<const TValues extends readonly [string, ...string[]]>
 }
 
 function optionalNumberField(schema: z.ZodNumber) {
-  return z.union([z.literal(""), z.coerce.number().pipe(schema)]).transform((value) =>
-    value === "" ? undefined : value,
-  );
+  return z.preprocess((value) => {
+    if (value === null || value === undefined) {
+      return undefined;
+    }
+
+    if (typeof value === "string") {
+      const trimmed = value.trim();
+      return trimmed === "" ? undefined : trimmed;
+    }
+
+    if (typeof value === "number" && Number.isNaN(value)) {
+      return undefined;
+    }
+
+    return value;
+  }, schema.optional());
 }
 
 export const loginSchema = z.object({

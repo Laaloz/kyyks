@@ -79,6 +79,16 @@ function parseList(value: string) {
     .filter(Boolean);
 }
 
+function parseOptionalNumberInput(value: string) {
+  const normalized = value.trim().replace(",", ".");
+  if (!normalized) {
+    return undefined;
+  }
+
+  const parsed = Number(normalized);
+  return Number.isFinite(parsed) ? parsed : undefined;
+}
+
 function splitKnownAndCustom(values: string[], knownOptions: readonly string[]) {
   const known = values.filter((value) => knownOptions.includes(value));
   const custom = values.filter((value) => !knownOptions.includes(value));
@@ -411,10 +421,10 @@ export function NutritionAdminPanel() {
       activityLevel: profileForm.activityLevel as NutritionProfile["activityLevel"],
       mealsPerDay: Number(profileForm.mealsPerDay),
       calculationMode: profileForm.calculationMode as NutritionProfile["calculationMode"],
-      targetKcal: profileForm.targetKcal ? Number(profileForm.targetKcal) : undefined,
-      proteinG: profileForm.proteinG ? Number(profileForm.proteinG) : undefined,
-      carbsG: profileForm.carbsG ? Number(profileForm.carbsG) : undefined,
-      fatG: profileForm.fatG ? Number(profileForm.fatG) : undefined,
+      targetKcal: parseOptionalNumberInput(profileForm.targetKcal),
+      proteinG: parseOptionalNumberInput(profileForm.proteinG),
+      carbsG: parseOptionalNumberInput(profileForm.carbsG),
+      fatG: parseOptionalNumberInput(profileForm.fatG),
       coachNotes: profileForm.coachNotes,
       dietaryFlags: [...profileForm.dietaryFlags, ...parseList(profileForm.customDietaryFlags)],
       allergies: [...profileForm.allergies, ...parseList(profileForm.customAllergies)],
