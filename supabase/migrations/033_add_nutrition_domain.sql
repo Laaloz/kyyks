@@ -32,6 +32,7 @@ create table if not exists public.nutrition_profiles (
 create table if not exists public.ingredient_catalog (
   id uuid primary key default gen_random_uuid(),
   name text not null,
+  display_name text,
   source public.ingredient_source not null default 'manual',
   source_external_id text,
   owner_role public.nutrition_owner_role not null default 'admin',

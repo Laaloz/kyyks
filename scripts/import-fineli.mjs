@@ -89,6 +89,7 @@ export function parseFineliCsv(content) {
     return {
       source_external_id: String(row.id).trim(),
       name: String(row.name).trim(),
+      display_name: null,
       source: "fineli",
       owner_role: "admin",
       default_purchase_unit: "g",

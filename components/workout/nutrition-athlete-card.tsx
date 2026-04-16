@@ -25,18 +25,18 @@ function formatIngredientUnit(unit: Recipe["ingredients"][number]["unit"]) {
   return unit === "pcs" ? "kpl" : unit;
 }
 
-function formatRecipeIngredientLine(ingredient: Recipe["ingredients"][number]) {
+function formatRecipeIngredientLine(ingredient: Recipe["ingredients"][number], ingredientName: string) {
   const displayQuantity = ingredient.displayQuantity?.trim();
   const displayUnit = ingredient.displayUnit?.trim();
   if (displayQuantity) {
-    return `${displayQuantity}${displayUnit ? ` ${displayUnit}` : ""} ${ingredient.ingredientName}`.trim();
+    return `${displayQuantity}${displayUnit ? ` ${displayUnit}` : ""} ${ingredientName}`.trim();
   }
 
   if (ingredient.quantity !== undefined) {
-    return `${formatQuantity(ingredient.quantity)} ${formatIngredientUnit(ingredient.unit)} ${ingredient.ingredientName}`;
+    return `${formatQuantity(ingredient.quantity)} ${formatIngredientUnit(ingredient.unit)} ${ingredientName}`;
   }
 
-  return ingredient.ingredientName;
+  return ingredientName;
 }
 
 function RecipeDetailDialog({
@@ -44,6 +44,7 @@ function RecipeDetailDialog({
   recipe,
   nutrition,
   nutritionProfile,
+  ingredientsCatalog,
   selectedServings,
   onDecreaseServings,
   onIncreaseServings,
@@ -53,6 +54,7 @@ function RecipeDetailDialog({
   recipe: Recipe;
   nutrition: { kcal: number; proteinG: number; carbsG: number; fatG: number };
   nutritionProfile: AppState["nutritionProfiles"][number] | null;
+  ingredientsCatalog: AppState["ingredientsCatalog"];
   selectedServings: number;
   onDecreaseServings: () => void;
   onIncreaseServings: () => void;
@@ -78,6 +80,13 @@ function RecipeDetailDialog({
   };
   const scaledIngredients = recipe.ingredients.map((ingredient) =>
     scaleRecipeIngredient(ingredient, selectedServings, recipe.defaultServings),
+  );
+  const ingredientNameById = useMemo(
+    () =>
+      new Map(
+        ingredientsCatalog.map((ingredient) => [ingredient.id, ingredient.displayName?.trim() || ingredient.name]),
+      ),
+    [ingredientsCatalog],
   );
 
   return (
@@ -206,7 +215,10 @@ function RecipeDetailDialog({
               <ul className="mt-4 space-y-2 text-sm text-[var(--text-muted)]">
                 {scaledIngredients.map((ingredient) => (
                   <li key={`${recipe.id}-${ingredient.id}`} className="rounded-xl bg-[var(--surface)] px-3 py-3">
-                    {formatRecipeIngredientLine(ingredient)}
+                    {formatRecipeIngredientLine(
+                      ingredient,
+                      ingredient.ingredientId ? ingredientNameById.get(ingredient.ingredientId) ?? ingredient.ingredientName : ingredient.ingredientName,
+                    )}
                   </li>
                 ))}
               </ul>
@@ -445,6 +457,7 @@ export function NutritionAthleteCard({
             recipe={selectedRecipeEntry.recipe}
             nutrition={selectedRecipeNutrition}
             nutritionProfile={nutritionProfile}
+            ingredientsCatalog={state.ingredientsCatalog}
             selectedServings={selectedServings}
             onDecreaseServings={() => setSelectedServings((current) => Math.max(1, current - 1))}
             onIncreaseServings={() => setSelectedServings((current) => current + 1)}

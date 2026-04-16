@@ -7,6 +7,7 @@ const fineliImportSchema = z.object({
   items: z.array(
     z.object({
       name: z.string().min(2),
+      displayName: z.string().optional(),
       sourceExternalId: z.string().optional(),
       defaultPurchaseUnit: z.enum(["g", "kg", "ml", "l", "pcs", "pack"]).optional(),
       gramsPerUnit: z.number().optional(),

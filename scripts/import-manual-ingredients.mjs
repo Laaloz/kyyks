@@ -67,6 +67,7 @@ async function upsertIngredient(supabase, ingredient, createdBy, timestamp) {
   const existingId = await findExistingIngredientId(supabase, ingredient);
   const payload = {
     name: ingredient.name,
+    display_name: ingredient.displayName ?? null,
     source: ingredient.source,
     source_external_id: null,
     owner_role: "admin",

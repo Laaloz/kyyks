@@ -190,6 +190,7 @@ type NutritionProfileRow = {
 type IngredientRow = {
   id: string;
   name: string;
+  display_name: string | null;
   source: Ingredient["source"];
   source_external_id: string | null;
   owner_role: Ingredient["ownerRole"];
@@ -375,6 +376,7 @@ function mapIngredientRow(entry: IngredientRow): Ingredient {
   return {
     id: entry.id,
     name: entry.name,
+    displayName: entry.display_name ?? undefined,
     source: entry.source,
     sourceExternalId: entry.source_external_id ?? undefined,
     ownerRole: entry.owner_role,
@@ -531,7 +533,7 @@ export async function loadVisibleSupabaseAppState(
     mode === "full"
       ? supabase
           .from("ingredient_catalog")
-          .select("id, name, source, source_external_id, owner_role, created_by, default_purchase_unit, grams_per_unit, kcal_per_100, protein_per_100, carbs_per_100, fat_per_100, created_at, updated_at")
+          .select("id, name, display_name, source, source_external_id, owner_role, created_by, default_purchase_unit, grams_per_unit, kcal_per_100, protein_per_100, carbs_per_100, fat_per_100, created_at, updated_at")
           .order("name", { ascending: true })
       : Promise.resolve({ data: [] as IngredientRow[], error: null }),
     mode === "full"

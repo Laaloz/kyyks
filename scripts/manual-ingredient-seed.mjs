@@ -1,4 +1,4 @@
-export const manualIngredientSeed = [
+const manualIngredientSeedBase = [
   { name: "Proteiinirahka maustamaton", source: "manual", defaultPurchaseUnit: "pack", gramsPerUnit: 200, kcalPer100: 73, proteinPer100: 10.5, carbsPer100: 3.9, fatPer100: 0.2 },
   { name: "Rahka maustamaton", source: "manual", defaultPurchaseUnit: "pack", gramsPerUnit: 200, kcalPer100: 67, proteinPer100: 10.0, carbsPer100: 3.8, fatPer100: 0.2 },
   { name: "Kaurahiutale", source: "manual", defaultPurchaseUnit: "kg", kcalPer100: 366, proteinPer100: 13, carbsPer100: 58.7, fatPer100: 7 },
@@ -76,3 +76,21 @@ export const manualIngredientSeed = [
   { name: "Valkosipulimauste", source: "manual", defaultPurchaseUnit: "g", kcalPer100: 331, proteinPer100: 17, carbsPer100: 73, fatPer100: 0.7 },
   { name: "Kaneli", source: "manual", defaultPurchaseUnit: "g", kcalPer100: 247, proteinPer100: 4.0, carbsPer100: 56, fatPer100: 1.2 },
 ];
+
+const displayNameOverrides = {
+  Taysjyvaleipa: "Täysjyväleipä",
+  Ruisleipa: "Ruisleipä",
+  "Vahasukerinen mysli": "Vähäsokerinen mysli",
+  "Vahasokerinen granola": "Vähäsokerinen granola",
+  Oliivioljy: "Oliiviöljy",
+  "Tonnikala vedessa": "Tonnikala vedessä",
+  Jaavuorisalaatti: "Jäävuorisalaatti",
+  "Proteiinijuoma vahasokerinen": "Proteiinijuoma vähäsokerinen",
+  Hedelma: "Hedelmä",
+  "BBQ-kastike ilman lisattya sokeria": "BBQ-kastike ilman lisättyä sokeria",
+};
+
+export const manualIngredientSeed = manualIngredientSeedBase.map((ingredient) => ({
+  ...ingredient,
+  displayName: displayNameOverrides[ingredient.name] ?? ingredient.displayName,
+}));

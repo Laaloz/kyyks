@@ -546,6 +546,7 @@ export function upsertIngredient(state: AppState, actorId: string, input: Ingred
   const nextIngredient: Ingredient = {
     id: current?.id ?? makeId("ingredient"),
     name: input.name.trim(),
+    displayName: input.displayName?.trim() || undefined,
     source: input.source,
     sourceExternalId: input.sourceExternalId?.trim() || undefined,
     ownerRole: "admin",

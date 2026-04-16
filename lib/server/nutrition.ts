@@ -151,6 +151,7 @@ export async function saveIngredientOnServer(requester: Requester, input: Ingred
 
   const payload = {
     name: input.name.trim(),
+    display_name: input.displayName?.trim() || null,
     source: input.source,
     source_external_id: input.sourceExternalId?.trim() || null,
     owner_role: "admin",

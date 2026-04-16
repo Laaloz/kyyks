@@ -100,6 +100,7 @@ export interface NutritionProfile {
 export interface Ingredient {
   id: string;
   name: string;
+  displayName?: string;
   source: IngredientSource;
   sourceExternalId?: string;
   ownerRole: NutritionOwnerRole;
@@ -500,6 +501,7 @@ export interface NutritionProfileInput {
 export interface IngredientInput {
   id?: string;
   name: string;
+  displayName?: string;
   source: IngredientSource;
   sourceExternalId?: string;
   defaultPurchaseUnit?: PurchaseUnit;

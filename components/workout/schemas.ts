@@ -76,6 +76,7 @@ export const nutritionProfileSchema = z.object({
 export const ingredientSchema = z.object({
   id: z.string().optional(),
   name: z.string().trim().min(2, "Anna raaka-aineelle nimi."),
+  displayName: z.string().trim().max(120).optional(),
   source: z.enum(["fineli", "open_food_facts", "manual"]),
   sourceExternalId: z.string().optional(),
   defaultPurchaseUnit: z.enum(["g", "kg", "ml", "l", "pcs", "pack"]).optional(),

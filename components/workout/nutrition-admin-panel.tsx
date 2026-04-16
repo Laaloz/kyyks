@@ -11,6 +11,7 @@ import { getMeasurementsForUser } from "@/lib/body-metrics";
 import { calculateMacroTarget, calculateRecipeNutrition, getMacroGoalGuidance, getMissingMacroProfileFields, getRecipeCompatibilityAlerts, joinRecipeInstructionSteps, mealTagLabel, splitRecipeInstructions } from "@/lib/nutrition";
 import { canActAsCoach, isAthleteRole } from "@/lib/role-access";
 import type {
+  Ingredient,
   IngredientRole,
   IngredientScalingMode,
   MealTag,
@@ -89,6 +90,10 @@ function parseOptionalNumberInput(value: string) {
   return Number.isFinite(parsed) ? parsed : undefined;
 }
 
+function ingredientLabel(ingredient: Pick<Ingredient, "name" | "displayName">) {
+  return ingredient.displayName?.trim() || ingredient.name;
+}
+
 function splitKnownAndCustom(values: string[], knownOptions: readonly string[]) {
   const known = values.filter((value) => knownOptions.includes(value));
   const custom = values.filter((value) => !knownOptions.includes(value));
@@ -158,6 +163,7 @@ type NutritionProfileFormState = {
 
 type IngredientFormState = {
   name: string;
+  displayName: string;
   defaultPurchaseUnit: PurchaseUnit;
   gramsPerUnit: string;
   kcalPer100: string;
@@ -246,6 +252,7 @@ export function NutritionAdminPanel() {
   }));
   const [ingredientForm, setIngredientForm] = useState<IngredientFormState>({
     name: "",
+    displayName: "",
     defaultPurchaseUnit: "g" as const,
     gramsPerUnit: "",
     kcalPer100: "",
@@ -268,6 +275,7 @@ export function NutritionAdminPanel() {
     emptyRecipeIngredientDraft(),
   ]);
   const [selectedRecipeId, setSelectedRecipeId] = useState("");
+  const [selectedIngredientId, setSelectedIngredientId] = useState("");
   const [recipeSearchQuery, setRecipeSearchQuery] = useState("");
   const [recipeFilterMealTag, setRecipeFilterMealTag] = useState<MealTag | "all">("all");
   const [templateForm, setTemplateForm] = useState({
@@ -348,6 +356,39 @@ export function NutritionAdminPanel() {
     });
     setRecipeSteps([emptyRecipeStepDraft()]);
     setRecipeIngredients([emptyRecipeIngredientDraft()]);
+  };
+
+  const resetIngredientEditor = () => {
+    setSelectedIngredientId("");
+    setIngredientForm({
+      name: "",
+      displayName: "",
+      defaultPurchaseUnit: "g",
+      gramsPerUnit: "",
+      kcalPer100: "",
+      proteinPer100: "",
+      carbsPer100: "",
+      fatPer100: "",
+    });
+  };
+
+  const loadIngredientToEditor = (ingredientId: string) => {
+    const ingredient = state.ingredientsCatalog.find((item) => item.id === ingredientId);
+    if (!ingredient) {
+      return;
+    }
+
+    setSelectedIngredientId(ingredient.id);
+    setIngredientForm({
+      name: ingredient.name,
+      displayName: ingredient.displayName ?? "",
+      defaultPurchaseUnit: ingredient.defaultPurchaseUnit ?? "g",
+      gramsPerUnit: ingredient.gramsPerUnit !== undefined ? String(ingredient.gramsPerUnit) : "",
+      kcalPer100: String(ingredient.kcalPer100),
+      proteinPer100: String(ingredient.proteinPer100),
+      carbsPer100: String(ingredient.carbsPer100),
+      fatPer100: String(ingredient.fatPer100),
+    });
   };
 
   const loadRecipeToEditor = (recipeId: string) => {
@@ -452,7 +493,9 @@ export function NutritionAdminPanel() {
   const handleSaveIngredient = async () => {
     setIsSavingIngredient(true);
     const result = await saveIngredient({
+      id: selectedIngredientId || undefined,
       name: ingredientForm.name,
+      displayName: ingredientForm.displayName || undefined,
       source: "manual",
       defaultPurchaseUnit: ingredientForm.defaultPurchaseUnit,
       gramsPerUnit: ingredientForm.gramsPerUnit ? Number(ingredientForm.gramsPerUnit) : undefined,
@@ -463,16 +506,8 @@ export function NutritionAdminPanel() {
     }).finally(() => setIsSavingIngredient(false));
 
     setMessage({ tone: result.ok ? "success" : "danger", text: result.ok ? "Raaka-aine tallennettiin." : result.message });
-    if (result.ok) {
-      setIngredientForm({
-        name: "",
-        defaultPurchaseUnit: "g",
-        gramsPerUnit: "",
-        kcalPer100: "",
-        proteinPer100: "",
-        carbsPer100: "",
-        fatPer100: "",
-      });
+    if (result.ok && !selectedIngredientId) {
+      resetIngredientEditor();
     }
   };
 
@@ -677,7 +712,14 @@ export function NutritionAdminPanel() {
         }
       : assignmentAthleteProfile;
   const athleteWithPlanCount = new Set(state.assignedMealPlans.filter((plan) => plan.active).map((plan) => plan.athleteId)).size;
-  const ingredientCatalogPreview = state.ingredientsCatalog.slice(0, 8);
+  const sortedIngredientsCatalog = useMemo(
+    () =>
+      [...state.ingredientsCatalog].sort((left, right) =>
+        ingredientLabel(left).localeCompare(ingredientLabel(right), "fi", { sensitivity: "base" }),
+      ),
+    [state.ingredientsCatalog],
+  );
+  const ingredientCatalogPreview = sortedIngredientsCatalog.slice(0, 8);
   const recipePreview = state.recipes.slice(0, 4);
   const templatePreview = state.mealPlanTemplates.slice(0, 4);
   const selectedTemplatePreview = useMemo(
@@ -1038,7 +1080,7 @@ export function NutritionAdminPanel() {
                         <p className="text-xs font-semibold tracking-[0.04em] text-[var(--text-subtle)]">Raaka-aineet</p>
                         <div className="mt-2 flex flex-wrap gap-2">
                           {ingredientCatalogPreview.length > 0 ? ingredientCatalogPreview.map((ingredient) => (
-                            <Badge key={ingredient.id}>{ingredient.name}</Badge>
+                            <Badge key={ingredient.id}>{ingredientLabel(ingredient)}</Badge>
                           )) : <p className="text-sm text-[var(--text-muted)]">Ei vielä raaka-aineita.</p>}
                         </div>
                       </div>
@@ -1675,14 +1717,14 @@ export function NutritionAdminPanel() {
                               id={`recipe-ingredient-${index}`}
                               value={ingredient.ingredientId}
                               onChange={(event) => {
-                                const selected = state.ingredientsCatalog.find((item) => item.id === event.target.value);
+                                const selected = sortedIngredientsCatalog.find((item) => item.id === event.target.value);
                                 setRecipeIngredients((current) =>
                                   current.map((row, rowIndex) =>
                                     rowIndex === index
                                       ? {
                                           ...row,
                                           ingredientId: event.target.value,
-                                          ingredientName: selected?.name ?? row.ingredientName,
+                                          ingredientName: selected ? ingredientLabel(selected) : row.ingredientName,
                                         }
                                       : row,
                                   ),
@@ -1690,8 +1732,8 @@ export function NutritionAdminPanel() {
                               }}
                             >
                               <option value="">Kirjoita oma nimi alle</option>
-                              {state.ingredientsCatalog.map((item) => (
-                                <option key={item.id} value={item.id}>{item.name}</option>
+                              {sortedIngredientsCatalog.map((item) => (
+                                <option key={item.id} value={item.id}>{ingredientLabel(item)}</option>
                               ))}
                             </Select>
                           </div>
@@ -1800,7 +1842,7 @@ export function NutritionAdminPanel() {
                       <p className="text-xs font-semibold tracking-[0.04em] text-[var(--text-subtle)]">Kirjastosta valmiina</p>
                       <div className="mt-3 flex flex-wrap gap-2">
                         {ingredientCatalogPreview.length > 0 ? ingredientCatalogPreview.map((ingredient) => (
-                          <Badge key={ingredient.id}>{ingredient.name}</Badge>
+                          <Badge key={ingredient.id}>{ingredientLabel(ingredient)}</Badge>
                         )) : <p className="text-sm text-[var(--text-muted)]">Ei vielä raaka-aineita.</p>}
                       </div>
                     </div>
@@ -1813,12 +1855,52 @@ export function NutritionAdminPanel() {
                   <div className="space-y-4 rounded-3xl border border-[var(--border)] bg-[var(--surface-2)] p-4">
                     <div>
                       <p className="text-sm font-semibold text-[var(--text)]">Raaka-ainekatalogi</p>
-                      <p className="text-sm text-[var(--text-muted)]">Lisää vain puuttuvat raaka-aineet käsin. Pidemmällä tähtäimellä päävirta tulee Fineli-haun kautta.</p>
+                      <p className="text-sm text-[var(--text-muted)]">Pidä tekninen nimi vakaana ja siivoa käyttäjälle näkyvä nimi erikseen. Näin makrolaskenta pysyy ehjänä, vaikka kirjaston otsikot paranevat.</p>
+                    </div>
+                    <div className="grid gap-3 md:grid-cols-[1fr_auto]">
+                      <div>
+                        <Label htmlFor="ingredient-editor-select">Muokkaa olemassa olevaa raaka-ainetta</Label>
+                        <Select
+                          id="ingredient-editor-select"
+                          value={selectedIngredientId}
+                          onChange={(event) => {
+                            const nextIngredientId = event.target.value;
+                            if (!nextIngredientId) {
+                              resetIngredientEditor();
+                              return;
+                            }
+                            loadIngredientToEditor(nextIngredientId);
+                          }}
+                        >
+                          <option value="">Luo uusi raaka-aine</option>
+                          {sortedIngredientsCatalog.map((ingredient) => (
+                            <option key={ingredient.id} value={ingredient.id}>
+                              {ingredientLabel(ingredient)}
+                            </option>
+                          ))}
+                        </Select>
+                      </div>
+                      <div className="flex items-end">
+                        <Button type="button" variant="secondary" onClick={resetIngredientEditor}>
+                          Uusi raaka-aine
+                        </Button>
+                      </div>
                     </div>
                     <div className="grid gap-3 md:grid-cols-2">
                       <div className="md:col-span-2">
-                        <Label htmlFor="ingredient-name">Nimi</Label>
+                        <Label htmlFor="ingredient-name">Tekninen nimi</Label>
                         <Input id="ingredient-name" value={ingredientForm.name} onChange={(event) => setIngredientForm((current) => ({ ...current, name: event.target.value }))} />
+                        <p className="mt-1 text-xs text-[var(--text-muted)]">Tämä voi jäädä lähdejärjestelmän nimeksi. Makrolaskenta käyttää linkitystä, ei tätä kenttää.</p>
+                      </div>
+                      <div className="md:col-span-2">
+                        <Label htmlFor="ingredient-display-name">Käyttäjälle näkyvä nimi</Label>
+                        <Input
+                          id="ingredient-display-name"
+                          placeholder="Esim. Täysjyväleipä"
+                          value={ingredientForm.displayName}
+                          onChange={(event) => setIngredientForm((current) => ({ ...current, displayName: event.target.value }))}
+                        />
+                        <p className="mt-1 text-xs text-[var(--text-muted)]">Näytetään resepteissä ja raaka-ainekirjastossa. Jos jätät tyhjäksi, käytetään teknistä nimeä.</p>
                       </div>
                       <div>
                         <Label htmlFor="ingredient-unit">Ostoyksikkö</Label>
@@ -1849,7 +1931,7 @@ export function NutritionAdminPanel() {
                       </div>
                     </div>
                     <Button type="button" disabled={isSavingIngredient} onClick={() => void handleSaveIngredient()}>
-                      {isSavingIngredient ? "Tallennetaan..." : "Tallenna raaka-aine"}
+                      {isSavingIngredient ? "Tallennetaan..." : selectedIngredientId ? "Päivitä raaka-aine" : "Tallenna raaka-aine"}
                     </Button>
                   </div>
 
@@ -1860,8 +1942,8 @@ export function NutritionAdminPanel() {
                     </div>
                     <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-4">
                       <div className="flex flex-wrap gap-2">
-                        {state.ingredientsCatalog.length > 0 ? state.ingredientsCatalog.slice(0, 24).map((ingredient) => (
-                          <Badge key={ingredient.id}>{ingredient.name}</Badge>
+                        {sortedIngredientsCatalog.length > 0 ? sortedIngredientsCatalog.slice(0, 24).map((ingredient) => (
+                          <Badge key={ingredient.id}>{ingredientLabel(ingredient)}</Badge>
                         )) : <p className="text-sm text-[var(--text-muted)]">Ei vielä raaka-aineita.</p>}
                       </div>
                     </div>
