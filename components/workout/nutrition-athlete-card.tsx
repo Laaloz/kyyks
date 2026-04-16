@@ -99,14 +99,8 @@ export function NutritionAthleteCard({
       setSelectedServings(1);
       return;
     }
-
-    setSelectedServings((current) => {
-      if (current >= recipe.minServings && current <= recipe.maxServings) {
-        return current;
-      }
-      return recipe.defaultServings;
-    });
-  }, [selectedRecipeEntry]);
+    setSelectedServings(Math.max(1, recipe.defaultServings));
+  }, [selectedRecipeEntry?.recipe.id]);
 
   const mealSlotGuidance = (mealTag: MealTag, targetKcal: number | undefined) => {
     if (!targetKcal) {
@@ -227,6 +221,9 @@ export function NutritionAthleteCard({
                                   <p className="mt-1 text-sm text-[var(--text-muted)]">
                                     {item.recipe.description ?? "Valmis ateriasuositus tämän ateriaryhmän sisälle."}
                                   </p>
+                                  <p className="mt-3 text-sm font-medium text-[var(--text)]">
+                                    {selected ? "Resepti auki" : "Avaa resepti"}
+                                  </p>
                                 </div>
                                 <div className="text-right text-sm text-[var(--text-muted)]">
                                   <p>{recipeNutrition.kcal} kcal</p>
@@ -257,16 +254,12 @@ export function NutritionAthleteCard({
                           selectedRecipeEntry.recipe.defaultServings,
                         ),
                       );
-                      const servingOptions = Array.from(
-                        { length: selectedRecipeEntry.recipe.maxServings - selectedRecipeEntry.recipe.minServings + 1 },
-                        (_, index) => selectedRecipeEntry.recipe.minServings + index,
-                      );
 
                       return (
                         <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-4">
                           <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
                             <div>
-                              <p className="text-xs font-semibold tracking-[0.04em] text-[var(--text-subtle)]">Valittu resepti</p>
+                              <p className="text-xs font-semibold tracking-[0.04em] text-[var(--text-subtle)]">Resepti</p>
                               <p className="mt-1 text-2xl font-semibold text-[var(--text)]">{selectedRecipeEntry.recipe.name}</p>
                               <p className="mt-2 text-sm text-[var(--text-muted)]">
                                 {selectedRecipeEntry.recipe.description ?? "Selkeä ateriavaihtoehto tämän ateriaryhmän sisälle."}
@@ -284,27 +277,36 @@ export function NutritionAthleteCard({
                           <div className="mt-4 rounded-2xl border border-[var(--border)] bg-[var(--surface-2)] p-4">
                             <div className="flex flex-col gap-4 sm:flex-row sm:flex-wrap sm:items-end sm:justify-between">
                               <div>
-                                <p className="text-xs font-semibold tracking-[0.04em] text-[var(--text-subtle)]">Kuinka monta annosta teet?</p>
+                                <p className="text-xs font-semibold tracking-[0.04em] text-[var(--text-subtle)]">Annosmäärä</p>
                                 <p className="mt-1 text-sm text-[var(--text-muted)]">
-                                  Valitse annosmäärä, niin näytämme koko satsin raaka-aineet ja makrot selkeästi yhdellä kertaa.
+                                  Lisää tai vähennä annoksia sen mukaan paljonko haluat valmistaa kerralla. Raaka-aineet ja koko satsin makrot päivittyvät heti.
                                 </p>
                               </div>
-                              <div className="sm:min-w-[10rem]">
-                                <label className="text-xs font-semibold tracking-[0.04em] text-[var(--text-subtle)]" htmlFor={`servings-${selectedRecipeEntry.recipe.id}`}>
-                                  Annoksia
-                                </label>
-                                <select
-                                  id={`servings-${selectedRecipeEntry.recipe.id}`}
-                                  className="mt-1 min-h-11 rounded-xl border border-[var(--border)] bg-[var(--surface)] px-3 text-sm text-[var(--text)]"
-                                  value={selectedServings}
-                                  onChange={(event) => setSelectedServings(Number(event.target.value))}
-                                >
-                                  {servingOptions.map((option) => (
-                                    <option key={option} value={option}>
-                                      {option} annosta
-                                    </option>
-                                  ))}
-                                </select>
+                              <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-2">
+                                <p className="px-2 text-xs font-semibold tracking-[0.04em] text-[var(--text-subtle)]">Annoksia</p>
+                                <div className="mt-2 flex items-center gap-2">
+                                  <Button
+                                    type="button"
+                                    variant="secondary"
+                                    className="min-h-11 min-w-11 px-0 text-lg"
+                                    onClick={() => setSelectedServings((current) => Math.max(1, current - 1))}
+                                    aria-label="Vähennä annoksia"
+                                  >
+                                    -
+                                  </Button>
+                                  <div className="min-w-[5.5rem] rounded-xl border border-[var(--border)] bg-[var(--surface-2)] px-4 py-3 text-center">
+                                    <p className="text-lg font-semibold text-[var(--text)]">{selectedServings}</p>
+                                  </div>
+                                  <Button
+                                    type="button"
+                                    variant="secondary"
+                                    className="min-h-11 min-w-11 px-0 text-lg"
+                                    onClick={() => setSelectedServings((current) => current + 1)}
+                                    aria-label="Lisää annoksia"
+                                  >
+                                    +
+                                  </Button>
+                                </div>
                               </div>
                             </div>
 
@@ -338,10 +340,13 @@ export function NutritionAthleteCard({
                             </div>
                           ) : null}
 
-                          <div className="mt-4 grid gap-4 lg:grid-cols-2">
+                          <div className="mt-4 space-y-4">
                             <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface-2)] p-4">
                               <div className="flex items-center justify-between gap-3">
-                                <p className="text-xs font-semibold tracking-[0.04em] text-[var(--text-subtle)]">Raaka-aineet {selectedServings} annokselle</p>
+                                <div>
+                                  <p className="text-xs font-semibold tracking-[0.04em] text-[var(--text-subtle)]">Mitä tarvitset</p>
+                                  <p className="mt-1 text-sm text-[var(--text-muted)]">Raaka-aineet {selectedServings} annokselle.</p>
+                                </div>
                                 <Button
                                   type="button"
                                   variant="ghost"
@@ -351,9 +356,9 @@ export function NutritionAthleteCard({
                                   Vaihda ateriaa
                                 </Button>
                               </div>
-                              <ul className="mt-3 space-y-2 text-sm text-[var(--text-muted)]">
+                              <ul className="mt-4 space-y-2 text-sm text-[var(--text-muted)]">
                                 {scaledIngredients.map((ingredient) => (
-                                  <li key={`${selectedRecipeEntry.recipe.id}-${ingredient.id}`}>
+                                  <li key={`${selectedRecipeEntry.recipe.id}-${ingredient.id}`} className="rounded-xl bg-[var(--surface)] px-3 py-3">
                                     {formatRecipeIngredientLine(ingredient)}
                                   </li>
                                 ))}
@@ -362,9 +367,14 @@ export function NutritionAthleteCard({
 
                             <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface-2)] p-4">
                               <p className="text-xs font-semibold tracking-[0.04em] text-[var(--text-subtle)]">Valmistus</p>
-                              <ol className="mt-3 list-decimal space-y-2 pl-4 text-sm text-[var(--text-muted)]">
+                              <ol className="mt-4 space-y-3 pl-0 text-sm text-[var(--text-muted)]">
                                 {splitRecipeInstructions(selectedRecipeEntry.recipe.instructions).map((step, index) => (
-                                  <li key={`${selectedRecipeEntry.recipe.id}-step-${index}`}>{step}</li>
+                                  <li key={`${selectedRecipeEntry.recipe.id}-step-${index}`} className="flex gap-3 rounded-xl bg-[var(--surface)] px-3 py-3">
+                                    <span className="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full border border-[var(--border)] text-xs font-semibold text-[var(--text)]">
+                                      {index + 1}
+                                    </span>
+                                    <span>{step}</span>
+                                  </li>
                                 ))}
                               </ol>
                             </div>

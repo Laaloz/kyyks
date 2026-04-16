@@ -333,10 +333,16 @@ export function scaleRecipeIngredient(
   const isScalable = ingredient.scalingMode === "linear";
   const sourceQuantity = ingredient.quantity ?? ingredient.normalizedQuantity;
   const scaledQuantity = sourceQuantity !== undefined && isScalable ? roundNutrition(sourceQuantity * ratio) : sourceQuantity;
+  const displayQuantityNumber = ingredient.displayQuantity ? Number(ingredient.displayQuantity.replace(",", ".")) : Number.NaN;
+  const scaledDisplayQuantity =
+    isScalable && Number.isFinite(displayQuantityNumber)
+      ? String(roundNutrition(displayQuantityNumber * ratio))
+      : ingredient.displayQuantity;
 
   return {
     ...ingredient,
     quantity: scaledQuantity,
+    displayQuantity: scaledDisplayQuantity,
     normalizedQuantity:
       ingredient.normalizedQuantity !== undefined && isScalable
         ? roundNutrition(ingredient.normalizedQuantity * ratio)

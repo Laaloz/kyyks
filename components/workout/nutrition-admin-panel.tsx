@@ -1474,7 +1474,7 @@ export function NutritionAdminPanel() {
                               Kopioi
                             </button>
                           </div>
-                        )) : <p className="text-sm text-[var(--text-muted)]">Ei viela resepteja.</p>}
+                        )) : <p className="text-sm text-[var(--text-muted)]">Ei vielä reseptejä.</p>}
                       </div>
                     </div>
                     <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface)] px-4 py-3 text-sm text-[var(--text-muted)]">
@@ -1634,7 +1634,7 @@ export function NutritionAdminPanel() {
                               id={`recipe-step-${index}`}
                               value={step}
                               onChange={(event) => setRecipeSteps((current) => current.map((row, rowIndex) => rowIndex === index ? event.target.value : row))}
-                              placeholder="Esim. Kypsenna riisi pakkauksen ohjeen mukaan."
+                              placeholder="Esim. Kypsennä riisi pakkauksen ohjeen mukaan."
                             />
                           </div>
                         ))}
@@ -1737,14 +1737,14 @@ export function NutritionAdminPanel() {
                       ))}
                     </div>
                     <Button type="button" disabled={isSavingRecipe || isDeletingRecipe} onClick={() => void handleSaveRecipe()}>
-                      {isSavingRecipe ? "Tallennetaan..." : selectedRecipeId ? "Paivita resepti" : "Tallenna resepti"}
+                      {isSavingRecipe ? "Tallennetaan..." : selectedRecipeId ? "Päivitä resepti" : "Tallenna resepti"}
                     </Button>
                   </div>
 
                   <div className="space-y-4 rounded-3xl border border-[var(--border)] bg-[var(--surface-2)] p-4">
                     <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-4">
                       <p className="text-sm font-semibold text-[var(--text)]">Makroesikatselu</p>
-                      <p className="mt-1 text-sm text-[var(--text-muted)]">Lasketaan editorin nykyisista riveista. Linkita paaraaka-aineet kirjastoon, jotta makrot osuvat oikein.</p>
+                      <p className="mt-1 text-sm text-[var(--text-muted)]">Lasketaan editorin nykyisistä riveistä. Linkitä pääraaka-aineet kirjastoon, jotta makrot osuvat oikein.</p>
                       {recipeNutritionPreview.hasIngredients && recipeNutritionPreview.nutritionPerServing ? (
                         <div className="mt-4 space-y-4">
                           <div className="grid gap-3 sm:grid-cols-2">
@@ -1766,14 +1766,14 @@ export function NutritionAdminPanel() {
                           <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface-2)] p-3 text-sm text-[var(--text-muted)]">
                             <p>Linkitetyt rivit: {recipeNutritionPreview.linkedIngredientCount} / {recipeNutritionPreview.totalIngredientCount}</p>
                             {recipeNutritionPreview.unlinkedIngredientNames.length > 0 ? (
-                              <p className="mt-2">Ei viela linkitetty kirjastoon: {recipeNutritionPreview.unlinkedIngredientNames.join(", ")}</p>
+                              <p className="mt-2">Ei vielä linkitetty kirjastoon: {recipeNutritionPreview.unlinkedIngredientNames.join(", ")}</p>
                             ) : (
                               <p className="mt-2">Kaikki laskentaan vaikuttavat rivit ovat linkitetty kirjastoon.</p>
                             )}
                           </div>
                         </div>
                       ) : (
-                        <p className="mt-3 text-sm text-[var(--text-muted)]">Lisaa reseptille raaka-aineita, niin makroesikatselu tulee tahan automaattisesti.</p>
+                        <p className="mt-3 text-sm text-[var(--text-muted)]">Lisää reseptille raaka-aineita, niin makroesikatselu tulee tähän automaattisesti.</p>
                       )}
                     </div>
                     <div>
@@ -1933,11 +1933,11 @@ export function NutritionAdminPanel() {
                     <div key={mealTag} className="space-y-3 rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-4">
                       <div>
                         <Label>{mealTagLabel(mealTag)}</Label>
-                        <p className="mt-1 text-xs text-[var(--text-muted)]">Valitse useita vaihtoehtoja saman ateriaryhman sisalle. Treenaaja voi syoda niita ristiin miten arki parhaiten toimii.</p>
+                        <p className="mt-1 text-xs text-[var(--text-muted)]">Valitse useita vaihtoehtoja saman ateriaryhmän sisälle. Treenaaja voi syödä niitä ristiin sen mukaan, mikä arjessa toimii parhaiten.</p>
                         <p className="mt-1 text-xs font-medium text-[var(--text-subtle)]">
                           {mealSlotKcalGuidance(mealTag, displayedTargetKcal)
                             ? `Tyypillinen haarukka noin ${mealSlotKcalGuidance(mealTag, displayedTargetKcal)}`
-                            : "Lisaa tai valitse treenaajalle kcal-tavoite, niin nakymaan tulee suuntaa-antava haarukka."}
+                            : "Lisää tai valitse treenaajalle kcal-tavoite, niin näkymään tulee suuntaa-antava haarukka."}
                         </p>
                       </div>
                       <div className="grid gap-3 sm:grid-cols-2">
@@ -1988,7 +1988,7 @@ export function NutritionAdminPanel() {
                               </div>
                             </button>
                           );
-                        }) : <p className="text-sm text-[var(--text-muted)]">Tassa kategoriassa ei ole viela resepteja.</p>}
+                        }) : <p className="text-sm text-[var(--text-muted)]">Tässä kategoriassa ei ole vielä reseptejä.</p>}
                       </div>
                       <p className="text-xs text-[var(--text-muted)]">Valittuna {templateForm[mealTag].length} vaihtoehtoa.</p>
                     </div>
