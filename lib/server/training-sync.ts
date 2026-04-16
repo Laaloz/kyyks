@@ -2,6 +2,7 @@ import "server-only";
 
 import type { SupabaseClient } from "@supabase/supabase-js";
 
+import { calculateRecipeNutrition } from "@/lib/nutrition";
 import { isAthleteRole } from "@/lib/role-access";
 import {
   PROGRAMS_DASHBOARD_VIEW,
@@ -677,23 +678,33 @@ export async function loadVisibleSupabaseAppState(
     });
     recipeIngredientsByRecipeId.set(entry.recipe_id, existing);
   });
-  const recipes = ((recipesResult.data ?? []) as RecipeRow[]).map((entry) => ({
-    id: entry.id,
-    name: entry.name,
-    description: entry.description ?? undefined,
-    instructions: entry.instructions,
-    mealTag: entry.meal_tag,
-    dietaryFlags: entry.dietary_flags ?? [],
-    allergies: entry.allergies ?? [],
-    ownerRole: entry.owner_role,
-    createdBy: entry.created_by,
-    defaultServings: entry.default_servings,
-    minServings: entry.min_servings,
-    maxServings: entry.max_servings,
-    ingredients: recipeIngredientsByRecipeId.get(entry.id) ?? [],
-    createdAt: entry.created_at,
-    updatedAt: entry.updated_at,
-  }));
+  const recipes = ((recipesResult.data ?? []) as RecipeRow[]).map((entry) => {
+    const ingredients = recipeIngredientsByRecipeId.get(entry.id) ?? [];
+    const recipeBase: Recipe = {
+      id: entry.id,
+      name: entry.name,
+      description: entry.description ?? undefined,
+      instructions: entry.instructions,
+      mealTag: entry.meal_tag,
+      dietaryFlags: entry.dietary_flags ?? [],
+      allergies: entry.allergies ?? [],
+      ownerRole: entry.owner_role,
+      createdBy: entry.created_by,
+      defaultServings: entry.default_servings,
+      minServings: entry.min_servings,
+      maxServings: entry.max_servings,
+      ingredients,
+      createdAt: entry.created_at,
+      updatedAt: entry.updated_at,
+    };
+    const nutrition = calculateRecipeNutrition(recipeBase, ingredientsCatalog);
+
+    return {
+      ...recipeBase,
+      nutritionPerRecipe: nutrition.nutritionPerRecipe,
+      nutritionPerServing: nutrition.nutritionPerServing,
+    };
+  });
   const mealPlanTemplateItemsByTemplateId = new Map<string, MealPlanTemplate["items"]>();
   ((mealPlanTemplateItemsResult.data ?? []) as MealPlanTemplateItemRow[]).forEach((entry) => {
     const existing = mealPlanTemplateItemsByTemplateId.get(entry.template_id) ?? [];

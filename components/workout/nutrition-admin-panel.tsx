@@ -99,6 +99,16 @@ function splitKnownAndCustom(values: string[], knownOptions: readonly string[]) 
 }
 
 function mealSlotKcalGuidance(mealTag: MealTag, targetKcal?: number) {
+  const range = getMealSlotKcalRange(mealTag, targetKcal);
+  if (!range) {
+    return null;
+  }
+
+  const [minKcal, maxKcal] = range;
+  return `${minKcal}-${maxKcal} kcal`;
+}
+
+function getMealSlotKcalRange(mealTag: MealTag, targetKcal?: number) {
   if (!targetKcal) {
     return null;
   }
@@ -112,7 +122,7 @@ function mealSlotKcalGuidance(mealTag: MealTag, targetKcal?: number) {
   };
 
   const [minRatio, maxRatio] = ranges[mealTag];
-  return `${Math.round(targetKcal * minRatio)}-${Math.round(targetKcal * maxRatio)} kcal`;
+  return [Math.round(targetKcal * minRatio), Math.round(targetKcal * maxRatio)] as const;
 }
 
 function formatRecipeMacroValue(value: number | null | undefined) {
@@ -121,6 +131,13 @@ function formatRecipeMacroValue(value: number | null | undefined) {
   }
 
   return String(Math.round(value));
+}
+
+function formatMacroRange(min: number, max: number, suffix = "") {
+  const roundedMin = Math.round(min);
+  const roundedMax = Math.round(max);
+  const value = roundedMin === roundedMax ? `${roundedMin}` : `${roundedMin}-${roundedMax}`;
+  return suffix ? `${value} ${suffix}` : value;
 }
 
 type NutritionProfileFormState = {
@@ -621,6 +638,118 @@ export function NutritionAdminPanel() {
       }, {}),
     [selectedTemplatePreview],
   );
+  const templateDailyMacroPreview = useMemo(() => {
+    const mealGroups = mealTags.flatMap((mealTag) => {
+      const items = groupedTemplatePreview[mealTag] ?? [];
+      if (items.length === 0) {
+        return [];
+      }
+
+      const entries = items.map((item) => ({
+        recipe: item.recipe,
+        nutrition: item.recipe.nutritionPerServing ?? calculateRecipeNutrition(item.recipe, state.ingredientsCatalog).nutritionPerServing,
+      }));
+      const totals = entries.reduce((sum, entry) => ({
+        kcal: sum.kcal + entry.nutrition.kcal,
+        proteinG: sum.proteinG + entry.nutrition.proteinG,
+        carbsG: sum.carbsG + entry.nutrition.carbsG,
+        fatG: sum.fatG + entry.nutrition.fatG,
+      }), { kcal: 0, proteinG: 0, carbsG: 0, fatG: 0 });
+      const min = entries.reduce((current, entry) => ({
+        kcal: Math.min(current.kcal, entry.nutrition.kcal),
+        proteinG: Math.min(current.proteinG, entry.nutrition.proteinG),
+        carbsG: Math.min(current.carbsG, entry.nutrition.carbsG),
+        fatG: Math.min(current.fatG, entry.nutrition.fatG),
+      }), { kcal: Number.POSITIVE_INFINITY, proteinG: Number.POSITIVE_INFINITY, carbsG: Number.POSITIVE_INFINITY, fatG: Number.POSITIVE_INFINITY });
+      const max = entries.reduce((current, entry) => ({
+        kcal: Math.max(current.kcal, entry.nutrition.kcal),
+        proteinG: Math.max(current.proteinG, entry.nutrition.proteinG),
+        carbsG: Math.max(current.carbsG, entry.nutrition.carbsG),
+        fatG: Math.max(current.fatG, entry.nutrition.fatG),
+      }), { kcal: 0, proteinG: 0, carbsG: 0, fatG: 0 });
+      const avg = {
+        kcal: totals.kcal / entries.length,
+        proteinG: totals.proteinG / entries.length,
+        carbsG: totals.carbsG / entries.length,
+        fatG: totals.fatG / entries.length,
+      };
+      const targetRange = getMealSlotKcalRange(mealTag, displayedTargetKcal);
+      const targetMidpoint = targetRange ? (targetRange[0] + targetRange[1]) / 2 : null;
+      const recommended = entries.reduce((best, entry) => {
+        if (!best) {
+          return entry;
+        }
+
+        if (targetMidpoint === null) {
+          const bestGap = Math.abs(best.nutrition.kcal - avg.kcal);
+          const nextGap = Math.abs(entry.nutrition.kcal - avg.kcal);
+          return nextGap < bestGap ? entry : best;
+        }
+
+        const bestGap = Math.abs(best.nutrition.kcal - targetMidpoint);
+        const nextGap = Math.abs(entry.nutrition.kcal - targetMidpoint);
+        return nextGap < bestGap ? entry : best;
+      }, null as (typeof entries)[number] | null);
+
+      return [{
+        mealTag,
+        itemCount: entries.length,
+        targetRange,
+        min,
+        max,
+        avg,
+        recommended,
+      }];
+    });
+
+    if (mealGroups.length === 0) {
+      return null;
+    }
+
+    const combine = (
+      source: Array<{ kcal: number; proteinG: number; carbsG: number; fatG: number }>,
+      strategy: "sum" | "min" | "max",
+    ) => {
+      if (source.length === 0) {
+        return { kcal: 0, proteinG: 0, carbsG: 0, fatG: 0 };
+      }
+
+      if (strategy === "sum") {
+        return source.reduce((sum, item) => ({
+          kcal: sum.kcal + item.kcal,
+          proteinG: sum.proteinG + item.proteinG,
+          carbsG: sum.carbsG + item.carbsG,
+          fatG: sum.fatG + item.fatG,
+        }), { kcal: 0, proteinG: 0, carbsG: 0, fatG: 0 });
+      }
+
+      return source.reduce((acc, item) => ({
+        kcal: strategy === "min" ? Math.min(acc.kcal, item.kcal) : Math.max(acc.kcal, item.kcal),
+        proteinG: strategy === "min" ? Math.min(acc.proteinG, item.proteinG) : Math.max(acc.proteinG, item.proteinG),
+        carbsG: strategy === "min" ? Math.min(acc.carbsG, item.carbsG) : Math.max(acc.carbsG, item.carbsG),
+        fatG: strategy === "min" ? Math.min(acc.fatG, item.fatG) : Math.max(acc.fatG, item.fatG),
+      }), source[0]);
+    };
+
+    const recommendedItems = mealGroups
+      .map((group) => group.recommended?.nutrition)
+      .filter((item): item is NonNullable<(typeof mealGroups)[number]["recommended"]>["nutrition"] => Boolean(item));
+
+    const recommendedTotals = combine(recommendedItems, "sum");
+    const minTotals = combine(mealGroups.map((group) => group.min), "sum");
+    const maxTotals = combine(mealGroups.map((group) => group.max), "sum");
+    const avgTotals = combine(mealGroups.map((group) => group.avg), "sum");
+    const targetGap = displayedTargetKcal ? recommendedTotals.kcal - displayedTargetKcal : null;
+
+    return {
+      mealGroups,
+      recommendedTotals,
+      minTotals,
+      maxTotals,
+      avgTotals,
+      targetGap,
+    };
+  }, [displayedTargetKcal, groupedTemplatePreview, state.ingredientsCatalog]);
   const filledMealTags = mealTags.filter((mealTag) => templateForm[mealTag].length > 0);
   const missingMealTags = mealTags.filter((mealTag) => templateForm[mealTag].length === 0);
   const templatePreviewRecipeCount = selectedTemplatePreview.length;
@@ -1824,6 +1953,80 @@ export function NutritionAdminPanel() {
                           </p>
                         </div>
                       </div>
+
+                      {templateDailyMacroPreview ? (
+                        <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-4">
+                          <div className="flex flex-wrap items-start justify-between gap-3">
+                            <div>
+                              <p className="text-sm font-semibold text-[var(--text)]">Päivän makroarvio</p>
+                              <p className="mt-1 text-sm text-[var(--text-muted)]">
+                                Yhteenveto näyttää yhden suositellun päivän sekä vaihteluvälin, kun käyttäjä valitsee kustakin ateriaryhmästä yhden vaihtoehdon.
+                              </p>
+                            </div>
+                            <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface-2)] px-3 py-2 text-sm text-[var(--text-muted)]">
+                              <p className="font-semibold text-[var(--text)]">
+                                {templateDailyMacroPreview.targetGap === null
+                                  ? "Ei tavoitekaloria valittuna"
+                                  : templateDailyMacroPreview.targetGap === 0
+                                    ? "Osuu tavoitekaloriin"
+                                    : templateDailyMacroPreview.targetGap > 0
+                                      ? `${Math.round(templateDailyMacroPreview.targetGap)} kcal yli`
+                                      : `${Math.abs(Math.round(templateDailyMacroPreview.targetGap))} kcal alle`}
+                              </p>
+                              <p className="mt-1">Suositellun päivän vertailu käyttäjän tavoitteeseen</p>
+                            </div>
+                          </div>
+
+                          <div className="mt-4 grid gap-3 lg:grid-cols-2">
+                            <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface-2)] p-4">
+                              <p className="text-xs font-semibold tracking-[0.04em] text-[var(--text-subtle)]">Suositeltu päivä</p>
+                              <p className="mt-2 text-2xl font-semibold text-[var(--text)]">{Math.round(templateDailyMacroPreview.recommendedTotals.kcal)} kcal</p>
+                              <p className="mt-1 text-sm text-[var(--text-muted)]">
+                                P {Math.round(templateDailyMacroPreview.recommendedTotals.proteinG)} g · H {Math.round(templateDailyMacroPreview.recommendedTotals.carbsG)} g · R {Math.round(templateDailyMacroPreview.recommendedTotals.fatG)} g
+                              </p>
+                              <p className="mt-2 text-sm text-[var(--text-muted)]">
+                                Valitsee kustakin ateriaryhmästä vaihtoehdon, joka osuu parhaiten kyseisen slotin tavoiteikkunaan.
+                              </p>
+                            </div>
+                            <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface-2)] p-4">
+                              <p className="text-xs font-semibold tracking-[0.04em] text-[var(--text-subtle)]">Vaihteluväli päivälle</p>
+                              <p className="mt-2 text-2xl font-semibold text-[var(--text)]">
+                                {formatMacroRange(templateDailyMacroPreview.minTotals.kcal, templateDailyMacroPreview.maxTotals.kcal, "kcal")}
+                              </p>
+                              <div className="mt-1 space-y-1 text-sm text-[var(--text-muted)]">
+                                <p>P {formatMacroRange(templateDailyMacroPreview.minTotals.proteinG, templateDailyMacroPreview.maxTotals.proteinG, "g")}</p>
+                                <p>H {formatMacroRange(templateDailyMacroPreview.minTotals.carbsG, templateDailyMacroPreview.maxTotals.carbsG, "g")}</p>
+                                <p>R {formatMacroRange(templateDailyMacroPreview.minTotals.fatG, templateDailyMacroPreview.maxTotals.fatG, "g")}</p>
+                              </div>
+                              <p className="mt-2 text-sm text-[var(--text-muted)]">
+                                Näyttää minimi- ja maksimitason, jos käyttäjä valitsee jokaisesta ryhmästä kevyimmän tai raskaimman vaihtoehdon.
+                              </p>
+                            </div>
+                          </div>
+
+                          <div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-5">
+                            {templateDailyMacroPreview.mealGroups.map((group) => (
+                              <div key={`daily-summary-${group.mealTag}`} className="rounded-2xl border border-[var(--border)] bg-[var(--surface-2)] p-4">
+                                <p className="text-xs font-semibold tracking-[0.04em] text-[var(--text-subtle)]">{mealTagLabel(group.mealTag)}</p>
+                                <p className="mt-2 text-sm font-semibold text-[var(--text)]">
+                                  {group.recommended?.recipe.name ?? "Ei suositusta"}
+                                </p>
+                                <p className="mt-1 text-sm text-[var(--text-muted)]">
+                                  {Math.round(group.recommended?.nutrition.kcal ?? group.avg.kcal)} kcal · P {Math.round(group.recommended?.nutrition.proteinG ?? group.avg.proteinG)} g
+                                </p>
+                                <p className="mt-2 text-xs text-[var(--text-subtle)]">
+                                  Haarukka: {formatMacroRange(group.min.kcal, group.max.kcal, "kcal")}
+                                </p>
+                                <p className="mt-1 text-xs text-[var(--text-subtle)]">
+                                  {group.targetRange
+                                    ? `Tavoite: ${group.targetRange[0]}-${group.targetRange[1]} kcal`
+                                    : `${group.itemCount} vaihtoehtoa tässä ryhmässä`}
+                                </p>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      ) : null}
 
                       {mealTags.map((mealTag) => {
                         const items = groupedTemplatePreview[mealTag] ?? [];

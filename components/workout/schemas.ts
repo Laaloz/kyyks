@@ -131,7 +131,7 @@ export const mealPlanTemplateSchema = z.object({
     z.object({
       mealTag: z.enum(["breakfast", "lunch", "snack", "dinner", "evening_snack"]),
       recipeId: z.string().min(1, "Valitse resepti."),
-      sortOrder: z.coerce.number().min(0).max(20),
+      sortOrder: z.coerce.number().int().min(0).max(1000),
     }),
   ).min(1, "Lisää vähintään yksi ateria."),
 });

@@ -49,7 +49,12 @@ async function saveMealPlanTemplate(request: Request) {
   const body = await request.json().catch(() => ({}));
   const parsed = mealPlanTemplateSchema.safeParse(body);
   if (!parsed.success) {
-    return NextResponse.json({ message: "Virheellinen ateriapohja." }, { status: 400 });
+    const fieldErrors = parsed.error.flatten().fieldErrors;
+    const firstError = Object.values(fieldErrors).flat().find(Boolean);
+    return NextResponse.json({
+      message: firstError ?? "Virheellinen ateriapohja.",
+      fieldErrors,
+    }, { status: 400 });
   }
 
   const result = await saveMealPlanTemplateOnServer(requesterResult.requester, parsed.data);
