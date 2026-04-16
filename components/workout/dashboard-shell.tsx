@@ -27,11 +27,11 @@ const MEASUREMENTS_SECTION_ID = "overview-measurements";
 
 function mobilePrimaryNavItemsForRole(role: Role): PrimaryWorkspaceView[] {
   if (role === "athlete") {
-    return ["athlete-log", "overview", "conversation"];
+    return ["athlete-log", "overview", "nutrition", "conversation"];
   }
 
   if (role === "independent_athlete") {
-    return ["athlete-log", "overview", PROGRAMS_WORKSPACE_VIEW, "conversation"];
+    return ["athlete-log", "overview", "nutrition", PROGRAMS_WORKSPACE_VIEW, "conversation"];
   }
 
   if (role === "admin") {

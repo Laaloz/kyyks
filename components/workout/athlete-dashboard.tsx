@@ -1532,11 +1532,11 @@ export function AthleteDashboard({
         </div>
       ) : null}
 
-      {view === "overview" && currentUser ? (
+      {(view === "overview" || view === "nutrition") && currentUser ? (
         <PersonalNutritionSummaryCard state={state} user={currentUser} onOpenSettings={onOpenSettings} />
       ) : null}
 
-      {view === "overview" && currentUser ? <NutritionAthleteCard state={state} user={currentUser} /> : null}
+      {(view === "overview" || view === "nutrition") && currentUser ? <NutritionAthleteCard state={state} user={currentUser} /> : null}
 
       {view === "conversation" && currentUser ? (
         <ConversationPanel
