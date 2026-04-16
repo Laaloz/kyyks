@@ -8,7 +8,7 @@ import { Card, CardDescription, CardTitle } from "@/components/ui/card";
 import { Input, Label, Select, Textarea } from "@/components/ui/field";
 import { InlineFeedback } from "@/components/workout/inline-feedback";
 import { getMeasurementsForUser } from "@/lib/body-metrics";
-import { calculateMacroTarget, calculateRecipeNutrition, getMacroGoalGuidance, getMissingMacroProfileFields, getRecipeCompatibilityAlerts, joinRecipeInstructionSteps, mealTagLabel, splitRecipeInstructions } from "@/lib/nutrition";
+import { calculateMacroTarget, calculateRecipeNutrition, getMacroGoalGuidance, getMissingMacroProfileFields, getRecipeCompatibilityAlerts, joinRecipeInstructionSteps, mealTagLabel, resolveRecipeNutritionPreview, splitRecipeInstructions } from "@/lib/nutrition";
 import { canActAsCoach, isAthleteRole } from "@/lib/role-access";
 import type {
   Ingredient,
@@ -759,7 +759,7 @@ export function NutritionAdminPanel() {
 
       const entries = items.map((item) => ({
         recipe: item.recipe,
-        nutrition: item.recipe.nutritionPerServing ?? calculateRecipeNutrition(item.recipe, state.ingredientsCatalog).nutritionPerServing,
+        nutrition: resolveRecipeNutritionPreview(item.recipe, state.ingredientsCatalog).nutritionPerServing,
       }));
       const totals = entries.reduce((sum, entry) => ({
         kcal: sum.kcal + entry.nutrition.kcal,
@@ -2027,7 +2027,7 @@ export function NutritionAdminPanel() {
                       <div className="grid gap-3 sm:grid-cols-2">
                         {recipesByMealTag[mealTag].length > 0 ? recipesByMealTag[mealTag].map((recipe) => {
                           const isSelected = templateForm[mealTag].includes(recipe.id);
-                          const nutrition = recipe.nutritionPerServing ?? calculateRecipeNutrition(recipe, state.ingredientsCatalog).nutritionPerServing;
+                          const nutrition = resolveRecipeNutritionPreview(recipe, state.ingredientsCatalog).nutritionPerServing;
                           return (
                             <button
                               key={recipe.id}
@@ -2277,7 +2277,7 @@ export function NutritionAdminPanel() {
 
                             <div className="mt-4 grid gap-3">
                               {items.map((item) => {
-                                const nutrition = item.recipe.nutritionPerServing ?? calculateRecipeNutrition(item.recipe, state.ingredientsCatalog).nutritionPerServing;
+                                const nutrition = resolveRecipeNutritionPreview(item.recipe, state.ingredientsCatalog).nutritionPerServing;
                                 const compatibilityAlerts = getRecipeCompatibilityAlerts(item.recipe, previewCompatibilityProfile);
                                 return (
                                   <div key={`preview-${mealTag}-${item.recipe.id}`} className="rounded-2xl border border-[var(--border)] bg-[var(--surface-2)] p-4">

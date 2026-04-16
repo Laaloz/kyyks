@@ -407,6 +407,33 @@ export function calculateRecipeNutrition(
   };
 }
 
+function hasMeaningfulNutrition(value: Pick<MacroTarget, "kcal" | "proteinG" | "carbsG" | "fatG"> | null | undefined) {
+  if (!value) {
+    return false;
+  }
+
+  return value.kcal > 0 || value.proteinG > 0 || value.carbsG > 0 || value.fatG > 0;
+}
+
+export function resolveRecipeNutritionPreview(
+  recipe: Pick<Recipe, "defaultServings" | "ingredients" | "nutritionPerServing" | "nutritionPerRecipe">,
+  ingredients: Ingredient[],
+) {
+  const calculated = calculateRecipeNutrition(recipe, ingredients);
+  const cachedPerServing = recipe.nutritionPerServing;
+  const cachedPerRecipe = recipe.nutritionPerRecipe;
+
+  const useCalculatedPerServing =
+    !hasMeaningfulNutrition(cachedPerServing) && hasMeaningfulNutrition(calculated.nutritionPerServing);
+  const useCalculatedPerRecipe =
+    !hasMeaningfulNutrition(cachedPerRecipe) && hasMeaningfulNutrition(calculated.nutritionPerRecipe);
+
+  return {
+    nutritionPerServing: useCalculatedPerServing ? calculated.nutritionPerServing : cachedPerServing ?? calculated.nutritionPerServing,
+    nutritionPerRecipe: useCalculatedPerRecipe ? calculated.nutritionPerRecipe : cachedPerRecipe ?? calculated.nutritionPerRecipe,
+  };
+}
+
 function findMatchedIngredientNames(ingredientNames: string[], keywords: readonly string[]) {
   const normalizedKeywords = keywords.map((keyword) => normalizeFoodText(keyword));
   return ingredientNames.filter((ingredientName) =>

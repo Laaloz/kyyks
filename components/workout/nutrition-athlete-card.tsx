@@ -5,11 +5,11 @@ import { useEffect, useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardDescription, CardTitle } from "@/components/ui/card";
 import {
-  calculateRecipeNutrition,
   getActiveMealPlanForAthlete,
   getMealPlanRecipes,
   getRecipeCompatibilityAlerts,
   mealTagLabel,
+  resolveRecipeNutritionPreview,
   scaleRecipeIngredient,
   splitRecipeInstructions,
 } from "@/lib/nutrition";
@@ -300,7 +300,7 @@ export function NutritionAthleteCard({
     if (!selectedRecipeEntry) {
       return null;
     }
-    return selectedRecipeEntry.recipe.nutritionPerServing ?? calculateRecipeNutrition(selectedRecipeEntry.recipe, state.ingredientsCatalog).nutritionPerServing;
+    return resolveRecipeNutritionPreview(selectedRecipeEntry.recipe, state.ingredientsCatalog).nutritionPerServing;
   }, [selectedRecipeEntry, state.ingredientsCatalog]);
 
   const mealSlotGuidance = (mealTag: MealTag, targetKcal: number | undefined) => {
@@ -404,7 +404,7 @@ export function NutritionAthleteCard({
 
                     <div className="mt-4 space-y-3">
                       {selectedMealItems.map((item) => {
-                        const recipeNutrition = item.recipe.nutritionPerServing ?? calculateRecipeNutrition(item.recipe, state.ingredientsCatalog).nutritionPerServing;
+                        const recipeNutrition = resolveRecipeNutritionPreview(item.recipe, state.ingredientsCatalog).nutritionPerServing;
                         const isOpen = selectedRecipeId === item.recipe.id;
 
                         return (
