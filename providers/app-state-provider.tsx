@@ -88,7 +88,7 @@ import {
   type PropsWithChildren,
 } from "react";
 
-const STATE_KEY = "rooki-fit-state-v1";
+const STATE_KEY = "rooki-fit-state-v2";
 const SESSION_KEY = "rooki-fit-session-v1";
 const PROFILE_IMAGE_BUCKET = "profile-images";
 const PROFILE_IMAGE_MAX_BYTES = 5 * 1024 * 1024;
