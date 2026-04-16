@@ -96,7 +96,7 @@ export const recipeIngredientSchema = z.object({
   displayQuantity: z.string().optional(),
   displayUnit: z.string().optional(),
   ingredientRole: z.enum(["main", "spice", "garnish"]),
-  scalingMode: z.enum(["linear", "fixed", "text_only"]),
+  scalingMode: z.enum(["linear", "gentle", "fixed", "text_only"]),
 }).refine(
   (value) => Boolean(value.ingredientId || value.ingredientName?.trim()),
   {

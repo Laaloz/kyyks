@@ -1790,6 +1790,7 @@ export function NutritionAdminPanel() {
                             <Label htmlFor={`recipe-ingredient-scaling-${index}`}>Skaalaus</Label>
                             <Select id={`recipe-ingredient-scaling-${index}`} value={ingredient.scalingMode} onChange={(event) => setRecipeIngredients((current) => current.map((row, rowIndex) => rowIndex === index ? { ...row, scalingMode: event.target.value as IngredientScalingMode } : row))}>
                               <option value="linear">Lineaarinen</option>
+                              <option value="gentle">Hillitty</option>
                               <option value="fixed">Kiinteä</option>
                               <option value="text_only">Vain ohjeeseen</option>
                             </Select>
@@ -1856,7 +1857,7 @@ export function NutritionAdminPanel() {
                       </div>
                       <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-4">
                         <p className="font-semibold text-[var(--text)]">Mauste</p>
-                        <p className="mt-1">Käytä `fixed`, jos määrä ei kasva suoraviivaisesti, tai `text_only`, jos ohjeeseen riittää esimerkiksi “maun mukaan”.</p>
+                        <p className="mt-1">Käytä tavallisesti `gentle`, jos mausteen pitää kasvaa annosmäärän mukana hillitysti. Käytä `fixed`, jos määrä pysyy käytännössä samana, tai `text_only`, jos ohjeeseen riittää esimerkiksi “maun mukaan”.</p>
                       </div>
                       <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-4">
                         <p className="font-semibold text-[var(--text)]">Näyttömuoto</p>

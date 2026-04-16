@@ -309,10 +309,7 @@ function resolveIngredientNutritionContribution(
   }
 
   const baseQuantity = recipeIngredient.normalizedQuantity ?? recipeIngredient.quantity ?? 0;
-  const quantity =
-    recipeIngredient.scalingMode === "linear"
-      ? baseQuantity * (servings <= 0 ? 1 : servings)
-      : baseQuantity;
+  const quantity = baseQuantity * getIngredientScalingRatio(recipeIngredient.scalingMode, servings, 1);
   const multiplier = quantity / 100;
 
   return {
@@ -323,14 +320,32 @@ function resolveIngredientNutritionContribution(
   };
 }
 
-export function scaleRecipeIngredient(
-  ingredient: RecipeIngredient,
+function getIngredientScalingRatio(
+  scalingMode: IngredientScalingMode,
   servings: number,
   defaultServings: number,
 ) {
   const safeDefaultServings = defaultServings > 0 ? defaultServings : 1;
   const ratio = servings > 0 ? servings / safeDefaultServings : 1;
-  const isScalable = ingredient.scalingMode === "linear";
+
+  switch (scalingMode) {
+    case "linear":
+      return ratio;
+    case "gentle":
+      return ratio >= 1 ? 1 + (ratio - 1) * 0.5 : ratio;
+    case "fixed":
+    case "text_only":
+      return 1;
+  }
+}
+
+export function scaleRecipeIngredient(
+  ingredient: RecipeIngredient,
+  servings: number,
+  defaultServings: number,
+) {
+  const ratio = getIngredientScalingRatio(ingredient.scalingMode, servings, defaultServings);
+  const isScalable = ingredient.scalingMode === "linear" || ingredient.scalingMode === "gentle";
   const sourceQuantity = ingredient.quantity ?? ingredient.normalizedQuantity;
   const scaledQuantity = sourceQuantity !== undefined && isScalable ? roundNutrition(sourceQuantity * ratio) : sourceQuantity;
   const displayQuantityNumber = ingredient.displayQuantity ? Number(ingredient.displayQuantity.replace(",", ".")) : Number.NaN;

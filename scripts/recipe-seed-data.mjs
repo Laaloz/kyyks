@@ -23,6 +23,10 @@ function fixedIngredient(ingredientName, quantity, unit = "g", options = {}) {
   return ingredient(ingredientName, quantity, unit, { ...options, scalingMode: "fixed" });
 }
 
+function gentleIngredient(ingredientName, quantity, unit = "g", options = {}) {
+  return ingredient(ingredientName, quantity, unit, { ...options, scalingMode: "gentle" });
+}
+
 function textIngredient(ingredientName, displayQuantity = "maun mukaan", displayUnit = "", options = {}) {
   return ingredient(ingredientName, undefined, "g", {
     ...options,
@@ -201,11 +205,11 @@ export const recipeSeedData = [
     ...batchServe,
     ingredients: [
       ingredient("Kanan rintafilee", 700, "g", { groupLabel: "Kana" }),
-      ingredient("Suola", 4, "g", { groupLabel: "Kana", ingredientRole: "spice", scalingMode: "fixed" }),
-      ingredient("Paprikamauste", 4, "g", { groupLabel: "Kana", ingredientRole: "spice", scalingMode: "fixed" }),
-      ingredient("Valkosipulimauste", 4, "g", { groupLabel: "Kana", ingredientRole: "spice", scalingMode: "fixed" }),
-      ingredient("Chilijauhe", 2, "g", { groupLabel: "Kana", ingredientRole: "spice", scalingMode: "fixed" }),
-      ingredient("Oregano", 2, "g", { groupLabel: "Kana", ingredientRole: "spice", scalingMode: "fixed" }),
+      gentleIngredient("Suola", 4, "g", { groupLabel: "Kana", ingredientRole: "spice" }),
+      gentleIngredient("Paprikamauste", 4, "g", { groupLabel: "Kana", ingredientRole: "spice" }),
+      gentleIngredient("Valkosipulimauste", 4, "g", { groupLabel: "Kana", ingredientRole: "spice" }),
+      gentleIngredient("Chilijauhe", 2, "g", { groupLabel: "Kana", ingredientRole: "spice" }),
+      gentleIngredient("Oregano", 2, "g", { groupLabel: "Kana", ingredientRole: "spice" }),
       ingredient("Hunaja", 25, "g", { groupLabel: "Kana" }),
       ingredient("BBQ-kastike ilman lisättyä sokeria", 85, "g", { groupLabel: "Kana" }),
       ingredient("Makaroni", 300, "g", { groupLabel: "Mac and cheese" }),
@@ -250,7 +254,7 @@ export const recipeSeedData = [
     ingredients: [
       ingredient("Tortilla original large", 4, "pcs", { groupLabel: "Tortillat" }),
       ingredient("Kanan rintafilee", 700, "g", { groupLabel: "Täyte" }),
-      ingredient("Fajita mausteseos", 28, "g", { groupLabel: "Täyte", ingredientRole: "spice", scalingMode: "fixed" }),
+      gentleIngredient("Fajita mausteseos", 28, "g", { groupLabel: "Täyte", ingredientRole: "spice" }),
       ingredient("Juustoraaste 12%", 80, "g", { groupLabel: "Täyte" }),
       ingredient("Salsa", 120, "g", { groupLabel: "Täyte" }),
       ingredient("Jäävuorisalaatti", 150, "g", { groupLabel: "Täyte" }),
@@ -461,15 +465,15 @@ export const recipeSeedData = [
     ...batchServe,
     ingredients: [
       ingredient("Kanan rintafilee", 700, "g", { groupLabel: "Kana" }),
-      fixedIngredient("Cayennepippuri", 2, "g", { groupLabel: "Kana", ingredientRole: "spice" }),
-      fixedIngredient("Suola", 4, "g", { groupLabel: "Kana", ingredientRole: "spice" }),
-      fixedIngredient("Mustapippuri", 2, "g", { groupLabel: "Kana", ingredientRole: "spice" }),
-      fixedIngredient("Valkosipulijauhe", 3, "g", { groupLabel: "Kana", ingredientRole: "spice" }),
-      fixedIngredient("Sipulijauhe", 3, "g", { groupLabel: "Kana", ingredientRole: "spice" }),
+      gentleIngredient("Cayennepippuri", 2, "g", { groupLabel: "Kana", ingredientRole: "spice" }),
+      gentleIngredient("Suola", 4, "g", { groupLabel: "Kana", ingredientRole: "spice" }),
+      gentleIngredient("Mustapippuri", 2, "g", { groupLabel: "Kana", ingredientRole: "spice" }),
+      gentleIngredient("Valkosipulijauhe", 3, "g", { groupLabel: "Kana", ingredientRole: "spice" }),
+      gentleIngredient("Sipulijauhe", 3, "g", { groupLabel: "Kana", ingredientRole: "spice" }),
       ingredient("Pasta", 320, "g", { groupLabel: "Pasta" }),
       ingredient("Voi suolaamaton", 15, "g", { groupLabel: "Kastike" }),
       ingredient("Valkosipuli", 15, "g", { groupLabel: "Kastike" }),
-      ingredient("Chilihiutaleet", 2, "g", { groupLabel: "Kastike", ingredientRole: "spice", scalingMode: "fixed" }),
+      gentleIngredient("Chilihiutaleet", 2, "g", { groupLabel: "Kastike", ingredientRole: "spice" }),
       ingredient("Ruokakerma kevyt ja paksu 4%", 250, "ml", { groupLabel: "Kastike" }),
       ingredient("Tomaattimurska", 300, "g", { groupLabel: "Kastike" }),
       ingredient("Tuorejuusto 11%", 100, "g", { groupLabel: "Kastike" }),
@@ -516,7 +520,7 @@ export const recipeSeedData = [
       ingredient("Punasipuli", 120, "g", { groupLabel: "Uunivuoka" }),
       ingredient("Kirsikkatomaatti", 300, "g", { groupLabel: "Uunivuoka" }),
       ingredient("Oliiviöljy", 10, "g", { groupLabel: "Uunivuoka" }),
-      fixedIngredient("Mustapippuri", 2, "g", { groupLabel: "Uunivuoka", ingredientRole: "spice" }),
+      gentleIngredient("Mustapippuri", 2, "g", { groupLabel: "Uunivuoka", ingredientRole: "spice" }),
       ingredient("Valkosipuli", 12, "g", { groupLabel: "Uunivuoka" }),
       ingredient("Basilika", 10, "g", { groupLabel: "Päälle" }),
     ],
@@ -537,17 +541,17 @@ export const recipeSeedData = [
       ingredient("Bataatti", 800, "g", { groupLabel: "Bataatti" }),
       ingredient("Sipuli", 120, "g", { groupLabel: "Lihaseos" }),
       ingredient("Naudan jauheliha 10%", 600, "g", { groupLabel: "Lihaseos" }),
-      fixedIngredient("Cayennepippuri", 2, "g", { groupLabel: "Lihaseos", ingredientRole: "spice" }),
-      fixedIngredient("Suola", 4, "g", { groupLabel: "Lihaseos", ingredientRole: "spice" }),
-      fixedIngredient("Paprikamauste", 3, "g", { groupLabel: "Lihaseos", ingredientRole: "spice" }),
-      fixedIngredient("Juustokumina", 3, "g", { groupLabel: "Lihaseos", ingredientRole: "spice" }),
+      gentleIngredient("Cayennepippuri", 2, "g", { groupLabel: "Lihaseos", ingredientRole: "spice" }),
+      gentleIngredient("Suola", 4, "g", { groupLabel: "Lihaseos", ingredientRole: "spice" }),
+      gentleIngredient("Paprikamauste", 3, "g", { groupLabel: "Lihaseos", ingredientRole: "spice" }),
+      gentleIngredient("Juustokumina", 3, "g", { groupLabel: "Lihaseos", ingredientRole: "spice" }),
       ingredient("Valkosipuli", 15, "g", { groupLabel: "Lihaseos" }),
       ingredient("Tomaattipyree", 40, "g", { groupLabel: "Lihaseos" }),
       ingredient("Juustoraaste 12%", 60, "g", { groupLabel: "Lihaseos" }),
       ingredient("Kreikkalainen jogurtti 0%", 150, "g", { groupLabel: "Kastike" }),
       ingredient("Oliiviöljy", 5, "g", { groupLabel: "Kastike" }),
-      fixedIngredient("Valkosipulijauhe", 2, "g", { groupLabel: "Kastike", ingredientRole: "spice" }),
-      fixedIngredient("Sipulijauhe", 2, "g", { groupLabel: "Kastike", ingredientRole: "spice" }),
+      gentleIngredient("Valkosipulijauhe", 2, "g", { groupLabel: "Kastike", ingredientRole: "spice" }),
+      gentleIngredient("Sipulijauhe", 2, "g", { groupLabel: "Kastike", ingredientRole: "spice" }),
       ingredient("Sinappi", 10, "g", { groupLabel: "Kastike" }),
     ],
     instructions: [
@@ -684,8 +688,8 @@ export const recipeSeedData = [
       ingredient("Banaani", 120, "g", { groupLabel: "Pannukakut" }),
       ingredient("Kananmuna", 2, "pcs", { groupLabel: "Pannukakut" }),
       ingredient("Vehnäjauho", 25, "g", { groupLabel: "Pannukakut" }),
-      ingredient("Leivinjauhe", 4, "g", { groupLabel: "Pannukakut", ingredientRole: "spice", scalingMode: "fixed" }),
-      ingredient("Vaniljasokeri", 5, "g", { groupLabel: "Pannukakut", ingredientRole: "spice", scalingMode: "fixed" }),
+      gentleIngredient("Leivinjauhe", 4, "g", { groupLabel: "Pannukakut", ingredientRole: "spice" }),
+      gentleIngredient("Vaniljasokeri", 5, "g", { groupLabel: "Pannukakut", ingredientRole: "spice" }),
       ingredient("Mustikka", 80, "g", { groupLabel: "Päälle" }),
       ingredient("Skyr wanhanajan vanilja", 150, "g", { groupLabel: "Päälle" }),
     ],

@@ -30,7 +30,7 @@ export type NutritionOwnerRole = "admin" | "coach";
 export type IngredientSource = "fineli" | "open_food_facts" | "manual";
 export type IngredientUnit = "g" | "ml" | "pcs";
 export type IngredientRole = "main" | "spice" | "garnish";
-export type IngredientScalingMode = "linear" | "fixed" | "text_only";
+export type IngredientScalingMode = "linear" | "gentle" | "fixed" | "text_only";
 export type MealTag = "breakfast" | "lunch" | "snack" | "dinner" | "evening_snack";
 export type PurchaseUnit = "g" | "kg" | "ml" | "l" | "pcs" | "pack";
 
