@@ -37,7 +37,12 @@ async function saveRecipe(request: Request) {
   const body = await request.json().catch(() => ({}));
   const parsed = recipeSchema.safeParse(body);
   if (!parsed.success) {
-    return NextResponse.json({ message: "Virheellinen resepti." }, { status: 400 });
+    const fieldErrors = parsed.error.flatten().fieldErrors;
+    const firstError = Object.values(fieldErrors).flat().find(Boolean);
+    return NextResponse.json({
+      message: firstError ?? "Virheellinen resepti.",
+      fieldErrors,
+    }, { status: 400 });
   }
 
   const result = await saveRecipeOnServer(requesterResult.requester, parsed.data);

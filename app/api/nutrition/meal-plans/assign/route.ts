@@ -21,7 +21,12 @@ export async function POST(request: Request) {
   const body = await request.json().catch(() => ({}));
   const parsed = assignedMealPlanSchema.safeParse(body);
   if (!parsed.success) {
-    return NextResponse.json({ message: "Virheellinen ateriapohjan jako." }, { status: 400 });
+    const fieldErrors = parsed.error.flatten().fieldErrors;
+    const firstError = Object.values(fieldErrors).flat().find(Boolean);
+    return NextResponse.json({
+      message: firstError ?? "Virheellinen ateriapohjan jako.",
+      fieldErrors,
+    }, { status: 400 });
   }
 
   const result = await assignMealPlanOnServer(requesterResult.requester, parsed.data);

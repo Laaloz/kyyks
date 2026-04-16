@@ -133,29 +133,28 @@ export function calculateMacroTarget(input: {
     return null;
   }
 
-  const activityKcalAdjustment = {
-    low: -150,
-    moderate: 0,
-    high: 175,
+  const bmr =
+    sex === "male"
+      ? 10 * weightKg + 6.25 * heightCm - 5 * age + 5
+      : sex === "female"
+        ? 10 * weightKg + 6.25 * heightCm - 5 * age - 161
+        : 10 * weightKg + 6.25 * heightCm - 5 * age - 78;
+
+  const activityMultiplier = {
+    low: 1.2,
+    moderate: 1.3,
+    high: 1.45,
   }[input.activityLevel];
 
-  const goalKcalPerKg = {
-    lose: 22.35,
-    maintain: 26.2,
-    gain: 29.3,
+  const goalAdjustment = {
+    lose: 0.85,
+    maintain: 1,
+    gain: 1.08,
   }[input.goal];
-
-  const bodySizeAdjustment =
-    sex === "male"
-      ? Math.max(0, (heightCm - 175) * 2)
-      : sex === "female"
-        ? Math.max(0, (heightCm - 165) * 1.5)
-        : Math.max(0, (heightCm - 170) * 1.75);
-  const ageAdjustment = Math.max(0, age - 35) * 4;
 
   const targetKcal = Math.max(
     1200,
-    Math.round(weightKg * goalKcalPerKg + activityKcalAdjustment + bodySizeAdjustment - ageAdjustment),
+    Math.round(bmr * activityMultiplier * goalAdjustment),
   );
 
   const proteinPerKg = {

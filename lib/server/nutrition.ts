@@ -183,6 +183,7 @@ export async function saveRecipeOnServer(requester: Requester, input: RecipeInpu
 
   const timestamp = new Date().toISOString();
   let recipeId = input.id;
+  const ownerRole = requester.role === "admin" ? "admin" : "coach";
 
   const recipePayload = {
     name: input.name.trim(),
@@ -191,8 +192,7 @@ export async function saveRecipeOnServer(requester: Requester, input: RecipeInpu
     meal_tag: input.mealTag,
     dietary_flags: input.dietaryFlags ?? [],
     allergies: input.allergies ?? [],
-    owner_role: "admin",
-    created_by: requester.id,
+    owner_role: ownerRole,
     default_servings: input.defaultServings,
     min_servings: input.minServings,
     max_servings: input.maxServings,
@@ -212,7 +212,7 @@ export async function saveRecipeOnServer(requester: Requester, input: RecipeInpu
   } else {
     const { data, error } = await supabase
       .from("recipes")
-      .insert({ ...recipePayload, created_at: timestamp })
+      .insert({ ...recipePayload, created_by: requester.id, created_at: timestamp })
       .select("id")
       .single<{ id: string }>();
     if (error || !data) {
@@ -315,11 +315,11 @@ export async function saveMealPlanTemplateOnServer(requester: Requester, input: 
 
   const timestamp = new Date().toISOString();
   let templateId = input.id;
+  const ownerRole = requester.role === "admin" ? "admin" : "coach";
   const payload = {
     name: input.name.trim(),
     description: input.description?.trim() || null,
-    owner_role: "admin",
-    created_by: requester.id,
+    owner_role: ownerRole,
     updated_at: timestamp,
   };
 
@@ -335,7 +335,7 @@ export async function saveMealPlanTemplateOnServer(requester: Requester, input: 
   } else {
     const { data, error } = await supabase
       .from("meal_plan_templates")
-      .insert({ ...payload, created_at: timestamp })
+      .insert({ ...payload, created_by: requester.id, created_at: timestamp })
       .select("id")
       .single<{ id: string }>();
     if (error || !data) {

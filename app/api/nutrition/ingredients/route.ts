@@ -36,7 +36,12 @@ async function saveIngredient(request: Request) {
   const body = await request.json().catch(() => ({}));
   const parsed = ingredientSchema.safeParse(body);
   if (!parsed.success) {
-    return NextResponse.json({ message: "Virheellinen raaka-aine." }, { status: 400 });
+    const fieldErrors = parsed.error.flatten().fieldErrors;
+    const firstError = Object.values(fieldErrors).flat().find(Boolean);
+    return NextResponse.json({
+      message: firstError ?? "Virheellinen raaka-aine.",
+      fieldErrors,
+    }, { status: 400 });
   }
 
   const result = await saveIngredientOnServer(requesterResult.requester, parsed.data);

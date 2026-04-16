@@ -281,6 +281,7 @@ export function NutritionAdminPanel() {
     dinner: [] as string[],
     evening_snack: [] as string[],
   });
+  const [selectedTemplateId, setSelectedTemplateId] = useState("");
   const [assignmentForm, setAssignmentForm] = useState({
     athleteId: athleteUsers[0]?.id ?? "",
     templateId: state.mealPlanTemplates[0]?.id ?? "",
@@ -288,6 +289,11 @@ export function NutritionAdminPanel() {
   const [activeSection, setActiveSection] = useState<NutritionAdminSection>("overview");
   const [recipeWorkspace, setRecipeWorkspace] = useState<RecipeWorkspace>("recipe");
   const [isSavingNutritionProfile, setIsSavingNutritionProfile] = useState(false);
+  const [isSavingIngredient, setIsSavingIngredient] = useState(false);
+  const [isSavingRecipe, setIsSavingRecipe] = useState(false);
+  const [isDeletingRecipe, setIsDeletingRecipe] = useState(false);
+  const [isSavingMealPlanTemplate, setIsSavingMealPlanTemplate] = useState(false);
+  const [isAssigningMealPlanTemplate, setIsAssigningMealPlanTemplate] = useState(false);
   const [message, setMessage] = useState<{ tone: "success" | "danger"; text: string } | null>(null);
   const visibleSections = isAdmin ? sectionMeta : sectionMeta.filter((section) => section.id !== "overview");
   const activeSectionMeta = visibleSections.find((section) => section.id === activeSection) ?? visibleSections[0];
@@ -452,6 +458,7 @@ export function NutritionAdminPanel() {
   };
 
   const handleSaveIngredient = async () => {
+    setIsSavingIngredient(true);
     const result = await saveIngredient({
       name: ingredientForm.name,
       source: "manual",
@@ -461,7 +468,7 @@ export function NutritionAdminPanel() {
       proteinPer100: Number(ingredientForm.proteinPer100),
       carbsPer100: Number(ingredientForm.carbsPer100),
       fatPer100: Number(ingredientForm.fatPer100),
-    });
+    }).finally(() => setIsSavingIngredient(false));
 
     setMessage({ tone: result.ok ? "success" : "danger", text: result.ok ? "Raaka-aine tallennettiin." : result.message });
     if (result.ok) {
@@ -478,6 +485,7 @@ export function NutritionAdminPanel() {
   };
 
   const handleSaveRecipe = async () => {
+    setIsSavingRecipe(true);
     const result = await saveRecipe({
       id: selectedRecipeId || undefined,
       name: recipeForm.name,
@@ -499,7 +507,7 @@ export function NutritionAdminPanel() {
         ingredientRole: ingredient.ingredientRole,
         scalingMode: ingredient.scalingMode,
       })),
-    });
+    }).finally(() => setIsSavingRecipe(false));
 
     setMessage({ tone: result.ok ? "success" : "danger", text: result.ok ? "Resepti tallennettiin." : result.message });
     if (result.ok) {
@@ -519,11 +527,76 @@ export function NutritionAdminPanel() {
       return;
     }
 
-    const result = await deleteRecipe(selectedRecipeId);
+    setIsDeletingRecipe(true);
+    const result = await deleteRecipe(selectedRecipeId).finally(() => setIsDeletingRecipe(false));
     setMessage({ tone: result.ok ? "success" : "danger", text: result.ok ? "Resepti poistettiin." : result.message });
     if (result.ok) {
       resetRecipeEditor();
     }
+  };
+
+  const resetTemplateEditor = () => {
+    setSelectedTemplateId("");
+    setTemplateForm({
+      name: "",
+      description: "",
+      breakfast: [],
+      lunch: [],
+      snack: [],
+      dinner: [],
+      evening_snack: [],
+    });
+  };
+
+  const loadTemplateToEditor = (templateId: string) => {
+    const template = state.mealPlanTemplates.find((item) => item.id === templateId);
+    if (!template) {
+      return;
+    }
+
+    const nextForm = {
+      name: template.name,
+      description: template.description ?? "",
+      breakfast: [] as string[],
+      lunch: [] as string[],
+      snack: [] as string[],
+      dinner: [] as string[],
+      evening_snack: [] as string[],
+    };
+
+    const sortedItems = [...template.items].sort((left, right) => left.sortOrder - right.sortOrder);
+    for (const item of sortedItems) {
+      nextForm[item.mealTag] = [...nextForm[item.mealTag], item.recipeId];
+    }
+
+    setSelectedTemplateId(template.id);
+    setTemplateForm(nextForm);
+  };
+
+  const duplicateTemplateToEditor = (templateId: string) => {
+    const template = state.mealPlanTemplates.find((item) => item.id === templateId);
+    if (!template) {
+      return;
+    }
+
+    const nextForm = {
+      name: `${template.name} kopio`,
+      description: template.description ?? "",
+      breakfast: [] as string[],
+      lunch: [] as string[],
+      snack: [] as string[],
+      dinner: [] as string[],
+      evening_snack: [] as string[],
+    };
+
+    const sortedItems = [...template.items].sort((left, right) => left.sortOrder - right.sortOrder);
+    for (const item of sortedItems) {
+      nextForm[item.mealTag] = [...nextForm[item.mealTag], item.recipeId];
+    }
+
+    setSelectedTemplateId("");
+    setTemplateForm(nextForm);
+    setMessage({ tone: "success", text: `Ateriapohja "${template.name}" kopioitiin editoriin uutena pohjana.` });
   };
 
   const handleSaveTemplate = async () => {
@@ -537,31 +610,35 @@ export function NutritionAdminPanel() {
         }));
       });
 
+    setIsSavingMealPlanTemplate(true);
     const result = await saveMealPlanTemplate({
+      id: selectedTemplateId || undefined,
       name: templateForm.name,
       description: templateForm.description,
       items,
-    });
+    }).finally(() => setIsSavingMealPlanTemplate(false));
 
-    setMessage({ tone: result.ok ? "success" : "danger", text: result.ok ? "Ateriapohja tallennettiin." : result.message });
+    setMessage({
+      tone: result.ok ? "success" : "danger",
+      text: result.ok
+        ? selectedTemplateId
+          ? "Ateriapohja päivitettiin."
+          : "Ateriapohja tallennettiin."
+        : result.message,
+    });
     if (result.ok) {
-      setTemplateForm({
-        name: "",
-        description: "",
-        breakfast: [],
-        lunch: [],
-        snack: [],
-        dinner: [],
-        evening_snack: [],
-      });
+      if (!selectedTemplateId) {
+        resetTemplateEditor();
+      }
     }
   };
 
   const handleAssignTemplate = async () => {
+    setIsAssigningMealPlanTemplate(true);
     const result = await assignMealPlanTemplate({
       athleteId: assignmentForm.athleteId,
       templateId: assignmentForm.templateId,
-    });
+    }).finally(() => setIsAssigningMealPlanTemplate(false));
 
     setMessage({ tone: result.ok ? "success" : "danger", text: result.ok ? "Ateriapohja jaettiin treenaajalle." : result.message });
   };
@@ -1093,8 +1170,8 @@ export function NutritionAdminPanel() {
                       <div className="mt-3 rounded-2xl border border-[var(--border)] bg-[var(--surface-2)] p-3">
                         <p className="text-sm font-semibold text-[var(--text)]">Miten auto laskee?</p>
                         <div className="mt-2 space-y-2 text-sm text-[var(--text-muted)]">
-                          <p>Energia arvioidaan painon, tavoitteen, aktiivisuustason, pituuden ja iän perusteella.</p>
-                          <p>Proteiini asetetaan ensin tavoitteen mukaan, rasvalle asetetaan minimitaso ja hiilarit täyttävät loput kalorit.</p>
+                          <p>Energia arvioidaan perusaineenvaihdunnan ja aktiivisuuskertoimen kautta, jonka jälkeen tavoite säätää kokonaiskaloreita ylös tai alas.</p>
+                          <p>Proteiini asetetaan ensin tavoitteen mukaan, rasvalle asetetaan riittävä minimitaso ja hiilarit täyttävät loput kalorit treenin tueksi.</p>
                           <p>Arvo on aloituspiste, jota säädetään myöhemmin seurannan perusteella.</p>
                         </div>
                       </div>
@@ -1334,7 +1411,7 @@ export function NutritionAdminPanel() {
                         <Button
                           type="button"
                           variant="secondary"
-                          disabled={!selectedRecipeId}
+                          disabled={!selectedRecipeId || isSavingRecipe || isDeletingRecipe}
                           onClick={() => {
                             if (selectedRecipeId) {
                               duplicateRecipeToEditor(selectedRecipeId);
@@ -1346,10 +1423,10 @@ export function NutritionAdminPanel() {
                         <Button
                           type="button"
                           variant="ghost"
-                          disabled={!selectedRecipeId}
+                          disabled={!selectedRecipeId || isSavingRecipe || isDeletingRecipe}
                           onClick={() => void handleDeleteRecipe()}
                         >
-                          Poista
+                          {isDeletingRecipe ? "Poistetaan..." : "Poista"}
                         </Button>
                       </div>
                     </div>
@@ -1659,8 +1736,8 @@ export function NutritionAdminPanel() {
                         </div>
                       ))}
                     </div>
-                    <Button type="button" onClick={() => void handleSaveRecipe()}>
-                      {selectedRecipeId ? "Paivita resepti" : "Tallenna resepti"}
+                    <Button type="button" disabled={isSavingRecipe || isDeletingRecipe} onClick={() => void handleSaveRecipe()}>
+                      {isSavingRecipe ? "Tallennetaan..." : selectedRecipeId ? "Paivita resepti" : "Tallenna resepti"}
                     </Button>
                   </div>
 
@@ -1769,7 +1846,9 @@ export function NutritionAdminPanel() {
                         <Input id="ingredient-fat" value={ingredientForm.fatPer100} onChange={(event) => setIngredientForm((current) => ({ ...current, fatPer100: event.target.value }))} />
                       </div>
                     </div>
-                    <Button type="button" onClick={() => void handleSaveIngredient()}>Tallenna raaka-aine</Button>
+                    <Button type="button" disabled={isSavingIngredient} onClick={() => void handleSaveIngredient()}>
+                      {isSavingIngredient ? "Tallennetaan..." : "Tallenna raaka-aine"}
+                    </Button>
                   </div>
 
                   <div className="space-y-4 rounded-3xl border border-[var(--border)] bg-[var(--surface-2)] p-4">
@@ -1798,6 +1877,50 @@ export function NutritionAdminPanel() {
                   <p className="text-sm text-[var(--text-muted)]">Rakenna päivän runko valmiista resepteistä ilman että kaikki ateriat ovat yhtä aikaa pakollisia.</p>
                 </div>
                 <div className="space-y-3">
+                  <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-4">
+                    <div className="flex flex-wrap items-end gap-3">
+                      <div className="min-w-[240px] flex-1">
+                        <Label htmlFor="template-picker">Muokkaa olemassa olevaa pohjaa</Label>
+                        <Select
+                          id="template-picker"
+                          value={selectedTemplateId}
+                          onChange={(event) => {
+                            const nextTemplateId = event.target.value;
+                            if (!nextTemplateId) {
+                              resetTemplateEditor();
+                              return;
+                            }
+                            loadTemplateToEditor(nextTemplateId);
+                          }}
+                        >
+                          <option value="">Uusi ateriapohja</option>
+                          {state.mealPlanTemplates.map((template) => (
+                            <option key={template.id} value={template.id}>{template.name}</option>
+                          ))}
+                        </Select>
+                      </div>
+                      <Button type="button" variant="secondary" onClick={resetTemplateEditor}>
+                        Uusi pohja
+                      </Button>
+                      <Button
+                        type="button"
+                        variant="secondary"
+                        disabled={!selectedTemplateId || isSavingMealPlanTemplate}
+                        onClick={() => {
+                          if (selectedTemplateId) {
+                            duplicateTemplateToEditor(selectedTemplateId);
+                          }
+                        }}
+                      >
+                        Kopioi pohja
+                      </Button>
+                    </div>
+                    <p className="mt-3 text-xs text-[var(--text-muted)]">
+                      {selectedTemplateId
+                        ? "Muokkaat nyt tallennettua ateriapohjaa. Tallennus päivittää nykyisen pohjan."
+                        : "Rakenna uusi ateriapohja tai lataa valmis pohja takaisin editoriin."}
+                    </p>
+                  </div>
                   <div>
                     <Label htmlFor="template-name">Ateriapohjan nimi</Label>
                     <Input id="template-name" value={templateForm.name} onChange={(event) => setTemplateForm((current) => ({ ...current, name: event.target.value }))} />
@@ -1880,7 +2003,9 @@ export function NutritionAdminPanel() {
                         Kaikki ateriaryhmät on täytetty. Pohja on valmis tallennettavaksi.
                       </div>
                     )}
-                    <Button type="button" onClick={() => void handleSaveTemplate()}>Tallenna ateriapohja</Button>
+                    <Button type="button" disabled={isSavingMealPlanTemplate} onClick={() => void handleSaveTemplate()}>
+                      {isSavingMealPlanTemplate ? "Tallennetaan..." : selectedTemplateId ? "Päivitä ateriapohja" : "Tallenna ateriapohja"}
+                    </Button>
                   </div>
                 </div>
               </div>
@@ -1905,15 +2030,32 @@ export function NutritionAdminPanel() {
                         ))}
                       </Select>
                     </div>
-                    <Button type="button" onClick={() => void handleAssignTemplate()}>Jaa aktiiviseksi pohjaksi</Button>
+                    <Button type="button" disabled={isAssigningMealPlanTemplate} onClick={() => void handleAssignTemplate()}>
+                      {isAssigningMealPlanTemplate ? "Jaetaan..." : "Jaa aktiiviseksi pohjaksi"}
+                    </Button>
                   </div>
                 </div>
 
                 <div className="rounded-3xl border border-[var(--border)] bg-[var(--surface-2)] p-4">
                   <p className="text-sm font-semibold text-[var(--text)]">Valmiit pohjat</p>
-                  <div className="mt-3 flex flex-wrap gap-2">
+                  <div className="mt-3 space-y-2">
                     {templatePreview.length > 0 ? templatePreview.map((template) => (
-                      <Badge key={template.id}>{template.name}</Badge>
+                      <div key={template.id} className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-[var(--border)] bg-[var(--surface)] px-3 py-3">
+                        <div>
+                          <p className="text-sm font-semibold text-[var(--text)]">{template.name}</p>
+                          {template.description ? (
+                            <p className="mt-1 text-xs text-[var(--text-muted)]">{template.description}</p>
+                          ) : null}
+                        </div>
+                        <div className="flex flex-wrap gap-2">
+                          <Button type="button" variant="secondary" className="px-3 py-2 text-sm" onClick={() => loadTemplateToEditor(template.id)}>
+                            Muokkaa
+                          </Button>
+                          <Button type="button" variant="ghost" className="px-3 py-2 text-sm" onClick={() => duplicateTemplateToEditor(template.id)}>
+                            Kopioi
+                          </Button>
+                        </div>
+                      </div>
                     )) : <p className="text-sm text-[var(--text-muted)]">Ei vielä tallennettuja ateriapohjia.</p>}
                   </div>
                 </div>
