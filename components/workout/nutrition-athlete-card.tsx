@@ -21,6 +21,10 @@ function formatQuantity(value: number) {
   return Number.isInteger(value) ? String(value) : String(Math.round(value * 10) / 10);
 }
 
+function formatIngredientUnit(unit: Recipe["ingredients"][number]["unit"]) {
+  return unit === "pcs" ? "kpl" : unit;
+}
+
 function formatRecipeIngredientLine(ingredient: Recipe["ingredients"][number]) {
   const displayQuantity = ingredient.displayQuantity?.trim();
   const displayUnit = ingredient.displayUnit?.trim();
@@ -29,7 +33,7 @@ function formatRecipeIngredientLine(ingredient: Recipe["ingredients"][number]) {
   }
 
   if (ingredient.quantity !== undefined) {
-    return `${formatQuantity(ingredient.quantity)} ${ingredient.unit} ${ingredient.ingredientName}`;
+    return `${formatQuantity(ingredient.quantity)} ${formatIngredientUnit(ingredient.unit)} ${ingredient.ingredientName}`;
   }
 
   return ingredient.ingredientName;

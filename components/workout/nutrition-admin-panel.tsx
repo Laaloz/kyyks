@@ -262,8 +262,6 @@ export function NutritionAdminPanel() {
     customDietaryFlags: "",
     customAllergies: "",
     defaultServings: "4",
-    minServings: "2",
-    maxServings: "8",
   });
   const [recipeSteps, setRecipeSteps] = useState<string[]>([emptyRecipeStepDraft()]);
   const [recipeIngredients, setRecipeIngredients] = useState<RecipeIngredientDraft[]>([
@@ -347,8 +345,6 @@ export function NutritionAdminPanel() {
       customDietaryFlags: "",
       customAllergies: "",
       defaultServings: "4",
-      minServings: "2",
-      maxServings: "8",
     });
     setRecipeSteps([emptyRecipeStepDraft()]);
     setRecipeIngredients([emptyRecipeIngredientDraft()]);
@@ -370,8 +366,6 @@ export function NutritionAdminPanel() {
       customDietaryFlags: splitKnownAndCustom(recipe.dietaryFlags ?? [], dietaryFlagOptions).custom,
       customAllergies: splitKnownAndCustom(recipe.allergies ?? [], allergyOptions).custom,
       defaultServings: String(recipe.defaultServings),
-      minServings: String(recipe.minServings),
-      maxServings: String(recipe.maxServings),
     });
     setRecipeSteps(splitRecipeInstructions(recipe.instructions).filter(Boolean).length > 0
       ? splitRecipeInstructions(recipe.instructions)
@@ -408,8 +402,6 @@ export function NutritionAdminPanel() {
       customDietaryFlags: splitKnownAndCustom(recipe.dietaryFlags ?? [], dietaryFlagOptions).custom,
       customAllergies: splitKnownAndCustom(recipe.allergies ?? [], allergyOptions).custom,
       defaultServings: String(recipe.defaultServings),
-      minServings: String(recipe.minServings),
-      maxServings: String(recipe.maxServings),
     });
     setRecipeSteps(splitRecipeInstructions(recipe.instructions).filter(Boolean).length > 0
       ? splitRecipeInstructions(recipe.instructions)
@@ -486,6 +478,7 @@ export function NutritionAdminPanel() {
 
   const handleSaveRecipe = async () => {
     setIsSavingRecipe(true);
+    const normalizedDefaultServings = Number(recipeForm.defaultServings) || 1;
     const result = await saveRecipe({
       id: selectedRecipeId || undefined,
       name: recipeForm.name,
@@ -494,9 +487,9 @@ export function NutritionAdminPanel() {
       mealTag: recipeForm.mealTag,
       dietaryFlags: [...recipeForm.dietaryFlags, ...parseList(recipeForm.customDietaryFlags)],
       allergies: [...recipeForm.allergies, ...parseList(recipeForm.customAllergies)],
-      defaultServings: Number(recipeForm.defaultServings),
-      minServings: Number(recipeForm.minServings),
-      maxServings: Number(recipeForm.maxServings),
+      defaultServings: normalizedDefaultServings,
+      minServings: normalizedDefaultServings,
+      maxServings: normalizedDefaultServings,
       ingredients: recipeIngredients.map((ingredient) => ({
         ingredientId: ingredient.ingredientId || undefined,
         ingredientName: ingredient.ingredientName,
@@ -1561,17 +1554,26 @@ export function NutritionAdminPanel() {
                           </div>
                         </div>
                       </div>
-                      <div>
-                        <Label htmlFor="recipe-servings">Oletusannokset</Label>
-                        <Input id="recipe-servings" value={recipeForm.defaultServings} onChange={(event) => setRecipeForm((current) => ({ ...current, defaultServings: event.target.value }))} />
-                      </div>
-                      <div>
-                        <Label htmlFor="recipe-min">Min annokset</Label>
-                        <Input id="recipe-min" value={recipeForm.minServings} onChange={(event) => setRecipeForm((current) => ({ ...current, minServings: event.target.value }))} />
-                      </div>
-                      <div>
-                        <Label htmlFor="recipe-max">Max annokset</Label>
-                        <Input id="recipe-max" value={recipeForm.maxServings} onChange={(event) => setRecipeForm((current) => ({ ...current, maxServings: event.target.value }))} />
+                      <div className="md:col-span-2 rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-4">
+                        <div className="grid gap-4 md:grid-cols-[minmax(0,220px)_1fr] md:items-start">
+                          <div>
+                            <Label htmlFor="recipe-servings">Oletusannosmäärä</Label>
+                            <Input
+                              id="recipe-servings"
+                              value={recipeForm.defaultServings}
+                              onChange={(event) => setRecipeForm((current) => ({ ...current, defaultServings: event.target.value }))}
+                            />
+                          </div>
+                          <div className="text-sm text-[var(--text-muted)]">
+                            <p className="font-medium text-[var(--text)]">Mitä tämä tarkoittaa?</p>
+                            <p className="mt-1">
+                              Tämä on reseptin perusmäärä, johon makrot lasketaan ja jolla resepti avautuu käyttäjälle oletuksena.
+                            </p>
+                            <p className="mt-2">
+                              Käyttäjä voi sen jälkeen lisätä tai vähentää annoksia <span className="font-medium text-[var(--text)]">+ / -</span> -painikkeilla ilman erillisiä reseptikohtaisia rajoituksia.
+                            </p>
+                          </div>
+                        </div>
                       </div>
                       <div className="md:col-span-2 space-y-3">
                         <div className="flex items-center justify-between gap-3">
@@ -1654,7 +1656,7 @@ export function NutritionAdminPanel() {
                           <div className="md:col-span-2 flex items-start justify-between gap-3">
                             <div>
                               <p className="text-sm font-semibold text-[var(--text)]">Rivi {index + 1}</p>
-                              <p className="text-xs text-[var(--text-muted)]">Anna laskentamäärä ja tarvittaessa näyttömuoto erikseen.</p>
+                              <p className="text-xs text-[var(--text-muted)]">Anna makroihin käytettävä määrä ja halutessasi käyttäjälle näkyvä määrä erikseen.</p>
                             </div>
                             {recipeIngredients.length > 1 ? (
                               <Button
@@ -1698,7 +1700,7 @@ export function NutritionAdminPanel() {
                             <Input id={`recipe-ingredient-name-${index}`} value={ingredient.ingredientName} onChange={(event) => setRecipeIngredients((current) => current.map((row, rowIndex) => rowIndex === index ? { ...row, ingredientName: event.target.value } : row))} />
                           </div>
                           <div>
-                            <Label htmlFor={`recipe-ingredient-quantity-${index}`}>Laskentamäärä</Label>
+                            <Label htmlFor={`recipe-ingredient-quantity-${index}`}>Makroihin käytettävä määrä</Label>
                             <Input id={`recipe-ingredient-quantity-${index}`} value={ingredient.quantity} onChange={(event) => setRecipeIngredients((current) => current.map((row, rowIndex) => rowIndex === index ? { ...row, quantity: event.target.value } : row))} />
                           </div>
                           <div>
@@ -1726,11 +1728,11 @@ export function NutritionAdminPanel() {
                             </Select>
                           </div>
                           <div>
-                            <Label htmlFor={`recipe-ingredient-display-quantity-${index}`}>Näyttömäärä</Label>
+                            <Label htmlFor={`recipe-ingredient-display-quantity-${index}`}>Käyttäjälle näkyvä määrä</Label>
                             <Input id={`recipe-ingredient-display-quantity-${index}`} placeholder="1" value={ingredient.displayQuantity} onChange={(event) => setRecipeIngredients((current) => current.map((row, rowIndex) => rowIndex === index ? { ...row, displayQuantity: event.target.value } : row))} />
                           </div>
                           <div>
-                            <Label htmlFor={`recipe-ingredient-display-unit-${index}`}>Näyttöyksikkö</Label>
+                            <Label htmlFor={`recipe-ingredient-display-unit-${index}`}>Käyttäjälle näkyvä yksikkö</Label>
                             <Input id={`recipe-ingredient-display-unit-${index}`} placeholder="tl / maun mukaan" value={ingredient.displayUnit} onChange={(event) => setRecipeIngredients((current) => current.map((row, rowIndex) => rowIndex === index ? { ...row, displayUnit: event.target.value } : row))} />
                           </div>
                         </div>
