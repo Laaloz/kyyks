@@ -436,8 +436,8 @@ export function NutritionAthleteCard({
                 </div>
 
                 {selectedMealTag ? (
-                  <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-4">
-                    <div className="flex items-start justify-between gap-4">
+                  <div className="space-y-4">
+                    <div className="flex items-start justify-between gap-4 px-1">
                       <div>
                         <p className="text-xs font-semibold tracking-[0.04em] text-[var(--text-subtle)]">{mealTagLabel(selectedMealTag)}</p>
                         <p className="mt-1 text-sm text-[var(--text-muted)]">Valitse resepti listasta avataksesi tarkemmat tiedot.</p>
@@ -445,7 +445,7 @@ export function NutritionAthleteCard({
                       <p className="text-sm text-[var(--text-muted)]">{selectedMealItems.length} reseptiä</p>
                     </div>
 
-                    <div className="mt-4 grid gap-3">
+                    <div className="grid gap-3">
                       {selectedMealItems.map((item) => {
                         const recipeNutrition = resolveRecipeNutritionPreview(item.recipe, state.ingredientsCatalog).nutritionPerServing;
                         const isOpen = selectedRecipeId === item.recipe.id;

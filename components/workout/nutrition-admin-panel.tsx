@@ -9,7 +9,7 @@ import { Input, Label, Select, Textarea } from "@/components/ui/field";
 import { InlineFeedback } from "@/components/workout/inline-feedback";
 import { getMeasurementsForUser } from "@/lib/body-metrics";
 import { calculateMacroTarget, calculateRecipeNutrition, getMacroGoalGuidance, getMissingMacroProfileFields, getRecipeCompatibilityAlerts, joinRecipeInstructionSteps, mealTagLabel, resolveRecipeNutritionPreview, splitRecipeInstructions } from "@/lib/nutrition";
-import { canActAsCoach, isAthleteRole } from "@/lib/role-access";
+import { canActAsCoach } from "@/lib/role-access";
 import type {
   Ingredient,
   IngredientRole,
@@ -193,7 +193,7 @@ const sectionMeta: Array<{
     id: "profiles",
     label: "Profiilit",
     title: "Treenaajien tavoitteet",
-    description: "Säädä päivän tavoitekcal, makrot ja ruokavalioliput yhdelle treenaajalle kerrallaan.",
+    description: "Säädä päivän tavoitekcal, makrot ja ruokavalioliput yhdelle käyttäjälle kerrallaan.",
   },
   {
     id: "recipes",
@@ -205,7 +205,7 @@ const sectionMeta: Array<{
     id: "plans",
     label: "Ateriapohjat",
     title: "Päivän runko ja jako",
-    description: "Kokoa päivän ateriat valmiista resepteistä ja jaa pohja treenaajalle.",
+    description: "Kokoa päivän ateriat valmiista resepteistä ja ota pohja käyttöön yhdelle käyttäjälle.",
   },
 ];
 
@@ -225,14 +225,29 @@ export function NutritionAdminPanel() {
 
   const canManageNutrition = canActAsCoach(currentUser?.role);
   const isAdmin = currentUser?.role === "admin";
-  const athleteUsers = useMemo(
+  const managedAthleteUsers = useMemo(
     () =>
       currentUser
-        ? getCoachAthletes(currentUser.id).filter((user) => isAthleteRole(user.role) && user.status === "active")
+        ? getCoachAthletes(currentUser.id).filter((user) => user.status === "active")
         : [],
     [currentUser, getCoachAthletes],
   );
-  const [selectedAthleteId, setSelectedAthleteId] = useState(athleteUsers[0]?.id ?? "");
+  const nutritionTargetUsers = useMemo(() => {
+    if (!currentUser) {
+      return [];
+    }
+
+    const seenUserIds = new Set<string>();
+    return [currentUser, ...managedAthleteUsers]
+      .filter((user) => {
+        if (seenUserIds.has(user.id)) {
+          return false;
+        }
+        seenUserIds.add(user.id);
+        return true;
+      });
+  }, [currentUser, managedAthleteUsers]);
+  const [selectedAthleteId, setSelectedAthleteId] = useState(nutritionTargetUsers[0]?.id ?? "");
   const selectedProfile = useMemo(
     () => state.nutritionProfiles.find((profile) => profile.userId === selectedAthleteId) ?? null,
     [selectedAthleteId, state.nutritionProfiles],
@@ -291,7 +306,7 @@ export function NutritionAdminPanel() {
   });
   const [selectedTemplateId, setSelectedTemplateId] = useState("");
   const [assignmentForm, setAssignmentForm] = useState({
-    athleteId: athleteUsers[0]?.id ?? "",
+    athleteId: nutritionTargetUsers[0]?.id ?? "",
     templateId: state.mealPlanTemplates[0]?.id ?? "",
   });
   const [activeSection, setActiveSection] = useState<NutritionAdminSection>("overview");
@@ -321,7 +336,7 @@ export function NutritionAdminPanel() {
   }, [canManageIngredients, recipeWorkspace]);
 
   useEffect(() => {
-    if (athleteUsers.length === 0) {
+    if (nutritionTargetUsers.length === 0) {
       if (selectedAthleteId) {
         setSelectedAthleteId("");
       }
@@ -331,14 +346,14 @@ export function NutritionAdminPanel() {
       return;
     }
 
-    if (!athleteUsers.some((user) => user.id === selectedAthleteId)) {
-      setSelectedAthleteId(athleteUsers[0].id);
+    if (!nutritionTargetUsers.some((user) => user.id === selectedAthleteId)) {
+      setSelectedAthleteId(nutritionTargetUsers[0].id);
     }
 
-    if (!athleteUsers.some((user) => user.id === assignmentForm.athleteId)) {
-      setAssignmentForm((current) => ({ ...current, athleteId: athleteUsers[0].id }));
+    if (!nutritionTargetUsers.some((user) => user.id === assignmentForm.athleteId)) {
+      setAssignmentForm((current) => ({ ...current, athleteId: nutritionTargetUsers[0].id }));
     }
-  }, [assignmentForm.athleteId, athleteUsers, selectedAthleteId]);
+  }, [assignmentForm.athleteId, nutritionTargetUsers, selectedAthleteId]);
 
   if (!currentUser || !canManageNutrition) {
     return null;
@@ -470,7 +485,7 @@ export function NutritionAdminPanel() {
 
   const handleSaveNutritionProfile = async () => {
     if (!selectedAthleteId) {
-      setMessage({ tone: "danger", text: "Valitse treenaaja ravintoprofiilille." });
+      setMessage({ tone: "danger", text: "Valitse käyttäjä ravintoprofiilille." });
       return;
     }
 
@@ -673,10 +688,10 @@ export function NutritionAdminPanel() {
       templateId: assignmentForm.templateId,
     }).finally(() => setIsAssigningMealPlanTemplate(false));
 
-    setMessage({ tone: result.ok ? "success" : "danger", text: result.ok ? "Ateriapohja jaettiin treenaajalle." : result.message });
+    setMessage({ tone: result.ok ? "success" : "danger", text: result.ok ? "Ateriapohja aktivoitiin käyttäjälle." : result.message });
   };
 
-  const selectedAthleteName = athleteUsers.find((user) => user.id === selectedAthleteId)?.fullName ?? "Ei valittu";
+  const selectedAthleteName = nutritionTargetUsers.find((user) => user.id === selectedAthleteId)?.fullName ?? "Ei valittu";
   const selectedAthlete = state.users.find((user) => user.id === selectedAthleteId) ?? null;
   const selectedAthleteMeasurements = selectedAthlete ? getMeasurementsForUser(state, selectedAthlete.id) : [];
   const latestWeightKg = selectedAthleteMeasurements.find((entry) => entry.weightKg !== undefined)?.weightKg ?? selectedAthlete?.weightKg;
@@ -1013,9 +1028,9 @@ export function NutritionAdminPanel() {
             <>
               <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
                 <div className="rounded-3xl border border-[var(--border)] bg-[var(--surface-2)] p-4">
-                  <p className="text-xs font-semibold tracking-[0.04em] text-[var(--text-subtle)]">Treenaajat</p>
-                  <p className="mt-2 text-3xl font-semibold text-[var(--text)]">{athleteUsers.length}</p>
-                  <p className="mt-1 text-sm text-[var(--text-muted)]">aktiivista treenaajaa ravinnon piirissä</p>
+                  <p className="text-xs font-semibold tracking-[0.04em] text-[var(--text-subtle)]">Käyttäjät</p>
+                  <p className="mt-2 text-3xl font-semibold text-[var(--text)]">{nutritionTargetUsers.length}</p>
+                  <p className="mt-1 text-sm text-[var(--text-muted)]">käyttäjää ravinnon piirissä</p>
                 </div>
                 <div className="rounded-3xl border border-[var(--border)] bg-[var(--surface-2)] p-4">
                   <p className="text-xs font-semibold tracking-[0.04em] text-[var(--text-subtle)]">Profiilit</p>
@@ -1030,7 +1045,7 @@ export function NutritionAdminPanel() {
                 <div className="rounded-3xl border border-[var(--border)] bg-[var(--surface-2)] p-4">
                   <p className="text-xs font-semibold tracking-[0.04em] text-[var(--text-subtle)]">Jaetut pohjat</p>
                   <p className="mt-2 text-3xl font-semibold text-[var(--text)]">{athleteWithPlanCount}</p>
-                  <p className="mt-1 text-sm text-[var(--text-muted)]">treenaajaa aktiivisen pohjan kanssa</p>
+                  <p className="mt-1 text-sm text-[var(--text-muted)]">käyttäjää aktiivisen pohjan kanssa</p>
                 </div>
               </div>
 
@@ -1042,8 +1057,8 @@ export function NutritionAdminPanel() {
                   </div>
                   <div className="space-y-3">
                     <button type="button" className="w-full rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-4 text-left transition hover:border-[var(--border-strong)] hover:bg-[var(--surface-2)]" onClick={() => setActiveSection("profiles")}>
-                      <p className="text-sm font-semibold text-[var(--text)]">1. Aseta treenaajan tavoite</p>
-                      <p className="mt-1 text-sm text-[var(--text-muted)]">Valitse treenaaja ja tallenna päivän kcal- ja makrotavoite.</p>
+                      <p className="text-sm font-semibold text-[var(--text)]">1. Aseta käyttäjän tavoite</p>
+                      <p className="mt-1 text-sm text-[var(--text-muted)]">Valitse käyttäjä ja tallenna päivän kcal- ja makrotavoite.</p>
                     </button>
                     <button type="button" className="w-full rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-4 text-left transition hover:border-[var(--border-strong)] hover:bg-[var(--surface-2)]" onClick={() => setActiveSection("recipes")}>
                       <p className="text-sm font-semibold text-[var(--text)]">2. Rakenna resepti valmiista aineksista</p>
@@ -1051,14 +1066,14 @@ export function NutritionAdminPanel() {
                     </button>
                     <button type="button" className="w-full rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-4 text-left transition hover:border-[var(--border-strong)] hover:bg-[var(--surface-2)]" onClick={() => setActiveSection("plans")}>
                       <p className="text-sm font-semibold text-[var(--text)]">3. Kokoa päivä ja jaa</p>
-                      <p className="mt-1 text-sm text-[var(--text-muted)]">Valitse reseptit päivän slotteihin ja aktivoi pohja treenaajalle.</p>
+                      <p className="mt-1 text-sm text-[var(--text-muted)]">Valitse reseptit päivän slotteihin ja aktivoi pohja käyttäjälle tai itsellesi.</p>
                     </button>
                   </div>
                 </section>
 
                 <section className="grid gap-6 lg:grid-cols-2">
                   <div className="rounded-3xl border border-[var(--border)] bg-[var(--surface-2)] p-4">
-                    <p className="text-sm font-semibold text-[var(--text)]">Valittu treenaaja</p>
+                    <p className="text-sm font-semibold text-[var(--text)]">Valittu käyttäjä</p>
                     <p className="mt-2 text-xl font-semibold text-[var(--text)]">{selectedAthleteName}</p>
                     <div className="mt-3 flex flex-wrap gap-2">
                       <Badge>{profileForm.goal === "maintain" ? "Pidä paino" : profileForm.goal === "gain" ? "Kasvata" : "Pudota"}</Badge>
@@ -1117,12 +1132,12 @@ export function NutritionAdminPanel() {
             <section className="grid gap-6 xl:grid-cols-[0.95fr_1.05fr]">
               <div className="space-y-4 rounded-3xl border border-[var(--border)] bg-[var(--surface-2)] p-4">
                 <div>
-                  <p className="text-sm font-semibold text-[var(--text)]">Treenaajan ravintoprofiili</p>
-                  <p className="text-sm text-[var(--text-muted)]">Laske tavoitekcal ja makrot tai lukitse ne käsin yhdelle treenaajalle kerrallaan.</p>
+                  <p className="text-sm font-semibold text-[var(--text)]">Käyttäjän ravintoprofiili</p>
+                  <p className="text-sm text-[var(--text-muted)]">Laske tavoitekcal ja makrot tai lukitse ne käsin yhdelle käyttäjälle kerrallaan.</p>
                 </div>
                 <div className="grid gap-3 md:grid-cols-2">
                   <div className="md:col-span-2">
-                    <Label htmlFor="nutrition-athlete">Treenaaja</Label>
+                    <Label htmlFor="nutrition-athlete">Käyttäjä</Label>
                     <Select
                       id="nutrition-athlete"
                       value={selectedAthleteId}
@@ -1147,7 +1162,7 @@ export function NutritionAdminPanel() {
                         });
                       }}
                     >
-                      {athleteUsers.map((user) => (
+                      {nutritionTargetUsers.map((user) => (
                         <option key={user.id} value={user.id}>
                           {user.fullName}
                         </option>
@@ -1332,11 +1347,11 @@ export function NutritionAdminPanel() {
               <div className="space-y-4 rounded-3xl border border-[var(--border)] bg-[var(--surface-2)] p-4">
                 <div>
                   <p className="text-sm font-semibold text-[var(--text)]">Pikayhteenveto</p>
-                  <p className="text-sm text-[var(--text-muted)]">Valitun treenaajan tilanne yhdellä silmäyksellä ennen tallennusta.</p>
+                  <p className="text-sm text-[var(--text-muted)]">Valitun käyttäjän tilanne yhdellä silmäyksellä ennen tallennusta.</p>
                 </div>
                 <div className="grid gap-3 md:grid-cols-2">
                   <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-4">
-                    <p className="text-xs font-semibold tracking-[0.04em] text-[var(--text-subtle)]">Treenaaja</p>
+                    <p className="text-xs font-semibold tracking-[0.04em] text-[var(--text-subtle)]">Käyttäjä</p>
                     <p className="mt-2 text-lg font-semibold text-[var(--text)]">{selectedAthleteName}</p>
                     <p className="mt-1 text-sm text-[var(--text-muted)]">{selectedProfile ? "Profiili löytyy jo" : "Uusi profiili tallennetaan ensimmäistä kertaa"}</p>
                   </div>
@@ -2027,11 +2042,11 @@ export function NutritionAdminPanel() {
                     <div key={mealTag} className="space-y-3 rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-4">
                       <div>
                         <Label>{mealTagLabel(mealTag)}</Label>
-                        <p className="mt-1 text-xs text-[var(--text-muted)]">Valitse useita vaihtoehtoja saman ateriaryhmän sisälle. Treenaaja voi syödä niitä ristiin sen mukaan, mikä arjessa toimii parhaiten.</p>
+                        <p className="mt-1 text-xs text-[var(--text-muted)]">Valitse useita vaihtoehtoja saman ateriaryhmän sisälle. Käyttäjä voi syödä niitä ristiin sen mukaan, mikä arjessa toimii parhaiten.</p>
                         <p className="mt-1 text-xs font-medium text-[var(--text-subtle)]">
                           {mealSlotKcalGuidance(mealTag, displayedTargetKcal)
                             ? `Tyypillinen haarukka noin ${mealSlotKcalGuidance(mealTag, displayedTargetKcal)}`
-                            : "Lisää tai valitse treenaajalle kcal-tavoite, niin näkymään tulee suuntaa-antava haarukka."}
+                            : "Lisää tai valitse käyttäjälle kcal-tavoite, niin näkymään tulee suuntaa-antava haarukka."}
                         </p>
                       </div>
                       <div className="grid gap-3 sm:grid-cols-2">
@@ -2106,12 +2121,12 @@ export function NutritionAdminPanel() {
 
               <div className="space-y-4">
                 <div className="rounded-3xl border border-[var(--border)] bg-[var(--surface-2)] p-4">
-                  <p className="text-sm font-semibold text-[var(--text)]">Jaa treenaajalle</p>
+                  <p className="text-sm font-semibold text-[var(--text)]">Aktivoi käyttäjälle</p>
                   <div className="mt-3 grid gap-3">
                     <div>
-                      <Label htmlFor="assign-athlete">Treenaaja</Label>
+                      <Label htmlFor="assign-athlete">Käyttäjä</Label>
                       <Select id="assign-athlete" value={assignmentForm.athleteId} onChange={(event) => setAssignmentForm((current) => ({ ...current, athleteId: event.target.value }))}>
-                        {athleteUsers.map((user) => (
+                        {nutritionTargetUsers.map((user) => (
                           <option key={user.id} value={user.id}>{user.fullName}</option>
                         ))}
                       </Select>
@@ -2155,7 +2170,7 @@ export function NutritionAdminPanel() {
                 </div>
 
                 <div className="rounded-3xl border border-[var(--border)] bg-[var(--surface-2)] p-4">
-                  <p className="text-sm font-semibold text-[var(--text)]">Treenaajan esikatselu</p>
+                  <p className="text-sm font-semibold text-[var(--text)]">Käyttäjän esikatselu</p>
                   <p className="mt-1 text-sm text-[var(--text-muted)]">
                     Näin nykyinen luonnos näkyisi käyttäjälle ateriaryhmittäin vaihtoehtoina.
                   </p>
@@ -2332,7 +2347,7 @@ export function NutritionAdminPanel() {
                     </div>
                   ) : (
                     <div className="mt-4 rounded-2xl border border-dashed border-[var(--border-strong)] bg-[var(--surface)] px-4 py-5 text-sm text-[var(--text-muted)]">
-                      Valitse reseptejä ateriaryhmiin, niin esikatselu näyttää heti miltä pohja näkyy treenaajalle.
+                      Valitse reseptejä ateriaryhmiin, niin esikatselu näyttää heti miltä pohja näkyy käyttäjälle.
                     </div>
                   )}
                 </div>

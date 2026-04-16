@@ -3843,12 +3843,16 @@ function findResolvedUserIdInSnapshot(
           return { ok: false, message: "Vain admin tai valmentaja voi hallita ravintoprofiileja." };
         }
 
-        if (!state.users.some((user) => user.id === input.userId && isAthleteRole(user.role))) {
-          return { ok: false, message: "Valitse aktiivinen treenaaja ravintoprofiilille." };
+        const targetUser = state.users.find((user) => user.id === input.userId);
+        if (!targetUser) {
+          return { ok: false, message: "Valitse käyttäjä ravintoprofiilille." };
         }
 
-        if (!isAdminRole(currentUser.role) && !canCoachManageAthlete(state, currentUser.id, input.userId)) {
-          return { ok: false, message: "Voit hallita vain omien valmennettaviesi ravintoprofiileja." };
+        const canManageSelf = input.userId === currentUser.id;
+        const canManageAthleteTarget = isAthleteRole(targetUser.role) && canCoachManageAthlete(state, currentUser.id, input.userId);
+
+        if (!isAdminRole(currentUser.role) && !canManageSelf && !canManageAthleteTarget) {
+          return { ok: false, message: "Voit hallita vain omaa profiiliasi tai omien valmennettaviesi ravintoprofiileja." };
         }
 
         if (supabase) {
@@ -3967,8 +3971,16 @@ function findResolvedUserIdInSnapshot(
           return { ok: false, message: "Vain admin tai valmentaja voi jakaa ateriapohjia." };
         }
 
-        if (!isAdminRole(currentUser.role) && !canCoachManageAthlete(state, currentUser.id, input.athleteId)) {
-          return { ok: false, message: "Voit jakaa ateriapohjia vain omille valmennettavillesi." };
+        const targetUser = state.users.find((user) => user.id === input.athleteId);
+        if (!targetUser) {
+          return { ok: false, message: "Valitse käyttäjä ateriapohjalle." };
+        }
+
+        const canManageSelf = input.athleteId === currentUser.id;
+        const canManageAthleteTarget = isAthleteRole(targetUser.role) && canCoachManageAthlete(state, currentUser.id, input.athleteId);
+
+        if (!isAdminRole(currentUser.role) && !canManageSelf && !canManageAthleteTarget) {
+          return { ok: false, message: "Voit aktivoida ateriapohjia vain itsellesi tai omille valmennettavillesi." };
         }
 
         if (supabase) {

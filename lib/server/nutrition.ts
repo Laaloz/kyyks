@@ -71,6 +71,10 @@ async function canRequesterManageAthlete(requester: Requester, athleteId: string
     return true;
   }
 
+  if (requester.id === athleteId) {
+    return true;
+  }
+
   const supabase = await createSupabaseServerClient();
   if (!supabase) {
     return false;
@@ -92,7 +96,7 @@ async function canRequesterManageAthlete(requester: Requester, athleteId: string
 
 export async function saveNutritionProfileOnServer(requester: Requester, input: NutritionProfileInput) {
   if (!(await canRequesterManageAthlete(requester, input.userId))) {
-    return { ok: false as const, message: "Voit hallita vain omien valmennettaviesi ravintoprofiileja." };
+    return { ok: false as const, message: "Voit hallita vain omaa profiiliasi tai omien valmennettaviesi ravintoprofiileja." };
   }
 
   const supabase = await createSupabaseServerClient();
@@ -415,7 +419,7 @@ export async function saveMealPlanTemplateOnServer(requester: Requester, input: 
 
 export async function assignMealPlanOnServer(requester: Requester, input: AssignedMealPlanInput) {
   if (!(await canRequesterManageAthlete(requester, input.athleteId))) {
-    return { ok: false as const, message: "Voit jakaa ateriapohjia vain omille valmennettavillesi." };
+    return { ok: false as const, message: "Voit aktivoida ateriapohjia vain itsellesi tai omille valmennettavillesi." };
   }
 
   const supabase = await createSupabaseServerClient();

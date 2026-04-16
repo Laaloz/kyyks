@@ -105,18 +105,18 @@ export function PersonalNutritionSummaryCard({
               </summary>
 
               <div className="border-t border-[var(--border)] px-4 py-4">
-                <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface-2)] p-4">
+                <div>
                   <p className="text-sm font-semibold text-[var(--text)]">Makrot nykyiselle tavoitteelle</p>
                   <div className="mt-3 grid grid-cols-3 gap-2 text-sm">
-                    <div className="rounded-xl border border-[var(--border)] bg-[var(--surface)] px-3 py-3">
+                    <div className="rounded-xl border border-[var(--border)] bg-[var(--surface-2)] px-3 py-3">
                       <p className="text-[11px] font-semibold tracking-[0.04em] text-[var(--text-subtle)]">P</p>
                       <p className="mt-1 font-medium text-[var(--text)]">{formatMacroValue(comparison.activeTarget.proteinG)} g</p>
                     </div>
-                    <div className="rounded-xl border border-[var(--border)] bg-[var(--surface)] px-3 py-3">
+                    <div className="rounded-xl border border-[var(--border)] bg-[var(--surface-2)] px-3 py-3">
                       <p className="text-[11px] font-semibold tracking-[0.04em] text-[var(--text-subtle)]">H</p>
                       <p className="mt-1 font-medium text-[var(--text)]">{formatMacroValue(comparison.activeTarget.carbsG)} g</p>
                     </div>
-                    <div className="rounded-xl border border-[var(--border)] bg-[var(--surface)] px-3 py-3">
+                    <div className="rounded-xl border border-[var(--border)] bg-[var(--surface-2)] px-3 py-3">
                       <p className="text-[11px] font-semibold tracking-[0.04em] text-[var(--text-subtle)]">R</p>
                       <p className="mt-1 font-medium text-[var(--text)]">{formatMacroValue(comparison.activeTarget.fatG)} g</p>
                     </div>
