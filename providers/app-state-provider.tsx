@@ -2465,26 +2465,24 @@ export function AppStateProvider({ children }: PropsWithChildren) {
       }
 
       let resolvedUserId: string | null = null;
-      if (!profile) {
-        const snapshot = await fetchSupabaseVisibleStateSnapshot({ lite: source === "bootstrap" });
-        if (!active) {
-          return;
-        }
+      const snapshot = await fetchSupabaseVisibleStateSnapshot({ lite: source === "bootstrap" });
+      if (!active) {
+        return;
+      }
 
-        if (snapshot) {
-          setState((previous) =>
-            reconcileSupabaseVisibleState(
-              previous,
-              snapshot,
-              workoutMutationQueueRef.current,
-              workoutSetDraftsRef.current,
-              recentlyConfirmedSetLogsRef.current,
-              recentlyConfirmedWorkoutNotesRef.current,
-              recentlyDeletedWorkoutsRef.current,
-            ),
-          );
-          resolvedUserId = findResolvedUserIdInSnapshot(snapshot, authUser);
-        }
+      if (snapshot) {
+        setState((previous) =>
+          reconcileSupabaseVisibleState(
+            previous,
+            snapshot,
+            workoutMutationQueueRef.current,
+            workoutSetDraftsRef.current,
+            recentlyConfirmedSetLogsRef.current,
+            recentlyConfirmedWorkoutNotesRef.current,
+            recentlyDeletedWorkoutsRef.current,
+          ),
+        );
+        resolvedUserId = findResolvedUserIdInSnapshot(snapshot, authUser);
       }
 
       if (resolvedUserId) {
