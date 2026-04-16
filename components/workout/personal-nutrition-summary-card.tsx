@@ -75,11 +75,6 @@ export function PersonalNutritionSummaryCard({
                   </p>
                   <p className="mt-1 text-sm text-[var(--text-muted)]">kcal / päivä</p>
                 </div>
-                <div className="text-sm text-[var(--text-muted)]">
-                  <p>P {formatMacroValue(comparison.activeTarget.proteinG)} g</p>
-                  <p>H {formatMacroValue(comparison.activeTarget.carbsG)} g</p>
-                  <p>R {formatMacroValue(comparison.activeTarget.fatG)} g</p>
-                </div>
               </div>
               <p className="mt-3 text-sm text-[var(--text-muted)]">
                 {comparison.activeTargetSource === "profile"
@@ -93,87 +88,124 @@ export function PersonalNutritionSummaryCard({
               ) : null}
             </div>
 
-            {!comparison.hasCompleteProfile ? (
-              <div className="rounded-2xl border border-[color-mix(in_srgb,var(--warning)_35%,var(--border))] bg-[color-mix(in_srgb,var(--warning)_8%,var(--surface))] p-4">
-                <p className="text-sm font-semibold text-[var(--text)]">Täydennä tiedot tarkempia tuloksia varten</p>
-                <p className="mt-1 text-sm text-[var(--text-muted)]">
-                  Suositukset tarkentuvat, kun lisäät puuttuvat tiedot profiiliin.
-                </p>
-                <p className="mt-2 text-sm text-[var(--text-muted)]">
-                  Puuttuu: {comparison.missingFields.map((field) => missingFieldLabel[field]).join(", ")}.
-                </p>
-                {onOpenSettings ? (
-                  <div className="mt-3">
-                    <Button type="button" variant="secondary" onClick={onOpenSettings}>
-                      Täydennä tiedot profiiliin
-                    </Button>
+            <details className="group rounded-2xl border border-[var(--border)] bg-[var(--surface)]">
+              <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-4 py-4 text-left">
+                <div>
+                  <p className="text-sm font-semibold text-[var(--text)]">Näytä tarkemmat suositukset</p>
+                  <p className="mt-1 text-sm text-[var(--text-muted)]">
+                    Makrot, vaihevertailu ja lisätiedot löytyvät täältä tarvittaessa.
+                  </p>
+                </div>
+                <span className="text-xs font-semibold tracking-[0.04em] text-[var(--text-subtle)] group-open:hidden">
+                  Avaa
+                </span>
+                <span className="hidden text-xs font-semibold tracking-[0.04em] text-[var(--text-subtle)] group-open:block">
+                  Sulje
+                </span>
+              </summary>
+
+              <div className="border-t border-[var(--border)] px-4 py-4">
+                <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface-2)] p-4">
+                  <p className="text-sm font-semibold text-[var(--text)]">Makrot nykyiselle tavoitteelle</p>
+                  <div className="mt-3 grid grid-cols-3 gap-2 text-sm">
+                    <div className="rounded-xl border border-[var(--border)] bg-[var(--surface)] px-3 py-3">
+                      <p className="text-[11px] font-semibold tracking-[0.04em] text-[var(--text-subtle)]">P</p>
+                      <p className="mt-1 font-medium text-[var(--text)]">{formatMacroValue(comparison.activeTarget.proteinG)} g</p>
+                    </div>
+                    <div className="rounded-xl border border-[var(--border)] bg-[var(--surface)] px-3 py-3">
+                      <p className="text-[11px] font-semibold tracking-[0.04em] text-[var(--text-subtle)]">H</p>
+                      <p className="mt-1 font-medium text-[var(--text)]">{formatMacroValue(comparison.activeTarget.carbsG)} g</p>
+                    </div>
+                    <div className="rounded-xl border border-[var(--border)] bg-[var(--surface)] px-3 py-3">
+                      <p className="text-[11px] font-semibold tracking-[0.04em] text-[var(--text-subtle)]">R</p>
+                      <p className="mt-1 font-medium text-[var(--text)]">{formatMacroValue(comparison.activeTarget.fatG)} g</p>
+                    </div>
+                  </div>
+                </div>
+
+                {!comparison.hasCompleteProfile ? (
+                  <div className="mt-4 rounded-2xl border border-[color-mix(in_srgb,var(--warning)_35%,var(--border))] bg-[color-mix(in_srgb,var(--warning)_8%,var(--surface))] p-4">
+                    <p className="text-sm font-semibold text-[var(--text)]">Täydennä tiedot tarkempia tuloksia varten</p>
+                    <p className="mt-1 text-sm text-[var(--text-muted)]">
+                      Suositukset tarkentuvat, kun lisäät puuttuvat tiedot profiiliin.
+                    </p>
+                    <p className="mt-2 text-sm text-[var(--text-muted)]">
+                      Puuttuu: {comparison.missingFields.map((field) => missingFieldLabel[field]).join(", ")}.
+                    </p>
+                    {onOpenSettings ? (
+                      <div className="mt-3">
+                        <Button type="button" variant="secondary" onClick={onOpenSettings}>
+                          Täydennä tiedot profiiliin
+                        </Button>
+                      </div>
+                    ) : null}
                   </div>
                 ) : null}
-              </div>
-            ) : null}
 
-            {comparison.comparisonTargets ? (
-              <div>
-                <p className="text-sm font-semibold text-[var(--text)]">Suositukset eri vaiheisiin</p>
-                <p className="mt-1 text-sm text-[var(--text-muted)]">
-                  Vertaa helposti miten päivän energia ja makrot muuttuvat eri tavoitteissa.
-                </p>
-                <div className="mt-4 grid gap-3 xl:grid-cols-3">
-                  {(["lose", "maintain", "gain"] as NutritionGoal[]).map((goal) => {
-                    const target = comparison.comparisonTargets![goal];
-                    const isActive = comparison.activeGoal === goal;
+                {comparison.comparisonTargets ? (
+                  <div className="mt-4">
+                    <p className="text-sm font-semibold text-[var(--text)]">Suositukset eri vaiheisiin</p>
+                    <p className="mt-1 text-sm text-[var(--text-muted)]">
+                      Vertaa helposti miten päivän energia ja makrot muuttuvat eri tavoitteissa.
+                    </p>
+                    <div className="mt-4 grid gap-3 xl:grid-cols-3">
+                      {(["lose", "maintain", "gain"] as NutritionGoal[]).map((goal) => {
+                        const target = comparison.comparisonTargets![goal];
+                        const isActive = comparison.activeGoal === goal;
 
-                    return (
-                      <div
-                        key={goal}
-                        className={`rounded-2xl border p-4 ${
-                          isActive
-                            ? "border-[var(--accent)] bg-[color-mix(in_srgb,var(--accent)_8%,var(--surface))] shadow-[0_0_0_1px_var(--accent)]"
-                            : "border-[var(--border)] bg-[var(--surface)]"
-                        }`}
-                      >
-                        <div className="flex items-start justify-between gap-3">
-                          <div>
-                            <p className="text-sm font-semibold text-[var(--text)]">{goalLabel[goal]}</p>
-                            <p className="mt-2 font-[family-name:var(--font-display)] text-3xl font-semibold text-[var(--text)]">
-                              {formatRoundedCalories(target.kcal)}
+                        return (
+                          <div
+                            key={goal}
+                            className={`rounded-2xl border p-4 ${
+                              isActive
+                                ? "border-[var(--accent)] bg-[color-mix(in_srgb,var(--accent)_8%,var(--surface))] shadow-[0_0_0_1px_var(--accent)]"
+                                : "border-[var(--border)] bg-[var(--surface)]"
+                            }`}
+                          >
+                            <div className="flex items-start justify-between gap-3">
+                              <div>
+                                <p className="text-sm font-semibold text-[var(--text)]">{goalLabel[goal]}</p>
+                                <p className="mt-2 font-[family-name:var(--font-display)] text-3xl font-semibold text-[var(--text)]">
+                                  {formatRoundedCalories(target.kcal)}
+                                </p>
+                                <p className="mt-1 text-sm text-[var(--text-muted)]">kcal / päivä</p>
+                              </div>
+                              {isActive ? (
+                                <Badge className="border-[var(--accent)] bg-[var(--surface)] text-[var(--accent)]">Nykyinen</Badge>
+                              ) : null}
+                            </div>
+                            <div className="mt-3 grid grid-cols-3 gap-2 text-sm">
+                              <div className="rounded-xl border border-[var(--border)] bg-[var(--surface-2)] px-3 py-2">
+                                <p className="text-[11px] font-semibold tracking-[0.04em] text-[var(--text-subtle)]">P</p>
+                                <p className="mt-1 font-medium text-[var(--text)]">{formatMacroValue(target.proteinG)} g</p>
+                              </div>
+                              <div className="rounded-xl border border-[var(--border)] bg-[var(--surface-2)] px-3 py-2">
+                                <p className="text-[11px] font-semibold tracking-[0.04em] text-[var(--text-subtle)]">H</p>
+                                <p className="mt-1 font-medium text-[var(--text)]">{formatMacroValue(target.carbsG)} g</p>
+                              </div>
+                              <div className="rounded-xl border border-[var(--border)] bg-[var(--surface-2)] px-3 py-2">
+                                <p className="text-[11px] font-semibold tracking-[0.04em] text-[var(--text-subtle)]">R</p>
+                                <p className="mt-1 font-medium text-[var(--text)]">{formatMacroValue(target.fatG)} g</p>
+                              </div>
+                            </div>
+                            <p className="mt-3 text-sm leading-6 text-[var(--text-muted)]">
+                              {comparison.guidanceByGoal[goal]}
                             </p>
-                            <p className="mt-1 text-sm text-[var(--text-muted)]">kcal / päivä</p>
                           </div>
-                          {isActive ? (
-                            <Badge className="border-[var(--accent)] bg-[var(--surface)] text-[var(--accent)]">Nykyinen</Badge>
-                          ) : null}
-                        </div>
-                        <div className="mt-3 grid grid-cols-3 gap-2 text-sm">
-                          <div className="rounded-xl border border-[var(--border)] bg-[var(--surface-2)] px-3 py-2">
-                            <p className="text-[11px] font-semibold tracking-[0.04em] text-[var(--text-subtle)]">P</p>
-                            <p className="mt-1 font-medium text-[var(--text)]">{formatMacroValue(target.proteinG)} g</p>
-                          </div>
-                          <div className="rounded-xl border border-[var(--border)] bg-[var(--surface-2)] px-3 py-2">
-                            <p className="text-[11px] font-semibold tracking-[0.04em] text-[var(--text-subtle)]">H</p>
-                            <p className="mt-1 font-medium text-[var(--text)]">{formatMacroValue(target.carbsG)} g</p>
-                          </div>
-                          <div className="rounded-xl border border-[var(--border)] bg-[var(--surface-2)] px-3 py-2">
-                            <p className="text-[11px] font-semibold tracking-[0.04em] text-[var(--text-subtle)]">R</p>
-                            <p className="mt-1 font-medium text-[var(--text)]">{formatMacroValue(target.fatG)} g</p>
-                          </div>
-                        </div>
-                        <p className="mt-3 text-sm leading-6 text-[var(--text-muted)]">
-                          {comparison.guidanceByGoal[goal]}
-                        </p>
-                      </div>
-                    );
-                  })}
-                </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                ) : (
+                  <div className="mt-4 rounded-2xl border border-dashed border-[var(--border-strong)] bg-[var(--surface-2)] p-4">
+                    <p className="text-sm font-semibold text-[var(--text)]">Vaihevertailu odottaa täydennyksiä</p>
+                    <p className="mt-1 text-sm text-[var(--text-muted)]">
+                      Profiilitavoite näkyy jo, mutta pudotus-, ylläpito- ja kasvatusvertailu avautuu vasta kun perustiedot ovat täydet.
+                    </p>
+                  </div>
+                )}
               </div>
-            ) : (
-              <div className="rounded-2xl border border-dashed border-[var(--border-strong)] bg-[var(--surface-2)] p-4">
-                <p className="text-sm font-semibold text-[var(--text)]">Vaihevertailu odottaa täydennyksiä</p>
-                <p className="mt-1 text-sm text-[var(--text-muted)]">
-                  Profiilitavoite näkyy jo, mutta pudotus-, ylläpito- ja kasvatusvertailu avautuu vasta kun perustiedot ovat täydet.
-                </p>
-              </div>
-            )}
+            </details>
           </>
         ) : (
           <div className="rounded-2xl border border-[color-mix(in_srgb,var(--warning)_35%,var(--border))] bg-[color-mix(in_srgb,var(--warning)_8%,var(--surface))] p-4">

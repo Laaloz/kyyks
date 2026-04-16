@@ -664,6 +664,23 @@ export function upsertMealPlanTemplate(state: AppState, actorId: string, input: 
     mealPlanTemplates: current
       ? state.mealPlanTemplates.map((template) => (template.id === current.id ? nextTemplate : template))
       : [nextTemplate, ...state.mealPlanTemplates],
+    assignedMealPlans: current
+      ? state.assignedMealPlans.map((plan) =>
+          plan.templateId === current.id && plan.active
+            ? {
+                ...plan,
+                name: nextTemplate.name,
+                items: nextTemplate.items.map((item) => ({
+                  id: makeId("assigned_meal_plan_item"),
+                  mealTag: item.mealTag,
+                  recipeId: item.recipeId,
+                  sortOrder: item.sortOrder,
+                })),
+                updatedAt: timestamp,
+              }
+            : plan,
+        )
+      : state.assignedMealPlans,
   };
 }
 

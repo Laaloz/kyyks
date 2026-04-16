@@ -356,6 +356,58 @@ export async function saveMealPlanTemplateOnServer(requester: Requester, input: 
     return { ok: false as const, message: itemsError.message || "Ateriapohjan aterioiden tallennus epäonnistui." };
   }
 
+  if (input.id) {
+    const { data: activeAssignedPlans, error: assignedPlansError } = await supabase
+      .from("assigned_meal_plans")
+      .select("id")
+      .eq("template_id", templateId)
+      .eq("active", true);
+
+    if (assignedPlansError) {
+      return { ok: false as const, message: assignedPlansError.message || "Aktiivisten ateriapohjien päivitys epäonnistui." };
+    }
+
+    const assignedPlanIds = (activeAssignedPlans ?? []).map((plan) => plan.id as string);
+    if (assignedPlanIds.length > 0) {
+      const { error: assignedUpdateError } = await supabase
+        .from("assigned_meal_plans")
+        .update({ name: input.name.trim(), updated_at: timestamp })
+        .in("id", assignedPlanIds);
+
+      if (assignedUpdateError) {
+        return { ok: false as const, message: assignedUpdateError.message || "Jaettujen ateriapohjien päivitys epäonnistui." };
+      }
+
+      const { error: deleteAssignedItemsError } = await supabase
+        .from("assigned_meal_plan_items")
+        .delete()
+        .in("assigned_plan_id", assignedPlanIds);
+
+      if (deleteAssignedItemsError) {
+        return { ok: false as const, message: deleteAssignedItemsError.message || "Jaettujen ateriapohjien rivien päivitys epäonnistui." };
+      }
+
+      const assignedItems = assignedPlanIds.flatMap((assignedPlanId) =>
+        input.items.map((item) => ({
+          assigned_plan_id: assignedPlanId,
+          meal_tag: item.mealTag,
+          recipe_id: item.recipeId,
+          sort_order: item.sortOrder,
+        })),
+      );
+
+      if (assignedItems.length > 0) {
+        const { error: insertAssignedItemsError } = await supabase
+          .from("assigned_meal_plan_items")
+          .insert(assignedItems);
+
+        if (insertAssignedItemsError) {
+          return { ok: false as const, message: insertAssignedItemsError.message || "Jaettujen ateriapohjien rivien tallennus epäonnistui." };
+        }
+      }
+    }
+  }
+
   return { ok: true as const, templateId };
 }
 

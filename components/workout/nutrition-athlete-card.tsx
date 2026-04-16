@@ -1,16 +1,16 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 import { Button } from "@/components/ui/button";
 import { Card, CardDescription, CardTitle } from "@/components/ui/card";
 import {
-  scaleRecipeIngredient,
-  getRecipeCompatibilityAlerts,
-  mealTagLabel,
+  calculateRecipeNutrition,
   getActiveMealPlanForAthlete,
   getMealPlanRecipes,
-  calculateRecipeNutrition,
+  getRecipeCompatibilityAlerts,
+  mealTagLabel,
+  scaleRecipeIngredient,
   splitRecipeInstructions,
 } from "@/lib/nutrition";
 import type { AppState, MealTag, Recipe, UserProfile } from "@/lib/types";
@@ -33,6 +33,199 @@ function formatRecipeIngredientLine(ingredient: Recipe["ingredients"][number]) {
   }
 
   return ingredient.ingredientName;
+}
+
+function RecipeDetailDialog({
+  mealTag,
+  recipe,
+  nutrition,
+  nutritionProfile,
+  selectedServings,
+  onDecreaseServings,
+  onIncreaseServings,
+  onClose,
+}: {
+  mealTag: MealTag;
+  recipe: Recipe;
+  nutrition: { kcal: number; proteinG: number; carbsG: number; fatG: number };
+  nutritionProfile: AppState["nutritionProfiles"][number] | null;
+  selectedServings: number;
+  onDecreaseServings: () => void;
+  onIncreaseServings: () => void;
+  onClose: () => void;
+}) {
+  useEffect(() => {
+    const handleKeyDown = (event: globalThis.KeyboardEvent) => {
+      if (event.key === "Escape") {
+        onClose();
+      }
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [onClose]);
+
+  const compatibilityAlerts = getRecipeCompatibilityAlerts(recipe, nutritionProfile);
+  const batchNutrition = {
+    kcal: Math.round(nutrition.kcal * selectedServings),
+    proteinG: nutrition.proteinG * selectedServings,
+    carbsG: nutrition.carbsG * selectedServings,
+    fatG: nutrition.fatG * selectedServings,
+  };
+  const scaledIngredients = recipe.ingredients.map((ingredient) =>
+    scaleRecipeIngredient(ingredient, selectedServings, recipe.defaultServings),
+  );
+
+  return (
+    <div
+      className="fixed inset-0 z-40 flex items-end justify-center bg-[color:color-mix(in_srgb,var(--background)_56%,transparent)] p-3 sm:items-center sm:p-4"
+      role="presentation"
+      onClick={onClose}
+    >
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="nutrition-recipe-title"
+        aria-describedby="nutrition-recipe-description"
+        className="flex max-h-[92vh] w-full max-w-2xl flex-col overflow-hidden rounded-3xl border border-[var(--border-strong)] bg-[var(--surface)] shadow-[0_24px_60px_-24px_var(--shadow)]"
+        onClick={(event) => event.stopPropagation()}
+      >
+        <div className="border-b border-[var(--border)] px-4 py-4 sm:px-5">
+          <div className="flex items-start justify-between gap-4">
+            <div>
+              <p className="text-[11px] font-semibold tracking-[0.06em] text-[var(--accent)]">{mealTagLabel(mealTag)}</p>
+              <h3 id="nutrition-recipe-title" className="mt-2 text-2xl font-semibold text-[var(--text)]">
+                {recipe.name}
+              </h3>
+              <p id="nutrition-recipe-description" className="mt-2 text-sm leading-6 text-[var(--text-muted)]">
+                {recipe.description ?? "Selkeä reseptinäkymä, jossa näet annosmäärän, raaka-aineet ja valmistusvaiheet yhdellä kertaa."}
+              </p>
+            </div>
+            <Button type="button" variant="ghost" className="shrink-0" onClick={onClose}>
+              Sulje
+            </Button>
+          </div>
+        </div>
+
+        <div className="flex-1 overflow-y-auto px-4 py-4 sm:px-5">
+          <div className="-mx-1 flex snap-x gap-3 overflow-x-auto px-1 pb-1 sm:mx-0 sm:grid sm:grid-cols-4 sm:overflow-visible sm:px-0">
+            <div className="min-w-[9.5rem] snap-start rounded-2xl border border-[var(--border)] bg-[var(--surface-2)] px-4 py-3 sm:min-w-0">
+              <p className="text-xs font-semibold tracking-[0.04em] text-[var(--text-subtle)]">Per annos</p>
+              <p className="mt-1 text-lg font-semibold text-[var(--text)]">{nutrition.kcal} kcal</p>
+            </div>
+            <div className="min-w-[9.5rem] snap-start rounded-2xl border border-[var(--border)] bg-[var(--surface-2)] px-4 py-3 sm:min-w-0">
+              <p className="text-xs font-semibold tracking-[0.04em] text-[var(--text-subtle)]">Proteiini</p>
+              <p className="mt-1 text-lg font-semibold text-[var(--text)]">{Math.round(nutrition.proteinG)} g</p>
+            </div>
+            <div className="min-w-[9.5rem] snap-start rounded-2xl border border-[var(--border)] bg-[var(--surface-2)] px-4 py-3 sm:min-w-0">
+              <p className="text-xs font-semibold tracking-[0.04em] text-[var(--text-subtle)]">Hiilarit</p>
+              <p className="mt-1 text-lg font-semibold text-[var(--text)]">{Math.round(nutrition.carbsG)} g</p>
+            </div>
+            <div className="min-w-[9.5rem] snap-start rounded-2xl border border-[var(--border)] bg-[var(--surface-2)] px-4 py-3 sm:min-w-0">
+              <p className="text-xs font-semibold tracking-[0.04em] text-[var(--text-subtle)]">Rasva</p>
+              <p className="mt-1 text-lg font-semibold text-[var(--text)]">{Math.round(nutrition.fatG)} g</p>
+            </div>
+          </div>
+
+          <div className="mt-4 rounded-2xl border border-[var(--border)] bg-[var(--surface-2)] p-4">
+            <div className="flex flex-col gap-4 sm:flex-row sm:flex-wrap sm:items-end sm:justify-between">
+              <div>
+                <p className="text-xs font-semibold tracking-[0.04em] text-[var(--text-subtle)]">Annosmäärä</p>
+                <p className="mt-1 text-sm text-[var(--text-muted)]">
+                  Lisää tai vähennä annoksia sen mukaan paljonko haluat valmistaa kerralla.
+                </p>
+              </div>
+              <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-2">
+                <p className="px-2 text-xs font-semibold tracking-[0.04em] text-[var(--text-subtle)]">Annoksia</p>
+                <div className="mt-2 flex items-center gap-2">
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    className="min-h-11 min-w-11 px-0 text-lg"
+                    onClick={onDecreaseServings}
+                    aria-label="Vähennä annoksia"
+                  >
+                    -
+                  </Button>
+                  <div className="min-w-[5.5rem] rounded-xl border border-[var(--border)] bg-[var(--surface-2)] px-4 py-3 text-center">
+                    <p className="text-lg font-semibold text-[var(--text)]">{selectedServings}</p>
+                  </div>
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    className="min-h-11 min-w-11 px-0 text-lg"
+                    onClick={onIncreaseServings}
+                    aria-label="Lisää annoksia"
+                  >
+                    +
+                  </Button>
+                </div>
+              </div>
+            </div>
+
+            <div className="-mx-1 mt-4 flex snap-x gap-3 overflow-x-auto px-1 pb-1 sm:mx-0 sm:grid sm:grid-cols-4 sm:overflow-visible sm:px-0">
+              <div>
+                <p className="text-xs font-semibold tracking-[0.04em] text-[var(--text-subtle)]">Koko satsi</p>
+                <p className="mt-1 text-lg font-semibold text-[var(--text)]">{batchNutrition.kcal} kcal</p>
+              </div>
+              <div>
+                <p className="text-xs font-semibold tracking-[0.04em] text-[var(--text-subtle)]">Proteiini</p>
+                <p className="mt-1 text-lg font-semibold text-[var(--text)]">{Math.round(batchNutrition.proteinG)} g</p>
+              </div>
+              <div>
+                <p className="text-xs font-semibold tracking-[0.04em] text-[var(--text-subtle)]">Hiilarit</p>
+                <p className="mt-1 text-lg font-semibold text-[var(--text)]">{Math.round(batchNutrition.carbsG)} g</p>
+              </div>
+              <div>
+                <p className="text-xs font-semibold tracking-[0.04em] text-[var(--text-subtle)]">Rasva</p>
+                <p className="mt-1 text-lg font-semibold text-[var(--text)]">{Math.round(batchNutrition.fatG)} g</p>
+              </div>
+            </div>
+          </div>
+
+          {compatibilityAlerts.length > 0 ? (
+            <div className="mt-4 rounded-2xl border border-[color:color-mix(in_srgb,var(--warning)_35%,var(--border))] bg-[color:color-mix(in_srgb,var(--warning)_12%,var(--surface))] p-3 text-sm text-[var(--warning)]">
+              {compatibilityAlerts.map((alert) => (
+                <p key={`${recipe.id}-${alert.key}`}>
+                  {alert.label}: {alert.matchedIngredients.join(", ")}
+                </p>
+              ))}
+            </div>
+          ) : null}
+
+          <div className="mt-4 space-y-4">
+            <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface-2)] p-4">
+              <div>
+                <p className="text-xs font-semibold tracking-[0.04em] text-[var(--text-subtle)]">Mitä tarvitset</p>
+                <p className="mt-1 text-sm text-[var(--text-muted)]">Raaka-aineet {selectedServings} annokselle.</p>
+              </div>
+              <ul className="mt-4 space-y-2 text-sm text-[var(--text-muted)]">
+                {scaledIngredients.map((ingredient) => (
+                  <li key={`${recipe.id}-${ingredient.id}`} className="rounded-xl bg-[var(--surface)] px-3 py-3">
+                    {formatRecipeIngredientLine(ingredient)}
+                  </li>
+                ))}
+              </ul>
+            </div>
+
+            <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface-2)] p-4">
+              <p className="text-xs font-semibold tracking-[0.04em] text-[var(--text-subtle)]">Valmistus</p>
+              <ol className="mt-4 space-y-3 pl-0 text-sm text-[var(--text-muted)]">
+                {splitRecipeInstructions(recipe.instructions).map((step, index) => (
+                  <li key={`${recipe.id}-step-${index}`} className="flex gap-3 rounded-xl bg-[var(--surface)] px-3 py-3">
+                    <span className="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full border border-[var(--border)] text-xs font-semibold text-[var(--text)]">
+                      {index + 1}
+                    </span>
+                    <span>{step}</span>
+                  </li>
+                ))}
+              </ol>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
 }
 
 export function NutritionAthleteCard({
@@ -61,7 +254,6 @@ export function NutritionAthleteCard({
   const [selectedMealTag, setSelectedMealTag] = useState<MealTag | null>(availableMealTags[0] ?? null);
   const [selectedRecipeId, setSelectedRecipeId] = useState<string | null>(null);
   const [selectedServings, setSelectedServings] = useState<number>(1);
-  const mealPickerRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
     if (availableMealTags.length === 0) {
@@ -74,22 +266,8 @@ export function NutritionAthleteCard({
   }, [availableMealTags]);
 
   const selectedMealItems = selectedMealTag ? groupedMealPlanRecipes[selectedMealTag] ?? [] : [];
-
-  useEffect(() => {
-    if (selectedMealItems.length === 0) {
-      setSelectedRecipeId(null);
-      return;
-    }
-
-    setSelectedRecipeId((current) => (
-      current && selectedMealItems.some((item) => item.recipe.id === current)
-        ? current
-        : selectedMealItems[0]?.recipe.id ?? null
-    ));
-  }, [selectedMealItems]);
-
   const selectedRecipeEntry = useMemo(
-    () => selectedMealItems.find((item) => item.recipe.id === selectedRecipeId) ?? selectedMealItems[0] ?? null,
+    () => selectedMealItems.find((item) => item.recipe.id === selectedRecipeId) ?? null,
     [selectedMealItems, selectedRecipeId],
   );
 
@@ -101,6 +279,13 @@ export function NutritionAthleteCard({
     }
     setSelectedServings(Math.max(1, recipe.defaultServings));
   }, [selectedRecipeEntry?.recipe.id]);
+
+  const selectedRecipeNutrition = useMemo(() => {
+    if (!selectedRecipeEntry) {
+      return null;
+    }
+    return selectedRecipeEntry.recipe.nutritionPerServing ?? calculateRecipeNutrition(selectedRecipeEntry.recipe, state.ingredientsCatalog).nutritionPerServing;
+  }, [selectedRecipeEntry, state.ingredientsCatalog]);
 
   const mealSlotGuidance = (mealTag: MealTag, targetKcal: number | undefined) => {
     if (!targetKcal) {
@@ -125,7 +310,7 @@ export function NutritionAthleteCard({
           <p className="text-xs font-semibold tracking-[0.04em] text-[var(--text-subtle)]">Ruokalista</p>
           <CardTitle className="mt-2 text-2xl">Päivän ateriat</CardTitle>
           <CardDescription className="mt-2">
-            Valitse ateriaryhmä, avaa resepti ja säädä annosmäärä suoraan mobiilissa ilman turhaa etsimistä.
+            Valitse ateriaryhmä ja avaa sen alta haluamasi resepti omaan näkymään ilman, että koko lista venyy mobiilissa pitkäksi.
           </CardDescription>
         </div>
 
@@ -155,13 +340,13 @@ export function NutritionAthleteCard({
             <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface-2)] p-4">
               <p className="text-sm font-semibold text-[var(--text)]">{assignedPlan.name}</p>
               <p className="mt-1 text-sm text-[var(--text-muted)]">
-                Valitse ensin ateriaryhmä ja sen alta sinulle sopiva resepti. Resepti aukeaa omaan selkeään näkymään, jossa näet raaka-aineet ja valmistusvaiheet yhdellä silmäyksellä.
+                Valitse ensin ateriaryhmä ja selaa sen alta sopivia vaihtoehtoja. Kun napautat reseptiä, se aukeaa omaan selkeään reseptinäkymään.
               </p>
             </div>
 
             {availableMealTags.length > 0 ? (
               <div className="space-y-4">
-                <div ref={mealPickerRef} className="-mx-1 flex snap-x gap-2 overflow-x-auto px-1 pb-1 xl:mx-0 xl:grid xl:grid-cols-5 xl:overflow-visible xl:px-0">
+                <div className="-mx-1 flex snap-x gap-2 overflow-x-auto px-1 pb-1 xl:mx-0 xl:grid xl:grid-cols-5 xl:overflow-visible xl:px-0">
                   {availableMealTags.map((mealTag) => {
                     const items = groupedMealPlanRecipes[mealTag] ?? [];
                     const selected = selectedMealTag === mealTag;
@@ -176,7 +361,10 @@ export function NutritionAthleteCard({
                             ? "border-[color-mix(in_srgb,var(--accent)_35%,var(--border))] bg-[color-mix(in_srgb,var(--accent)_10%,var(--surface))]"
                             : "border-[var(--border)] bg-[var(--surface)] hover:bg-[var(--surface-2)]"
                         }`}
-                        onClick={() => setSelectedMealTag(mealTag)}
+                        onClick={() => {
+                          setSelectedMealTag(mealTag);
+                          setSelectedRecipeId(null);
+                        }}
                       >
                         <p className="text-xs font-semibold tracking-[0.04em] text-[var(--text-subtle)]">{mealTagLabel(mealTag)}</p>
                         <p className="mt-2 text-base font-semibold text-[var(--text)]">{items.length} vaihtoehtoa</p>
@@ -188,200 +376,54 @@ export function NutritionAthleteCard({
                   })}
                 </div>
 
-                {selectedMealTag && selectedRecipeEntry ? (
-                  <div className="grid gap-4 xl:grid-cols-[0.95fr_1.05fr]">
-                    <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-4">
-                      <div className="flex items-start justify-between gap-4">
-                        <div>
-                          <p className="text-xs font-semibold tracking-[0.04em] text-[var(--text-subtle)]">{mealTagLabel(selectedMealTag)}</p>
-                          <p className="mt-1 text-sm text-[var(--text-muted)]">Valitse resepti listasta avataksesi tarkemmat tiedot.</p>
-                        </div>
-                        <p className="text-sm text-[var(--text-muted)]">{selectedMealItems.length} reseptiä</p>
+                {selectedMealTag ? (
+                  <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-4">
+                    <div className="flex items-start justify-between gap-4">
+                      <div>
+                        <p className="text-xs font-semibold tracking-[0.04em] text-[var(--text-subtle)]">{mealTagLabel(selectedMealTag)}</p>
+                        <p className="mt-1 text-sm text-[var(--text-muted)]">Valitse resepti listasta avataksesi tarkemmat tiedot.</p>
                       </div>
-
-                      <div className="mt-4 space-y-3">
-                        {selectedMealItems.map((item) => {
-                          const recipeNutrition = item.recipe.nutritionPerServing ?? calculateRecipeNutrition(item.recipe, state.ingredientsCatalog).nutritionPerServing;
-                          const selected = selectedRecipeEntry.recipe.id === item.recipe.id;
-
-                          return (
-                            <button
-                              key={`${item.mealTag}-${item.recipe.id}`}
-                              type="button"
-                              className={`w-full rounded-2xl border p-4 text-left transition ${
-                                selected
-                                  ? "border-[color-mix(in_srgb,var(--accent)_35%,var(--border))] bg-[color-mix(in_srgb,var(--accent)_8%,var(--surface))]"
-                                  : "border-[var(--border)] bg-[var(--surface-2)] hover:bg-[var(--surface)]"
-                              }`}
-                              onClick={() => setSelectedRecipeId(item.recipe.id)}
-                            >
-                              <div className="flex items-start justify-between gap-4">
-                                <div>
-                                  <p className="text-lg font-semibold text-[var(--text)]">{item.recipe.name}</p>
-                                  <p className="mt-1 text-sm text-[var(--text-muted)]">
-                                    {item.recipe.description ?? "Valmis ateriasuositus tämän ateriaryhmän sisälle."}
-                                  </p>
-                                  <p className="mt-3 text-sm font-medium text-[var(--text)]">
-                                    {selected ? "Resepti auki" : "Avaa resepti"}
-                                  </p>
-                                </div>
-                                <div className="text-right text-sm text-[var(--text-muted)]">
-                                  <p>{recipeNutrition.kcal} kcal</p>
-                                  <p>P {Math.round(recipeNutrition.proteinG)} g</p>
-                                  <p>H {Math.round(recipeNutrition.carbsG)} g</p>
-                                  <p>R {Math.round(recipeNutrition.fatG)} g</p>
-                                </div>
-                              </div>
-                            </button>
-                          );
-                        })}
-                      </div>
+                      <p className="text-sm text-[var(--text-muted)]">{selectedMealItems.length} reseptiä</p>
                     </div>
 
-                    {(() => {
-                      const recipeNutritionBase = selectedRecipeEntry.recipe.nutritionPerServing ?? calculateRecipeNutrition(selectedRecipeEntry.recipe, state.ingredientsCatalog).nutritionPerServing;
-                      const compatibilityAlerts = getRecipeCompatibilityAlerts(selectedRecipeEntry.recipe, nutritionProfile);
-                      const batchNutrition = {
-                        kcal: Math.round(recipeNutritionBase.kcal * selectedServings),
-                        proteinG: recipeNutritionBase.proteinG * selectedServings,
-                        carbsG: recipeNutritionBase.carbsG * selectedServings,
-                        fatG: recipeNutritionBase.fatG * selectedServings,
-                      };
-                      const scaledIngredients = selectedRecipeEntry.recipe.ingredients.map((ingredient) =>
-                        scaleRecipeIngredient(
-                          ingredient,
-                          selectedServings,
-                          selectedRecipeEntry.recipe.defaultServings,
-                        ),
-                      );
+                    <div className="mt-4 space-y-3">
+                      {selectedMealItems.map((item) => {
+                        const recipeNutrition = item.recipe.nutritionPerServing ?? calculateRecipeNutrition(item.recipe, state.ingredientsCatalog).nutritionPerServing;
+                        const isOpen = selectedRecipeId === item.recipe.id;
 
-                      return (
-                        <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-4">
-                          <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-                            <div>
-                              <p className="text-xs font-semibold tracking-[0.04em] text-[var(--text-subtle)]">Resepti</p>
-                              <p className="mt-1 text-2xl font-semibold text-[var(--text)]">{selectedRecipeEntry.recipe.name}</p>
-                              <p className="mt-2 text-sm text-[var(--text-muted)]">
-                                {selectedRecipeEntry.recipe.description ?? "Selkeä ateriavaihtoehto tämän ateriaryhmän sisälle."}
-                              </p>
-                            </div>
-                            <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface-2)] px-4 py-3 text-sm text-[var(--text-muted)] sm:min-w-[11rem] sm:text-right">
-                              <p className="text-xs font-semibold tracking-[0.04em] text-[var(--text-subtle)]">Per annos</p>
-                              <p className="text-lg font-semibold text-[var(--text)]">{recipeNutritionBase.kcal} kcal</p>
-                              <p>P {Math.round(recipeNutritionBase.proteinG)} g</p>
-                              <p>H {Math.round(recipeNutritionBase.carbsG)} g</p>
-                              <p>R {Math.round(recipeNutritionBase.fatG)} g</p>
-                            </div>
-                          </div>
-
-                          <div className="mt-4 rounded-2xl border border-[var(--border)] bg-[var(--surface-2)] p-4">
-                            <div className="flex flex-col gap-4 sm:flex-row sm:flex-wrap sm:items-end sm:justify-between">
+                        return (
+                          <button
+                            key={`${item.mealTag}-${item.recipe.id}`}
+                            type="button"
+                            className={`w-full rounded-2xl border p-4 text-left transition ${
+                              isOpen
+                                ? "border-[color-mix(in_srgb,var(--accent)_35%,var(--border))] bg-[color-mix(in_srgb,var(--accent)_8%,var(--surface))]"
+                                : "border-[var(--border)] bg-[var(--surface-2)] hover:bg-[var(--surface)]"
+                            }`}
+                            onClick={() => {
+                              setSelectedServings(Math.max(1, item.recipe.defaultServings));
+                              setSelectedRecipeId(item.recipe.id);
+                            }}
+                          >
+                            <div className="flex items-start justify-between gap-4">
                               <div>
-                                <p className="text-xs font-semibold tracking-[0.04em] text-[var(--text-subtle)]">Annosmäärä</p>
+                                <p className="text-lg font-semibold text-[var(--text)]">{item.recipe.name}</p>
                                 <p className="mt-1 text-sm text-[var(--text-muted)]">
-                                  Lisää tai vähennä annoksia sen mukaan paljonko haluat valmistaa kerralla. Raaka-aineet ja koko satsin makrot päivittyvät heti.
+                                  {item.recipe.description ?? "Valmis ateriasuositus tämän ateriaryhmän sisälle."}
                                 </p>
+                                <p className="mt-3 text-sm font-medium text-[var(--text)]">{isOpen ? "Resepti auki" : "Avaa resepti"}</p>
                               </div>
-                              <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-2">
-                                <p className="px-2 text-xs font-semibold tracking-[0.04em] text-[var(--text-subtle)]">Annoksia</p>
-                                <div className="mt-2 flex items-center gap-2">
-                                  <Button
-                                    type="button"
-                                    variant="secondary"
-                                    className="min-h-11 min-w-11 px-0 text-lg"
-                                    onClick={() => setSelectedServings((current) => Math.max(1, current - 1))}
-                                    aria-label="Vähennä annoksia"
-                                  >
-                                    -
-                                  </Button>
-                                  <div className="min-w-[5.5rem] rounded-xl border border-[var(--border)] bg-[var(--surface-2)] px-4 py-3 text-center">
-                                    <p className="text-lg font-semibold text-[var(--text)]">{selectedServings}</p>
-                                  </div>
-                                  <Button
-                                    type="button"
-                                    variant="secondary"
-                                    className="min-h-11 min-w-11 px-0 text-lg"
-                                    onClick={() => setSelectedServings((current) => current + 1)}
-                                    aria-label="Lisää annoksia"
-                                  >
-                                    +
-                                  </Button>
-                                </div>
+                              <div className="text-right text-sm text-[var(--text-muted)]">
+                                <p>{recipeNutrition.kcal} kcal</p>
+                                <p>P {Math.round(recipeNutrition.proteinG)} g</p>
+                                <p>H {Math.round(recipeNutrition.carbsG)} g</p>
+                                <p>R {Math.round(recipeNutrition.fatG)} g</p>
                               </div>
                             </div>
-
-                            <div className="-mx-1 mt-4 flex snap-x gap-3 overflow-x-auto px-1 pb-1 sm:mx-0 sm:grid sm:grid-cols-4 sm:overflow-visible sm:px-0">
-                              <div>
-                                <p className="text-xs font-semibold tracking-[0.04em] text-[var(--text-subtle)]">Koko satsi</p>
-                                <p className="mt-1 text-lg font-semibold text-[var(--text)]">{batchNutrition.kcal} kcal</p>
-                              </div>
-                              <div>
-                                <p className="text-xs font-semibold tracking-[0.04em] text-[var(--text-subtle)]">Proteiini</p>
-                                <p className="mt-1 text-lg font-semibold text-[var(--text)]">{Math.round(batchNutrition.proteinG)} g</p>
-                              </div>
-                              <div>
-                                <p className="text-xs font-semibold tracking-[0.04em] text-[var(--text-subtle)]">Hiilarit</p>
-                                <p className="mt-1 text-lg font-semibold text-[var(--text)]">{Math.round(batchNutrition.carbsG)} g</p>
-                              </div>
-                              <div>
-                                <p className="text-xs font-semibold tracking-[0.04em] text-[var(--text-subtle)]">Rasva</p>
-                                <p className="mt-1 text-lg font-semibold text-[var(--text)]">{Math.round(batchNutrition.fatG)} g</p>
-                              </div>
-                            </div>
-                          </div>
-
-                          {compatibilityAlerts.length > 0 ? (
-                            <div className="mt-4 rounded-2xl border border-[color:color-mix(in_srgb,var(--warning)_35%,var(--border))] bg-[color:color-mix(in_srgb,var(--warning)_12%,var(--surface))] p-3 text-sm text-[var(--warning)]">
-                              {compatibilityAlerts.map((alert) => (
-                                <p key={`${selectedRecipeEntry.recipe.id}-${alert.key}`}>
-                                  {alert.label}: {alert.matchedIngredients.join(", ")}
-                                </p>
-                              ))}
-                            </div>
-                          ) : null}
-
-                          <div className="mt-4 space-y-4">
-                            <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface-2)] p-4">
-                              <div className="flex items-center justify-between gap-3">
-                                <div>
-                                  <p className="text-xs font-semibold tracking-[0.04em] text-[var(--text-subtle)]">Mitä tarvitset</p>
-                                  <p className="mt-1 text-sm text-[var(--text-muted)]">Raaka-aineet {selectedServings} annokselle.</p>
-                                </div>
-                                <Button
-                                  type="button"
-                                  variant="ghost"
-                                  className="px-3 py-2 text-sm"
-                                  onClick={() => mealPickerRef.current?.scrollIntoView({ behavior: "smooth", block: "start" })}
-                                >
-                                  Vaihda ateriaa
-                                </Button>
-                              </div>
-                              <ul className="mt-4 space-y-2 text-sm text-[var(--text-muted)]">
-                                {scaledIngredients.map((ingredient) => (
-                                  <li key={`${selectedRecipeEntry.recipe.id}-${ingredient.id}`} className="rounded-xl bg-[var(--surface)] px-3 py-3">
-                                    {formatRecipeIngredientLine(ingredient)}
-                                  </li>
-                                ))}
-                              </ul>
-                            </div>
-
-                            <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface-2)] p-4">
-                              <p className="text-xs font-semibold tracking-[0.04em] text-[var(--text-subtle)]">Valmistus</p>
-                              <ol className="mt-4 space-y-3 pl-0 text-sm text-[var(--text-muted)]">
-                                {splitRecipeInstructions(selectedRecipeEntry.recipe.instructions).map((step, index) => (
-                                  <li key={`${selectedRecipeEntry.recipe.id}-step-${index}`} className="flex gap-3 rounded-xl bg-[var(--surface)] px-3 py-3">
-                                    <span className="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full border border-[var(--border)] text-xs font-semibold text-[var(--text)]">
-                                      {index + 1}
-                                    </span>
-                                    <span>{step}</span>
-                                  </li>
-                                ))}
-                              </ol>
-                            </div>
-                          </div>
-                        </div>
-                      );
-                    })()}
+                          </button>
+                        );
+                      })}
+                    </div>
                   </div>
                 ) : null}
               </div>
@@ -392,6 +434,19 @@ export function NutritionAthleteCard({
             Tälle käyttäjälle ei ole vielä jaettu aktiivista ateriapohjaa.
           </div>
         )}
+
+        {selectedMealTag && selectedRecipeEntry && selectedRecipeNutrition ? (
+          <RecipeDetailDialog
+            mealTag={selectedMealTag}
+            recipe={selectedRecipeEntry.recipe}
+            nutrition={selectedRecipeNutrition}
+            nutritionProfile={nutritionProfile}
+            selectedServings={selectedServings}
+            onDecreaseServings={() => setSelectedServings((current) => Math.max(1, current - 1))}
+            onIncreaseServings={() => setSelectedServings((current) => current + 1)}
+            onClose={() => setSelectedRecipeId(null)}
+          />
+        ) : null}
       </div>
     </Card>
   );
