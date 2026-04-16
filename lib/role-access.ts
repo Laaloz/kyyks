@@ -3,6 +3,7 @@ import { PROGRAMS_DASHBOARD_VIEW, type AthleteRole, type DashboardHomeView, type
 const coachWorkspaceViews: DashboardHomeView[] = [
   "athlete-log",
   "overview",
+  "nutrition",
   PROGRAMS_DASHBOARD_VIEW,
   "athletes",
 ];

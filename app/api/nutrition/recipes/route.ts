@@ -2,7 +2,8 @@ import { NextResponse } from "next/server";
 
 import { recipeSchema } from "@/components/workout/schemas";
 import {
-  ensureAdminRequester,
+  deleteRecipeOnServer,
+  ensureNutritionManagerRequester,
   getNutritionRequester,
   saveRecipeOnServer,
 } from "@/lib/server/nutrition";
@@ -28,7 +29,7 @@ async function saveRecipe(request: Request) {
     return requesterResult.error;
   }
 
-  const forbidden = ensureAdminRequester(requesterResult.requester);
+  const forbidden = ensureNutritionManagerRequester(requesterResult.requester);
   if (forbidden) {
     return forbidden;
   }
@@ -53,4 +54,28 @@ export async function POST(request: Request) {
 
 export async function PATCH(request: Request) {
   return saveRecipe(request);
+}
+
+export async function DELETE(request: Request) {
+  const requesterResult = await getNutritionRequester();
+  if ("error" in requesterResult) {
+    return requesterResult.error;
+  }
+
+  const forbidden = ensureNutritionManagerRequester(requesterResult.requester);
+  if (forbidden) {
+    return forbidden;
+  }
+
+  const recipeId = new URL(request.url).searchParams.get("id")?.trim();
+  if (!recipeId) {
+    return NextResponse.json({ message: "Reseptin id puuttuu." }, { status: 400 });
+  }
+
+  const result = await deleteRecipeOnServer(recipeId);
+  if (!result.ok) {
+    return NextResponse.json({ message: result.message }, { status: 400 });
+  }
+
+  return NextResponse.json({ ok: true });
 }

@@ -137,6 +137,8 @@ export interface Recipe {
   description?: string;
   instructions: string;
   mealTag: MealTag;
+  dietaryFlags: string[];
+  allergies: string[];
   ownerRole: NutritionOwnerRole;
   createdBy: string;
   defaultServings: number;
@@ -525,6 +527,8 @@ export interface RecipeInput {
   description?: string;
   instructions: string;
   mealTag: MealTag;
+  dietaryFlags?: string[];
+  allergies?: string[];
   defaultServings: number;
   minServings: number;
   maxServings: number;

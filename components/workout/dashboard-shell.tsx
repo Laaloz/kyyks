@@ -7,6 +7,7 @@ import { AdminDashboard } from "@/components/workout/admin-dashboard";
 import { MeasurementReminderDialog } from "@/components/workout/athlete/measurement-reminder-dialog";
 import { AthleteDashboard } from "@/components/workout/athlete-dashboard";
 import { CoachDashboard } from "@/components/workout/coach-dashboard";
+import { NutritionAdminPanel } from "@/components/workout/nutrition-admin-panel";
 import { UserSettingsPanel } from "@/components/workout/user-settings-panel";
 import { Button } from "@/components/ui/button";
 import { isConversationEntryNotifiable } from "@/lib/conversation";
@@ -37,7 +38,7 @@ function mobilePrimaryNavItemsForRole(role: Role): PrimaryWorkspaceView[] {
     return ["athlete-log", "overview", "nutrition", "users"];
   }
 
-  return ["athlete-log", "overview", PROGRAMS_WORKSPACE_VIEW, "athletes"];
+  return ["athlete-log", "overview", "nutrition", PROGRAMS_WORKSPACE_VIEW, "athletes"];
 }
 
 function navItemsForRole(role: Role): PrimaryWorkspaceView[] {
@@ -586,6 +587,8 @@ export function DashboardShell() {
                 overviewFocusTarget={athleteOverviewFocusTarget}
                 onOverviewFocusHandled={() => setAthleteOverviewFocusTarget(null)}
               />
+            ) : view === "nutrition" && canActAsCoach(currentUser.role) ? (
+              <NutritionAdminPanel />
             ) : view === PROGRAMS_WORKSPACE_VIEW ||
               currentUser.role === "coach" ||
               (currentUser.role === "admin" && (view === "athletes" || view === "conversation")) ? (

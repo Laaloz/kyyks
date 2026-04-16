@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 
 import { nutritionProfileSchema } from "@/components/workout/schemas";
 import {
-  ensureAdminRequester,
+  ensureNutritionManagerRequester,
   getNutritionRequester,
   saveNutritionProfileOnServer,
 } from "@/lib/server/nutrition";
@@ -18,6 +18,23 @@ export async function GET() {
 
   if (requester.role === "athlete" || requester.role === "independent_athlete") {
     query = query.eq("user_id", requester.id);
+  } else if (requester.role === "coach") {
+    const { data: assignments, error: assignmentsError } = await supabase
+      .from("coach_athlete_assignments")
+      .select("athlete_id")
+      .eq("coach_id", requester.id)
+      .eq("active", true);
+
+    if (assignmentsError) {
+      return NextResponse.json({ message: assignmentsError.message || "Valmennussuhteiden haku epäonnistui." }, { status: 400 });
+    }
+
+    const athleteIds = (assignments ?? []).map((assignment) => assignment.athlete_id).filter(Boolean);
+    if (athleteIds.length === 0) {
+      return NextResponse.json([]);
+    }
+
+    query = query.in("user_id", athleteIds);
   }
 
   const { data, error } = await query;
@@ -34,7 +51,7 @@ export async function PATCH(request: Request) {
     return requesterResult.error;
   }
 
-  const forbidden = ensureAdminRequester(requesterResult.requester);
+  const forbidden = ensureNutritionManagerRequester(requesterResult.requester);
   if (forbidden) {
     return forbidden;
   }
@@ -42,7 +59,12 @@ export async function PATCH(request: Request) {
   const body = await request.json().catch(() => ({}));
   const parsed = nutritionProfileSchema.safeParse(body);
   if (!parsed.success) {
-    return NextResponse.json({ message: "Virheellinen ravintoprofiili." }, { status: 400 });
+    const fieldErrors = parsed.error.flatten().fieldErrors;
+    const firstError = Object.values(fieldErrors).flat().find(Boolean);
+    return NextResponse.json({
+      message: firstError ?? "Virheellinen ravintoprofiili.",
+      fieldErrors,
+    }, { status: 400 });
   }
 
   const result = await saveNutritionProfileOnServer(requesterResult.requester, parsed.data);

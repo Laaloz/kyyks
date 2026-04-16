@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -8,8 +8,8 @@ import { Card, CardDescription, CardTitle } from "@/components/ui/card";
 import { Input, Label, Select, Textarea } from "@/components/ui/field";
 import { InlineFeedback } from "@/components/workout/inline-feedback";
 import { getMeasurementsForUser } from "@/lib/body-metrics";
-import { calculateMacroTarget, getMacroGoalGuidance, getMissingMacroProfileFields, joinRecipeInstructionSteps, mealTagLabel } from "@/lib/nutrition";
-import { isAthleteRole } from "@/lib/role-access";
+import { calculateMacroTarget, calculateRecipeNutrition, getMacroGoalGuidance, getMissingMacroProfileFields, getRecipeCompatibilityAlerts, joinRecipeInstructionSteps, mealTagLabel, splitRecipeInstructions } from "@/lib/nutrition";
+import { canActAsCoach, isAthleteRole } from "@/lib/role-access";
 import type {
   IngredientRole,
   IngredientScalingMode,
@@ -88,6 +88,31 @@ function splitKnownAndCustom(values: string[], knownOptions: readonly string[]) 
   };
 }
 
+function mealSlotKcalGuidance(mealTag: MealTag, targetKcal?: number) {
+  if (!targetKcal) {
+    return null;
+  }
+
+  const ranges: Record<MealTag, [number, number]> = {
+    breakfast: [0.15, 0.2],
+    lunch: [0.25, 0.3],
+    snack: [0.1, 0.15],
+    dinner: [0.25, 0.3],
+    evening_snack: [0.1, 0.15],
+  };
+
+  const [minRatio, maxRatio] = ranges[mealTag];
+  return `${Math.round(targetKcal * minRatio)}-${Math.round(targetKcal * maxRatio)} kcal`;
+}
+
+function formatRecipeMacroValue(value: number | null | undefined) {
+  if (value === null || value === undefined || Number.isNaN(value)) {
+    return "-";
+  }
+
+  return String(Math.round(value));
+}
+
 type NutritionProfileFormState = {
   goal: NutritionGoal;
   activityLevel: NutritionActivityLevel;
@@ -154,16 +179,23 @@ export function NutritionAdminPanel() {
     currentUser,
     state,
     notify,
+    getCoachAthletes,
     saveNutritionProfile,
     saveIngredient,
     saveRecipe,
+    deleteRecipe,
     saveMealPlanTemplate,
     assignMealPlanTemplate,
   } = useAppState();
 
+  const canManageNutrition = canActAsCoach(currentUser?.role);
+  const isAdmin = currentUser?.role === "admin";
   const athleteUsers = useMemo(
-    () => state.users.filter((user) => isAthleteRole(user.role) && user.status === "active"),
-    [state.users],
+    () =>
+      currentUser
+        ? getCoachAthletes(currentUser.id).filter((user) => isAthleteRole(user.role) && user.status === "active")
+        : [],
+    [currentUser, getCoachAthletes],
   );
   const [selectedAthleteId, setSelectedAthleteId] = useState(athleteUsers[0]?.id ?? "");
   const selectedProfile = useMemo(
@@ -198,6 +230,10 @@ export function NutritionAdminPanel() {
     name: "",
     description: "",
     mealTag: "lunch" as MealTag,
+    dietaryFlags: [] as string[],
+    allergies: [] as string[],
+    customDietaryFlags: "",
+    customAllergies: "",
     defaultServings: "4",
     minServings: "2",
     maxServings: "8",
@@ -206,14 +242,17 @@ export function NutritionAdminPanel() {
   const [recipeIngredients, setRecipeIngredients] = useState<RecipeIngredientDraft[]>([
     emptyRecipeIngredientDraft(),
   ]);
+  const [selectedRecipeId, setSelectedRecipeId] = useState("");
+  const [recipeSearchQuery, setRecipeSearchQuery] = useState("");
+  const [recipeFilterMealTag, setRecipeFilterMealTag] = useState<MealTag | "all">("all");
   const [templateForm, setTemplateForm] = useState({
     name: "",
     description: "",
-    breakfast: "",
-    lunch: "",
-    snack: "",
-    dinner: "",
-    evening_snack: "",
+    breakfast: [] as string[],
+    lunch: [] as string[],
+    snack: [] as string[],
+    dinner: [] as string[],
+    evening_snack: [] as string[],
   });
   const [assignmentForm, setAssignmentForm] = useState({
     athleteId: athleteUsers[0]?.id ?? "",
@@ -221,11 +260,143 @@ export function NutritionAdminPanel() {
   });
   const [activeSection, setActiveSection] = useState<NutritionAdminSection>("overview");
   const [recipeWorkspace, setRecipeWorkspace] = useState<RecipeWorkspace>("recipe");
+  const [isSavingNutritionProfile, setIsSavingNutritionProfile] = useState(false);
   const [message, setMessage] = useState<{ tone: "success" | "danger"; text: string } | null>(null);
+  const visibleSections = isAdmin ? sectionMeta : sectionMeta.filter((section) => section.id !== "overview");
+  const activeSectionMeta = visibleSections.find((section) => section.id === activeSection) ?? visibleSections[0];
+  const canManageIngredients = isAdmin;
+  const canAssignMealPlans = canManageNutrition;
 
-  if (!currentUser || currentUser.role !== "admin") {
+  useEffect(() => {
+    if (!isAdmin && activeSection === "overview") {
+      setActiveSection("profiles");
+    }
+  }, [activeSection, isAdmin]);
+
+  useEffect(() => {
+    if (!canManageIngredients && recipeWorkspace === "ingredients") {
+      setRecipeWorkspace("recipe");
+    }
+  }, [canManageIngredients, recipeWorkspace]);
+
+  useEffect(() => {
+    if (athleteUsers.length === 0) {
+      if (selectedAthleteId) {
+        setSelectedAthleteId("");
+      }
+      if (assignmentForm.athleteId) {
+        setAssignmentForm((current) => ({ ...current, athleteId: "" }));
+      }
+      return;
+    }
+
+    if (!athleteUsers.some((user) => user.id === selectedAthleteId)) {
+      setSelectedAthleteId(athleteUsers[0].id);
+    }
+
+    if (!athleteUsers.some((user) => user.id === assignmentForm.athleteId)) {
+      setAssignmentForm((current) => ({ ...current, athleteId: athleteUsers[0].id }));
+    }
+  }, [assignmentForm.athleteId, athleteUsers, selectedAthleteId]);
+
+  if (!currentUser || !canManageNutrition) {
     return null;
   }
+
+  const resetRecipeEditor = () => {
+    setSelectedRecipeId("");
+    setRecipeForm({
+      name: "",
+      description: "",
+      mealTag: "lunch",
+      dietaryFlags: [],
+      allergies: [],
+      customDietaryFlags: "",
+      customAllergies: "",
+      defaultServings: "4",
+      minServings: "2",
+      maxServings: "8",
+    });
+    setRecipeSteps([emptyRecipeStepDraft()]);
+    setRecipeIngredients([emptyRecipeIngredientDraft()]);
+  };
+
+  const loadRecipeToEditor = (recipeId: string) => {
+    const recipe = state.recipes.find((item) => item.id === recipeId);
+    if (!recipe) {
+      return;
+    }
+
+    setSelectedRecipeId(recipe.id);
+    setRecipeForm({
+      name: recipe.name,
+      description: recipe.description ?? "",
+      mealTag: recipe.mealTag,
+      dietaryFlags: splitKnownAndCustom(recipe.dietaryFlags ?? [], dietaryFlagOptions).known,
+      allergies: splitKnownAndCustom(recipe.allergies ?? [], allergyOptions).known,
+      customDietaryFlags: splitKnownAndCustom(recipe.dietaryFlags ?? [], dietaryFlagOptions).custom,
+      customAllergies: splitKnownAndCustom(recipe.allergies ?? [], allergyOptions).custom,
+      defaultServings: String(recipe.defaultServings),
+      minServings: String(recipe.minServings),
+      maxServings: String(recipe.maxServings),
+    });
+    setRecipeSteps(splitRecipeInstructions(recipe.instructions).filter(Boolean).length > 0
+      ? splitRecipeInstructions(recipe.instructions)
+      : [emptyRecipeStepDraft()]);
+    setRecipeIngredients(
+      recipe.ingredients.length > 0
+        ? recipe.ingredients.map((ingredient) => ({
+            ingredientId: ingredient.ingredientId ?? "",
+            ingredientName: ingredient.ingredientName,
+            quantity: ingredient.quantity !== undefined ? String(ingredient.quantity) : "",
+            unit: ingredient.unit,
+            displayQuantity: ingredient.displayQuantity ?? "",
+            displayUnit: ingredient.displayUnit ?? "",
+            ingredientRole: ingredient.ingredientRole,
+            scalingMode: ingredient.scalingMode,
+          }))
+        : [emptyRecipeIngredientDraft()],
+    );
+  };
+
+  const duplicateRecipeToEditor = (recipeId: string) => {
+    const recipe = state.recipes.find((item) => item.id === recipeId);
+    if (!recipe) {
+      return;
+    }
+
+    setSelectedRecipeId("");
+    setRecipeForm({
+      name: `${recipe.name} kopio`,
+      description: recipe.description ?? "",
+      mealTag: recipe.mealTag,
+      dietaryFlags: splitKnownAndCustom(recipe.dietaryFlags ?? [], dietaryFlagOptions).known,
+      allergies: splitKnownAndCustom(recipe.allergies ?? [], allergyOptions).known,
+      customDietaryFlags: splitKnownAndCustom(recipe.dietaryFlags ?? [], dietaryFlagOptions).custom,
+      customAllergies: splitKnownAndCustom(recipe.allergies ?? [], allergyOptions).custom,
+      defaultServings: String(recipe.defaultServings),
+      minServings: String(recipe.minServings),
+      maxServings: String(recipe.maxServings),
+    });
+    setRecipeSteps(splitRecipeInstructions(recipe.instructions).filter(Boolean).length > 0
+      ? splitRecipeInstructions(recipe.instructions)
+      : [emptyRecipeStepDraft()]);
+    setRecipeIngredients(
+      recipe.ingredients.length > 0
+        ? recipe.ingredients.map((ingredient) => ({
+            ingredientId: ingredient.ingredientId ?? "",
+            ingredientName: ingredient.ingredientName,
+            quantity: ingredient.quantity !== undefined ? String(ingredient.quantity) : "",
+            unit: ingredient.unit,
+            displayQuantity: ingredient.displayQuantity ?? "",
+            displayUnit: ingredient.displayUnit ?? "",
+            ingredientRole: ingredient.ingredientRole,
+            scalingMode: ingredient.scalingMode,
+          }))
+        : [emptyRecipeIngredientDraft()],
+    );
+    setMessage({ tone: "success", text: `Resepti "${recipe.name}" kopioitiin editoriin uutena pohjana.` });
+  };
 
   const handleSaveNutritionProfile = async () => {
     if (!selectedAthleteId) {
@@ -233,6 +404,7 @@ export function NutritionAdminPanel() {
       return;
     }
 
+    setIsSavingNutritionProfile(true);
     const result = await saveNutritionProfile({
       userId: selectedAthleteId,
       goal: profileForm.goal as NutritionProfile["goal"],
@@ -246,7 +418,7 @@ export function NutritionAdminPanel() {
       coachNotes: profileForm.coachNotes,
       dietaryFlags: [...profileForm.dietaryFlags, ...parseList(profileForm.customDietaryFlags)],
       allergies: [...profileForm.allergies, ...parseList(profileForm.customAllergies)],
-    });
+    }).finally(() => setIsSavingNutritionProfile(false));
 
     setMessage({ tone: result.ok ? "success" : "danger", text: result.ok ? "Ravintoprofiili tallennettiin." : result.message });
     notify({ tone: result.ok ? "success" : "danger", message: result.ok ? "Ravintoprofiili tallennettiin." : result.message });
@@ -280,10 +452,13 @@ export function NutritionAdminPanel() {
 
   const handleSaveRecipe = async () => {
     const result = await saveRecipe({
+      id: selectedRecipeId || undefined,
       name: recipeForm.name,
       description: recipeForm.description,
       instructions: joinRecipeInstructionSteps(recipeSteps),
       mealTag: recipeForm.mealTag,
+      dietaryFlags: [...recipeForm.dietaryFlags, ...parseList(recipeForm.customDietaryFlags)],
+      allergies: [...recipeForm.allergies, ...parseList(recipeForm.customAllergies)],
       defaultServings: Number(recipeForm.defaultServings),
       minServings: Number(recipeForm.minServings),
       maxServings: Number(recipeForm.maxServings),
@@ -301,24 +476,38 @@ export function NutritionAdminPanel() {
 
     setMessage({ tone: result.ok ? "success" : "danger", text: result.ok ? "Resepti tallennettiin." : result.message });
     if (result.ok) {
-      setRecipeForm({
-        name: "",
-        description: "",
-        mealTag: "lunch",
-        defaultServings: "4",
-        minServings: "2",
-        maxServings: "8",
-      });
-      setRecipeSteps([emptyRecipeStepDraft()]);
-      setRecipeIngredients([emptyRecipeIngredientDraft()]);
+      resetRecipeEditor();
+    }
+  };
+
+  const handleDeleteRecipe = async () => {
+    if (!selectedRecipeId) {
+      setMessage({ tone: "danger", text: "Valitse ensin poistettava resepti." });
+      return;
+    }
+
+    const recipeName = state.recipes.find((recipe) => recipe.id === selectedRecipeId)?.name ?? "Resepti";
+    const confirmed = window.confirm(`Poistetaanko resepti "${recipeName}"?`);
+    if (!confirmed) {
+      return;
+    }
+
+    const result = await deleteRecipe(selectedRecipeId);
+    setMessage({ tone: result.ok ? "success" : "danger", text: result.ok ? "Resepti poistettiin." : result.message });
+    if (result.ok) {
+      resetRecipeEditor();
     }
   };
 
   const handleSaveTemplate = async () => {
     const items = mealTags
-      .flatMap((mealTag, index) => {
-        const recipeId = templateForm[mealTag];
-        return recipeId ? [{ mealTag, recipeId, sortOrder: index }] : [];
+      .flatMap((mealTag, mealTagIndex) => {
+        const recipeIds = templateForm[mealTag];
+        return recipeIds.map((recipeId, recipeIndex) => ({
+          mealTag,
+          recipeId,
+          sortOrder: mealTagIndex * 100 + recipeIndex,
+        }));
       });
 
     const result = await saveMealPlanTemplate({
@@ -332,11 +521,11 @@ export function NutritionAdminPanel() {
       setTemplateForm({
         name: "",
         description: "",
-        breakfast: "",
-        lunch: "",
-        snack: "",
-        dinner: "",
-        evening_snack: "",
+        breakfast: [],
+        lunch: [],
+        snack: [],
+        dinner: [],
+        evening_snack: [],
       });
     }
   };
@@ -350,7 +539,6 @@ export function NutritionAdminPanel() {
     setMessage({ tone: result.ok ? "success" : "danger", text: result.ok ? "Ateriapohja jaettiin treenaajalle." : result.message });
   };
 
-  const activeSectionMeta = sectionMeta.find((section) => section.id === activeSection) ?? sectionMeta[0];
   const selectedAthleteName = athleteUsers.find((user) => user.id === selectedAthleteId)?.fullName ?? "Ei valittu";
   const selectedAthlete = state.users.find((user) => user.id === selectedAthleteId) ?? null;
   const selectedAthleteMeasurements = selectedAthlete ? getMeasurementsForUser(state, selectedAthlete.id) : [];
@@ -383,10 +571,125 @@ export function NutritionAdminPanel() {
     profileForm.calculationMode === "auto"
       ? autoPreviewTarget?.fatG ?? selectedProfile?.fatG ?? (profileForm.fatG ? Number(profileForm.fatG) : undefined)
       : (profileForm.fatG ? Number(profileForm.fatG) : undefined);
+  const assignmentAthleteProfile = state.nutritionProfiles.find((profile) => profile.userId === assignmentForm.athleteId) ?? null;
+  const previewCompatibilityProfile =
+    assignmentForm.athleteId === selectedAthleteId
+      ? {
+          dietaryFlags: [...profileForm.dietaryFlags, ...parseList(profileForm.customDietaryFlags)],
+          allergies: [...profileForm.allergies, ...parseList(profileForm.customAllergies)],
+        }
+      : assignmentAthleteProfile;
   const athleteWithPlanCount = new Set(state.assignedMealPlans.filter((plan) => plan.active).map((plan) => plan.athleteId)).size;
   const ingredientCatalogPreview = state.ingredientsCatalog.slice(0, 8);
   const recipePreview = state.recipes.slice(0, 4);
   const templatePreview = state.mealPlanTemplates.slice(0, 4);
+  const selectedTemplatePreview = useMemo(
+    () =>
+      mealTags.reduce<Array<{ mealTag: MealTag; recipe: (typeof state.recipes)[number] }>>((items, mealTag) => {
+        const recipes = templateForm[mealTag]
+          .map((recipeId) => state.recipes.find((recipe) => recipe.id === recipeId))
+          .filter((recipe): recipe is (typeof state.recipes)[number] => Boolean(recipe));
+
+        return [
+          ...items,
+          ...recipes.map((recipe) => ({
+            mealTag,
+            recipe,
+          })),
+        ];
+      }, []),
+    [state.recipes, templateForm],
+  );
+  const groupedTemplatePreview = useMemo(
+    () =>
+      selectedTemplatePreview.reduce<Partial<Record<MealTag, typeof selectedTemplatePreview>>>((groups, item) => {
+        const existing = groups[item.mealTag] ?? [];
+        return {
+          ...groups,
+          [item.mealTag]: [...existing, item],
+        };
+      }, {}),
+    [selectedTemplatePreview],
+  );
+  const filledMealTags = mealTags.filter((mealTag) => templateForm[mealTag].length > 0);
+  const missingMealTags = mealTags.filter((mealTag) => templateForm[mealTag].length === 0);
+  const templatePreviewRecipeCount = selectedTemplatePreview.length;
+  const recipesByMealTag = useMemo(
+    () => ({
+      breakfast: state.recipes.filter((recipe) => recipe.mealTag === "breakfast"),
+      lunch: state.recipes.filter((recipe) => recipe.mealTag === "lunch"),
+      snack: state.recipes.filter((recipe) => recipe.mealTag === "snack"),
+      dinner: state.recipes.filter((recipe) => recipe.mealTag === "dinner"),
+      evening_snack: state.recipes.filter((recipe) => recipe.mealTag === "evening_snack"),
+    }),
+    [state.recipes],
+  );
+  const recentRecipes = useMemo(
+    () => [...state.recipes]
+      .sort((left, right) => new Date(right.updatedAt).getTime() - new Date(left.updatedAt).getTime())
+      .slice(0, 6),
+    [state.recipes],
+  );
+  const filteredRecipes = useMemo(() => {
+    const normalizedQuery = recipeSearchQuery.trim().toLowerCase();
+    return state.recipes.filter((recipe) => {
+      const matchesMealTag = recipeFilterMealTag === "all" || recipe.mealTag === recipeFilterMealTag;
+      const matchesQuery = normalizedQuery.length === 0
+        || recipe.name.toLowerCase().includes(normalizedQuery)
+        || (recipe.description ?? "").toLowerCase().includes(normalizedQuery);
+      return matchesMealTag && matchesQuery;
+    });
+  }, [recipeFilterMealTag, recipeSearchQuery, state.recipes]);
+  const recipeNutritionPreview = useMemo(() => {
+    const draftIngredients = recipeIngredients
+      .map((ingredient, index) => {
+        const parsedQuantity = ingredient.quantity ? Number(ingredient.quantity) : undefined;
+        return {
+          id: `draft-ingredient-${index}`,
+          ingredientId: ingredient.ingredientId || undefined,
+          ingredientName: ingredient.ingredientName.trim(),
+          quantity: parsedQuantity,
+          unit: ingredient.unit,
+          displayQuantity: ingredient.displayQuantity.trim() || undefined,
+          displayUnit: ingredient.displayUnit.trim() || undefined,
+          normalizedQuantity: parsedQuantity,
+          ingredientRole: ingredient.ingredientRole,
+          scalingMode: ingredient.scalingMode,
+        };
+      })
+      .filter((ingredient) => ingredient.ingredientId || ingredient.ingredientName);
+
+    const linkedIngredientCount = draftIngredients.filter((ingredient) => ingredient.ingredientId).length;
+    const unlinkedIngredientNames = draftIngredients
+      .filter((ingredient) => !ingredient.ingredientId && ingredient.ingredientRole !== "spice" && ingredient.scalingMode !== "text_only")
+      .map((ingredient) => ingredient.ingredientName)
+      .filter(Boolean);
+
+    if (draftIngredients.length === 0) {
+      return {
+        hasIngredients: false,
+        linkedIngredientCount,
+        totalIngredientCount: 0,
+        unlinkedIngredientNames,
+        nutritionPerServing: null,
+        nutritionPerRecipe: null,
+      };
+    }
+
+    const nutrition = calculateRecipeNutrition({
+      defaultServings: Number(recipeForm.defaultServings) || 1,
+      ingredients: draftIngredients,
+    }, state.ingredientsCatalog);
+
+    return {
+      hasIngredients: true,
+      linkedIngredientCount,
+      totalIngredientCount: draftIngredients.length,
+      unlinkedIngredientNames,
+      nutritionPerServing: nutrition.nutritionPerServing,
+      nutritionPerRecipe: nutrition.nutritionPerRecipe,
+    };
+  }, [recipeForm.defaultServings, recipeIngredients, state.ingredientsCatalog]);
 
   const toggleSelection = (
     field: "dietaryFlags" | "allergies",
@@ -405,9 +708,9 @@ export function NutritionAdminPanel() {
       <div className="space-y-6">
         <div>
           <p className="text-xs font-semibold tracking-[0.04em] text-[var(--text-subtle)]">Ravinto</p>
-          <CardTitle className="mt-2 text-2xl">Adminin ateriapohjat ja reseptit</CardTitle>
+          <CardTitle className="mt-2 text-2xl">Ateriapohjat ja reseptit</CardTitle>
           <CardDescription className="mt-2">
-            V1:ssä vain admin rakentaa ravintosisällön. Reseptit perustuvat oikeisiin raaka-ainemääriin, annossäätimeen ja mausteiden hybridiskaalaukseen.
+            Rakenna reseptit ja ateriapohjat oikeista raaka-ainemääristä niin, että annossäätö, makrot ja rajoitteet pysyvät mukana.
           </CardDescription>
         </div>
 
@@ -416,9 +719,9 @@ export function NutritionAdminPanel() {
         <div
           role="tablist"
           aria-label="Ravinnon admin-osiot"
-          className="grid gap-2 rounded-[1.4rem] border border-[color-mix(in_srgb,var(--border)_88%,var(--surface))] bg-[color-mix(in_srgb,var(--surface)_80%,var(--surface-2))] p-2 md:grid-cols-4"
+          className={`grid gap-2 rounded-[1.4rem] border border-[color-mix(in_srgb,var(--border)_88%,var(--surface))] bg-[color-mix(in_srgb,var(--surface)_80%,var(--surface-2))] p-2 ${visibleSections.length >= 4 ? "md:grid-cols-4" : "md:grid-cols-3"}`}
         >
-          {sectionMeta.map((section) => {
+          {visibleSections.map((section) => {
             const selected = activeSection === section.id;
             return (
               <button
@@ -764,7 +1067,9 @@ export function NutritionAdminPanel() {
                     <Textarea id="nutrition-notes" value={profileForm.coachNotes} onChange={(event) => setProfileForm((current) => ({ ...current, coachNotes: event.target.value }))} />
                   </div>
                 </div>
-                <Button type="button" onClick={() => void handleSaveNutritionProfile()}>Tallenna ravintoprofiili</Button>
+                <Button type="button" disabled={isSavingNutritionProfile} onClick={() => void handleSaveNutritionProfile()}>
+                  {isSavingNutritionProfile ? "Tallennetaan..." : "Tallenna ravintoprofiili"}
+                </Button>
               </div>
 
               <div className="space-y-4 rounded-3xl border border-[var(--border)] bg-[var(--surface-2)] p-4">
@@ -825,7 +1130,7 @@ export function NutritionAdminPanel() {
               <div
                 role="tablist"
                 aria-label="Reseptityötila"
-                className="grid gap-2 rounded-[1.2rem] border border-[var(--border)] bg-[var(--surface-2)] p-2 md:grid-cols-2"
+                className={`grid gap-2 rounded-[1.2rem] border border-[var(--border)] bg-[var(--surface-2)] p-2 ${canManageIngredients ? "md:grid-cols-2" : "md:grid-cols-1"}`}
               >
                 <button
                   type="button"
@@ -840,19 +1145,21 @@ export function NutritionAdminPanel() {
                   <p className="text-sm font-semibold">Reseptieditori</p>
                   <p className="mt-1 text-xs text-[var(--text-subtle)]">Pääraaka-aineet, annokset ja skaalaus yhteen reseptiin.</p>
                 </button>
-                <button
-                  type="button"
-                  role="tab"
-                  aria-selected={recipeWorkspace === "ingredients"}
-                  aria-controls="nutrition-ingredient-workspace"
-                  id="nutrition-ingredient-tab"
-                  tabIndex={recipeWorkspace === "ingredients" ? 0 : -1}
-                  className={`rounded-2xl px-4 py-3 text-left transition ${recipeWorkspace === "ingredients" ? "border border-[color-mix(in_srgb,var(--accent)_24%,var(--border))] bg-[color-mix(in_srgb,var(--accent)_10%,var(--surface))] text-[var(--text)]" : "border border-transparent bg-transparent text-[var(--text-muted)] hover:border-[var(--border)] hover:bg-[var(--surface)] hover:text-[var(--text)]"}`}
-                  onClick={() => setRecipeWorkspace("ingredients")}
-                >
-                  <p className="text-sm font-semibold">Raaka-ainekatalogi</p>
-                  <p className="mt-1 text-xs text-[var(--text-subtle)]">Lisää puuttuva aine käsin ja tarkista mitä kirjastosta jo löytyy.</p>
-                </button>
+                {canManageIngredients ? (
+                  <button
+                    type="button"
+                    role="tab"
+                    aria-selected={recipeWorkspace === "ingredients"}
+                    aria-controls="nutrition-ingredient-workspace"
+                    id="nutrition-ingredient-tab"
+                    tabIndex={recipeWorkspace === "ingredients" ? 0 : -1}
+                    className={`rounded-2xl px-4 py-3 text-left transition ${recipeWorkspace === "ingredients" ? "border border-[color-mix(in_srgb,var(--accent)_24%,var(--border))] bg-[color-mix(in_srgb,var(--accent)_10%,var(--surface))] text-[var(--text)]" : "border border-transparent bg-transparent text-[var(--text-muted)] hover:border-[var(--border)] hover:bg-[var(--surface)] hover:text-[var(--text)]"}`}
+                    onClick={() => setRecipeWorkspace("ingredients")}
+                  >
+                    <p className="text-sm font-semibold">Raaka-ainekatalogi</p>
+                    <p className="mt-1 text-xs text-[var(--text-subtle)]">Lisää puuttuva aine käsin ja tarkista mitä kirjastosta jo löytyy.</p>
+                  </button>
+                ) : null}
               </div>
 
               {recipeWorkspace === "recipe" ? (
@@ -861,6 +1168,101 @@ export function NutritionAdminPanel() {
                     <div>
                       <p className="text-sm font-semibold text-[var(--text)]">Reseptieditori</p>
                       <p className="text-sm text-[var(--text-muted)]">Rakenna resepti niin, että ostettavat määrät ja annosskaalaus pysyvät realistisina.</p>
+                    </div>
+                    <div className="grid gap-3 md:grid-cols-[1fr_auto] md:items-end">
+                      <div>
+                        <Label htmlFor="recipe-existing">Muokkaa olemassa olevaa reseptia</Label>
+                        <Select
+                          id="recipe-existing"
+                          value={selectedRecipeId}
+                          onChange={(event) => {
+                            const nextRecipeId = event.target.value;
+                            if (!nextRecipeId) {
+                              resetRecipeEditor();
+                              return;
+                            }
+                            loadRecipeToEditor(nextRecipeId);
+                          }}
+                        >
+                          <option value="">Uusi resepti</option>
+                          {filteredRecipes.map((recipe) => (
+                            <option key={recipe.id} value={recipe.id}>{recipe.name}</option>
+                          ))}
+                        </Select>
+                      </div>
+                      <div className="flex gap-2">
+                        <Button type="button" variant="secondary" onClick={resetRecipeEditor}>Tyhjenna editori</Button>
+                        <Button
+                          type="button"
+                          variant="secondary"
+                          disabled={!selectedRecipeId}
+                          onClick={() => {
+                            if (selectedRecipeId) {
+                              duplicateRecipeToEditor(selectedRecipeId);
+                            }
+                          }}
+                        >
+                          Duplikoi
+                        </Button>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          disabled={!selectedRecipeId}
+                          onClick={() => void handleDeleteRecipe()}
+                        >
+                          Poista
+                        </Button>
+                      </div>
+                    </div>
+                    <div className="grid gap-3 md:grid-cols-2">
+                      <div>
+                        <Label htmlFor="recipe-search">Hae reseptia</Label>
+                        <Input
+                          id="recipe-search"
+                          placeholder="Kirjoita nimi tai kuvaus"
+                          value={recipeSearchQuery}
+                          onChange={(event) => setRecipeSearchQuery(event.target.value)}
+                        />
+                      </div>
+                      <div>
+                        <Label htmlFor="recipe-filter-meal-tag">Suodata aterian mukaan</Label>
+                        <Select
+                          id="recipe-filter-meal-tag"
+                          value={recipeFilterMealTag}
+                          onChange={(event) => setRecipeFilterMealTag(event.target.value as MealTag | "all")}
+                        >
+                          <option value="all">Kaikki ateriat</option>
+                          {mealTags.map((mealTag) => (
+                            <option key={mealTag} value={mealTag}>{mealTagLabel(mealTag)}</option>
+                          ))}
+                        </Select>
+                      </div>
+                    </div>
+                    <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-4">
+                      <p className="text-xs font-semibold tracking-[0.04em] text-[var(--text-subtle)]">Viimeksi paivitetyt</p>
+                      <div className="mt-3 flex flex-wrap gap-2">
+                        {recentRecipes.length > 0 ? recentRecipes.map((recipe) => (
+                          <div key={recipe.id} className="flex items-center gap-2 rounded-full border border-[var(--border)] bg-[var(--surface)] px-2 py-1">
+                            <button
+                              type="button"
+                              className={`rounded-full px-2 py-1 text-sm transition ${selectedRecipeId === recipe.id ? "text-[var(--text)]" : "text-[var(--text-muted)] hover:text-[var(--text)]"}`}
+                              onClick={() => loadRecipeToEditor(recipe.id)}
+                            >
+                              {recipe.name}
+                            </button>
+                            <button
+                              type="button"
+                              className="rounded-full px-2 py-1 text-xs text-[var(--text-muted)] transition hover:text-[var(--text)]"
+                              onClick={() => duplicateRecipeToEditor(recipe.id)}
+                            >
+                              Kopioi
+                            </button>
+                          </div>
+                        )) : <p className="text-sm text-[var(--text-muted)]">Ei viela resepteja.</p>}
+                      </div>
+                    </div>
+                    <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface)] px-4 py-3 text-sm text-[var(--text-muted)]">
+                      Loytyi {filteredRecipes.length} reseptia nykyisilla suodattimilla.
                     </div>
                     <div className="grid gap-3 md:grid-cols-2">
                       <div className="md:col-span-2">
@@ -878,6 +1280,70 @@ export function NutritionAdminPanel() {
                             <option key={mealTag} value={mealTag}>{mealTagLabel(mealTag)}</option>
                           ))}
                         </Select>
+                      </div>
+                      <div className="md:col-span-2 rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-4">
+                        <p className="text-sm font-semibold text-[var(--text)]">Reseptin rajoitteet ja allergeenit</p>
+                        <p className="mt-1 text-xs text-[var(--text-muted)]">Nämä tagit tekevät varoituksista tarkempia kuin pelkkä ainesosanimien tulkinta.</p>
+                        <div className="mt-4 grid gap-4 md:grid-cols-2">
+                          <div className="space-y-3">
+                            <p className="text-xs font-semibold tracking-[0.04em] text-[var(--text-subtle)]">Ruokavaliot</p>
+                            <div className="grid gap-2 sm:grid-cols-2">
+                              {dietaryFlagOptions.map((option) => (
+                                <label key={`recipe-dietary-${option}`} className="flex items-center gap-2 text-sm text-[var(--text)]">
+                                  <input
+                                    type="checkbox"
+                                    checked={recipeForm.dietaryFlags.includes(option)}
+                                    onChange={() => setRecipeForm((current) => ({
+                                      ...current,
+                                      dietaryFlags: current.dietaryFlags.includes(option)
+                                        ? current.dietaryFlags.filter((item) => item !== option)
+                                        : [...current.dietaryFlags, option],
+                                    }))}
+                                  />
+                                  <span>{option}</span>
+                                </label>
+                              ))}
+                            </div>
+                            <div>
+                              <Label htmlFor="recipe-custom-dietary-flags">Muut ruokavaliot tai rajoitteet</Label>
+                              <Input
+                                id="recipe-custom-dietary-flags"
+                                placeholder="Esim. ei sianlihaa, low FODMAP"
+                                value={recipeForm.customDietaryFlags}
+                                onChange={(event) => setRecipeForm((current) => ({ ...current, customDietaryFlags: event.target.value }))}
+                              />
+                            </div>
+                          </div>
+                          <div className="space-y-3">
+                            <p className="text-xs font-semibold tracking-[0.04em] text-[var(--text-subtle)]">Allergeenit</p>
+                            <div className="grid gap-2 sm:grid-cols-2">
+                              {allergyOptions.map((option) => (
+                                <label key={`recipe-allergy-${option}`} className="flex items-center gap-2 text-sm text-[var(--text)]">
+                                  <input
+                                    type="checkbox"
+                                    checked={recipeForm.allergies.includes(option)}
+                                    onChange={() => setRecipeForm((current) => ({
+                                      ...current,
+                                      allergies: current.allergies.includes(option)
+                                        ? current.allergies.filter((item) => item !== option)
+                                        : [...current.allergies, option],
+                                    }))}
+                                  />
+                                  <span>{option}</span>
+                                </label>
+                              ))}
+                            </div>
+                            <div>
+                              <Label htmlFor="recipe-custom-allergies">Muut allergeenit</Label>
+                              <Input
+                                id="recipe-custom-allergies"
+                                placeholder="Esim. selleri"
+                                value={recipeForm.customAllergies}
+                                onChange={(event) => setRecipeForm((current) => ({ ...current, customAllergies: event.target.value }))}
+                              />
+                            </div>
+                          </div>
+                        </div>
                       </div>
                       <div>
                         <Label htmlFor="recipe-servings">Oletusannokset</Label>
@@ -1054,10 +1520,46 @@ export function NutritionAdminPanel() {
                         </div>
                       ))}
                     </div>
-                    <Button type="button" onClick={() => void handleSaveRecipe()}>Tallenna resepti</Button>
+                    <Button type="button" onClick={() => void handleSaveRecipe()}>
+                      {selectedRecipeId ? "Paivita resepti" : "Tallenna resepti"}
+                    </Button>
                   </div>
 
                   <div className="space-y-4 rounded-3xl border border-[var(--border)] bg-[var(--surface-2)] p-4">
+                    <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-4">
+                      <p className="text-sm font-semibold text-[var(--text)]">Makroesikatselu</p>
+                      <p className="mt-1 text-sm text-[var(--text-muted)]">Lasketaan editorin nykyisista riveista. Linkita paaraaka-aineet kirjastoon, jotta makrot osuvat oikein.</p>
+                      {recipeNutritionPreview.hasIngredients && recipeNutritionPreview.nutritionPerServing ? (
+                        <div className="mt-4 space-y-4">
+                          <div className="grid gap-3 sm:grid-cols-2">
+                            <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface-2)] p-3">
+                              <p className="text-xs font-semibold tracking-[0.04em] text-[var(--text-subtle)]">Per annos</p>
+                              <p className="mt-2 text-lg font-semibold text-[var(--text)]">{recipeNutritionPreview.nutritionPerServing.kcal} kcal</p>
+                              <p className="mt-1 text-sm text-[var(--text-muted)]">
+                                P {Math.round(recipeNutritionPreview.nutritionPerServing.proteinG)} g · H {Math.round(recipeNutritionPreview.nutritionPerServing.carbsG)} g · R {Math.round(recipeNutritionPreview.nutritionPerServing.fatG)} g
+                              </p>
+                            </div>
+                            <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface-2)] p-3">
+                              <p className="text-xs font-semibold tracking-[0.04em] text-[var(--text-subtle)]">Koko resepti</p>
+                              <p className="mt-2 text-lg font-semibold text-[var(--text)]">{recipeNutritionPreview.nutritionPerRecipe?.kcal ?? 0} kcal</p>
+                              <p className="mt-1 text-sm text-[var(--text-muted)]">
+                                P {Math.round(recipeNutritionPreview.nutritionPerRecipe?.proteinG ?? 0)} g · H {Math.round(recipeNutritionPreview.nutritionPerRecipe?.carbsG ?? 0)} g · R {Math.round(recipeNutritionPreview.nutritionPerRecipe?.fatG ?? 0)} g
+                              </p>
+                            </div>
+                          </div>
+                          <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface-2)] p-3 text-sm text-[var(--text-muted)]">
+                            <p>Linkitetyt rivit: {recipeNutritionPreview.linkedIngredientCount} / {recipeNutritionPreview.totalIngredientCount}</p>
+                            {recipeNutritionPreview.unlinkedIngredientNames.length > 0 ? (
+                              <p className="mt-2">Ei viela linkitetty kirjastoon: {recipeNutritionPreview.unlinkedIngredientNames.join(", ")}</p>
+                            ) : (
+                              <p className="mt-2">Kaikki laskentaan vaikuttavat rivit ovat linkitetty kirjastoon.</p>
+                            )}
+                          </div>
+                        </div>
+                      ) : (
+                        <p className="mt-3 text-sm text-[var(--text-muted)]">Lisaa reseptille raaka-aineita, niin makroesikatselu tulee tahan automaattisesti.</p>
+                      )}
+                    </div>
                     <div>
                       <p className="text-sm font-semibold text-[var(--text)]">Editorin muistilista</p>
                       <p className="text-sm text-[var(--text-muted)]">Näillä valinnoilla reseptit pysyvät helpompina hallita ja ostaa.</p>
@@ -1166,17 +1668,81 @@ export function NutritionAdminPanel() {
                     <Input id="template-description" value={templateForm.description} onChange={(event) => setTemplateForm((current) => ({ ...current, description: event.target.value }))} />
                   </div>
                   {mealTags.map((mealTag) => (
-                    <div key={mealTag}>
-                      <Label htmlFor={`template-${mealTag}`}>{mealTagLabel(mealTag)}</Label>
-                      <Select id={`template-${mealTag}`} value={templateForm[mealTag]} onChange={(event) => setTemplateForm((current) => ({ ...current, [mealTag]: event.target.value }))}>
-                        <option value="">Ei valittu</option>
-                        {state.recipes.map((recipe) => (
-                          <option key={recipe.id} value={recipe.id}>{recipe.name}</option>
-                        ))}
-                      </Select>
+                    <div key={mealTag} className="space-y-3 rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-4">
+                      <div>
+                        <Label>{mealTagLabel(mealTag)}</Label>
+                        <p className="mt-1 text-xs text-[var(--text-muted)]">Valitse useita vaihtoehtoja saman ateriaryhman sisalle. Treenaaja voi syoda niita ristiin miten arki parhaiten toimii.</p>
+                        <p className="mt-1 text-xs font-medium text-[var(--text-subtle)]">
+                          {mealSlotKcalGuidance(mealTag, displayedTargetKcal)
+                            ? `Tyypillinen haarukka noin ${mealSlotKcalGuidance(mealTag, displayedTargetKcal)}`
+                            : "Lisaa tai valitse treenaajalle kcal-tavoite, niin nakymaan tulee suuntaa-antava haarukka."}
+                        </p>
+                      </div>
+                      <div className="grid gap-3 sm:grid-cols-2">
+                        {recipesByMealTag[mealTag].length > 0 ? recipesByMealTag[mealTag].map((recipe) => {
+                          const isSelected = templateForm[mealTag].includes(recipe.id);
+                          const nutrition = recipe.nutritionPerServing ?? calculateRecipeNutrition(recipe, state.ingredientsCatalog).nutritionPerServing;
+                          return (
+                            <button
+                              key={recipe.id}
+                              type="button"
+                              className={`rounded-2xl border p-3 text-left transition ${isSelected ? "border-[var(--border-strong)] bg-[var(--surface-2)] text-[var(--text)] shadow-[0_0_0_1px_var(--border-strong)]" : "border-[var(--border)] bg-[var(--surface)] text-[var(--text-muted)] hover:border-[var(--border-strong)] hover:text-[var(--text)]"}`}
+                              onClick={() => setTemplateForm((current) => ({
+                                ...current,
+                                [mealTag]: current[mealTag].includes(recipe.id)
+                                  ? current[mealTag].filter((item) => item !== recipe.id)
+                                  : [...current[mealTag], recipe.id],
+                              }))}
+                              aria-pressed={isSelected}
+                            >
+                              <div className="flex items-start justify-between gap-3">
+                                <div>
+                                  <p className="font-medium text-[var(--text)]">{recipe.name}</p>
+                                  {recipe.description ? (
+                                    <p className="mt-1 line-clamp-2 text-xs text-[var(--text-muted)]">{recipe.description}</p>
+                                  ) : null}
+                                </div>
+                                <Badge className={isSelected ? "border-[var(--border-strong)] bg-[var(--surface-3)] text-[var(--text)]" : undefined}>
+                                  {isSelected ? "Valittu" : "Valitse"}
+                                </Badge>
+                              </div>
+                              <div className="mt-3 grid grid-cols-4 gap-2 rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-2 text-center">
+                                <div>
+                                  <p className="text-[11px] uppercase tracking-[0.18em] text-[var(--text-subtle)]">kcal</p>
+                                  <p className="mt-1 text-sm font-semibold text-[var(--text)]">{formatRecipeMacroValue(nutrition?.kcal)}</p>
+                                </div>
+                                <div>
+                                  <p className="text-[11px] uppercase tracking-[0.18em] text-[var(--text-subtle)]">P</p>
+                                  <p className="mt-1 text-sm font-semibold text-[var(--text)]">{formatRecipeMacroValue(nutrition?.proteinG)} g</p>
+                                </div>
+                                <div>
+                                  <p className="text-[11px] uppercase tracking-[0.18em] text-[var(--text-subtle)]">H</p>
+                                  <p className="mt-1 text-sm font-semibold text-[var(--text)]">{formatRecipeMacroValue(nutrition?.carbsG)} g</p>
+                                </div>
+                                <div>
+                                  <p className="text-[11px] uppercase tracking-[0.18em] text-[var(--text-subtle)]">R</p>
+                                  <p className="mt-1 text-sm font-semibold text-[var(--text)]">{formatRecipeMacroValue(nutrition?.fatG)} g</p>
+                                </div>
+                              </div>
+                            </button>
+                          );
+                        }) : <p className="text-sm text-[var(--text-muted)]">Tassa kategoriassa ei ole viela resepteja.</p>}
+                      </div>
+                      <p className="text-xs text-[var(--text-muted)]">Valittuna {templateForm[mealTag].length} vaihtoehtoa.</p>
                     </div>
                   ))}
-                  <Button type="button" onClick={() => void handleSaveTemplate()}>Tallenna ateriapohja</Button>
+                  <div className="space-y-2">
+                    {missingMealTags.length > 0 ? (
+                      <div className="rounded-2xl border border-[color:color-mix(in_srgb,var(--warning)_35%,var(--border))] bg-[color:color-mix(in_srgb,var(--warning)_12%,var(--surface))] px-4 py-3 text-sm text-[var(--warning)]">
+                        Ateriapohjasta puuttuu vielä: {missingMealTags.map((mealTag) => mealTagLabel(mealTag)).join(", ")}. Voit silti tallentaa luonnoksen jo nyt.
+                      </div>
+                    ) : (
+                      <div className="rounded-2xl border border-[color:color-mix(in_srgb,var(--success)_35%,var(--border))] bg-[color:color-mix(in_srgb,var(--success)_12%,var(--surface))] px-4 py-3 text-sm text-[var(--success)]">
+                        Kaikki ateriaryhmät on täytetty. Pohja on valmis tallennettavaksi.
+                      </div>
+                    )}
+                    <Button type="button" onClick={() => void handleSaveTemplate()}>Tallenna ateriapohja</Button>
+                  </div>
                 </div>
               </div>
 
@@ -1211,6 +1777,115 @@ export function NutritionAdminPanel() {
                       <Badge key={template.id}>{template.name}</Badge>
                     )) : <p className="text-sm text-[var(--text-muted)]">Ei vielä tallennettuja ateriapohjia.</p>}
                   </div>
+                </div>
+
+                <div className="rounded-3xl border border-[var(--border)] bg-[var(--surface-2)] p-4">
+                  <p className="text-sm font-semibold text-[var(--text)]">Treenaajan esikatselu</p>
+                  <p className="mt-1 text-sm text-[var(--text-muted)]">
+                    Näin nykyinen luonnos näkyisi käyttäjälle ateriaryhmittäin vaihtoehtoina.
+                  </p>
+
+                  {selectedTemplatePreview.length > 0 ? (
+                    <div className="mt-4 space-y-4">
+                      <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-4">
+                        <p className="text-sm font-semibold text-[var(--text)]">
+                          {templateForm.name.trim() || "Luonnos ilman nimeä"}
+                        </p>
+                        <p className="mt-1 text-sm text-[var(--text-muted)]">
+                          {templateForm.description.trim() || "Ateriapohja näyttää vaihtoehdot per ateriaryhmä. Käyttäjä voi valita arkeen sopivat vaihtoehdot ilman että kaikki listatut annokset kuuluvat samaan päivään."}
+                        </p>
+                      </div>
+
+                      <div className="grid gap-3 sm:grid-cols-3">
+                        <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-4">
+                          <p className="text-xs font-semibold tracking-[0.04em] text-[var(--text-subtle)]">Vaihtoehtoja yhteensä</p>
+                          <p className="mt-2 text-2xl font-semibold text-[var(--text)]">{templatePreviewRecipeCount}</p>
+                          <p className="mt-1 text-sm text-[var(--text-muted)]">reseptiä luonnoksessa</p>
+                        </div>
+                        <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-4">
+                          <p className="text-xs font-semibold tracking-[0.04em] text-[var(--text-subtle)]">Täytetyt ateriaryhmät</p>
+                          <p className="mt-2 text-2xl font-semibold text-[var(--text)]">{filledMealTags.length} / {mealTags.length}</p>
+                          <p className="mt-1 text-sm text-[var(--text-muted)]">ryhmää mukana luonnoksessa</p>
+                        </div>
+                        <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-4">
+                          <p className="text-xs font-semibold tracking-[0.04em] text-[var(--text-subtle)]">Puuttuu vielä</p>
+                          <p className="mt-2 text-sm font-semibold text-[var(--text)]">
+                            {missingMealTags.length > 0 ? missingMealTags.map((mealTag) => mealTagLabel(mealTag)).join(", ") : "Ei puuttuvia ryhmiä"}
+                          </p>
+                        </div>
+                      </div>
+
+                      {mealTags.map((mealTag) => {
+                        const items = groupedTemplatePreview[mealTag] ?? [];
+                        if (items.length === 0) {
+                          return null;
+                        }
+
+                        const slotGuidance = mealSlotKcalGuidance(mealTag, displayedTargetKcal);
+                        return (
+                          <div key={`preview-${mealTag}`} className="rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-4">
+                            <div className="flex items-start justify-between gap-4">
+                              <div>
+                                <p className="text-xs font-semibold tracking-[0.04em] text-[var(--text-subtle)]">{mealTagLabel(mealTag)}</p>
+                                <p className="mt-1 text-sm text-[var(--text-muted)]">
+                                  {slotGuidance ? `Tyypillinen haarukka: ${slotGuidance}` : "Valitse tilanteeseen sopiva vaihtoehto."}
+                                </p>
+                              </div>
+                              <div className="text-right text-sm text-[var(--text-muted)]">
+                                <p>{items.length} vaihtoehtoa</p>
+                              </div>
+                            </div>
+
+                            <div className="mt-4 grid gap-3">
+                              {items.map((item) => {
+                                const nutrition = item.recipe.nutritionPerServing ?? calculateRecipeNutrition(item.recipe, state.ingredientsCatalog).nutritionPerServing;
+                                const compatibilityAlerts = getRecipeCompatibilityAlerts(item.recipe, previewCompatibilityProfile);
+                                return (
+                                  <div key={`preview-${mealTag}-${item.recipe.id}`} className="rounded-2xl border border-[var(--border)] bg-[var(--surface-2)] p-4">
+                                    <div className="flex items-start justify-between gap-4">
+                                      <div>
+                                        <p className="text-lg font-semibold text-[var(--text)]">{item.recipe.name}</p>
+                                        <p className="mt-1 text-sm text-[var(--text-muted)]">
+                                          {item.recipe.description ?? "Valmis ateriasuositus tämän ateriaryhmän sisälle."}
+                                        </p>
+                                      </div>
+                                      <div className="text-right text-sm text-[var(--text-muted)]">
+                                        <p>{formatRecipeMacroValue(nutrition?.kcal)} kcal</p>
+                                        <p>P {formatRecipeMacroValue(nutrition?.proteinG)} g</p>
+                                        <p>H {formatRecipeMacroValue(nutrition?.carbsG)} g</p>
+                                        <p>R {formatRecipeMacroValue(nutrition?.fatG)} g</p>
+                                      </div>
+                                    </div>
+                                    {compatibilityAlerts.length > 0 ? (
+                                      <div className="mt-3 rounded-2xl border border-[color:color-mix(in_srgb,var(--warning)_35%,var(--border))] bg-[color:color-mix(in_srgb,var(--warning)_12%,var(--surface))] p-3 text-sm text-[var(--warning)]">
+                                        {compatibilityAlerts.map((alert) => (
+                                          <p key={`preview-${item.recipe.id}-${alert.key}`}>
+                                            {alert.label}: {alert.matchedIngredients.join(", ")}
+                                          </p>
+                                        ))}
+                                      </div>
+                                    ) : null}
+                                    <div className="mt-3 border-t border-[var(--border)] pt-3">
+                                      <p className="text-xs font-semibold tracking-[0.04em] text-[var(--text-subtle)]">Ohjeet</p>
+                                      <ol className="mt-1 list-decimal space-y-1 pl-4 text-sm text-[var(--text-muted)]">
+                                        {splitRecipeInstructions(item.recipe.instructions).map((step, index) => (
+                                          <li key={`preview-${item.recipe.id}-step-${index}`}>{step}</li>
+                                        ))}
+                                      </ol>
+                                    </div>
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  ) : (
+                    <div className="mt-4 rounded-2xl border border-dashed border-[var(--border-strong)] bg-[var(--surface)] px-4 py-5 text-sm text-[var(--text-muted)]">
+                      Valitse reseptejä ateriaryhmiin, niin esikatselu näyttää heti miltä pohja näkyy treenaajalle.
+                    </div>
+                  )}
                 </div>
               </div>
             </section>

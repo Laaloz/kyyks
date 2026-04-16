@@ -32,6 +32,8 @@ import { getVisiblePendingInvites } from "@/lib/invite-status";
 import {
   assignMealPlan,
   calculateMacroTarget,
+  recipeUsageSummary,
+  removeRecipe,
   upsertIngredient,
   upsertMealPlanTemplate,
   upsertNutritionProfile,
@@ -2170,6 +2172,7 @@ interface AppStateContextValue {
   saveNutritionProfile: (input: NutritionProfileInput) => Promise<ActionResult>;
   saveIngredient: (input: IngredientInput) => Promise<ActionResult>;
   saveRecipe: (input: RecipeInput) => Promise<ActionResult>;
+  deleteRecipe: (recipeId: string) => Promise<ActionResult>;
   saveMealPlanTemplate: (input: MealPlanTemplateInput) => Promise<ActionResult>;
   assignMealPlanTemplate: (input: AssignedMealPlanInput) => Promise<ActionResult>;
   requestCurrentUserPasswordReset: () => Promise<PasswordResetRequestResult>;
@@ -3837,12 +3840,16 @@ function findResolvedUserIdInSnapshot(
         return { ok: true };
       },
       async saveNutritionProfile(input) {
-        if (!currentUser || currentUser.role !== "admin") {
-          return { ok: false, message: "Vain admin voi hallita ravintoprofiileja." };
+        if (!currentUser || !canActAsCoach(currentUser.role)) {
+          return { ok: false, message: "Vain admin tai valmentaja voi hallita ravintoprofiileja." };
         }
 
         if (!state.users.some((user) => user.id === input.userId && isAthleteRole(user.role))) {
           return { ok: false, message: "Valitse aktiivinen treenaaja ravintoprofiilille." };
+        }
+
+        if (!isAdminRole(currentUser.role) && !canCoachManageAthlete(state, currentUser.id, input.userId)) {
+          return { ok: false, message: "Voit hallita vain omien valmennettaviesi ravintoprofiileja." };
         }
 
         if (supabase) {
@@ -3887,8 +3894,8 @@ function findResolvedUserIdInSnapshot(
         return { ok: true };
       },
       async saveRecipe(input) {
-        if (!currentUser || currentUser.role !== "admin") {
-          return { ok: false, message: "Vain admin voi hallita reseptejä." };
+        if (!currentUser || !canActAsCoach(currentUser.role)) {
+          return { ok: false, message: "Vain admin tai valmentaja voi hallita reseptejä." };
         }
 
         if (supabase) {
@@ -3909,9 +3916,33 @@ function findResolvedUserIdInSnapshot(
         setState((previous) => upsertRecipe(previous, currentUser.id, input));
         return { ok: true };
       },
+      async deleteRecipe(recipeId) {
+        if (!currentUser || !canActAsCoach(currentUser.role)) {
+          return { ok: false, message: "Vain admin tai valmentaja voi hallita reseptejä." };
+        }
+
+        const usage = recipeUsageSummary(stateRef.current, recipeId);
+        if (usage.inUse) {
+          return { ok: false, message: "Resepti on käytössä ateriapohjassa tai jaetussa suunnitelmassa, joten sitä ei voi poistaa." };
+        }
+
+        if (supabase) {
+          const response = await fetch(`/api/nutrition/recipes?id=${encodeURIComponent(recipeId)}`, {
+            method: "DELETE",
+          });
+          const payload = (await response.json().catch(() => null)) as { message?: string } | null;
+          if (!response.ok) {
+            await refreshSupabaseVisibleState();
+            return { ok: false, message: payload?.message ?? "Reseptin poistaminen epäonnistui." };
+          }
+        }
+
+        setState((previous) => removeRecipe(previous, recipeId));
+        return { ok: true };
+      },
       async saveMealPlanTemplate(input) {
-        if (!currentUser || currentUser.role !== "admin") {
-          return { ok: false, message: "Vain admin voi hallita ateriapohjia." };
+        if (!currentUser || !canActAsCoach(currentUser.role)) {
+          return { ok: false, message: "Vain admin tai valmentaja voi hallita ateriapohjia." };
         }
 
         if (supabase) {
@@ -3933,8 +3964,12 @@ function findResolvedUserIdInSnapshot(
         return { ok: true };
       },
       async assignMealPlanTemplate(input) {
-        if (!currentUser || currentUser.role !== "admin") {
-          return { ok: false, message: "Vain admin voi jakaa ateriapohjia." };
+        if (!currentUser || !canActAsCoach(currentUser.role)) {
+          return { ok: false, message: "Vain admin tai valmentaja voi jakaa ateriapohjia." };
+        }
+
+        if (!isAdminRole(currentUser.role) && !canCoachManageAthlete(state, currentUser.id, input.athleteId)) {
+          return { ok: false, message: "Voit jakaa ateriapohjia vain omille valmennettavillesi." };
         }
 
         if (supabase) {

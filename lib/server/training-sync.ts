@@ -224,6 +224,8 @@ type RecipeRow = {
   description: string | null;
   instructions: string;
   meal_tag: Recipe["mealTag"];
+  dietary_flags: string[] | null;
+  allergies: string[] | null;
   owner_role: Recipe["ownerRole"];
   created_by: string;
   default_servings: number;
@@ -534,7 +536,7 @@ export async function loadVisibleSupabaseAppState(
     mode === "full"
       ? supabase
           .from("recipes")
-          .select("id, name, description, instructions, meal_tag, owner_role, created_by, default_servings, min_servings, max_servings, created_at, updated_at")
+          .select("id, name, description, instructions, meal_tag, dietary_flags, allergies, owner_role, created_by, default_servings, min_servings, max_servings, created_at, updated_at")
           .order("updated_at", { ascending: false })
       : Promise.resolve({ data: [] as RecipeRow[], error: null }),
     mode === "full"
@@ -681,6 +683,8 @@ export async function loadVisibleSupabaseAppState(
     description: entry.description ?? undefined,
     instructions: entry.instructions,
     mealTag: entry.meal_tag,
+    dietaryFlags: entry.dietary_flags ?? [],
+    allergies: entry.allergies ?? [],
     ownerRole: entry.owner_role,
     createdBy: entry.created_by,
     defaultServings: entry.default_servings,

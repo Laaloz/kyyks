@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 
 import { mealPlanTemplateSchema } from "@/components/workout/schemas";
 import {
-  ensureAdminRequester,
+  ensureNutritionManagerRequester,
   getNutritionRequester,
   saveMealPlanTemplateOnServer,
 } from "@/lib/server/nutrition";
@@ -41,7 +41,7 @@ async function saveMealPlanTemplate(request: Request) {
     return requesterResult.error;
   }
 
-  const forbidden = ensureAdminRequester(requesterResult.requester);
+  const forbidden = ensureNutritionManagerRequester(requesterResult.requester);
   if (forbidden) {
     return forbidden;
   }

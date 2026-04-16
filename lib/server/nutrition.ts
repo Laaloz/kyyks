@@ -1,5 +1,7 @@
 import "server-only";
 
+import { resolveRecipeIngredientNormalizedQuantity } from "@/lib/nutrition";
+import { canActAsCoach } from "@/lib/role-access";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import type {
   AssignedMealPlanInput,
@@ -56,7 +58,43 @@ export function ensureAdminRequester(requester: Requester) {
   return null;
 }
 
+export function ensureNutritionManagerRequester(requester: Requester) {
+  if (!canActAsCoach(requester.role)) {
+    return Response.json({ message: "Vain admin tai valmentaja voi muokata ravintosisältöä." }, { status: 403 });
+  }
+
+  return null;
+}
+
+async function canRequesterManageAthlete(requester: Requester, athleteId: string) {
+  if (requester.role === "admin") {
+    return true;
+  }
+
+  const supabase = await createSupabaseServerClient();
+  if (!supabase) {
+    return false;
+  }
+
+  const { count, error } = await supabase
+    .from("coach_athlete_assignments")
+    .select("id", { count: "exact", head: true })
+    .eq("coach_id", requester.id)
+    .eq("athlete_id", athleteId)
+    .eq("active", true);
+
+  if (error) {
+    return false;
+  }
+
+  return (count ?? 0) > 0;
+}
+
 export async function saveNutritionProfileOnServer(requester: Requester, input: NutritionProfileInput) {
+  if (!(await canRequesterManageAthlete(requester, input.userId))) {
+    return { ok: false as const, message: "Voit hallita vain omien valmennettaviesi ravintoprofiileja." };
+  }
+
   const supabase = await createSupabaseServerClient();
   if (!supabase) {
     return { ok: false as const, message: "Supabase ei ole käytössä tässä ympäristössä." };
@@ -151,6 +189,8 @@ export async function saveRecipeOnServer(requester: Requester, input: RecipeInpu
     description: input.description?.trim() || null,
     instructions: input.instructions.trim(),
     meal_tag: input.mealTag,
+    dietary_flags: input.dietaryFlags ?? [],
+    allergies: input.allergies ?? [],
     owner_role: "admin",
     created_by: requester.id,
     default_servings: input.defaultServings,
@@ -181,6 +221,27 @@ export async function saveRecipeOnServer(requester: Requester, input: RecipeInpu
     recipeId = data.id;
   }
 
+  const ingredientIds = Array.from(new Set(
+    input.ingredients
+      .map((ingredient) => ingredient.ingredientId)
+      .filter((value): value is string => Boolean(value)),
+  ));
+  const ingredientMap = new Map<string, { gramsPerUnit?: number }>();
+  if (ingredientIds.length > 0) {
+    const { data: catalogRows, error: catalogError } = await supabase
+      .from("ingredient_catalog")
+      .select("id,grams_per_unit")
+      .in("id", ingredientIds);
+
+    if (catalogError) {
+      return { ok: false as const, message: catalogError.message || "Raaka-ainekirjaston haku epäonnistui." };
+    }
+
+    for (const row of catalogRows ?? []) {
+      ingredientMap.set(row.id, { gramsPerUnit: row.grams_per_unit ?? undefined });
+    }
+  }
+
   const ingredientPayload = input.ingredients.map((ingredient, index) => ({
     recipe_id: recipeId,
     ingredient_id: ingredient.ingredientId ?? null,
@@ -189,7 +250,11 @@ export async function saveRecipeOnServer(requester: Requester, input: RecipeInpu
     unit: ingredient.unit,
     display_quantity: ingredient.displayQuantity?.trim() || null,
     display_unit: ingredient.displayUnit?.trim() || null,
-    normalized_quantity: ingredient.quantity ?? null,
+    normalized_quantity: resolveRecipeIngredientNormalizedQuantity(
+      ingredient.quantity,
+      ingredient.unit,
+      ingredient.ingredientId ? ingredientMap.get(ingredient.ingredientId) : undefined,
+    ) ?? null,
     ingredient_role: ingredient.ingredientRole,
     scaling_mode: ingredient.scalingMode,
     sort_order: index,
@@ -201,6 +266,45 @@ export async function saveRecipeOnServer(requester: Requester, input: RecipeInpu
   }
 
   return { ok: true as const, recipeId };
+}
+
+export async function deleteRecipeOnServer(recipeId: string) {
+  const supabase = await createSupabaseServerClient();
+  if (!supabase) {
+    return { ok: false as const, message: "Supabase ei ole käytössä tässä ympäristössä." };
+  }
+
+  const [{ count: templateCount, error: templateError }, { count: assignedCount, error: assignedError }] = await Promise.all([
+    supabase
+      .from("meal_plan_template_items")
+      .select("id", { count: "exact", head: true })
+      .eq("recipe_id", recipeId),
+    supabase
+      .from("assigned_meal_plan_items")
+      .select("id", { count: "exact", head: true })
+      .eq("recipe_id", recipeId),
+  ]);
+
+  if (templateError) {
+    return { ok: false as const, message: templateError.message || "Reseptin käyttöä ateriapohjissa ei voitu tarkistaa." };
+  }
+  if (assignedError) {
+    return { ok: false as const, message: assignedError.message || "Reseptin käyttöä jaetuissa pohjissa ei voitu tarkistaa." };
+  }
+
+  if ((templateCount ?? 0) > 0 || (assignedCount ?? 0) > 0) {
+    return {
+      ok: false as const,
+      message: "Resepti on käytössä ateriapohjassa tai jaetussa suunnitelmassa, joten sitä ei voi poistaa.",
+    };
+  }
+
+  const { error } = await supabase.from("recipes").delete().eq("id", recipeId);
+  if (error) {
+    return { ok: false as const, message: error.message || "Reseptin poistaminen epäonnistui." };
+  }
+
+  return { ok: true as const };
 }
 
 export async function saveMealPlanTemplateOnServer(requester: Requester, input: MealPlanTemplateInput) {
@@ -256,6 +360,10 @@ export async function saveMealPlanTemplateOnServer(requester: Requester, input: 
 }
 
 export async function assignMealPlanOnServer(requester: Requester, input: AssignedMealPlanInput) {
+  if (!(await canRequesterManageAthlete(requester, input.athleteId))) {
+    return { ok: false as const, message: "Voit jakaa ateriapohjia vain omille valmennettavillesi." };
+  }
+
   const supabase = await createSupabaseServerClient();
   if (!supabase) {
     return { ok: false as const, message: "Supabase ei ole käytössä tässä ympäristössä." };

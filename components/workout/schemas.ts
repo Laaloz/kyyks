@@ -96,6 +96,8 @@ export const recipeSchema = z.object({
   description: z.string().max(280).optional(),
   instructions: z.string().trim().min(8, "Kirjoita valmistusohje."),
   mealTag: z.enum(["breakfast", "lunch", "snack", "dinner", "evening_snack"]),
+  dietaryFlags: z.array(z.string()).default([]),
+  allergies: z.array(z.string()).default([]),
   defaultServings: z.coerce.number().min(1).max(20),
   minServings: z.coerce.number().min(1).max(20),
   maxServings: z.coerce.number().min(1).max(20),

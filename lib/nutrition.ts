@@ -5,6 +5,7 @@ import type {
   AppState,
   Ingredient,
   IngredientInput,
+  IngredientUnit,
   IngredientScalingMode,
   MacroTarget,
   MealPlanTemplate,
@@ -33,6 +34,13 @@ export type PersonalNutritionGoalComparison = {
   isEstimate: boolean;
   hasNutritionProfile: boolean;
   calculationMode?: NutritionProfile["calculationMode"];
+};
+
+export type RecipeCompatibilityAlert = {
+  key: string;
+  category: "allergy" | "dietary";
+  label: string;
+  matchedIngredients: string[];
 };
 
 function nowIso() {
@@ -73,6 +81,14 @@ export function joinRecipeInstructionSteps(steps: string[]) {
 
 function roundNutrition(value: number) {
   return Math.round(value * 10) / 10;
+}
+
+function normalizeFoodText(value: string) {
+  return value
+    .trim()
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "");
 }
 
 export function mealTagLabel(mealTag: MealTag) {
@@ -329,6 +345,22 @@ export function scaleRecipeIngredient(
   };
 }
 
+export function resolveRecipeIngredientNormalizedQuantity(
+  quantity: number | undefined,
+  unit: IngredientUnit,
+  ingredient?: Pick<Ingredient, "gramsPerUnit">,
+) {
+  if (quantity === undefined) {
+    return undefined;
+  }
+
+  if (unit === "pcs" && ingredient?.gramsPerUnit) {
+    return roundNutrition(quantity * ingredient.gramsPerUnit);
+  }
+
+  return quantity;
+}
+
 export function calculateRecipeNutrition(
   recipe: Pick<Recipe, "defaultServings" | "ingredients">,
   ingredients: Ingredient[],
@@ -368,6 +400,79 @@ export function calculateRecipeNutrition(
       fatG: roundNutrition(totals.fatG / servings),
     },
   };
+}
+
+function findMatchedIngredientNames(ingredientNames: string[], keywords: readonly string[]) {
+  const normalizedKeywords = keywords.map((keyword) => normalizeFoodText(keyword));
+  return ingredientNames.filter((ingredientName) =>
+    normalizedKeywords.some((keyword) => ingredientName.includes(keyword)),
+  );
+}
+
+export function getRecipeCompatibilityAlerts(
+  recipe: Pick<Recipe, "ingredients" | "dietaryFlags" | "allergies">,
+  profile?: Pick<NutritionProfile, "dietaryFlags" | "allergies"> | null,
+) {
+  if (!profile) {
+    return [] as RecipeCompatibilityAlert[];
+  }
+
+  const ingredientNames = recipe.ingredients
+    .map((ingredient) => normalizeFoodText(ingredient.ingredientName))
+    .filter(Boolean);
+
+  if (ingredientNames.length === 0) {
+    return [] as RecipeCompatibilityAlert[];
+  }
+
+  const alerts: RecipeCompatibilityAlert[] = [];
+  const explicitAllergies = new Set(recipe.allergies ?? []);
+  const explicitDietaryFlags = new Set(recipe.dietaryFlags ?? []);
+
+  const allergyRules: Record<string, readonly string[]> = {
+    maito: ["maito", "juusto", "jogurtti", "rahka", "raejuusto", "tuorejuusto", "kerma", "mozzarella", "feta", "parmesan", "skyr"],
+    kananmuna: ["kananmuna", "muna", "valkuainen"],
+    kala: ["kala", "lohi", "tonnikala"],
+    äyriäiset: ["ayriainen", "katkarapu", "rapu", "shrimp"],
+    pähkinä: ["pahkina", "manteli", "cashew", "maapahkina", "pekaanipahkina", "saksanpahkina"],
+    soija: ["soija", "tofu", "soijakastike"],
+    seesami: ["seesami", "tahini"],
+  };
+
+  for (const allergy of profile.allergies ?? []) {
+    const matchedIngredients = findMatchedIngredientNames(ingredientNames, allergyRules[allergy] ?? [allergy]);
+    if (explicitAllergies.has(allergy) || matchedIngredients.length > 0) {
+      alerts.push({
+        key: `allergy-${allergy}`,
+        category: "allergy",
+        label: `Mahdollinen allergeeniriski: ${allergy}`,
+        matchedIngredients: matchedIngredients.length > 0 ? matchedIngredients : [allergy],
+      });
+    }
+  }
+
+  const dietaryRules: Record<string, readonly string[]> = {
+    laktoositon: ["maito", "jogurtti", "rahka", "raejuusto", "tuorejuusto", "kerma", "skyr"],
+    maidoton: ["maito", "juusto", "jogurtti", "rahka", "raejuusto", "tuorejuusto", "kerma", "mozzarella", "feta", "parmesan", "skyr"],
+    gluteeniton: ["pasta", "spaghetti", "makaroni", "tortilla", "leipa", "ruisleipa", "mysli", "granola", "couscous"],
+    kasvis: ["kana", "broileri", "kalkkuna", "jauheliha", "nauta", "liha", "lohi", "tonnikala", "kala"],
+    vegaaninen: ["kana", "broileri", "kalkkuna", "jauheliha", "nauta", "liha", "lohi", "tonnikala", "kala", "kananmuna", "muna", "maito", "juusto", "jogurtti", "rahka", "raejuusto", "tuorejuusto", "kerma", "hunaja"],
+    halal: ["kinkku", "pekoni", "bacon", "porsas", "sika", "salami"],
+  };
+
+  for (const flag of profile.dietaryFlags ?? []) {
+    const matchedIngredients = findMatchedIngredientNames(ingredientNames, dietaryRules[flag] ?? []);
+    if (explicitDietaryFlags.has(flag) || matchedIngredients.length > 0) {
+      alerts.push({
+        key: `dietary-${flag}`,
+        category: "dietary",
+        label: `Mahdollinen ristiriita ruokavalion kanssa: ${flag}`,
+        matchedIngredients: matchedIngredients.length > 0 ? matchedIngredients : [flag],
+      });
+    }
+  }
+
+  return alerts;
 }
 
 export function upsertNutritionProfile(
@@ -467,23 +572,30 @@ export function upsertRecipe(state: AppState, actorId: string, input: RecipeInpu
     description: input.description?.trim() || undefined,
     instructions: input.instructions.trim(),
     mealTag: input.mealTag,
+    dietaryFlags: input.dietaryFlags ?? current?.dietaryFlags ?? [],
+    allergies: input.allergies ?? current?.allergies ?? [],
     ownerRole: "admin",
     createdBy: current?.createdBy ?? actorId,
     defaultServings: input.defaultServings,
     minServings: input.minServings,
     maxServings: input.maxServings,
-    ingredients: input.ingredients.map((ingredient) => ({
-      id: makeId("recipe_ingredient"),
-      ingredientId: ingredient.ingredientId,
-      ingredientName: ingredient.ingredientName?.trim() || "",
-      quantity: ingredient.quantity,
-      unit: ingredient.unit,
-      displayQuantity: ingredient.displayQuantity?.trim() || undefined,
-      displayUnit: ingredient.displayUnit?.trim() || undefined,
-      normalizedQuantity: ingredient.quantity,
-      ingredientRole: ingredient.ingredientRole,
-      scalingMode: ingredient.scalingMode,
-    })),
+    ingredients: input.ingredients.map((ingredient) => {
+      const catalogIngredient = ingredient.ingredientId
+        ? state.ingredientsCatalog.find((item) => item.id === ingredient.ingredientId)
+        : undefined;
+      return {
+        id: makeId("recipe_ingredient"),
+        ingredientId: ingredient.ingredientId,
+        ingredientName: ingredient.ingredientName?.trim() || "",
+        quantity: ingredient.quantity,
+        unit: ingredient.unit,
+        displayQuantity: ingredient.displayQuantity?.trim() || undefined,
+        displayUnit: ingredient.displayUnit?.trim() || undefined,
+        normalizedQuantity: resolveRecipeIngredientNormalizedQuantity(ingredient.quantity, ingredient.unit, catalogIngredient),
+        ingredientRole: ingredient.ingredientRole,
+        scalingMode: ingredient.scalingMode,
+      };
+    }),
     createdAt: current?.createdAt ?? timestamp,
     updatedAt: timestamp,
   };
@@ -498,6 +610,28 @@ export function upsertRecipe(state: AppState, actorId: string, input: RecipeInpu
     recipes: current
       ? state.recipes.map((recipe) => (recipe.id === current.id ? nextRecipe : recipe))
       : [nextRecipe, ...state.recipes],
+  };
+}
+
+export function recipeUsageSummary(state: AppState, recipeId: string) {
+  const templateCount = state.mealPlanTemplates.filter((template) =>
+    template.items.some((item) => item.recipeId === recipeId),
+  ).length;
+  const assignedPlanCount = state.assignedMealPlans.filter((plan) =>
+    plan.items.some((item) => item.recipeId === recipeId),
+  ).length;
+
+  return {
+    templateCount,
+    assignedPlanCount,
+    inUse: templateCount > 0 || assignedPlanCount > 0,
+  };
+}
+
+export function removeRecipe(state: AppState, recipeId: string) {
+  return {
+    ...state,
+    recipes: state.recipes.filter((recipe) => recipe.id !== recipeId),
   };
 }
 

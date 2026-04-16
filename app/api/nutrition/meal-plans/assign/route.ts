@@ -3,7 +3,7 @@ import { NextResponse } from "next/server";
 import { assignedMealPlanSchema } from "@/components/workout/schemas";
 import {
   assignMealPlanOnServer,
-  ensureAdminRequester,
+  ensureNutritionManagerRequester,
   getNutritionRequester,
 } from "@/lib/server/nutrition";
 
@@ -13,7 +13,7 @@ export async function POST(request: Request) {
     return requesterResult.error;
   }
 
-  const forbidden = ensureAdminRequester(requesterResult.requester);
+  const forbidden = ensureNutritionManagerRequester(requesterResult.requester);
   if (forbidden) {
     return forbidden;
   }
