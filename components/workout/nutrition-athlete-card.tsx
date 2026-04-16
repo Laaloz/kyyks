@@ -1,5 +1,6 @@
 "use client";
 
+import { ChevronDown, Minus, Plus } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 
 import { Button } from "@/components/ui/button";
@@ -192,48 +193,48 @@ function RecipeDetailDialog({
                   Lisää tai vähennä annoksia sen mukaan paljonko haluat valmistaa kerralla.
                 </p>
               </div>
-              <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-2">
-                <p className="px-2 text-xs font-semibold tracking-[0.04em] text-[var(--text-subtle)]">Annoksia</p>
-                <div className="mt-2 flex items-center gap-2">
+              <div className="w-full rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-3 sm:w-auto sm:min-w-[15rem]">
+                <div className="flex items-center justify-between gap-3 rounded-xl border border-[var(--border)] bg-[var(--surface-2)] px-2 py-2">
                   <Button
                     type="button"
                     variant="secondary"
-                    className="min-h-11 min-w-11 px-0 text-lg"
+                    className="size-11 shrink-0 rounded-xl border border-[var(--border)] bg-[var(--surface)] px-0 text-lg"
                     onClick={onDecreaseServings}
                     aria-label="Vähennä annoksia"
                   >
-                    -
+                    <Minus className="size-4" aria-hidden="true" />
                   </Button>
-                  <div className="min-w-[5.5rem] rounded-xl border border-[var(--border)] bg-[var(--surface-2)] px-4 py-3 text-center">
-                    <p className="text-lg font-semibold text-[var(--text)]">{selectedServings}</p>
+                  <div className="flex min-w-0 flex-1 flex-col items-center justify-center text-center">
+                    <p className="text-[11px] font-semibold tracking-[0.06em] text-[var(--text-subtle)]">ANNOKSIA</p>
+                    <p className="mt-1 text-2xl font-semibold text-[var(--text)]">{selectedServings}</p>
                   </div>
                   <Button
                     type="button"
                     variant="secondary"
-                    className="min-h-11 min-w-11 px-0 text-lg"
+                    className="size-11 shrink-0 rounded-xl border border-[var(--border)] bg-[var(--surface)] px-0 text-lg"
                     onClick={onIncreaseServings}
                     aria-label="Lisää annoksia"
                   >
-                    +
+                    <Plus className="size-4" aria-hidden="true" />
                   </Button>
                 </div>
               </div>
             </div>
 
             <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-4">
-              <div>
+              <div className="rounded-xl border border-[var(--border)] bg-[var(--surface)] px-3 py-3">
                 <p className="text-xs font-semibold tracking-[0.04em] text-[var(--text-subtle)]">Koko satsi</p>
                 <p className="mt-1 text-lg font-semibold text-[var(--text)]">{batchNutrition.kcal} kcal</p>
               </div>
-              <div>
+              <div className="rounded-xl border border-[var(--border)] bg-[var(--surface)] px-3 py-3">
                 <p className="text-xs font-semibold tracking-[0.04em] text-[var(--text-subtle)]">Proteiini</p>
                 <p className="mt-1 text-lg font-semibold text-[var(--text)]">{Math.round(batchNutrition.proteinG)} g</p>
               </div>
-              <div>
+              <div className="rounded-xl border border-[var(--border)] bg-[var(--surface)] px-3 py-3">
                 <p className="text-xs font-semibold tracking-[0.04em] text-[var(--text-subtle)]">Hiilarit</p>
                 <p className="mt-1 text-lg font-semibold text-[var(--text)]">{Math.round(batchNutrition.carbsG)} g</p>
               </div>
-              <div>
+              <div className="rounded-xl border border-[var(--border)] bg-[var(--surface)] px-3 py-3">
                 <p className="text-xs font-semibold tracking-[0.04em] text-[var(--text-subtle)]">Rasva</p>
                 <p className="mt-1 text-lg font-semibold text-[var(--text)]">{Math.round(batchNutrition.fatG)} g</p>
               </div>

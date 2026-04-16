@@ -11,10 +11,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardDescription, CardTitle } from "@/components/ui/card";
 import { Input, Label, Select } from "@/components/ui/field";
-import { NutritionAdminPanel } from "@/components/workout/nutrition-admin-panel";
-import { NutritionAthleteCard } from "@/components/workout/nutrition-athlete-card";
 import { OwnMeasurementsCard } from "@/components/workout/own-measurements-card";
-import { PersonalNutritionSummaryCard } from "@/components/workout/personal-nutrition-summary-card";
 import { getAdminCoachingCoverage, getAdminOverviewAthleteGroups } from "@/lib/admin-overview";
 import { getInviteLifecycleLabel, getVisiblePendingInvites } from "@/lib/invite-status";
 import { withMinimumDelay } from "@/lib/min-delay";
@@ -201,7 +198,6 @@ export function AdminDashboard({
 
   return (
     <div className="grid gap-6">
-      {view === "nutrition" ? <NutritionAdminPanel /> : null}
       {view === "overview" ? (
         <>
           <div
@@ -260,10 +256,6 @@ export function AdminDashboard({
                   />
                 ) : null}
                 <OwnMeasurementsCard sectionId="overview-measurements" />
-                {currentUser ? (
-                  <PersonalNutritionSummaryCard state={state} user={currentUser} onOpenSettings={onOpenSettings} />
-                ) : null}
-                {currentUser ? <NutritionAthleteCard state={state} user={currentUser} /> : null}
               </>
             ) : null}
 

@@ -1,5 +1,7 @@
 "use client";
 
+import { ChevronDown } from "lucide-react";
+
 import { Card, CardDescription, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -96,11 +98,8 @@ export function PersonalNutritionSummaryCard({
                     Makrot, vaihevertailu ja lisätiedot löytyvät täältä tarvittaessa.
                   </p>
                 </div>
-                <span className="text-xs font-semibold tracking-[0.04em] text-[var(--text-subtle)] group-open:hidden">
-                  Avaa
-                </span>
-                <span className="hidden text-xs font-semibold tracking-[0.04em] text-[var(--text-subtle)] group-open:block">
-                  Sulje
+                <span className="grid size-10 shrink-0 place-items-center rounded-full border border-[var(--border)] bg-[var(--surface-2)] text-[var(--text-subtle)] transition group-open:rotate-180">
+                  <ChevronDown className="size-4" aria-hidden="true" />
                 </span>
               </summary>
 

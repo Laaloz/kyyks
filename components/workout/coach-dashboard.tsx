@@ -26,9 +26,7 @@ import { InfoTooltip } from "@/components/ui/tooltip";
 import { ConversationPanel } from "@/components/workout/conversation-panel";
 import { InlineFeedback } from "@/components/workout/inline-feedback";
 import { MetricTrendChart } from "@/components/workout/metric-trend-chart";
-import { NutritionAthleteCard } from "@/components/workout/nutrition-athlete-card";
 import { OwnMeasurementsCard } from "@/components/workout/own-measurements-card";
-import { PersonalNutritionSummaryCard } from "@/components/workout/personal-nutrition-summary-card";
 import { CoachInvitePanel } from "@/components/workout/coach/invite-panel";
 import { ProgramWorkoutEditor } from "@/components/workout/coach/program-workout-editor";
 import {
@@ -1216,12 +1214,6 @@ export function CoachDashboard({
       ) : null}
 
       {view === "overview" ? <OwnMeasurementsCard sectionId="overview-measurements" /> : null}
-
-      {view === "overview" && currentUser ? (
-        <PersonalNutritionSummaryCard state={state} user={currentUser} onOpenSettings={onOpenSettings} />
-      ) : null}
-
-      {view === "overview" && currentUser ? <NutritionAthleteCard state={state} user={currentUser} /> : null}
 
       {view === "athletes" ? (
         <CoachAthleteInsights

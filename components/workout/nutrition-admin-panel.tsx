@@ -7,6 +7,8 @@ import { Button } from "@/components/ui/button";
 import { Card, CardDescription, CardTitle } from "@/components/ui/card";
 import { Input, Label, Select, Textarea } from "@/components/ui/field";
 import { InlineFeedback } from "@/components/workout/inline-feedback";
+import { NutritionAthleteCard } from "@/components/workout/nutrition-athlete-card";
+import { PersonalNutritionSummaryCard } from "@/components/workout/personal-nutrition-summary-card";
 import { getMeasurementsForUser } from "@/lib/body-metrics";
 import { calculateMacroTarget, calculateRecipeNutrition, getMacroGoalGuidance, getMissingMacroProfileFields, getRecipeCompatibilityAlerts, joinRecipeInstructionSteps, mealTagLabel, resolveRecipeNutritionPreview, splitRecipeInstructions } from "@/lib/nutrition";
 import { canActAsCoach } from "@/lib/role-access";
@@ -176,6 +178,7 @@ type IngredientFormState = {
 
 type NutritionAdminSection = "overview" | "profiles" | "recipes" | "plans";
 type RecipeWorkspace = "recipe" | "ingredients";
+type NutritionWorkspace = "editor" | "own";
 
 const sectionMeta: Array<{
   id: NutritionAdminSection;
@@ -311,6 +314,7 @@ export function NutritionAdminPanel() {
   });
   const [activeSection, setActiveSection] = useState<NutritionAdminSection>("overview");
   const [recipeWorkspace, setRecipeWorkspace] = useState<RecipeWorkspace>("recipe");
+  const [workspaceTab, setWorkspaceTab] = useState<NutritionWorkspace>("editor");
   const [isSavingNutritionProfile, setIsSavingNutritionProfile] = useState(false);
   const [isSavingIngredient, setIsSavingIngredient] = useState(false);
   const [isSavingRecipe, setIsSavingRecipe] = useState(false);
@@ -982,7 +986,7 @@ export function NutritionAdminPanel() {
           <p className="text-xs font-semibold tracking-[0.04em] text-[var(--text-subtle)]">Ravinto</p>
           <CardTitle className="mt-2 text-2xl">Ateriapohjat ja reseptit</CardTitle>
           <CardDescription className="mt-2">
-            Rakenna reseptit ja ateriapohjat oikeista raaka-ainemääristä niin, että annossäätö, makrot ja rajoitteet pysyvät mukana.
+            Rakenna reseptit ja ateriapohjat oikeista raaka-ainemääristä niin, että annossäätö, makrot ja rajoitteet pysyvät mukana. Oma ravinto löytyy tästä samasta näkymästä ilman, että kotisivu kuormittuu turhaan.
           </CardDescription>
         </div>
 
@@ -990,40 +994,104 @@ export function NutritionAdminPanel() {
 
         <div
           role="tablist"
-          aria-label="Ravinnon admin-osiot"
-          className={`grid gap-2 rounded-[1.4rem] border border-[color-mix(in_srgb,var(--border)_88%,var(--surface))] bg-[color-mix(in_srgb,var(--surface)_80%,var(--surface-2))] p-2 ${visibleSections.length >= 4 ? "md:grid-cols-4" : "md:grid-cols-3"}`}
+          aria-label="Ravinnon työtila"
+          className="grid gap-2 rounded-[1.4rem] border border-[color-mix(in_srgb,var(--border)_88%,var(--surface))] bg-[color-mix(in_srgb,var(--surface)_80%,var(--surface-2))] p-2 md:grid-cols-2"
         >
-          {visibleSections.map((section) => {
-            const selected = activeSection === section.id;
-            return (
-              <button
-                key={section.id}
-                type="button"
-                role="tab"
-                aria-selected={selected}
-                aria-controls={`nutrition-panel-${section.id}`}
-                id={`nutrition-tab-${section.id}`}
-                tabIndex={selected ? 0 : -1}
-                className={`rounded-2xl px-4 py-3 text-left transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--background)] ${
-                  selected
-                    ? "border border-[color-mix(in_srgb,var(--accent)_24%,var(--border))] bg-[color-mix(in_srgb,var(--accent)_10%,var(--surface))] text-[var(--text)] shadow-[0_10px_24px_-20px_var(--accent)]"
-                    : "border border-transparent bg-transparent text-[var(--text-muted)] hover:border-[var(--border)] hover:bg-[var(--surface)] hover:text-[var(--text)]"
-                }`}
-                onClick={() => setActiveSection(section.id)}
-              >
-                <p className="text-sm font-semibold">{section.label}</p>
-                <p className="mt-1 text-xs text-[var(--text-subtle)]">{section.description}</p>
-              </button>
-            );
-          })}
+          <button
+            type="button"
+            role="tab"
+            aria-selected={workspaceTab === "editor"}
+            aria-controls="nutrition-workspace-editor"
+            id="nutrition-workspace-tab-editor"
+            tabIndex={workspaceTab === "editor" ? 0 : -1}
+            className={`rounded-2xl px-4 py-3 text-left transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--background)] ${
+              workspaceTab === "editor"
+                ? "border border-[color-mix(in_srgb,var(--accent)_24%,var(--border))] bg-[color-mix(in_srgb,var(--accent)_10%,var(--surface))] text-[var(--text)] shadow-[0_10px_24px_-20px_var(--accent)]"
+                : "border border-transparent bg-transparent text-[var(--text-muted)] hover:border-[var(--border)] hover:bg-[var(--surface)] hover:text-[var(--text)]"
+            }`}
+            onClick={() => setWorkspaceTab("editor")}
+          >
+            <p className="text-sm font-semibold">Editori</p>
+            <p className="mt-1 text-xs text-[var(--text-subtle)]">Muokkaa profiileja, reseptejä ja ateriapohjia itselle tai käyttäjille.</p>
+          </button>
+          <button
+            type="button"
+            role="tab"
+            aria-selected={workspaceTab === "own"}
+            aria-controls="nutrition-workspace-own"
+            id="nutrition-workspace-tab-own"
+            tabIndex={workspaceTab === "own" ? 0 : -1}
+            className={`rounded-2xl px-4 py-3 text-left transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--background)] ${
+              workspaceTab === "own"
+                ? "border border-[color-mix(in_srgb,var(--accent)_24%,var(--border))] bg-[color-mix(in_srgb,var(--accent)_10%,var(--surface))] text-[var(--text)] shadow-[0_10px_24px_-20px_var(--accent)]"
+                : "border border-transparent bg-transparent text-[var(--text-muted)] hover:border-[var(--border)] hover:bg-[var(--surface)] hover:text-[var(--text)]"
+            }`}
+            onClick={() => setWorkspaceTab("own")}
+          >
+            <p className="text-sm font-semibold">Oma ravinto</p>
+            <p className="mt-1 text-xs text-[var(--text-subtle)]">Näe oma energiasuositus ja käytössä oleva ateriapohja ilman editorin raskautta.</p>
+          </button>
         </div>
 
-        <section
-          id={`nutrition-panel-${activeSectionMeta.id}`}
-          role="tabpanel"
-          aria-labelledby={`nutrition-tab-${activeSectionMeta.id}`}
-          className="space-y-6"
-        >
+        {workspaceTab === "own" ? (
+          <section
+            id="nutrition-workspace-own"
+            role="tabpanel"
+            aria-labelledby="nutrition-workspace-tab-own"
+            className="space-y-6"
+          >
+            <PersonalNutritionSummaryCard
+              state={state}
+              user={currentUser}
+              onOpenSettings={() => {
+                setWorkspaceTab("editor");
+                setActiveSection("profiles");
+                setSelectedAthleteId(currentUser.id);
+              }}
+            />
+            <NutritionAthleteCard state={state} user={currentUser} />
+          </section>
+        ) : null}
+
+        {workspaceTab === "editor" ? (
+          <div
+            role="tablist"
+            aria-label="Ravinnon admin-osiot"
+            className={`grid gap-2 rounded-[1.4rem] border border-[color-mix(in_srgb,var(--border)_88%,var(--surface))] bg-[color-mix(in_srgb,var(--surface)_80%,var(--surface-2))] p-2 ${visibleSections.length >= 4 ? "md:grid-cols-4" : "md:grid-cols-3"}`}
+          >
+            {visibleSections.map((section) => {
+              const selected = activeSection === section.id;
+              return (
+                <button
+                  key={section.id}
+                  type="button"
+                  role="tab"
+                  aria-selected={selected}
+                  aria-controls={`nutrition-panel-${section.id}`}
+                  id={`nutrition-tab-${section.id}`}
+                  tabIndex={selected ? 0 : -1}
+                  className={`rounded-2xl px-4 py-3 text-left transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--background)] ${
+                    selected
+                      ? "border border-[color-mix(in_srgb,var(--accent)_24%,var(--border))] bg-[color-mix(in_srgb,var(--accent)_10%,var(--surface))] text-[var(--text)] shadow-[0_10px_24px_-20px_var(--accent)]"
+                      : "border border-transparent bg-transparent text-[var(--text-muted)] hover:border-[var(--border)] hover:bg-[var(--surface)] hover:text-[var(--text)]"
+                  }`}
+                  onClick={() => setActiveSection(section.id)}
+                >
+                  <p className="text-sm font-semibold">{section.label}</p>
+                  <p className="mt-1 text-xs text-[var(--text-subtle)]">{section.description}</p>
+                </button>
+              );
+            })}
+          </div>
+        ) : null}
+
+        {workspaceTab === "editor" ? (
+          <section
+            id={`nutrition-panel-${activeSectionMeta.id}`}
+            role="tabpanel"
+            aria-labelledby={`nutrition-tab-${activeSectionMeta.id}`}
+            className="space-y-6"
+          >
           {activeSection === "overview" ? (
             <>
               <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
@@ -2355,7 +2423,8 @@ export function NutritionAdminPanel() {
               </div>
             </section>
           ) : null}
-        </section>
+          </section>
+        ) : null}
       </div>
     </Card>
   );
