@@ -290,6 +290,9 @@ export function NutritionAthleteCard({
 }) {
   const nutritionProfile = state.nutritionProfiles.find((profile) => profile.userId === user.id) ?? null;
   const assignedPlan = getActiveMealPlanForAthlete(state, user.id);
+  const assignedTemplate = assignedPlan
+    ? state.mealPlanTemplates.find((template) => template.id === assignedPlan.templateId) ?? null
+    : null;
   const mealPlanRecipes = getMealPlanRecipes(state, assignedPlan);
 
   if (!nutritionProfile && !assignedPlan) {
@@ -392,7 +395,10 @@ export function NutritionAthleteCard({
           <>
             <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface-2)] p-4">
               <p className="text-sm font-semibold text-[var(--text)]">{assignedPlan.name}</p>
-              <p className="mt-1 text-sm text-[var(--text-muted)]">
+              {assignedTemplate?.description ? (
+                <p className="mt-1 text-sm text-[var(--text-muted)]">{assignedTemplate.description}</p>
+              ) : null}
+              <p className="mt-2 text-sm text-[var(--text-muted)]">
                 Valitse ensin ateriaryhmä ja selaa sen alta sopivia vaihtoehtoja. Kun napautat reseptiä, se aukeaa omaan selkeään reseptinäkymään.
               </p>
             </div>
