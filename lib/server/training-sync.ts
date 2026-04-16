@@ -274,6 +274,36 @@ type AssignedMealPlanRow = {
   updated_at: string;
 };
 
+async function fetchAllIngredientRows(supabase: ServerClient) {
+  const pageSize = 1000;
+  const allRows: IngredientRow[] = [];
+  let from = 0;
+
+  while (true) {
+    const to = from + pageSize - 1;
+    const { data, error } = await supabase
+      .from("ingredient_catalog")
+      .select("id, name, display_name, source, source_external_id, owner_role, created_by, default_purchase_unit, grams_per_unit, kcal_per_100, protein_per_100, carbs_per_100, fat_per_100, created_at, updated_at")
+      .order("name", { ascending: true })
+      .range(from, to);
+
+    if (error) {
+      throw new Error(error.message || "Ingredients haku epäonnistui.");
+    }
+
+    const rows = (data ?? []) as IngredientRow[];
+    allRows.push(...rows);
+
+    if (rows.length < pageSize) {
+      break;
+    }
+
+    from += pageSize;
+  }
+
+  return allRows;
+}
+
 export type SupabaseVisibleAppStateSnapshot = Partial<Pick<
   AppState,
   | "users"
@@ -490,6 +520,11 @@ export async function loadVisibleSupabaseAppState(
   const lite = Boolean(options?.lite);
   const mode = options?.mode ?? "full";
   const queryStartedAt = performance.now();
+  const ingredientsPromise =
+    mode === "full"
+      ? fetchAllIngredientRows(supabase).then((data) => ({ data, error: null }))
+      : Promise.resolve({ data: [] as IngredientRow[], error: null });
+
   const [
     profilesResult,
     bodyMeasurementsResult,
@@ -530,12 +565,7 @@ export async function loadVisibleSupabaseAppState(
           .select("id, user_id, goal, activity_level, meals_per_day, target_kcal, protein_g, carbs_g, fat_g, calculation_mode, coach_notes, dietary_flags, allergies, created_by, updated_by, created_at, updated_at")
           .order("updated_at", { ascending: false })
       : Promise.resolve({ data: [] as NutritionProfileRow[], error: null }),
-    mode === "full"
-      ? supabase
-          .from("ingredient_catalog")
-          .select("id, name, display_name, source, source_external_id, owner_role, created_by, default_purchase_unit, grams_per_unit, kcal_per_100, protein_per_100, carbs_per_100, fat_per_100, created_at, updated_at")
-          .order("name", { ascending: true })
-      : Promise.resolve({ data: [] as IngredientRow[], error: null }),
+    ingredientsPromise,
     mode === "full"
       ? supabase
           .from("recipes")
