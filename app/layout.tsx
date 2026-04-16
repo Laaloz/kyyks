@@ -1,14 +1,15 @@
 import type { Metadata, Viewport } from "next";
 import Script from "next/script";
 
+import { APP_SESSION_STORAGE_KEY, APP_STATE_STORAGE_KEY } from "@/lib/app-state-storage";
 import { AppStateProvider } from "@/providers/app-state-provider";
 
 import "./globals.css";
 
 const themeInitScript = `
 (() => {
-  const stateKey = "rooki-fit-state-v1";
-  const sessionKey = "rooki-fit-session-v1";
+  const stateKey = "${APP_STATE_STORAGE_KEY}";
+  const sessionKey = "${APP_SESSION_STORAGE_KEY}";
   const themeColorByTheme = {
     light: "#f3f7fc",
     dark: "#08111f",

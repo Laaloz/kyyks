@@ -87,9 +87,10 @@ import {
   useState,
   type PropsWithChildren,
 } from "react";
+import { APP_SESSION_STORAGE_KEY, APP_STATE_STORAGE_KEY } from "@/lib/app-state-storage";
 
-const STATE_KEY = "rooki-fit-state-v2";
-const SESSION_KEY = "rooki-fit-session-v1";
+const STATE_KEY = APP_STATE_STORAGE_KEY;
+const SESSION_KEY = APP_SESSION_STORAGE_KEY;
 const PROFILE_IMAGE_BUCKET = "profile-images";
 const PROFILE_IMAGE_MAX_BYTES = 5 * 1024 * 1024;
 const PROFILE_IMAGE_ALLOWED_TYPES = new Set(["image/jpeg", "image/png", "image/webp", "image/avif"]);
