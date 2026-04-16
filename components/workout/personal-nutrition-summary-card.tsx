@@ -51,7 +51,7 @@ export function PersonalNutritionSummaryCard({
         <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
           <div>
             <p className="text-xs font-semibold tracking-[0.04em] text-[var(--text-subtle)]">Henkilökohtainen ravinto</p>
-            <CardTitle className="mt-2 text-2xl">Päivän energiasuositus</CardTitle>
+            <CardTitle className="mt-2 text-balance text-2xl leading-tight">Päivän energiasuositus</CardTitle>
             <CardDescription className="mt-2 max-w-3xl">
               Näet profiiliin tallennetun tavoitteen sekä vertailun pudotus-, ylläpito- ja kasvatusvaiheisiin omien tietojesi perusteella.
             </CardDescription>
@@ -148,7 +148,7 @@ export function PersonalNutritionSummaryCard({
                     <p className="mt-1 text-sm text-[var(--text-muted)]">
                       Vertaa helposti miten päivän energia ja makrot muuttuvat eri tavoitteissa.
                     </p>
-                    <div className="mt-4 grid gap-3 xl:grid-cols-3">
+                    <div className="mt-4 grid gap-3">
                       {(["lose", "maintain", "gain"] as NutritionGoal[]).map((goal) => {
                         const target = comparison.comparisonTargets![goal];
                         const isActive = comparison.activeGoal === goal;
