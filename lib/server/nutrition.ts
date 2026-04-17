@@ -252,6 +252,7 @@ export async function saveRecipeOnServer(requester: Requester, input: RecipeInpu
     ingredient_id: ingredient.ingredientId ?? null,
     ingredient_name: ingredient.ingredientName?.trim() || "",
     group_label: ingredient.groupLabel?.trim() || null,
+    alternatives: ingredient.alternatives?.map((value) => value.trim()).filter(Boolean) ?? [],
     quantity: ingredient.quantity ?? null,
     unit: ingredient.unit,
     display_quantity: ingredient.displayQuantity?.trim() || null,

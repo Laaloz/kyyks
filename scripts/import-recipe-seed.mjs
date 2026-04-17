@@ -199,6 +199,7 @@ async function upsertRecipe(supabase, recipe, createdBy, ingredientCatalogMap, t
       ingredient_id: ingredientId,
       ingredient_name: row.ingredientName?.trim() || "",
       group_label: row.groupLabel?.trim() || null,
+      alternatives: row.alternatives?.map((value) => value.trim()).filter(Boolean) ?? [],
       quantity: row.quantity ?? null,
       unit: row.unit,
       display_quantity: row.displayQuantity?.trim() || null,

@@ -40,6 +40,14 @@ function formatRecipeIngredientLine(ingredient: Recipe["ingredients"][number], i
   return ingredientName;
 }
 
+function formatIngredientAlternatives(alternatives?: string[]) {
+  if (!alternatives || alternatives.length === 0) {
+    return null;
+  }
+
+  return `Vaihtoehdot: ${alternatives.join(", ")}`;
+}
+
 function groupRecipeIngredients(ingredients: Recipe["ingredients"]) {
   const groups = new Map<string, Recipe["ingredients"]>();
   for (const ingredient of ingredients) {
@@ -267,10 +275,17 @@ function RecipeDetailDialog({
                     <ul className="space-y-2 text-sm text-[var(--text-muted)]">
                       {group.rows.map((ingredient) => (
                         <li key={`${recipe.id}-${ingredient.id}`} className="rounded-xl bg-[var(--surface-2)] px-3 py-3 leading-6">
-                          {formatRecipeIngredientLine(
-                            ingredient,
-                            ingredient.ingredientId ? ingredientNameById.get(ingredient.ingredientId) ?? ingredient.ingredientName : ingredient.ingredientName,
-                          )}
+                          <p className="text-[var(--text-muted)]">
+                            {formatRecipeIngredientLine(
+                              ingredient,
+                              ingredient.ingredientId ? ingredientNameById.get(ingredient.ingredientId) ?? ingredient.ingredientName : ingredient.ingredientName,
+                            )}
+                          </p>
+                          {formatIngredientAlternatives(ingredient.alternatives) ? (
+                            <p className="mt-1 text-xs text-[var(--text-subtle)]">
+                              {formatIngredientAlternatives(ingredient.alternatives)}
+                            </p>
+                          ) : null}
                         </li>
                       ))}
                     </ul>
@@ -497,10 +512,9 @@ export function NutritionAthleteCard({
                                   {macroPill("H", `${Math.round(recipeNutrition.carbsG)} g`)}
                                   {macroPill("R", `${Math.round(recipeNutrition.fatG)} g`)}
                                 </div>
-                                <p className="mt-3 text-sm font-medium text-[var(--text)]">{isOpen ? "Resepti auki" : "Avaa resepti"}</p>
                               </div>
-                              <div className="w-fit shrink-0 rounded-full border border-[var(--border)] bg-[var(--surface)] px-3 py-1.5 text-xs font-semibold text-[var(--text)]">
-                                {isOpen ? "Auki" : "Avaa"}
+                              <div className={`grid size-10 shrink-0 place-items-center rounded-full border border-[var(--border)] bg-[var(--surface)] text-[var(--text-subtle)] transition ${isOpen ? "rotate-180 text-[var(--accent)]" : "-rotate-90"}`}>
+                                <ChevronDown className="size-4" aria-hidden="true" />
                               </div>
                             </div>
                           </button>
