@@ -137,13 +137,13 @@ export const recipeSeedData = [
       ingredient("Kaurahiutale", 55, "g", { groupLabel: "Tuorepuuro" }),
       ingredient("Rasvaton maito", 160, "ml", { groupLabel: "Tuorepuuro", alternatives: ["Vähärasvainen kauramaito"] }),
       ingredient("Chian siemenet", 12, "g", { groupLabel: "Tuorepuuro", alternatives: ["Maapähkinävoi 99%"] }),
+      ingredient("Skyr wanhanajan vanilja", 150, "g", { groupLabel: "Tuorepuuro" }),
       ingredient("Vadelma", 80, "g", { groupLabel: "Päälle", alternatives: ["Muut marjat"] }),
-      ingredient("Skyr wanhanajan vanilja", 150, "g", { groupLabel: "Päälle" }),
     ],
     instructions: [
-      "Sekoita kaurahiutaleet, maito ja chian siemenet kannelliseen rasiaan.",
+      "Sekoita kaurahiutaleet, maito, chian siemenet ja vaniljaskyr kannelliseen rasiaan.",
       "Anna tekeytyä jääkaapissa vähintään yön yli.",
-      "Sekoita ennen tarjoilua ja lisää päälle vadelmat sekä vaniljaskyr.",
+      "Sekoita ennen tarjoilua ja lisää päälle vadelmat.",
     ],
   }),
   recipe({
