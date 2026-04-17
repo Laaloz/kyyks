@@ -500,9 +500,13 @@ export function NutritionAthleteCard({
                               setSelectedRecipeId(item.recipe.id);
                             }}
                           >
-                            <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-                              <div className="min-w-0">
+                            <div className="min-w-0">
+                              <div className="flex items-start justify-between gap-3">
                                 <p className="text-lg font-semibold text-[var(--text)]">{item.recipe.name}</p>
+                                <div className={`mt-0.5 grid size-8 shrink-0 place-items-center rounded-full border border-[var(--border)] bg-[var(--surface)] text-[var(--text-subtle)] transition ${isOpen ? "rotate-180 text-[var(--accent)]" : "-rotate-90"}`}>
+                                  <ChevronDown className="size-3.5" aria-hidden="true" />
+                                </div>
+                              </div>
                                 <p className="mt-1 text-sm text-[var(--text-muted)]">
                                   {item.recipe.description ?? "Valmis ateriasuositus tämän ateriaryhmän sisälle."}
                                 </p>
@@ -512,10 +516,6 @@ export function NutritionAthleteCard({
                                   {macroPill("H", `${Math.round(recipeNutrition.carbsG)} g`)}
                                   {macroPill("R", `${Math.round(recipeNutrition.fatG)} g`)}
                                 </div>
-                              </div>
-                              <div className={`grid size-10 shrink-0 place-items-center rounded-full border border-[var(--border)] bg-[var(--surface)] text-[var(--text-subtle)] transition ${isOpen ? "rotate-180 text-[var(--accent)]" : "-rotate-90"}`}>
-                                <ChevronDown className="size-4" aria-hidden="true" />
-                              </div>
                             </div>
                           </button>
                         );
