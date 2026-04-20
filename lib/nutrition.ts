@@ -492,7 +492,7 @@ function hasCompleteMacroTarget(value: Pick<MacroTarget, "kcal" | "proteinG" | "
 
 function hasCompleteNutritionProfileTarget(
   value: Pick<NutritionProfile, "targetKcal" | "proteinG" | "carbsG" | "fatG"> | null | undefined,
-) {
+): value is Pick<NutritionProfile, "targetKcal" | "proteinG" | "carbsG" | "fatG"> {
   if (!value) {
     return false;
   }
