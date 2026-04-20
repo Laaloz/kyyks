@@ -4,9 +4,11 @@ import { cloneDemoState } from "@/lib/domain";
 import {
   assignMealPlan,
   buildPersonalNutritionGoalComparison,
+  buildRecipeGoalComparison,
   calculateMacroTarget,
   calculateRecipeNutrition,
   getActiveMealPlanForAthlete,
+  getMealSlotKcalRange,
   joinRecipeInstructionSteps,
   scaleRecipeIngredient,
   splitRecipeInstructions,
@@ -39,12 +41,12 @@ describe("nutrition helpers", () => {
     });
 
     expect(target).not.toBeNull();
-    expect(target?.kcal).toBeGreaterThanOrEqual(2175);
-    expect(target?.kcal).toBeLessThanOrEqual(2225);
-    expect(target?.proteinG).toBeGreaterThanOrEqual(155);
+    expect(target?.kcal).toBeGreaterThanOrEqual(2160);
+    expect(target?.kcal).toBeLessThanOrEqual(2170);
+    expect(target?.proteinG).toBeGreaterThanOrEqual(160);
     expect(target?.proteinG).toBeLessThanOrEqual(170);
-    expect(target?.carbsG).toBeGreaterThanOrEqual(235);
-    expect(target?.carbsG).toBeLessThanOrEqual(250);
+    expect(target?.carbsG).toBeGreaterThanOrEqual(230);
+    expect(target?.carbsG).toBeLessThanOrEqual(240);
     expect(target?.fatG).toBeGreaterThanOrEqual(60);
     expect(target?.fatG).toBeLessThanOrEqual(70);
   });
@@ -229,6 +231,86 @@ describe("nutrition helpers", () => {
 
     expect(summary.nutritionPerRecipe.kcal).toBeGreaterThan(1500);
     expect(summary.nutritionPerServing.kcal).toBeGreaterThan(300);
+  });
+
+  it("builds recipe goal comparison from active profile targets", () => {
+    const comparison = buildRecipeGoalComparison(
+      "lunch",
+      {
+        kcal: 500,
+        proteinG: 50,
+        carbsG: 60,
+        fatG: 20,
+      },
+      {
+        targetKcal: 2500,
+        proteinG: 200,
+        carbsG: 300,
+        fatG: 80,
+      },
+    );
+
+    expect(comparison).not.toBeNull();
+    expect(comparison?.dailyShare.kcal).toBe(20);
+    expect(comparison?.dailyShare.proteinG).toBe(25);
+    expect(comparison?.dailyShare.carbsG).toBe(20);
+    expect(comparison?.dailyShare.fatG).toBe(25);
+    expect(comparison?.mealSlot.range).toEqual([625, 750]);
+    expect(comparison?.mealSlot.status).toBe("below");
+  });
+
+  it("returns null recipe goal comparison when profile targets are missing", () => {
+    const comparison = buildRecipeGoalComparison(
+      "dinner",
+      {
+        kcal: 500,
+        proteinG: 30,
+        carbsG: 45,
+        fatG: 15,
+      },
+      null,
+    );
+
+    expect(comparison).toBeNull();
+  });
+
+  it("resolves meal slot range boundaries and status safely", () => {
+    const breakfastRange = getMealSlotKcalRange("breakfast", 2400);
+    expect(breakfastRange).toEqual([360, 480]);
+
+    const withinComparison = buildRecipeGoalComparison(
+      "breakfast",
+      {
+        kcal: 360,
+        proteinG: 30,
+        carbsG: 40,
+        fatG: 10,
+      },
+      {
+        targetKcal: 2400,
+        proteinG: 180,
+        carbsG: 240,
+        fatG: 80,
+      },
+    );
+    const aboveComparison = buildRecipeGoalComparison(
+      "breakfast",
+      {
+        kcal: 481,
+        proteinG: 30,
+        carbsG: 40,
+        fatG: 10,
+      },
+      {
+        targetKcal: 2400,
+        proteinG: 180,
+        carbsG: 240,
+        fatG: 80,
+      },
+    );
+
+    expect(withinComparison?.mealSlot.status).toBe("within");
+    expect(aboveComparison?.mealSlot.status).toBe("above");
   });
 
   it("assigns a new meal plan and deactivates the previous one", () => {

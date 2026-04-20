@@ -10,7 +10,7 @@ import { InlineFeedback } from "@/components/workout/inline-feedback";
 import { NutritionAthleteCard } from "@/components/workout/nutrition-athlete-card";
 import { PersonalNutritionSummaryCard } from "@/components/workout/personal-nutrition-summary-card";
 import { getMeasurementsForUser } from "@/lib/body-metrics";
-import { calculateMacroTarget, calculateRecipeNutrition, getMacroGoalGuidance, getMissingMacroProfileFields, getRecipeCompatibilityAlerts, joinRecipeInstructionSteps, mealTagLabel, resolveRecipeNutritionPreview, splitRecipeInstructions } from "@/lib/nutrition";
+import { calculateMacroTarget, calculateRecipeNutrition, getMacroGoalGuidance, getMealSlotKcalRange, getMissingMacroProfileFields, getRecipeCompatibilityAlerts, joinRecipeInstructionSteps, mealTagLabel, resolveRecipeNutritionPreview, splitRecipeInstructions } from "@/lib/nutrition";
 import { canActAsCoach } from "@/lib/role-access";
 import type {
   Ingredient,
@@ -117,23 +117,6 @@ function mealSlotKcalGuidance(mealTag: MealTag, targetKcal?: number) {
 
   const [minKcal, maxKcal] = range;
   return `${minKcal}-${maxKcal} kcal`;
-}
-
-function getMealSlotKcalRange(mealTag: MealTag, targetKcal?: number) {
-  if (!targetKcal) {
-    return null;
-  }
-
-  const ranges: Record<MealTag, [number, number]> = {
-    breakfast: [0.15, 0.2],
-    lunch: [0.25, 0.3],
-    snack: [0.1, 0.15],
-    dinner: [0.25, 0.3],
-    evening_snack: [0.1, 0.15],
-  };
-
-  const [minRatio, maxRatio] = ranges[mealTag];
-  return [Math.round(targetKcal * minRatio), Math.round(targetKcal * maxRatio)] as const;
 }
 
 function formatRecipeMacroValue(value: number | null | undefined) {

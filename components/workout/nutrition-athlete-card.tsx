@@ -6,8 +6,10 @@ import { useEffect, useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardDescription, CardTitle } from "@/components/ui/card";
 import {
+  buildRecipeGoalComparison,
   getActiveMealPlanForAthlete,
   getMealPlanRecipes,
+  getMealSlotKcalRange,
   getRecipeCompatibilityAlerts,
   mealTagLabel,
   resolveRecipeNutritionPreview,
@@ -64,6 +66,61 @@ function macroPill(label: string, value: string) {
     <div className="rounded-full border border-[var(--border)] bg-[var(--surface)] px-3 py-1.5 text-xs font-semibold text-[var(--text)]">
       <span className="text-[var(--text-subtle)]">{label}</span>{" "}
       <span>{value}</span>
+    </div>
+  );
+}
+
+function formatShareValue(value: number) {
+  return `${Math.round(value)} %`;
+}
+
+function mealSlotStatusLabel(status: "below" | "within" | "above") {
+  switch (status) {
+    case "below":
+      return "hieman alle haarukan";
+    case "within":
+      return "osuu haarukkaan";
+    case "above":
+      return "hieman yli haarukan";
+  }
+}
+
+function mealTagPossessiveLabel(mealTag: MealTag) {
+  switch (mealTag) {
+    case "breakfast":
+      return "Aamupalan";
+    case "lunch":
+      return "Lounaan";
+    case "snack":
+      return "Välipalan";
+    case "dinner":
+      return "Illallisen";
+    case "evening_snack":
+      return "Iltapalan";
+  }
+}
+
+function GoalComparisonPreview({
+  comparison,
+  mealTag,
+}: {
+  comparison: NonNullable<ReturnType<typeof buildRecipeGoalComparison>>;
+  mealTag: MealTag;
+}) {
+  return (
+    <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-3">
+      <p className="text-xs font-semibold tracking-[0.04em] text-[var(--text-subtle)]">Tavoitevertailu</p>
+      <p className="mt-2 text-sm font-semibold text-[var(--text)]">
+        {formatShareValue(comparison.dailyShare.kcal)} päivän energiasta
+      </p>
+      <div className="mt-2 flex flex-wrap gap-2">
+        {macroPill("P", formatShareValue(comparison.dailyShare.proteinG))}
+        {macroPill("H", formatShareValue(comparison.dailyShare.carbsG))}
+        {macroPill("R", formatShareValue(comparison.dailyShare.fatG))}
+      </div>
+      <p className="mt-3 text-sm text-[var(--text-muted)]">
+        {mealTagPossessiveLabel(mealTag)} suositus {comparison.mealSlot.range[0]}-{comparison.mealSlot.range[1]} kcal. Tämä annos {mealSlotStatusLabel(comparison.mealSlot.status)}.
+      </p>
     </div>
   );
 }
@@ -140,6 +197,10 @@ function RecipeDetailDialog({
   const groupedIngredients = useMemo(
     () => groupRecipeIngredients(scaledIngredients),
     [scaledIngredients],
+  );
+  const goalComparison = useMemo(
+    () => buildRecipeGoalComparison(mealTag, nutrition, nutritionProfile),
+    [mealTag, nutrition, nutritionProfile],
   );
 
   return (
@@ -248,6 +309,12 @@ function RecipeDetailDialog({
               </div>
             </div>
           </div>
+
+          {goalComparison ? (
+            <div className="mt-4">
+              <GoalComparisonPreview comparison={goalComparison} mealTag={mealTag} />
+            </div>
+          ) : null}
 
           {compatibilityAlerts.length > 0 ? (
             <div className="mt-4 rounded-2xl border border-[color:color-mix(in_srgb,var(--warning)_35%,var(--border))] bg-[color:color-mix(in_srgb,var(--warning)_12%,var(--surface))] p-3 text-sm text-[var(--warning)]">
@@ -379,22 +446,6 @@ export function NutritionAthleteCard({
     return resolveRecipeNutritionPreview(selectedRecipeEntry.recipe, state.ingredientsCatalog).nutritionPerServing;
   }, [selectedRecipeEntry, state.ingredientsCatalog]);
 
-  const mealSlotGuidance = (mealTag: MealTag, targetKcal: number | undefined) => {
-    if (!targetKcal) {
-      return null;
-    }
-
-    const ranges = {
-      breakfast: [0.15, 0.2],
-      lunch: [0.25, 0.3],
-      snack: [0.1, 0.15],
-      dinner: [0.25, 0.3],
-      evening_snack: [0.1, 0.15],
-    } as const;
-    const [minRatio, maxRatio] = ranges[mealTag as keyof typeof ranges] ?? [0.1, 0.2];
-    return `${Math.round(targetKcal * minRatio)}-${Math.round(targetKcal * maxRatio)} kcal`;
-  };
-
   return (
     <Card className="border-[var(--border-strong)]">
       <div className="space-y-5">
@@ -445,7 +496,8 @@ export function NutritionAthleteCard({
                   {availableMealTags.map((mealTag) => {
                     const items = groupedMealPlanRecipes[mealTag] ?? [];
                     const selected = selectedMealTag === mealTag;
-                    const slotGuidance = mealSlotGuidance(mealTag, nutritionProfile?.targetKcal);
+                    const slotRange = getMealSlotKcalRange(mealTag, nutritionProfile?.targetKcal);
+                    const slotGuidance = slotRange ? `${slotRange[0]}-${slotRange[1]} kcal` : null;
 
                     return (
                       <button
@@ -484,6 +536,7 @@ export function NutritionAthleteCard({
                     <div className="grid gap-3">
                       {selectedMealItems.map((item) => {
                         const recipeNutrition = resolveRecipeNutritionPreview(item.recipe, state.ingredientsCatalog).nutritionPerServing;
+                        const goalComparison = buildRecipeGoalComparison(item.mealTag, recipeNutrition, nutritionProfile);
                         const isOpen = selectedRecipeId === item.recipe.id;
 
                         return (
@@ -516,6 +569,19 @@ export function NutritionAthleteCard({
                                   {macroPill("H", `${Math.round(recipeNutrition.carbsG)} g`)}
                                   {macroPill("R", `${Math.round(recipeNutrition.fatG)} g`)}
                                 </div>
+                                {goalComparison ? (
+                                  <div className="mt-3 rounded-2xl border border-[var(--border)] bg-[var(--surface)] px-3 py-3 text-sm text-[var(--text-muted)]">
+                                    <p className="font-semibold text-[var(--text)]">
+                                      {formatShareValue(goalComparison.dailyShare.kcal)} päivän energiasta
+                                    </p>
+                                    <p className="mt-1">
+                                      P {formatShareValue(goalComparison.dailyShare.proteinG)} · H {formatShareValue(goalComparison.dailyShare.carbsG)} · R {formatShareValue(goalComparison.dailyShare.fatG)}
+                                    </p>
+                                    <p className="mt-1">
+                                      {mealTagPossessiveLabel(item.mealTag)} suositus {goalComparison.mealSlot.range[0]}-{goalComparison.mealSlot.range[1]} kcal, ja tämä annos {mealSlotStatusLabel(goalComparison.mealSlot.status)}.
+                                    </p>
+                                  </div>
+                                ) : null}
                             </div>
                           </button>
                         );

@@ -43,6 +43,21 @@ export type RecipeCompatibilityAlert = {
   matchedIngredients: string[];
 };
 
+export type MealSlotKcalStatus = "below" | "within" | "above";
+
+export type RecipeGoalComparison = {
+  dailyShare: {
+    kcal: number;
+    proteinG: number;
+    carbsG: number;
+    fatG: number;
+  };
+  mealSlot: {
+    range: readonly [number, number];
+    status: MealSlotKcalStatus;
+  };
+};
+
 function nowIso() {
   return new Date().toISOString();
 }
@@ -83,6 +98,14 @@ function roundNutrition(value: number) {
   return Math.round(value * 10) / 10;
 }
 
+function calculateNutritionShare(value: number, target: number) {
+  if (target <= 0) {
+    return 0;
+  }
+
+  return roundNutrition((value / target) * 100);
+}
+
 function normalizeFoodText(value: string) {
   return value
     .trim()
@@ -104,6 +127,35 @@ export function mealTagLabel(mealTag: MealTag) {
     case "evening_snack":
       return "Iltapala";
   }
+}
+
+export function getMealSlotKcalRange(mealTag: MealTag, targetKcal?: number) {
+  if (!targetKcal || targetKcal <= 0) {
+    return null;
+  }
+
+  const ranges: Record<MealTag, [number, number]> = {
+    breakfast: [0.15, 0.2],
+    lunch: [0.25, 0.3],
+    snack: [0.1, 0.15],
+    dinner: [0.25, 0.3],
+    evening_snack: [0.1, 0.15],
+  };
+
+  const [minRatio, maxRatio] = ranges[mealTag];
+  return [Math.round(targetKcal * minRatio), Math.round(targetKcal * maxRatio)] as const;
+}
+
+function resolveMealSlotKcalStatus(kcal: number, range: readonly [number, number]): MealSlotKcalStatus {
+  if (kcal < range[0]) {
+    return "below";
+  }
+
+  if (kcal > range[1]) {
+    return "above";
+  }
+
+  return "within";
 }
 
 export function getMacroGoalGuidance(goal: NutritionGoal) {
@@ -430,6 +482,24 @@ function hasMeaningfulNutrition(value: Pick<MacroTarget, "kcal" | "proteinG" | "
   return value.kcal > 0 || value.proteinG > 0 || value.carbsG > 0 || value.fatG > 0;
 }
 
+function hasCompleteMacroTarget(value: Pick<MacroTarget, "kcal" | "proteinG" | "carbsG" | "fatG"> | null | undefined) {
+  if (!value) {
+    return false;
+  }
+
+  return value.kcal > 0 && value.proteinG > 0 && value.carbsG > 0 && value.fatG > 0;
+}
+
+function hasCompleteNutritionProfileTarget(
+  value: Pick<NutritionProfile, "targetKcal" | "proteinG" | "carbsG" | "fatG"> | null | undefined,
+) {
+  if (!value) {
+    return false;
+  }
+
+  return value.targetKcal > 0 && value.proteinG > 0 && value.carbsG > 0 && value.fatG > 0;
+}
+
 export function resolveRecipeNutritionPreview(
   recipe: Pick<Recipe, "defaultServings" | "ingredients" | "nutritionPerServing" | "nutritionPerRecipe">,
   ingredients: Ingredient[],
@@ -446,6 +516,35 @@ export function resolveRecipeNutritionPreview(
   return {
     nutritionPerServing: useCalculatedPerServing ? calculated.nutritionPerServing : cachedPerServing ?? calculated.nutritionPerServing,
     nutritionPerRecipe: useCalculatedPerRecipe ? calculated.nutritionPerRecipe : cachedPerRecipe ?? calculated.nutritionPerRecipe,
+  };
+}
+
+export function buildRecipeGoalComparison(
+  mealTag: MealTag,
+  nutritionPerServing: Pick<MacroTarget, "kcal" | "proteinG" | "carbsG" | "fatG">,
+  nutritionProfile?: Pick<NutritionProfile, "targetKcal" | "proteinG" | "carbsG" | "fatG"> | null,
+): RecipeGoalComparison | null {
+  if (!hasCompleteNutritionProfileTarget(nutritionProfile)) {
+    return null;
+  }
+
+  const profile = nutritionProfile;
+  const mealSlotRange = getMealSlotKcalRange(mealTag, profile.targetKcal);
+  if (!mealSlotRange) {
+    return null;
+  }
+
+  return {
+    dailyShare: {
+      kcal: calculateNutritionShare(nutritionPerServing.kcal, profile.targetKcal),
+      proteinG: calculateNutritionShare(nutritionPerServing.proteinG, profile.proteinG),
+      carbsG: calculateNutritionShare(nutritionPerServing.carbsG, profile.carbsG),
+      fatG: calculateNutritionShare(nutritionPerServing.fatG, profile.fatG),
+    },
+    mealSlot: {
+      range: mealSlotRange,
+      status: resolveMealSlotKcalStatus(nutritionPerServing.kcal, mealSlotRange),
+    },
   };
 }
 
