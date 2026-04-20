@@ -23,8 +23,13 @@ function optionalNumberField(schema: z.ZodNumber) {
     }
 
     if (typeof value === "string") {
-      const trimmed = value.trim();
-      return trimmed === "" ? undefined : trimmed;
+      const trimmed = value.trim().replace(",", ".");
+      if (trimmed === "") {
+        return undefined;
+      }
+
+      const parsed = Number(trimmed);
+      return Number.isFinite(parsed) ? parsed : value;
     }
 
     if (typeof value === "number" && Number.isNaN(value)) {
