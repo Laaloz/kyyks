@@ -757,6 +757,93 @@ describe("training workflows server", () => {
     });
   });
 
+  it("falls back to legacy writes when the atomic workout start rpc fails", async () => {
+    const admin = {
+      from: vi.fn((table: string) => {
+        const builder = {
+          select: vi.fn(() => builder),
+          order: vi.fn(() => builder),
+          limit: vi.fn(() => builder),
+          eq: vi.fn(() => builder),
+          in: vi.fn(() => builder),
+          neq: vi.fn(() => builder),
+          not: vi.fn(() => builder),
+          insert: vi.fn(() => builder),
+          delete: vi.fn(() => builder),
+          maybeSingle: vi.fn(async () => {
+            if (table === "training_plans") {
+              return {
+                data: {
+                  id: "plan-1",
+                  coach_id: "coach-1",
+                  athlete_id: "athlete-1",
+                  title: "Plan",
+                  description: null,
+                  status: "active",
+                  start_date: "2026-04-01",
+                  week_count: 4,
+                  workouts: [
+                    {
+                      id: "program-workout-1",
+                      name: "Penkki",
+                      splitType: "upper",
+                      defaultRestSeconds: 120,
+                      exercises: [],
+                    },
+                  ],
+                  created_at: "2026-04-01T08:00:00.000Z",
+                  updated_at: "2026-04-01T08:00:00.000Z",
+                },
+                error: null,
+              };
+            }
+
+            return { data: null, error: null };
+          }),
+          single: vi.fn(async () => {
+            if (table === "scheduled_workouts") {
+              return { data: { id: "fallback-workout" }, error: null };
+            }
+
+            if (table === "workout_sessions") {
+              return { data: { id: "fallback-session", updated_at: "2026-04-03T08:10:00.000Z" }, error: null };
+            }
+
+            return { data: null, error: null };
+          }),
+          then: (resolve: (value: { data: unknown; error: null }) => unknown, reject?: (reason: unknown) => unknown) =>
+            Promise.resolve({ data: table === "workout_set_logs" ? [] : {}, error: null }).then(resolve, reject),
+        };
+        return builder;
+      }),
+      rpc: vi.fn(async () => ({
+        data: null,
+        error: { message: "column reference is ambiguous", code: "42702", details: null, hint: null },
+      })),
+    };
+
+    createSupabaseAdminClientMock.mockReturnValue(admin);
+
+    const result = await startProgramWorkoutOnServer({
+      requester: { id: "athlete-1", role: "athlete" },
+      programId: "plan-1",
+      programWorkoutId: "program-workout-1",
+    });
+
+    expect(result).toMatchObject({
+      ok: true,
+      scheduledWorkoutId: "fallback-workout",
+    });
+    expect(admin.rpc).toHaveBeenCalledWith("start_workout_atomic", {
+      p_requester_id: "athlete-1",
+      p_requester_role: "athlete",
+      p_set_logs: [],
+      p_scheduled_workout_id: null,
+      p_training_plan_id: "plan-1",
+      p_program_workout_id: "program-workout-1",
+    });
+  });
+
   it("sends duration updates through the atomic rpc with expected session version", async () => {
     const admin = createWorkoutSetRpcClient({
       ok: true,

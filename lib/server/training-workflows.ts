@@ -765,7 +765,7 @@ async function startWorkoutAtomic(params: {
       trainingPlanId: params.trainingPlanId,
       programWorkoutId: params.programWorkoutId,
     });
-    return { ok: false as const, message: "Treeniä ei voitu käynnistää." };
+    return { ok: false as const, message: "Treeniä ei voitu käynnistää.", code: "rpc_error" };
   }
 
   const payload = (Array.isArray(data) ? data[0] : data) as StartWorkoutAtomicPayload | null;
@@ -790,6 +790,55 @@ async function startWorkoutAtomic(params: {
     scheduledWorkoutId: payload.scheduled_workout_id,
     sessionId: payload.session_id ?? undefined,
     updatedAt: payload.updated_at,
+  };
+}
+
+async function createProgramWorkoutWithLegacyWrites(params: {
+  admin: NonNullable<ReturnType<typeof createSupabaseAdminClient>>;
+  requester: RequesterProfile;
+  plan: TrainingPlan;
+  programWorkout: NonNullable<TrainingPlan["workouts"]>[number];
+  setLogs: Array<Record<string, unknown>>;
+}) {
+  const timestamp = nowIso();
+  const { data: scheduledWorkout, error: scheduledWorkoutError } = await params.admin
+    .from("scheduled_workouts")
+    .insert({
+      training_plan_id: params.plan.id,
+      program_workout_id: params.programWorkout.id,
+      athlete_id: params.plan.athleteId,
+      coach_id: params.plan.coachId,
+      title: params.programWorkout.name,
+      scheduled_date: timestamp,
+      status: "in_progress",
+      created_by: params.requester.id,
+      updated_by: params.requester.id,
+      created_at: timestamp,
+      updated_at: timestamp,
+    })
+    .select("id")
+    .single<{ id: string }>();
+
+  if (scheduledWorkoutError || !scheduledWorkout) {
+    return { ok: false as const, message: "Harjoituksen käynnistys epäonnistui." };
+  }
+
+  const sessionResult = await createSessionWithLogs({
+    scheduledWorkoutId: scheduledWorkout.id,
+    athleteId: params.plan.athleteId,
+    setLogs: params.setLogs,
+    admin: params.admin,
+  });
+
+  if (!sessionResult.ok) {
+    await params.admin.from("scheduled_workouts").delete().eq("id", scheduledWorkout.id);
+    return sessionResult;
+  }
+
+  return {
+    ok: true as const,
+    scheduledWorkoutId: scheduledWorkout.id,
+    updatedAt: sessionResult.updatedAt,
   };
 }
 
@@ -1265,6 +1314,21 @@ export async function startProgramWorkoutOnServer({
   timer.checkpoint("rpc-start");
 
   if (!startResult.ok) {
+    if (startResult.code === "rpc_error") {
+      const fallbackResult = await createProgramWorkoutWithLegacyWrites({
+        admin,
+        requester,
+        plan,
+        programWorkout,
+        setLogs,
+      });
+      timer.checkpoint("legacy-start-fallback");
+      if (fallbackResult.ok) {
+        const payload = await fetchStartedWorkoutPayload(admin, fallbackResult.scheduledWorkoutId);
+        return { ok: true as const, scheduledWorkoutId: fallbackResult.scheduledWorkoutId, payload: payload ?? undefined };
+      }
+    }
+
     return startResult;
   }
 

@@ -413,6 +413,7 @@ declare
   v_session public.workout_sessions%rowtype;
   v_timestamp timestamptz := now();
   v_set_log_count integer := coalesce(jsonb_array_length(coalesce(p_set_logs, '[]'::jsonb)), 0);
+  v_inserted_session boolean := false;
 begin
   if p_scheduled_workout_id is null then
     if p_training_plan_id is null or p_program_workout_id is null then
@@ -583,11 +584,20 @@ begin
     v_timestamp,
     0
   )
-  on conflict (scheduled_workout_id) do update
-  set updated_at = public.workout_sessions.updated_at
+  on conflict do nothing
   returning * into v_session;
 
-  if v_session.started_at = v_timestamp and v_set_log_count > 0 then
+  if found then
+    v_inserted_session := true;
+  else
+    select *
+    into v_session
+    from public.workout_sessions
+    where public.workout_sessions.scheduled_workout_id = v_workout.id
+    for update;
+  end if;
+
+  if v_inserted_session and v_set_log_count > 0 then
     insert into public.workout_set_logs (
       session_id,
       scheduled_workout_id,
