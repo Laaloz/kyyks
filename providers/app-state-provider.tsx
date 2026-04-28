@@ -811,6 +811,7 @@ type WorkoutSetDraftState = {
 
 type RecentlyConfirmedWorkoutSetLogs = Map<string, string>;
 type RecentlyConfirmedWorkoutNotes = Map<string, string>;
+type RecentlyStartedWorkouts = Map<string, number>;
 
 export function collectPendingWorkoutMutationKinds(
   pending: ReadonlyArray<Pick<WorkoutMutation, "kind">>,
@@ -1583,6 +1584,7 @@ export function reconcileSupabaseVisibleState(
   recentlyConfirmedSetLogs?: ReadonlyMap<string, string>,
   recentlyConfirmedNotes?: ReadonlyMap<string, string>,
   recentlyDeletedWorkoutIds?: ReadonlyMap<string, number>,
+  recentlyStartedWorkoutIds?: ReadonlyMap<string, number>,
   snapshotMode: "full" | "workouts" = "full",
 ) {
   const suppressedWorkoutIds = new Set(
@@ -1601,7 +1603,33 @@ export function reconcileSupabaseVisibleState(
         }),
       }
     : snapshot;
-  const withOptimisticWorkouts = preserveActiveWorkoutShells(previous, filteredSnapshot);
+  const freshStartedWorkoutIds = new Set(
+    Array.from(recentlyStartedWorkoutIds?.entries() ?? [])
+      .filter(([, startedAt]) => Date.now() - startedAt < 30000)
+      .map(([workoutId]) => workoutId),
+  );
+  const snapshotWorkoutIds = new Set((filteredSnapshot.scheduledWorkouts ?? []).map((workout) => workout.id));
+  const snapshotSessionWorkoutIds = new Set((filteredSnapshot.sessions ?? []).map((session) => session.scheduledWorkoutId));
+  const optimisticWorkoutShells = preserveActiveWorkoutShells(previous, filteredSnapshot);
+  const optimisticWorkoutIds = new Set(optimisticWorkoutShells.scheduledWorkouts.map((workout) => workout.id));
+  const optimisticSessionWorkoutIds = new Set(optimisticWorkoutShells.sessions.map((session) => session.scheduledWorkoutId));
+  const recentlyStartedWorkouts = previous.scheduledWorkouts.filter(
+    (workout) =>
+      freshStartedWorkoutIds.has(workout.id) &&
+      workout.status === "in_progress" &&
+      !snapshotWorkoutIds.has(workout.id) &&
+      !optimisticWorkoutIds.has(workout.id),
+  );
+  const recentlyStartedSessions = previous.sessions.filter(
+    (session) =>
+      freshStartedWorkoutIds.has(session.scheduledWorkoutId) &&
+      !snapshotSessionWorkoutIds.has(session.scheduledWorkoutId) &&
+      !optimisticSessionWorkoutIds.has(session.scheduledWorkoutId),
+  );
+  const withActiveWorkoutShells = {
+    scheduledWorkouts: [...optimisticWorkoutShells.scheduledWorkouts, ...recentlyStartedWorkouts],
+    sessions: [...optimisticWorkoutShells.sessions, ...recentlyStartedSessions],
+  };
   const previousScheduledWorkoutsById = new Map(previous.scheduledWorkouts.map((workout) => [workout.id, workout]));
   const previousSessionsById = new Map(previous.sessions.map((session) => [session.id, session]));
   const previousSessionsByWorkoutId = new Map(previous.sessions.map((session) => [session.scheduledWorkoutId, session]));
@@ -1663,7 +1691,7 @@ export function reconcileSupabaseVisibleState(
     exercises: snapshotMode === "workouts" ? previous.exercises : (filteredSnapshot.exercises ?? previous.exercises),
     templates: snapshotMode === "workouts" ? previous.templates : (filteredSnapshot.templates ?? previous.templates),
     plans: snapshotMode === "workouts" ? previous.plans : (filteredSnapshot.plans ?? previous.plans),
-    scheduledWorkouts: withOptimisticWorkouts.scheduledWorkouts.map((workout) => {
+    scheduledWorkouts: withActiveWorkoutShells.scheduledWorkouts.map((workout) => {
       const localWorkout = previousScheduledWorkoutsById.get(workout.id);
       if (!localWorkout) {
         return workout;
@@ -1695,7 +1723,7 @@ export function reconcileSupabaseVisibleState(
         ? localWorkout
         : workout;
     }),
-    sessions: withOptimisticWorkouts.sessions.map((session) => {
+    sessions: withActiveWorkoutShells.sessions.map((session) => {
       const localSession = previousSessionsById.get(session.id);
       if (!localSession) {
         return session;
@@ -2258,6 +2286,7 @@ export function AppStateProvider({ children }: PropsWithChildren) {
   const recentlyConfirmedSetLogsRef = useRef<RecentlyConfirmedWorkoutSetLogs>(new Map());
   const recentlyConfirmedWorkoutNotesRef = useRef<RecentlyConfirmedWorkoutNotes>(new Map());
   const recentlyDeletedWorkoutsRef = useRef<Map<string, number>>(new Map());
+  const recentlyStartedWorkoutsRef = useRef<RecentlyStartedWorkouts>(new Map());
   const isHydrated =
     isStorageHydrated && (supabase ? (isSupabaseAuthResolved && didAttemptBootstrapRevalidation) || didBootstrapTimeout : true);
   const notify = useCallback((input: { tone: "success" | "danger" | "info"; message: string }) => {
@@ -2488,6 +2517,7 @@ export function AppStateProvider({ children }: PropsWithChildren) {
             recentlyConfirmedSetLogsRef.current,
             recentlyConfirmedWorkoutNotesRef.current,
             recentlyDeletedWorkoutsRef.current,
+            recentlyStartedWorkoutsRef.current,
             source === "bootstrap" ? "workouts" : "full",
           ),
         );
@@ -2717,6 +2747,7 @@ function findResolvedUserIdInSnapshot(
             recentlyConfirmedSetLogsRef.current,
             recentlyConfirmedWorkoutNotesRef.current,
             recentlyDeletedWorkoutsRef.current,
+            recentlyStartedWorkoutsRef.current,
             options?.mode ?? "full",
           ),
         );
@@ -3453,6 +3484,7 @@ function findResolvedUserIdInSnapshot(
               recentlyConfirmedSetLogsRef.current,
               recentlyConfirmedWorkoutNotesRef.current,
               recentlyDeletedWorkoutsRef.current,
+              recentlyStartedWorkoutsRef.current,
             ),
           );
         }
@@ -5260,6 +5292,7 @@ function findResolvedUserIdInSnapshot(
               : started?.scheduledWorkout.id ?? null;
             const previousState = state;
             if (started) {
+              recentlyStartedWorkoutsRef.current.set(started.scheduledWorkout.id, Date.now());
               setState(started.state);
             }
 
@@ -5277,6 +5310,9 @@ function findResolvedUserIdInSnapshot(
               session?: WorkoutSession;
             } | null;
             if (!response.ok) {
+              if (optimisticWorkoutId) {
+                recentlyStartedWorkoutsRef.current.delete(optimisticWorkoutId);
+              }
               setState(previousState);
               await refreshSupabaseVisibleState();
               return { ok: false, message: payload?.message ?? "Harjoituksen käynnistys epäonnistui." };
@@ -5284,9 +5320,15 @@ function findResolvedUserIdInSnapshot(
 
             const scheduledWorkoutId = payload?.scheduledWorkoutId ?? optimisticWorkoutId ?? undefined;
             if (optimisticWorkoutId && scheduledWorkoutId && scheduledWorkoutId !== optimisticWorkoutId) {
+              const startedAt = recentlyStartedWorkoutsRef.current.get(optimisticWorkoutId) ?? Date.now();
+              recentlyStartedWorkoutsRef.current.delete(optimisticWorkoutId);
+              recentlyStartedWorkoutsRef.current.set(scheduledWorkoutId, startedAt);
               setState((current) => rekeyOptimisticWorkoutArtifacts(current, optimisticWorkoutId, scheduledWorkoutId));
               setState((current) => mergeStartedWorkoutPayload(current, payload?.scheduledWorkout, payload?.session));
             } else {
+              if (scheduledWorkoutId) {
+                recentlyStartedWorkoutsRef.current.set(scheduledWorkoutId, Date.now());
+              }
               setState((current) => mergeStartedWorkoutPayload(current, payload?.scheduledWorkout, payload?.session));
             }
             if (scheduledWorkoutId && !payload?.session) {
@@ -5312,6 +5354,9 @@ function findResolvedUserIdInSnapshot(
               return { ok: false, message: payload?.message ?? "Harjoituksen käynnistys epäonnistui." };
             }
 
+            if (payload?.scheduledWorkoutId) {
+              recentlyStartedWorkoutsRef.current.set(payload.scheduledWorkoutId, Date.now());
+            }
             setState((current) => mergeStartedWorkoutPayload(current, payload?.scheduledWorkout, payload?.session));
             if (payload?.scheduledWorkoutId && !payload?.session) {
               void ensureWorkoutVisibleInState(payload.scheduledWorkoutId, { requireSession: true });

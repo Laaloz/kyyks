@@ -73,14 +73,14 @@ describe("mergeWorkoutSetDraftPatch", () => {
 });
 
 describe("buildWorkoutSetDraftKey", () => {
-  it("prefers stable template exercise identifiers over transient log ids", () => {
+  it("prefers persisted log ids so edited sets cannot drift between exercises", () => {
     expect(
       buildWorkoutSetDraftKey({
         logId: "log_1",
         templateExerciseId: "exercise_1",
         setLabel: "2",
       }),
-    ).toBe("exercise_1::2");
+    ).toBe("log::log_1");
     expect(buildWorkoutSetDraftKey({ logId: "log_1" })).toBe("log::log_1");
   });
 });
@@ -645,6 +645,62 @@ describe("shouldPreserveStoredSessionDuringSupabaseBootstrap", () => {
 
     expect(preserved.scheduledWorkouts.some((workout: { id: string }) => workout.id === "workout_local_start")).toBe(true);
     expect(preserved.sessions.some((session: { id: string }) => session.id === "session_local_start")).toBe(true);
+  });
+
+  it("preserves a newly persisted active workout when a stale snapshot arrives", () => {
+    const state = cloneDemoState();
+
+    state.scheduledWorkouts = [
+      {
+        id: "srv_workout_1",
+        athleteId: "user_athlete_1",
+        coachId: "user_admin",
+        trainingPlanId: "plan_1",
+        programWorkoutId: "day_1",
+        title: "Penkki",
+        scheduledDate: "2026-03-24T08:00:00.000Z",
+        status: "in_progress",
+        createdAt: "2026-03-24T08:00:00.000Z",
+        updatedAt: "2026-03-24T08:00:00.000Z",
+      },
+    ];
+    state.sessions = [
+      {
+        id: "session_local_start",
+        scheduledWorkoutId: "srv_workout_1",
+        athleteId: "user_athlete_1",
+        startedAt: "2026-03-24T08:00:00.000Z",
+        updatedAt: "2026-03-24T08:00:00.000Z",
+        pausedDurationSeconds: 0,
+        setLogs: [],
+      },
+    ];
+
+    const nextState = reconcileSupabaseVisibleState(
+      state,
+      {
+        users: state.users,
+        bodyMeasurements: state.bodyMeasurements,
+        assignments: state.assignments,
+        exercises: state.exercises,
+        templates: state.templates,
+        plans: state.plans,
+        scheduledWorkouts: [],
+        sessions: [],
+        notes: state.notes,
+        conversationEntries: state.conversationEntries,
+      },
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      new Map([["srv_workout_1", Date.now()]]),
+      "workouts",
+    );
+
+    expect(nextState.scheduledWorkouts.some((workout) => workout.id === "srv_workout_1")).toBe(true);
+    expect(nextState.sessions.some((session) => session.scheduledWorkoutId === "srv_workout_1")).toBe(true);
   });
 
   it("rekeys optimistic workout artifacts to the persisted workout id", () => {
