@@ -173,11 +173,15 @@ function buildWorkoutSetDraftKey(patch: {
   templateExerciseId?: string;
   setLabel?: string;
 }) {
+  if (patch.logId) {
+    return `log::${patch.logId}`;
+  }
+
   if (patch.templateExerciseId && patch.setLabel) {
     return `${patch.templateExerciseId}::${patch.setLabel}`;
   }
 
-  return patch.logId ? `log::${patch.logId}` : null;
+  return null;
 }
 
 function mapPlanRow(row: PlanRow): TrainingPlan {
@@ -752,6 +756,15 @@ async function startWorkoutAtomic(params: {
   });
 
   if (error) {
+    console.error("[workout-start] atomic rpc failed", {
+      message: error.message,
+      code: error.code,
+      details: error.details,
+      hint: error.hint,
+      scheduledWorkoutId: params.scheduledWorkoutId,
+      trainingPlanId: params.trainingPlanId,
+      programWorkoutId: params.programWorkoutId,
+    });
     return { ok: false as const, message: "Treeniä ei voitu käynnistää." };
   }
 
@@ -1453,12 +1466,6 @@ export async function updateWorkoutSetOnServer({
     const supersetUpdatePayload = {
       done: patch.done,
       updated_at: updatePayload.updated_at,
-      ...(patch.done
-        ? {
-            actual_reps: updatePayload.actual_reps,
-            actual_load: updatePayload.actual_load,
-          }
-        : {}),
     };
 
     updates.push(
@@ -1635,8 +1642,6 @@ export async function syncWorkoutSetDraftsOnServer({
         workingLogs.set(candidate.id, {
           ...siblingCurrent,
           done: setPatch.done ?? siblingCurrent.done,
-          actual_reps: setPatch.done ? updatePayload.actual_reps : siblingCurrent.actual_reps,
-          actual_load: setPatch.done ? updatePayload.actual_load : siblingCurrent.actual_load,
         });
         changedLogIds.add(candidate.id);
       });

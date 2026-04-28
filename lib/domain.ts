@@ -649,16 +649,7 @@ export function updateSessionSet(
                   log.supersetGroup === targetLog.supersetGroup &&
                   log.setLabel === targetLog.setLabel
                 ) {
-                  const nextLog = { ...log, done: patch.done };
-                  if (patch.done) {
-                    return {
-                      ...nextLog,
-                      actualReps: nextLog.actualReps ?? resolveDefaultActualReps(nextLog),
-                      actualLoad: nextLog.actualLoad ?? resolveDefaultActualLoad(nextLog),
-                    };
-                  }
-
-                  return nextLog;
+                  return { ...log, done: patch.done };
                 }
 
                 return log;

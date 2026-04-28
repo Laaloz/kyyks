@@ -532,6 +532,112 @@ describe("training workflows server", () => {
     }
   });
 
+  it("uses log ids before template exercise and set label when syncing duplicate-looking set rows", async () => {
+    const updatedLogIds: string[] = [];
+    const admin = {
+      from: vi.fn((table: string) => {
+        const builder = {
+          select: vi.fn(() => builder),
+          eq: vi.fn((column: string, value: unknown) => {
+            if (table === "workout_set_logs" && column === "id") {
+              updatedLogIds.push(String(value));
+            }
+            return builder;
+          }),
+          neq: vi.fn(() => builder),
+          maybeSingle: vi.fn(async () => ({
+            data: table === "scheduled_workouts" ? { id: "workout-1", athlete_id: "athlete-1", status: "completed" } : null,
+            error: null,
+          })),
+          update: vi.fn(() => builder),
+          then: (resolve: (value: { data: unknown; error: null }) => unknown, reject?: (reason: unknown) => unknown) =>
+            Promise.resolve({
+              data:
+                table === "workout_set_logs"
+                  ? [
+                      {
+                        id: "log-left",
+                        template_exercise_id: "exercise-duplicate",
+                        set_id: "set-left",
+                        set_label: "1",
+                        superset_group: null,
+                        target_reps: 8,
+                        target_reps_min: null,
+                        target_load: 100,
+                        actual_reps: null,
+                        actual_load: null,
+                        done: false,
+                      },
+                      {
+                        id: "log-right",
+                        template_exercise_id: "exercise-duplicate",
+                        set_id: "set-right",
+                        set_label: "1",
+                        superset_group: null,
+                        target_reps: 10,
+                        target_reps_min: null,
+                        target_load: 80,
+                        actual_reps: null,
+                        actual_load: null,
+                        done: false,
+                      },
+                    ]
+                  : {},
+              error: null,
+            }).then(resolve, reject),
+        };
+
+        return builder;
+      }),
+    };
+
+    createSupabaseAdminClientMock.mockReturnValue(admin);
+
+    const result = await syncWorkoutSetDraftsOnServer({
+      requester: { id: "athlete-1", role: "athlete" },
+      scheduledWorkoutId: "workout-1",
+      sets: [
+        {
+          logId: "log-left",
+          templateExerciseId: "exercise-duplicate",
+          setLabel: "1",
+          actualReps: 6,
+          done: true,
+        },
+        {
+          logId: "log-right",
+          templateExerciseId: "exercise-duplicate",
+          setLabel: "1",
+          actualReps: 9,
+          done: true,
+        },
+      ],
+    });
+
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.setLogs).toEqual([
+        {
+          id: "log-left",
+          templateExerciseId: "exercise-duplicate",
+          setLabel: "1",
+          actualReps: 6,
+          actualLoad: 100,
+          done: true,
+        },
+        {
+          id: "log-right",
+          templateExerciseId: "exercise-duplicate",
+          setLabel: "1",
+          actualReps: 9,
+          actualLoad: 80,
+          done: true,
+        },
+      ]);
+    }
+    expect(updatedLogIds).toEqual(["log-left", "log-right"]);
+  });
+
   it("does not reopen a workout as active when its session is already completed", async () => {
     const admin = {
       from: vi.fn((table: string) => {

@@ -1167,11 +1167,15 @@ export function buildWorkoutSetDraftKey(patch: {
   templateExerciseId?: string;
   setLabel?: string;
 }) {
+  if (patch.logId) {
+    return `log::${patch.logId}`;
+  }
+
   if (patch.templateExerciseId && patch.setLabel) {
     return `${patch.templateExerciseId}::${patch.setLabel}`;
   }
 
-  return patch.logId ? `log::${patch.logId}` : null;
+  return null;
 }
 
 export function mergeWorkoutSetDraftPatch(

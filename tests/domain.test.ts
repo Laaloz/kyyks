@@ -571,6 +571,10 @@ describe("domain helpers", () => {
     );
     expect(checkedSetOne?.every((log) => log.done)).toBe(true);
     expect(checkedSetTwo?.every((log) => !log.done)).toBe(true);
+    expect(checkedSetOne?.find((log) => log.id === firstSetOneLog.id)?.actualReps).toBe(8);
+    expect(checkedSetOne?.find((log) => log.id === firstSetOneLog.id)?.actualLoad).toBe(firstSetOneLog.actualLoad ?? 50);
+    expect(checkedSetOne?.find((log) => log.id === secondSetOneLog.id)?.actualReps).toBe(secondSetOneLog.actualReps);
+    expect(checkedSetOne?.find((log) => log.id === secondSetOneLog.id)?.actualLoad).toBe(secondSetOneLog.actualLoad);
 
     const afterUncheck = updateSessionSet(afterCheck, scheduledWorkoutId, secondSetOneLog.id, { done: false });
     const uncheckedSession = afterUncheck.sessions.find((session) => session.scheduledWorkoutId === scheduledWorkoutId);

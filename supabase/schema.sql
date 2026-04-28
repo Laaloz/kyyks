@@ -412,7 +412,7 @@ declare
   v_blocking_workout public.scheduled_workouts%rowtype;
   v_session public.workout_sessions%rowtype;
   v_timestamp timestamptz := now();
-  v_set_log_count integer := coalesce(jsonb_array_length(p_set_logs), 0);
+  v_set_log_count integer := coalesce(jsonb_array_length(coalesce(p_set_logs, '[]'::jsonb)), 0);
 begin
   if p_scheduled_workout_id is null then
     if p_training_plan_id is null or p_program_workout_id is null then
@@ -422,8 +422,8 @@ begin
 
     select *
     into v_plan
-    from public.training_plans
-    where id = p_training_plan_id
+    from public.training_plans plan
+    where plan.id = p_training_plan_id
     for update;
 
     if not found or (p_requester_role <> 'admin' and v_plan.athlete_id <> p_requester_id) then
@@ -438,11 +438,11 @@ begin
 
     select *
     into v_existing_workout
-    from public.scheduled_workouts
-    where athlete_id = v_plan.athlete_id
-      and program_workout_id = p_program_workout_id
-      and status in ('in_progress', 'cancelled')
-    order by updated_at desc, id desc
+    from public.scheduled_workouts workout
+    where workout.athlete_id = v_plan.athlete_id
+      and workout.program_workout_id = p_program_workout_id
+      and workout.status in ('in_progress', 'cancelled')
+    order by workout.updated_at desc, workout.id desc
     limit 1
     for update;
 
@@ -461,11 +461,11 @@ begin
 
     select *
     into v_blocking_workout
-    from public.scheduled_workouts
-    where athlete_id = v_plan.athlete_id
-      and status = 'in_progress'
-      and (program_workout_id is distinct from p_program_workout_id)
-    order by updated_at desc, id desc
+    from public.scheduled_workouts workout
+    where workout.athlete_id = v_plan.athlete_id
+      and workout.status = 'in_progress'
+      and (workout.program_workout_id is distinct from p_program_workout_id)
+    order by workout.updated_at desc, workout.id desc
     limit 1;
 
     if found then
@@ -501,9 +501,9 @@ begin
       coalesce(
         nullif(
           (
-            select workout ->> 'name'
-            from jsonb_array_elements(v_plan.workouts) workout
-            where workout ->> 'id' = p_program_workout_id
+            select program_workout ->> 'name'
+            from jsonb_array_elements(v_plan.workouts) program_workout
+            where program_workout ->> 'id' = p_program_workout_id
             limit 1
           ),
           ''
@@ -521,8 +521,8 @@ begin
   else
     select *
     into v_workout
-    from public.scheduled_workouts
-    where id = p_scheduled_workout_id
+    from public.scheduled_workouts workout
+    where workout.id = p_scheduled_workout_id
     for update;
 
     if not found or (p_requester_role <> 'admin' and v_workout.athlete_id <> p_requester_id) then
@@ -553,12 +553,12 @@ begin
           else 0
         end,
       updated_at = v_timestamp
-    where id = v_session.id
+    where public.workout_sessions.id = v_session.id
     returning * into v_session;
 
     update public.scheduled_workouts
     set status = 'in_progress', updated_at = v_timestamp, updated_by = p_requester_id
-    where id = v_workout.id;
+    where public.scheduled_workouts.id = v_workout.id;
 
     return query select true, null::text, null::text, v_workout.id, v_session.id, v_session.updated_at;
     return;
@@ -566,7 +566,7 @@ begin
 
   update public.scheduled_workouts
   set status = 'in_progress', updated_at = v_timestamp, updated_by = p_requester_id
-  where id = v_workout.id
+  where public.scheduled_workouts.id = v_workout.id
   returning * into v_workout;
 
   insert into public.workout_sessions (
@@ -627,7 +627,7 @@ begin
       logs.actual_reps,
       logs.actual_load,
       coalesce(logs.done, false)
-    from jsonb_to_recordset(p_set_logs) as logs(
+    from jsonb_to_recordset(coalesce(p_set_logs, '[]'::jsonb)) as logs(
       template_exercise_id text,
       set_id text,
       exercise_id text,
