@@ -47,6 +47,15 @@ type StartedWorkoutPayload = {
   session: WorkoutSession;
 };
 
+type StartWorkoutAtomicPayload = {
+  ok?: boolean;
+  code?: string | null;
+  message?: string | null;
+  scheduled_workout_id?: string | null;
+  session_id?: string | null;
+  updated_at?: string | null;
+};
+
 function createPhaseTimer(label: string) {
   const startedAt = performance.now();
   return {
@@ -694,6 +703,16 @@ async function createSessionWithLogs(params: {
     .single<{ id: string; updated_at: string }>();
 
   if (sessionError || !session) {
+    const { data: recoveredSession } = await getLatestWorkoutSession<{
+      id: string;
+      completed_at: string | null;
+      updated_at: string;
+    }>(admin, params.scheduledWorkoutId, "id, completed_at, updated_at");
+
+    if (recoveredSession) {
+      return { ok: true as const, sessionId: recoveredSession.id, updatedAt: recoveredSession.updated_at };
+    }
+
     return { ok: false as const, message: "Treenisession luonti epäonnistui." };
   }
 
@@ -713,6 +732,52 @@ async function createSessionWithLogs(params: {
   }
 
   return { ok: true as const, sessionId: session.id, updatedAt: session.updated_at };
+}
+
+async function startWorkoutAtomic(params: {
+  admin: NonNullable<ReturnType<typeof createSupabaseAdminClient>>;
+  requester: RequesterProfile;
+  setLogs: Array<Record<string, unknown>>;
+  scheduledWorkoutId?: string;
+  trainingPlanId?: string;
+  programWorkoutId?: string;
+}) {
+  const { data, error } = await params.admin.rpc("start_workout_atomic", {
+    p_requester_id: params.requester.id,
+    p_requester_role: params.requester.role,
+    p_set_logs: params.setLogs,
+    p_scheduled_workout_id: params.scheduledWorkoutId ?? null,
+    p_training_plan_id: params.trainingPlanId ?? null,
+    p_program_workout_id: params.programWorkoutId ?? null,
+  });
+
+  if (error) {
+    return { ok: false as const, message: "Treeniä ei voitu käynnistää." };
+  }
+
+  const payload = (Array.isArray(data) ? data[0] : data) as StartWorkoutAtomicPayload | null;
+  if (!payload || typeof payload !== "object") {
+    return { ok: false as const, message: "Treeniä ei voitu käynnistää." };
+  }
+
+  if (!payload.ok) {
+    return {
+      ok: false as const,
+      message: typeof payload.message === "string" && payload.message ? payload.message : "Treeniä ei voitu käynnistää.",
+      code: typeof payload.code === "string" ? payload.code : undefined,
+    };
+  }
+
+  if (!payload.scheduled_workout_id || !payload.updated_at) {
+    return { ok: false as const, message: "Treeniä ei voitu käynnistää." };
+  }
+
+  return {
+    ok: true as const,
+    scheduledWorkoutId: payload.scheduled_workout_id,
+    sessionId: payload.session_id ?? undefined,
+    updatedAt: payload.updated_at,
+  };
 }
 
 async function getWorkoutCompletionSnapshot(params: {
@@ -1151,7 +1216,7 @@ export async function startProgramWorkoutOnServer({
       : Promise.resolve({ data: null, error: null }),
   ]);
 
-  if (existingActive.data?.id && !existingActiveSession.data?.completed_at) {
+  if (existingActive.data?.id && existingActiveSession.data && !existingActiveSession.data.completed_at) {
     const payload = await fetchStartedWorkoutPayload(admin, existingActive.data.id);
     return { ok: true as const, scheduledWorkoutId: existingActive.data.id, payload: payload ?? undefined };
   }
@@ -1170,56 +1235,29 @@ export async function startProgramWorkoutOnServer({
     return { ok: false as const, message: "Harjoituksen käynnistys epäonnistui." };
   }
 
-  const timestamp = nowIso();
-  const [scheduledWorkoutResult, setLogs] = await Promise.all([
-    admin
-      .from("scheduled_workouts")
-      .insert({
-        training_plan_id: plan.id,
-        program_workout_id: programWorkout.id,
-        athlete_id: plan.athleteId,
-        coach_id: plan.coachId,
-        title: programWorkout.name,
-        scheduled_date: timestamp,
-        status: "in_progress",
-        created_by: requester.id,
-        updated_by: requester.id,
-        created_at: timestamp,
-        updated_at: timestamp,
-      })
-      .select("id")
-      .single<{ id: string }>(),
-    buildProgramWorkoutSetLogs(plan, programWorkout.id, admin),
-  ]);
-  const { data: scheduledWorkout, error: scheduledWorkoutError } = scheduledWorkoutResult;
-  timer.checkpoint("scheduled-workout-insert");
+  const setLogs = await buildProgramWorkoutSetLogs(plan, programWorkout.id, admin);
   timer.checkpoint("set-log-build");
 
-  if (scheduledWorkoutError || !scheduledWorkout) {
-    return { ok: false as const, message: "Harjoituksen käynnistys epäonnistui." };
-  }
-
   if (!setLogs) {
-    await admin.from("scheduled_workouts").delete().eq("id", scheduledWorkout.id);
     return { ok: false as const, message: "Harjoituksen käynnistys epäonnistui." };
   }
 
-  const sessionResult = await createSessionWithLogs({
-    scheduledWorkoutId: scheduledWorkout.id,
-    athleteId: plan.athleteId,
-    setLogs,
+  const startResult = await startWorkoutAtomic({
     admin,
+    requester,
+    setLogs,
+    trainingPlanId: plan.id,
+    programWorkoutId: programWorkout.id,
   });
-  timer.checkpoint("session-and-log-insert");
+  timer.checkpoint("rpc-start");
 
-  if (!sessionResult.ok) {
-    await admin.from("scheduled_workouts").delete().eq("id", scheduledWorkout.id);
-    return sessionResult;
+  if (!startResult.ok) {
+    return startResult;
   }
 
   timer.checkpoint("done");
-  const payload = await fetchStartedWorkoutPayload(admin, scheduledWorkout.id);
-  return { ok: true as const, scheduledWorkoutId: scheduledWorkout.id, payload: payload ?? undefined };
+  const payload = await fetchStartedWorkoutPayload(admin, startResult.scheduledWorkoutId);
+  return { ok: true as const, scheduledWorkoutId: startResult.scheduledWorkoutId, payload: payload ?? undefined };
 }
 
 export async function startScheduledWorkoutOnServer({
@@ -1259,37 +1297,19 @@ export async function startScheduledWorkoutOnServer({
       return { ok: true as const, scheduledWorkoutId, updatedAt: existingSession.updated_at, payload: payload ?? undefined };
     }
 
-    const resumedAt = nowIso();
-    const pausedAtMs = existingSession.paused_at ? new Date(existingSession.paused_at).getTime() : Number.NaN;
-    const resumedAtMs = new Date(resumedAt).getTime();
-    const pausedSeconds =
-      Number.isFinite(pausedAtMs) && Number.isFinite(resumedAtMs) && resumedAtMs >= pausedAtMs
-        ? Math.round((resumedAtMs - pausedAtMs) / 1000)
-        : 0;
+    const startResult = await startWorkoutAtomic({
+      admin,
+      requester,
+      scheduledWorkoutId,
+      setLogs: [],
+    });
 
-    const { error: sessionError } = await admin
-      .from("workout_sessions")
-      .update({
-        paused_at: null,
-        paused_duration_seconds: (existingSession.paused_duration_seconds ?? 0) + pausedSeconds,
-        updated_at: resumedAt,
-      })
-      .eq("id", existingSession.id);
-
-    if (sessionError) {
-      return { ok: false as const, message: "Treeniä ei voitu jatkaa." };
+    if (!startResult.ok) {
+      return startResult;
     }
 
-    await admin
-      .from("scheduled_workouts")
-      .update({
-        status: "in_progress",
-        updated_at: resumedAt,
-      })
-      .eq("id", scheduledWorkoutId);
-
     const payload = await fetchStartedWorkoutPayload(admin, scheduledWorkoutId);
-    return { ok: true as const, scheduledWorkoutId, updatedAt: resumedAt, payload: payload ?? undefined };
+    return { ok: true as const, scheduledWorkoutId, updatedAt: startResult.updatedAt, payload: payload ?? undefined };
   }
 
   let setLogs: Array<Record<string, unknown>> | null = null;
@@ -1311,34 +1331,19 @@ export async function startScheduledWorkoutOnServer({
     return { ok: false as const, message: "Treeniä ei voitu käynnistää." };
   }
 
-  const timestamp = nowIso();
-  await admin
-    .from("scheduled_workouts")
-    .update({
-      status: "in_progress",
-      updated_at: timestamp,
-    })
-    .eq("id", scheduledWorkoutId);
-
-  const sessionResult = await createSessionWithLogs({
+  const startResult = await startWorkoutAtomic({
+    admin,
+    requester,
     scheduledWorkoutId,
-    athleteId: workout.athlete_id,
     setLogs,
   });
 
-  if (!sessionResult.ok) {
-    await admin
-      .from("scheduled_workouts")
-      .update({
-        status: "cancelled",
-        updated_at: timestamp,
-      })
-      .eq("id", scheduledWorkoutId);
-    return sessionResult;
+  if (!startResult.ok) {
+    return startResult;
   }
 
   const payload = await fetchStartedWorkoutPayload(admin, scheduledWorkoutId);
-  return { ok: true as const, scheduledWorkoutId, updatedAt: sessionResult.updatedAt, payload: payload ?? undefined };
+  return { ok: true as const, scheduledWorkoutId, updatedAt: startResult.updatedAt, payload: payload ?? undefined };
 }
 
 export async function updateWorkoutSetOnServer({

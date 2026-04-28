@@ -17,6 +17,7 @@ import {
   saveWorkoutNoteOnServer,
   syncWorkoutSetDraftsOnServer,
   startProgramWorkoutOnServer,
+  startScheduledWorkoutOnServer,
   updateWorkoutDateOnServer,
   updateWorkoutDurationOnServer,
   updateWorkoutSetOnServer,
@@ -614,6 +615,15 @@ describe("training workflows server", () => {
         };
         return builder;
       }),
+      rpc: vi.fn(async () => ({
+        data: {
+          ok: true,
+          scheduled_workout_id: "new-workout",
+          session_id: "new-session",
+          updated_at: "2026-04-03T08:10:00.000Z",
+        },
+        error: null,
+      })),
     };
 
     createSupabaseAdminClientMock.mockReturnValue(admin);
@@ -630,6 +640,14 @@ describe("training workflows server", () => {
     expect(result).toMatchObject({
       ok: true,
       scheduledWorkoutId: "new-workout",
+    });
+    expect(admin.rpc).toHaveBeenCalledWith("start_workout_atomic", {
+      p_requester_id: "athlete-1",
+      p_requester_role: "athlete",
+      p_set_logs: [],
+      p_scheduled_workout_id: null,
+      p_training_plan_id: "plan-1",
+      p_program_workout_id: "program-workout-1",
     });
   });
 
@@ -888,6 +906,139 @@ describe("training workflows server", () => {
       ok: true,
       updatedAt: "2026-04-02T09:30:00.000Z",
       completedAt: "2026-04-02T09:30:00.000Z",
+    });
+  });
+
+  it("recovers the existing session when scheduled workout start races with another request", async () => {
+    let workoutSessionLookupCount = 0;
+    const admin = {
+      from: vi.fn((table: string) => {
+        const builder = {
+          select: vi.fn(() => builder),
+          order: vi.fn(() => builder),
+          limit: vi.fn(() => builder),
+          eq: vi.fn(() => builder),
+          update: vi.fn(() => builder),
+          insert: vi.fn(() => builder),
+          maybeSingle: vi.fn(async () => {
+            if (table === "scheduled_workouts") {
+              return {
+                data: {
+                  id: "workout-1",
+                  training_plan_id: "plan-1",
+                  template_id: null,
+                  program_workout_id: "program-workout-1",
+                  athlete_id: "athlete-1",
+                  coach_id: "coach-1",
+                  title: "Penkki",
+                  scheduled_date: "2026-04-02T09:00:00.000Z",
+                  status: "scheduled",
+                  completed_at: null,
+                  created_at: "2026-04-01T08:00:00.000Z",
+                  updated_at: "2026-04-01T08:00:00.000Z",
+                },
+                error: null,
+              };
+            }
+
+            if (table === "workout_sessions") {
+              workoutSessionLookupCount += 1;
+              if (workoutSessionLookupCount <= 2) {
+                return { data: null, error: null };
+              }
+
+              return {
+                data: {
+                  id: "session-1",
+                  scheduled_workout_id: "workout-1",
+                  athlete_id: "athlete-1",
+                  started_at: "2026-04-02T09:00:00.000Z",
+                  completed_at: null,
+                  paused_at: null,
+                  paused_duration_seconds: 0,
+                  updated_at: "2026-04-02T09:00:01.000Z",
+                },
+                error: null,
+              };
+            }
+
+            if (table === "training_plans") {
+              return {
+                data: {
+                  id: "plan-1",
+                  coach_id: "coach-1",
+                  athlete_id: "athlete-1",
+                  title: "Plan",
+                  description: null,
+                  status: "active",
+                  start_date: "2026-04-01",
+                  week_count: 4,
+                  workouts: [
+                    {
+                      id: "program-workout-1",
+                      name: "Penkki",
+                      splitType: "upper",
+                      defaultRestSeconds: 120,
+                      exercises: [],
+                    },
+                  ],
+                  created_at: "2026-04-01T08:00:00.000Z",
+                  updated_at: "2026-04-01T08:00:00.000Z",
+                },
+                error: null,
+              };
+            }
+
+            return { data: null, error: null };
+          }),
+          single: vi.fn(async () => {
+            if (table === "workout_sessions") {
+              return {
+                data: null,
+                error: { code: "23505", message: "duplicate key value violates unique constraint" },
+              };
+            }
+
+            return { data: null, error: null };
+          }),
+          then: (resolve: (value: { data: unknown; error: null }) => unknown, reject?: (reason: unknown) => unknown) =>
+            Promise.resolve({
+              data: table === "workout_set_logs" ? [] : {},
+              error: null,
+            }).then(resolve, reject),
+        };
+        return builder;
+      }),
+      rpc: vi.fn(async () => ({
+        data: {
+          ok: true,
+          scheduled_workout_id: "workout-1",
+          session_id: "session-1",
+          updated_at: "2026-04-02T09:00:01.000Z",
+        },
+        error: null,
+      })),
+    };
+
+    createSupabaseAdminClientMock.mockReturnValue(admin);
+
+    const result = await startScheduledWorkoutOnServer({
+      requester: { id: "athlete-1", role: "athlete" },
+      scheduledWorkoutId: "workout-1",
+    });
+
+    expect(result).toMatchObject({
+      ok: true,
+      scheduledWorkoutId: "workout-1",
+      updatedAt: "2026-04-02T09:00:01.000Z",
+    });
+    expect(admin.rpc).toHaveBeenCalledWith("start_workout_atomic", {
+      p_requester_id: "athlete-1",
+      p_requester_role: "athlete",
+      p_set_logs: [],
+      p_scheduled_workout_id: "workout-1",
+      p_training_plan_id: null,
+      p_program_workout_id: null,
     });
   });
 });

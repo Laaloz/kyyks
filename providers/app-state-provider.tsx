@@ -2466,7 +2466,10 @@ export function AppStateProvider({ children }: PropsWithChildren) {
       }
 
       let resolvedUserId: string | null = null;
-      const snapshot = await fetchSupabaseVisibleStateSnapshot({ lite: source === "bootstrap" });
+      const snapshot = await fetchSupabaseVisibleStateSnapshot({
+        lite: source === "bootstrap",
+        mode: source === "bootstrap" ? "workouts" : "full",
+      });
       if (!active) {
         return;
       }
@@ -2481,6 +2484,7 @@ export function AppStateProvider({ children }: PropsWithChildren) {
             recentlyConfirmedSetLogsRef.current,
             recentlyConfirmedWorkoutNotesRef.current,
             recentlyDeletedWorkoutsRef.current,
+            source === "bootstrap" ? "workouts" : "full",
           ),
         );
         resolvedUserId = findResolvedUserIdInSnapshot(snapshot, authUser);

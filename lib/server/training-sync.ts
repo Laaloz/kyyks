@@ -546,7 +546,7 @@ export async function loadVisibleSupabaseAppState(
     notesResult,
     conversationEntriesResult,
   ] = await Promise.all([
-    mode === "full"
+    mode === "full" || mode === "workouts"
       ? supabase
           .from("profiles")
           .select(
@@ -607,19 +607,19 @@ export async function loadVisibleSupabaseAppState(
           .order("assigned_plan_id", { ascending: true })
           .order("sort_order", { ascending: true })
       : Promise.resolve({ data: [] as AssignedMealPlanItemRow[], error: null }),
-    mode === "full"
+    mode === "full" || mode === "workouts"
       ? supabase
           .from("coach_athlete_assignments")
           .select("id, coach_id, athlete_id, active, created_at")
           .order("created_at", { ascending: false })
       : Promise.resolve({ data: [] as AssignmentRow[], error: null }),
-    mode === "full"
+    mode === "full" || mode === "workouts"
       ? supabase
           .from("exercises")
           .select("id, external_key, name, category, equipment, cue, scope, coach_id")
           .order("name", { ascending: true })
       : Promise.resolve({ data: [] as ExerciseRow[], error: null }),
-    mode === "full"
+    mode === "full" || mode === "workouts"
       ? supabase
           .from("training_plans")
           .select("id, coach_id, athlete_id, title, description, status, start_date, week_count, workouts, created_at, updated_at")

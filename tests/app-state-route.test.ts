@@ -28,6 +28,7 @@ vi.mock("@/lib/server/training-sync", () => ({
 
 vi.mock("@/lib/server/request-timing", () => ({
   createRequestTimer: () => ({
+    checkpoint: vi.fn(),
     json: (body: unknown, init?: ResponseInit) => Response.json(body, init),
     log: vi.fn(),
   }),

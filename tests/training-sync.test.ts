@@ -190,6 +190,9 @@ function createSupabaseMock() {
       order() {
         return builder;
       },
+      range() {
+        return builder;
+      },
       maybeSingle() {
         state.isMaybeSingle = true;
         return Promise.resolve(resolveResult(state));

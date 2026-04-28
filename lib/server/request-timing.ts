@@ -8,6 +8,14 @@ export function createRequestTimer(label: string) {
   const startedAt = performance.now();
 
   return {
+    checkpoint(phase: string, metadata?: Record<string, unknown>) {
+      const durationMs = toDurationMs(startedAt);
+      console.info(`[timing] ${label}:${phase}`, {
+        durationMs,
+        ...metadata,
+      });
+      return durationMs;
+    },
     json(body: unknown, init?: ResponseInit) {
       const durationMs = toDurationMs(startedAt);
       const response = NextResponse.json(body, init);

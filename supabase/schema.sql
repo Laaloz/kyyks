@@ -385,6 +385,273 @@ on public.workout_set_logs (scheduled_workout_id);
 create index if not exists workout_set_logs_session_exercise_label_done_idx
 on public.workout_set_logs (session_id, exercise_id, set_label, done);
 
+create or replace function public.start_workout_atomic(
+  p_requester_id uuid,
+  p_requester_role public.app_role,
+  p_set_logs jsonb,
+  p_scheduled_workout_id uuid default null,
+  p_training_plan_id uuid default null,
+  p_program_workout_id text default null
+)
+returns table (
+  ok boolean,
+  code text,
+  message text,
+  scheduled_workout_id uuid,
+  session_id uuid,
+  updated_at timestamptz
+)
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_plan public.training_plans%rowtype;
+  v_workout public.scheduled_workouts%rowtype;
+  v_existing_workout public.scheduled_workouts%rowtype;
+  v_blocking_workout public.scheduled_workouts%rowtype;
+  v_session public.workout_sessions%rowtype;
+  v_timestamp timestamptz := now();
+  v_set_log_count integer := coalesce(jsonb_array_length(p_set_logs), 0);
+begin
+  if p_scheduled_workout_id is null then
+    if p_training_plan_id is null or p_program_workout_id is null then
+      return query select false, 'invalid_state', 'Harjoituksen käynnistys epäonnistui.', null::uuid, null::uuid, null::timestamptz;
+      return;
+    end if;
+
+    select *
+    into v_plan
+    from public.training_plans
+    where id = p_training_plan_id
+    for update;
+
+    if not found or (p_requester_role <> 'admin' and v_plan.athlete_id <> p_requester_id) then
+      return query select false, 'forbidden', 'Ohjelmaa ei löytynyt tai se ei kuulu sinulle.', null::uuid, null::uuid, null::timestamptz;
+      return;
+    end if;
+
+    if coalesce(v_plan.status, 'active') <> 'active' then
+      return query select false, 'invalid_state', 'Ohjelma on arkistoitu eikä siitä voi käynnistää uutta treeniä.', null::uuid, null::uuid, null::timestamptz;
+      return;
+    end if;
+
+    select *
+    into v_existing_workout
+    from public.scheduled_workouts
+    where athlete_id = v_plan.athlete_id
+      and program_workout_id = p_program_workout_id
+      and status in ('in_progress', 'cancelled')
+    order by updated_at desc, id desc
+    limit 1
+    for update;
+
+    if found then
+      select *
+      into v_session
+      from public.workout_sessions
+      where public.workout_sessions.scheduled_workout_id = v_existing_workout.id
+      for update;
+
+      if found and v_session.completed_at is null then
+        return query select true, null::text, null::text, v_existing_workout.id, v_session.id, v_session.updated_at;
+        return;
+      end if;
+    end if;
+
+    select *
+    into v_blocking_workout
+    from public.scheduled_workouts
+    where athlete_id = v_plan.athlete_id
+      and status = 'in_progress'
+      and (program_workout_id is distinct from p_program_workout_id)
+    order by updated_at desc, id desc
+    limit 1;
+
+    if found then
+      select *
+      into v_session
+      from public.workout_sessions
+      where public.workout_sessions.scheduled_workout_id = v_blocking_workout.id;
+
+      if not found or v_session.completed_at is null then
+        return query select false, 'invalid_state', format('Sinulla on kesken oleva treeni "%s". Jatka se ensin.', coalesce(nullif(trim(v_blocking_workout.title), ''), 'Treeni')), null::uuid, null::uuid, null::timestamptz;
+        return;
+      end if;
+    end if;
+
+    insert into public.scheduled_workouts (
+      training_plan_id,
+      program_workout_id,
+      athlete_id,
+      coach_id,
+      title,
+      scheduled_date,
+      status,
+      created_by,
+      updated_by,
+      created_at,
+      updated_at
+    )
+    values (
+      v_plan.id,
+      p_program_workout_id,
+      v_plan.athlete_id,
+      v_plan.coach_id,
+      coalesce(
+        nullif(
+          (
+            select workout ->> 'name'
+            from jsonb_array_elements(v_plan.workouts) workout
+            where workout ->> 'id' = p_program_workout_id
+            limit 1
+          ),
+          ''
+        ),
+        'Treeni'
+      ),
+      v_timestamp,
+      'in_progress',
+      p_requester_id,
+      p_requester_id,
+      v_timestamp,
+      v_timestamp
+    )
+    returning * into v_workout;
+  else
+    select *
+    into v_workout
+    from public.scheduled_workouts
+    where id = p_scheduled_workout_id
+    for update;
+
+    if not found or (p_requester_role <> 'admin' and v_workout.athlete_id <> p_requester_id) then
+      return query select false, 'forbidden', 'Treeniä ei löytynyt.', null::uuid, null::uuid, null::timestamptz;
+      return;
+    end if;
+  end if;
+
+  select *
+  into v_session
+  from public.workout_sessions
+  where public.workout_sessions.scheduled_workout_id = v_workout.id
+  for update;
+
+  if found then
+    if v_workout.status in ('completed', 'in_progress') then
+      return query select true, null::text, null::text, v_workout.id, v_session.id, v_session.updated_at;
+      return;
+    end if;
+
+    update public.workout_sessions
+    set
+      paused_at = null,
+      paused_duration_seconds = coalesce(paused_duration_seconds, 0) +
+        case
+          when paused_at is not null and v_timestamp >= paused_at
+            then extract(epoch from (v_timestamp - paused_at))::integer
+          else 0
+        end,
+      updated_at = v_timestamp
+    where id = v_session.id
+    returning * into v_session;
+
+    update public.scheduled_workouts
+    set status = 'in_progress', updated_at = v_timestamp, updated_by = p_requester_id
+    where id = v_workout.id;
+
+    return query select true, null::text, null::text, v_workout.id, v_session.id, v_session.updated_at;
+    return;
+  end if;
+
+  update public.scheduled_workouts
+  set status = 'in_progress', updated_at = v_timestamp, updated_by = p_requester_id
+  where id = v_workout.id
+  returning * into v_workout;
+
+  insert into public.workout_sessions (
+    scheduled_workout_id,
+    athlete_id,
+    started_at,
+    updated_at,
+    paused_duration_seconds
+  )
+  values (
+    v_workout.id,
+    v_workout.athlete_id,
+    v_timestamp,
+    v_timestamp,
+    0
+  )
+  on conflict (scheduled_workout_id) do update
+  set updated_at = public.workout_sessions.updated_at
+  returning * into v_session;
+
+  if v_session.started_at = v_timestamp and v_set_log_count > 0 then
+    insert into public.workout_set_logs (
+      session_id,
+      scheduled_workout_id,
+      template_exercise_id,
+      set_id,
+      exercise_id,
+      exercise_name,
+      muscle_group,
+      superset_group,
+      set_label,
+      target_reps,
+      target_reps_min,
+      target_reps_max,
+      target_load,
+      target_rest_seconds,
+      program_workout_id,
+      actual_reps,
+      actual_load,
+      done
+    )
+    select
+      v_session.id,
+      v_workout.id,
+      logs.template_exercise_id,
+      logs.set_id,
+      logs.exercise_id,
+      logs.exercise_name,
+      logs.muscle_group,
+      logs.superset_group,
+      logs.set_label,
+      logs.target_reps,
+      logs.target_reps_min,
+      logs.target_reps_max,
+      logs.target_load,
+      logs.target_rest_seconds,
+      logs.program_workout_id,
+      logs.actual_reps,
+      logs.actual_load,
+      coalesce(logs.done, false)
+    from jsonb_to_recordset(p_set_logs) as logs(
+      template_exercise_id text,
+      set_id text,
+      exercise_id text,
+      exercise_name text,
+      muscle_group text,
+      superset_group text,
+      set_label text,
+      target_reps int,
+      target_reps_min int,
+      target_reps_max int,
+      target_load numeric,
+      target_rest_seconds int,
+      program_workout_id text,
+      actual_reps int,
+      actual_load numeric,
+      done boolean
+    )
+    on conflict (session_id, template_exercise_id, set_id) do nothing;
+  end if;
+
+  return query select true, null::text, null::text, v_workout.id, v_session.id, v_session.updated_at;
+end;
+$$;
+
 create table if not exists public.workout_notes (
   id uuid primary key default gen_random_uuid(),
   session_id uuid not null unique references public.workout_sessions(id) on delete cascade,

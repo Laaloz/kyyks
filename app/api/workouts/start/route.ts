@@ -20,6 +20,7 @@ export async function POST(request: Request) {
   const {
     data: { user },
   } = await supabase.auth.getUser();
+  timer.checkpoint("auth");
 
   if (!user) {
     return timer.json({ message: "Kirjaudu sisään ennen harjoituksen käynnistystä." }, { status: 401 });
@@ -30,6 +31,7 @@ export async function POST(request: Request) {
     .select("id, role, email, full_name")
     .eq("id", user.id)
     .maybeSingle();
+  timer.checkpoint("profile");
 
   if (!requester) {
     return timer.json({ message: "Käyttäjäprofiilia ei löytynyt." }, { status: 403 });
@@ -46,6 +48,7 @@ export async function POST(request: Request) {
     programId: parsed.data.programId,
     programWorkoutId: parsed.data.programWorkoutId,
   });
+  timer.checkpoint("start", { programId: parsed.data.programId, programWorkoutId: parsed.data.programWorkoutId });
 
   if (!result.ok) {
     return timer.json({ message: result.message }, { status: 400 });
