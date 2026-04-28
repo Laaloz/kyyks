@@ -757,6 +757,111 @@ describe("training workflows server", () => {
     });
   });
 
+  it("uses client autofill hints for start set values while keeping server plan targets authoritative", async () => {
+    const admin = {
+      from: vi.fn((table: string) => {
+        const builder = {
+          select: vi.fn(() => builder),
+          order: vi.fn(() => builder),
+          limit: vi.fn(() => builder),
+          eq: vi.fn(() => builder),
+          in: vi.fn(() => builder),
+          neq: vi.fn(() => builder),
+          not: vi.fn(() => builder),
+          maybeSingle: vi.fn(async () => {
+            if (table === "training_plans") {
+              return {
+                data: {
+                  id: "plan-1",
+                  coach_id: "coach-1",
+                  athlete_id: "athlete-1",
+                  title: "Plan",
+                  description: null,
+                  status: "active",
+                  start_date: "2026-04-01",
+                  week_count: 4,
+                  workouts: [
+                    {
+                      id: "program-workout-1",
+                      name: "Penkki",
+                      splitType: "upper",
+                      defaultRestSeconds: 120,
+                      exercises: [
+                        {
+                          id: "exercise-server-1",
+                          exerciseId: "bench",
+                          exerciseName: "Penkkipunnerrus",
+                          muscleGroup: "chest",
+                          instruction: "",
+                          sets: [{ id: "set-server-1", label: "1", targetReps: 5, targetLoad: 100 }],
+                        },
+                      ],
+                    },
+                  ],
+                  created_at: "2026-04-01T08:00:00.000Z",
+                  updated_at: "2026-04-01T08:00:00.000Z",
+                },
+                error: null,
+              };
+            }
+
+            return { data: null, error: null };
+          }),
+          then: (resolve: (value: { data: unknown; error: null }) => unknown, reject?: (reason: unknown) => unknown) =>
+            Promise.resolve({ data: [], error: null }).then(resolve, reject),
+        };
+        return builder;
+      }),
+      rpc: vi.fn(async () => ({
+        data: {
+          ok: true,
+          scheduled_workout_id: "new-workout",
+          session_id: "new-session",
+          updated_at: "2026-04-03T08:10:00.000Z",
+        },
+        error: null,
+      })),
+    };
+
+    createSupabaseAdminClientMock.mockReturnValue(admin);
+
+    const result = await startProgramWorkoutOnServer({
+      requester: { id: "athlete-1", role: "athlete" },
+      programId: "plan-1",
+      programWorkoutId: "program-workout-1",
+      autofillHints: [
+        {
+          templateExerciseId: "exercise-server-1",
+          setId: "set-server-1",
+          exerciseId: "bench",
+          setLabel: "1",
+          actualReps: 7,
+          actualLoad: 105,
+        },
+      ],
+    });
+
+    expect(result).toMatchObject({ ok: true, scheduledWorkoutId: "new-workout" });
+    expect(admin.rpc).toHaveBeenCalledTimes(1);
+    expect(admin.rpc).toHaveBeenCalledWith("start_workout_atomic", {
+      p_requester_id: "athlete-1",
+      p_requester_role: "athlete",
+      p_set_logs: [
+        expect.objectContaining({
+          template_exercise_id: "exercise-server-1",
+          set_id: "set-server-1",
+          target_reps: 5,
+          target_load: 100,
+          actual_reps: 7,
+          actual_load: 105,
+        }),
+      ],
+      p_scheduled_workout_id: null,
+      p_training_plan_id: "plan-1",
+      p_program_workout_id: "program-workout-1",
+    });
+  });
+
   it("falls back to legacy writes when the atomic workout start rpc fails", async () => {
     const admin = {
       from: vi.fn((table: string) => {

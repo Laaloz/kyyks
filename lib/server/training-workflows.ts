@@ -12,6 +12,7 @@ import type {
   ScheduledWorkout,
   TrainingPlan,
   WorkoutBatchSetSyncResult,
+  WorkoutStartAutofillHint,
   WorkoutSetLog,
   WorkoutSetDraftPatch,
   WorkoutNote,
@@ -617,22 +618,44 @@ async function buildProgramWorkoutSetLogs(
   plan: TrainingPlan,
   workoutId: string,
   adminClient: NonNullable<ReturnType<typeof createSupabaseAdminClient>> | null = null,
+  autofillHints?: WorkoutStartAutofillHint[],
 ) {
   const programWorkout = plan.workouts?.find((item) => item.id === workoutId);
   if (!programWorkout) {
     return null;
   }
 
-  const autofill = await buildAutofillSnapshotMaps(
-    plan.athleteId,
-    programWorkout.exercises.map((exercise) => exercise.exerciseId ?? `custom_${exercise.id}`),
-    adminClient,
-  );
+  const hintByTemplateSet = new Map<string, { actualReps?: number; actualLoad?: number }>();
+  const hintByExerciseAndSetLabel = new Map<string, { actualReps?: number; actualLoad?: number }>();
+  autofillHints?.forEach((hint) => {
+    const snapshot = {
+      actualReps: hint.actualReps,
+      actualLoad: hint.actualLoad,
+    };
+    if (snapshot.actualReps === undefined && snapshot.actualLoad === undefined) {
+      return;
+    }
+
+    hintByTemplateSet.set(`${hint.templateExerciseId}:${hint.setId}`, snapshot);
+    hintByExerciseAndSetLabel.set(`${hint.exerciseId}:${hint.setLabel}`, snapshot);
+  });
+
+  const autofill = autofillHints
+    ? {
+        byExerciseAndSetLabel: hintByExerciseAndSetLabel,
+        byExercise: new Map<string, { actualReps?: number; actualLoad?: number }>(),
+      }
+    : await buildAutofillSnapshotMaps(
+        plan.athleteId,
+        programWorkout.exercises.map((exercise) => exercise.exerciseId ?? `custom_${exercise.id}`),
+        adminClient,
+      );
 
   return programWorkout.exercises.flatMap((exercise) =>
     exercise.sets.map((set) => {
       const resolvedExerciseId = exercise.exerciseId ?? `custom_${exercise.id}`;
       const snapshot =
+        hintByTemplateSet.get(`${exercise.id}:${set.id}`) ??
         autofill.byExerciseAndSetLabel.get(`${resolvedExerciseId}:${set.label}`) ??
         autofill.byExercise.get(resolvedExerciseId);
 
@@ -1214,10 +1237,12 @@ export async function startProgramWorkoutOnServer({
   requester,
   programId,
   programWorkoutId,
+  autofillHints,
 }: {
   requester: RequesterProfile;
   programId: string;
   programWorkoutId: string;
+  autofillHints?: WorkoutStartAutofillHint[];
 }) {
   const admin = createSupabaseAdminClient();
   const timer = createPhaseTimer(`workouts-start:${programId}`);
@@ -1251,6 +1276,9 @@ export async function startProgramWorkoutOnServer({
       .eq("athlete_id", planRow.athlete_id)
       .eq("program_workout_id", programWorkoutId)
       .in("status", ["in_progress", "cancelled"])
+      .order("updated_at", { ascending: false })
+      .order("id", { ascending: false })
+      .limit(1)
       .maybeSingle<{ id: string }>(),
     admin
       .from("scheduled_workouts")
@@ -1258,6 +1286,9 @@ export async function startProgramWorkoutOnServer({
       .eq("athlete_id", planRow.athlete_id)
       .eq("status", "in_progress")
       .neq("program_workout_id", programWorkoutId)
+      .order("updated_at", { ascending: false })
+      .order("id", { ascending: false })
+      .limit(1)
       .maybeSingle<{ id: string; title: string }>(),
   ]);
   timer.checkpoint("existing-active-query");
@@ -1280,8 +1311,7 @@ export async function startProgramWorkoutOnServer({
   ]);
 
   if (existingActive.data?.id && existingActiveSession.data && !existingActiveSession.data.completed_at) {
-    const payload = await fetchStartedWorkoutPayload(admin, existingActive.data.id);
-    return { ok: true as const, scheduledWorkoutId: existingActive.data.id, payload: payload ?? undefined };
+    return { ok: true as const, scheduledWorkoutId: existingActive.data.id };
   }
   timer.checkpoint("blocking-query");
 
@@ -1298,7 +1328,7 @@ export async function startProgramWorkoutOnServer({
     return { ok: false as const, message: "Harjoituksen käynnistys epäonnistui." };
   }
 
-  const setLogs = await buildProgramWorkoutSetLogs(plan, programWorkout.id, admin);
+  const setLogs = await buildProgramWorkoutSetLogs(plan, programWorkout.id, admin, autofillHints);
   timer.checkpoint("set-log-build");
 
   if (!setLogs) {

@@ -852,7 +852,15 @@ export async function loadVisibleSupabaseAppState(
   const sessions = ((sessionsResult.data ?? []) as WorkoutSessionRow[]).map((entry) => {
     const workout = scheduledWorkoutsById.get(entry.scheduled_workout_id);
     const exerciseOrder = buildProgramExerciseOrder(plans, workout);
-    const setLogs = [...(setLogsBySessionId.get(entry.id) ?? [])].sort((left, right) => {
+    const rawSetLogs = setLogsBySessionId.get(entry.id) ?? [];
+    const canUseProgramOrder =
+      exerciseOrder.size > 0 && rawSetLogs.every((log) => exerciseOrder.has(log.templateExerciseId));
+    const originalLogIndex = new Map(rawSetLogs.map((log, index) => [log.id, index] as const));
+    const setLogs = [...rawSetLogs].sort((left, right) => {
+      if (!canUseProgramOrder) {
+        return (originalLogIndex.get(left.id) ?? 0) - (originalLogIndex.get(right.id) ?? 0);
+      }
+
       const leftOrder = exerciseOrder.get(left.templateExerciseId) ?? Number.MAX_SAFE_INTEGER;
       const rightOrder = exerciseOrder.get(right.templateExerciseId) ?? Number.MAX_SAFE_INTEGER;
       if (leftOrder !== rightOrder) {

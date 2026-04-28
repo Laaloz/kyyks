@@ -4,10 +4,23 @@ import { z } from "zod";
 import { createRequestTimer } from "@/lib/server/request-timing";
 import { startProgramWorkoutOnServer } from "@/lib/server/training-workflows";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
+import type { ScheduledWorkout, WorkoutSession } from "@/lib/types";
 
 const requestSchema = z.object({
   programId: z.string(),
   programWorkoutId: z.string(),
+  autofillSetLogs: z
+    .array(
+      z.object({
+        templateExerciseId: z.string().min(1),
+        setId: z.string().min(1),
+        exerciseId: z.string().min(1),
+        setLabel: z.string().min(1),
+        actualReps: z.number().optional(),
+        actualLoad: z.number().optional(),
+      }),
+    )
+    .optional(),
 });
 
 export async function POST(request: Request) {
@@ -47,6 +60,7 @@ export async function POST(request: Request) {
     requester,
     programId: parsed.data.programId,
     programWorkoutId: parsed.data.programWorkoutId,
+    autofillHints: parsed.data.autofillSetLogs,
   });
   timer.checkpoint("start", { programId: parsed.data.programId, programWorkoutId: parsed.data.programWorkoutId });
 
@@ -54,11 +68,14 @@ export async function POST(request: Request) {
     return timer.json({ message: result.message }, { status: 400 });
   }
 
+  const payload = ("payload" in result ? result.payload : undefined) as
+    | { scheduledWorkout?: ScheduledWorkout; session?: WorkoutSession }
+    | undefined;
   timer.log({ userId: user.id, programId: parsed.data.programId, scheduledWorkoutId: result.scheduledWorkoutId });
   return timer.json({
     ok: true,
     scheduledWorkoutId: result.scheduledWorkoutId,
-    scheduledWorkout: result.payload?.scheduledWorkout,
-    session: result.payload?.session,
+    scheduledWorkout: payload?.scheduledWorkout,
+    session: payload?.session,
   });
 }

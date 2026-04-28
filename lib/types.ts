@@ -590,3 +590,12 @@ export interface WorkoutBatchSetSyncResult {
     done: boolean;
   }>;
 }
+
+export interface WorkoutStartAutofillHint {
+  templateExerciseId: string;
+  setId: string;
+  exerciseId: string;
+  setLabel: string;
+  actualReps?: number;
+  actualLoad?: number;
+}

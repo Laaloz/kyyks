@@ -776,7 +776,13 @@ export function AthleteSessionPanel({
         logs: [log],
       });
     });
-    return Array.from(grouped.values()).sort((left, right) => {
+    const groups = Array.from(grouped.values());
+    const canUseExerciseOrder = exerciseOrder.size > 0 && groups.every((group) => exerciseOrder.has(group.key));
+    if (!canUseExerciseOrder) {
+      return groups;
+    }
+
+    return groups.sort((left, right) => {
       const leftOrder = exerciseOrder.get(left.key) ?? Number.MAX_SAFE_INTEGER;
       const rightOrder = exerciseOrder.get(right.key) ?? Number.MAX_SAFE_INTEGER;
       if (leftOrder !== rightOrder) {

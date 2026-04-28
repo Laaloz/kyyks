@@ -510,7 +510,11 @@ export function AthleteDashboard({
       }
 
       const plannedOrder = buildScheduledWorkoutExerciseOrder(state, selectedWorkout);
-      if (plannedOrder.size > 0) {
+      const sessionHasOnlyPlannedExercises =
+        plannedOrder.size > 0 &&
+        (!selectedSession?.setLogs.length ||
+          selectedSession.setLogs.every((log) => plannedOrder.has(log.templateExerciseId)));
+      if (sessionHasOnlyPlannedExercises) {
         return plannedOrder;
       }
 

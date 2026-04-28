@@ -14,7 +14,7 @@ type QueryState = {
   isMaybeSingle: boolean;
 };
 
-function createSupabaseMock() {
+function createSupabaseMock(options?: { omitFirstExerciseFromPlan?: boolean }) {
   const inCalls: Array<{ table: string; column: string; values: unknown[] }> = [];
 
   const resolveResult = (state: QueryState) => {
@@ -97,13 +97,17 @@ function createSupabaseMock() {
                 splitType: "upper",
                 defaultRestSeconds: 180,
                 exercises: [
-                  {
-                    id: "exercise-template-1",
-                    exerciseId: "exercise-1",
-                    exerciseName: "Bench Press",
-                    instruction: "",
-                    sets: [{ id: "set-1", label: "1", targetReps: 5 }],
-                  },
+                  ...(options?.omitFirstExerciseFromPlan
+                    ? []
+                    : [
+                        {
+                          id: "exercise-template-1",
+                          exerciseId: "exercise-1",
+                          exerciseName: "Bench Press",
+                          instruction: "",
+                          sets: [{ id: "set-1", label: "1", targetReps: 5 }],
+                        },
+                      ]),
                   {
                     id: "exercise-template-2",
                     exerciseId: "exercise-2",
@@ -310,5 +314,13 @@ describe("loadVisibleSupabaseAppState", () => {
     expect(snapshot.sessions?.[0]?.setLogs[1]).toMatchObject({
       id: "log-second",
     });
+  });
+
+  it("keeps persisted set log order when the current program no longer matches the workout snapshot", async () => {
+    const supabase = createSupabaseMock({ omitFirstExerciseFromPlan: true });
+
+    const snapshot = await loadVisibleSupabaseAppState(supabase.client as never);
+
+    expect(snapshot.sessions?.[0]?.setLogs.map((log) => log.id)).toEqual(["log-second", "log-target"]);
   });
 });

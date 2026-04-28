@@ -5336,13 +5336,21 @@ function findResolvedUserIdInSnapshot(
               recentlyStartedWorkoutsRef.current.set(started.scheduledWorkout.id, Date.now());
               setState(started.state);
             }
+            const optimisticSetLogs = started?.session.setLogs.map((log) => ({
+              templateExerciseId: log.templateExerciseId,
+              setId: log.setId,
+              exerciseId: log.exerciseId,
+              setLabel: log.setLabel,
+              actualReps: log.actualReps,
+              actualLoad: log.actualLoad,
+            }));
 
             const response = await fetch("/api/workouts/start", {
               method: "POST",
               headers: {
                 "Content-Type": "application/json",
               },
-              body: JSON.stringify({ programId, programWorkoutId }),
+              body: JSON.stringify({ programId, programWorkoutId, autofillSetLogs: optimisticSetLogs }),
             });
             const payload = (await response.json().catch(() => null)) as {
               message?: string;
@@ -5374,6 +5382,9 @@ function findResolvedUserIdInSnapshot(
             }
             if (scheduledWorkoutId && !payload?.session) {
               void ensureWorkoutVisibleInState(scheduledWorkoutId, { requireSession: true });
+              window.setTimeout(() => {
+                void refreshSupabaseVisibleState({ mode: "workouts" });
+              }, 750);
             }
             warnIfOptimisticServerIdLeak("workout", scheduledWorkoutId);
             return { ok: true, scheduledWorkoutId };
@@ -5401,6 +5412,9 @@ function findResolvedUserIdInSnapshot(
             setState((current) => mergeStartedWorkoutPayload(current, payload?.scheduledWorkout, payload?.session));
             if (payload?.scheduledWorkoutId && !payload?.session) {
               void ensureWorkoutVisibleInState(payload.scheduledWorkoutId, { requireSession: true });
+              window.setTimeout(() => {
+                void refreshSupabaseVisibleState({ mode: "workouts" });
+              }, 750);
             }
             warnIfOptimisticServerIdLeak("workout", payload?.scheduledWorkoutId);
             return { ok: true, scheduledWorkoutId: payload?.scheduledWorkoutId };
