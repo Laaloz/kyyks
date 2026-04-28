@@ -676,8 +676,8 @@ export async function loadVisibleSupabaseAppState(
           .select("id, session_id, scheduled_workout_id, template_exercise_id, set_id, exercise_id, exercise_name, muscle_group, superset_group, set_label, target_reps, target_reps_min, target_reps_max, target_load, target_rest_seconds, program_workout_id, actual_reps, actual_load, done")
           .in("session_id", visibleSessionIds)
           .order("session_id", { ascending: true })
-          .order("template_exercise_id", { ascending: true })
-          .order("set_label", { ascending: true })
+          .order("created_at", { ascending: true })
+          .order("id", { ascending: true })
       : {
           data: [] as WorkoutSetLogRow[],
           error: null,

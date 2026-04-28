@@ -2788,8 +2788,14 @@ function findResolvedUserIdInSnapshot(
       return;
     }
 
-    void refreshSupabaseVisibleState();
-  }, [authenticatedUserId, isHydrated, supabase]);
+    const timeoutId = window.setTimeout(() => {
+      if (!hasActiveWorkoutOpen) {
+        void refreshSupabaseVisibleState();
+      }
+    }, 2500);
+
+    return () => window.clearTimeout(timeoutId);
+  }, [authenticatedUserId, hasActiveWorkoutOpen, isHydrated, supabase]);
 
   useEffect(() => {
     if (!isHydrated || !supabase || !authenticatedUserId) {
@@ -2817,14 +2823,6 @@ function findResolvedUserIdInSnapshot(
       window.removeEventListener("focus", refreshIfVisible);
       document.removeEventListener("visibilitychange", handleVisibilityChange);
     };
-  }, [authenticatedUserId, hasActiveWorkoutOpen, isHydrated, supabase]);
-
-  useEffect(() => {
-    if (!isHydrated || !supabase || !authenticatedUserId || hasActiveWorkoutOpen) {
-      return;
-    }
-
-    void refreshSupabaseVisibleState();
   }, [authenticatedUserId, hasActiveWorkoutOpen, isHydrated, supabase]);
 
   const ensureWorkoutSetDraftState = useCallback((scheduledWorkoutId: string) => {

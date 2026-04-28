@@ -285,7 +285,8 @@ async function fetchStartedWorkoutPayload(
     .from("workout_set_logs")
     .select("id, session_id, scheduled_workout_id, template_exercise_id, set_id, exercise_id, exercise_name, muscle_group, superset_group, set_label, target_reps, target_reps_min, target_reps_max, target_load, target_rest_seconds, program_workout_id, actual_reps, actual_load, done")
     .eq("session_id", session.id)
-    .order("template_exercise_id", { ascending: true })
+    .order("created_at", { ascending: true })
+    .order("id", { ascending: true })
     .order("set_label", { ascending: true });
 
   return {
@@ -1324,8 +1325,7 @@ export async function startProgramWorkoutOnServer({
       });
       timer.checkpoint("legacy-start-fallback");
       if (fallbackResult.ok) {
-        const payload = await fetchStartedWorkoutPayload(admin, fallbackResult.scheduledWorkoutId);
-        return { ok: true as const, scheduledWorkoutId: fallbackResult.scheduledWorkoutId, payload: payload ?? undefined };
+        return { ok: true as const, scheduledWorkoutId: fallbackResult.scheduledWorkoutId };
       }
     }
 
@@ -1333,8 +1333,7 @@ export async function startProgramWorkoutOnServer({
   }
 
   timer.checkpoint("done");
-  const payload = await fetchStartedWorkoutPayload(admin, startResult.scheduledWorkoutId);
-  return { ok: true as const, scheduledWorkoutId: startResult.scheduledWorkoutId, payload: payload ?? undefined };
+  return { ok: true as const, scheduledWorkoutId: startResult.scheduledWorkoutId };
 }
 
 export async function startScheduledWorkoutOnServer({

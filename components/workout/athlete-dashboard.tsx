@@ -504,11 +504,24 @@ export function AthleteDashboard({
     [selectedWorkout, state.plans, state.templates],
   );
   const selectedWorkoutExerciseOrder = useMemo(
-    () =>
-      selectedWorkout
-        ? buildScheduledWorkoutExerciseOrder(state, selectedWorkout)
-        : new Map<string, number>(),
-    [selectedWorkout, state],
+    () => {
+      if (!selectedWorkout) {
+        return new Map<string, number>();
+      }
+
+      if (selectedSession?.setLogs.length) {
+        const order = new Map<string, number>();
+        selectedSession.setLogs.forEach((log) => {
+          if (!order.has(log.templateExerciseId)) {
+            order.set(log.templateExerciseId, order.size);
+          }
+        });
+        return order;
+      }
+
+      return buildScheduledWorkoutExerciseOrder(state, selectedWorkout);
+    },
+    [selectedSession, selectedWorkout, state],
   );
   const selectedProgramWorkout = useMemo(
     () =>
