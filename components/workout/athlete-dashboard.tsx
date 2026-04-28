@@ -509,17 +509,18 @@ export function AthleteDashboard({
         return new Map<string, number>();
       }
 
-      if (selectedSession?.setLogs.length) {
-        const order = new Map<string, number>();
-        selectedSession.setLogs.forEach((log) => {
-          if (!order.has(log.templateExerciseId)) {
-            order.set(log.templateExerciseId, order.size);
-          }
-        });
-        return order;
+      const plannedOrder = buildScheduledWorkoutExerciseOrder(state, selectedWorkout);
+      if (plannedOrder.size > 0) {
+        return plannedOrder;
       }
 
-      return buildScheduledWorkoutExerciseOrder(state, selectedWorkout);
+      const sessionOrder = new Map<string, number>();
+      selectedSession?.setLogs.forEach((log) => {
+        if (!sessionOrder.has(log.templateExerciseId)) {
+          sessionOrder.set(log.templateExerciseId, sessionOrder.size);
+        }
+      });
+      return sessionOrder;
     },
     [selectedSession, selectedWorkout, state],
   );

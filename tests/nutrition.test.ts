@@ -139,11 +139,14 @@ describe("nutrition helpers", () => {
     );
 
     expect(comparison).not.toBeNull();
-    expect(comparison?.activeGoal).toBe("gain");
-    expect(comparison?.activeTarget.kcal).toBe(3200);
-    expect(comparison?.comparisonTargets.lose.kcal).toBeLessThan(comparison?.comparisonTargets.maintain.kcal ?? 0);
-    expect(comparison?.comparisonTargets.maintain.kcal).toBeLessThan(comparison?.comparisonTargets.gain.kcal ?? 0);
-    expect(comparison?.isEstimate).toBe(true);
+    if (!comparison?.comparisonTargets) {
+      throw new Error("Expected nutrition comparison targets");
+    }
+    expect(comparison.activeGoal).toBe("gain");
+    expect(comparison.activeTarget.kcal).toBe(3200);
+    expect(comparison.comparisonTargets.lose.kcal).toBeLessThan(comparison.comparisonTargets.maintain.kcal);
+    expect(comparison.comparisonTargets.maintain.kcal).toBeLessThan(comparison.comparisonTargets.gain.kcal);
+    expect(comparison.isEstimate).toBe(true);
   });
 
   it("returns null comparison when required profile data is missing", () => {
@@ -180,8 +183,11 @@ describe("nutrition helpers", () => {
     });
 
     expect(comparison).not.toBeNull();
-    expect(comparison?.activityLevel).toBe("high");
-    expect(comparison?.comparisonTargets.maintain.kcal).toBe(expectedMaintain?.kcal);
+    if (!comparison?.comparisonTargets) {
+      throw new Error("Expected default comparison targets");
+    }
+    expect(comparison.activityLevel).toBe("high");
+    expect(comparison.comparisonTargets.maintain.kcal).toBe(expectedMaintain?.kcal);
   });
 
   it("scales linear recipe ingredients but keeps fixed spices stable", () => {

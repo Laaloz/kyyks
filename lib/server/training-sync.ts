@@ -30,6 +30,33 @@ function logSyncPhase(phase: string, startedAt: number) {
   console.info(`[timing:app-state] ${phase}`, { durationMs });
 }
 
+function compareWorkoutSetLabels(left: string, right: string) {
+  const leftNumber = Number(left);
+  const rightNumber = Number(right);
+  if (Number.isFinite(leftNumber) && Number.isFinite(rightNumber) && leftNumber !== rightNumber) {
+    return leftNumber - rightNumber;
+  }
+
+  return left.localeCompare(right, undefined, { numeric: true, sensitivity: "base" });
+}
+
+function buildProgramExerciseOrder(
+  plans: TrainingPlan[],
+  workout: ScheduledWorkout | undefined,
+) {
+  if (!workout?.trainingPlanId || !workout.programWorkoutId) {
+    return new Map<string, number>();
+  }
+
+  const plan = plans.find((item) => item.id === workout.trainingPlanId);
+  const programWorkout = plan?.workouts?.find((item) => item.id === workout.programWorkoutId);
+  if (!programWorkout) {
+    return new Map<string, number>();
+  }
+
+  return new Map(programWorkout.exercises.map((exercise, index) => [exercise.id, index] as const));
+}
+
 type ProfileRow = {
   id: string;
   role: UserProfile["role"];
@@ -789,6 +816,7 @@ export async function loadVisibleSupabaseAppState(
   );
   const exercises = (exercisesResult.data ?? []).map((entry) => mapExerciseRow(entry as ExerciseRow));
   const templates: AppState["templates"] = [];
+  const plans = ((plansResult.data ?? []) as TrainingPlanRow[]).map((entry) => mapPlanRow(entry));
 
   const scheduledWorkouts = ((scheduledWorkoutsResult.data ?? []) as ScheduledWorkoutRow[]).map((entry) =>
     mapScheduledWorkoutRow(entry),
@@ -820,18 +848,38 @@ export async function loadVisibleSupabaseAppState(
     setLogsBySessionId.set(entry.session_id, existing);
   });
 
-  const sessions = ((sessionsResult.data ?? []) as WorkoutSessionRow[]).map((entry) => ({
-    id: entry.id,
-    scheduledWorkoutId: entry.scheduled_workout_id,
-    athleteId: entry.athlete_id,
-    energyLevel: entry.energy_level ?? undefined,
-    startedAt: entry.started_at,
-    completedAt: entry.completed_at ?? undefined,
-    pausedAt: entry.paused_at ?? undefined,
-    pausedDurationSeconds: entry.paused_duration_seconds ?? undefined,
-    updatedAt: entry.updated_at,
-    setLogs: setLogsBySessionId.get(entry.id) ?? [],
-  }));
+  const scheduledWorkoutsById = new Map(scheduledWorkouts.map((workout) => [workout.id, workout]));
+  const sessions = ((sessionsResult.data ?? []) as WorkoutSessionRow[]).map((entry) => {
+    const workout = scheduledWorkoutsById.get(entry.scheduled_workout_id);
+    const exerciseOrder = buildProgramExerciseOrder(plans, workout);
+    const setLogs = [...(setLogsBySessionId.get(entry.id) ?? [])].sort((left, right) => {
+      const leftOrder = exerciseOrder.get(left.templateExerciseId) ?? Number.MAX_SAFE_INTEGER;
+      const rightOrder = exerciseOrder.get(right.templateExerciseId) ?? Number.MAX_SAFE_INTEGER;
+      if (leftOrder !== rightOrder) {
+        return leftOrder - rightOrder;
+      }
+
+      const byLabel = compareWorkoutSetLabels(left.setLabel, right.setLabel);
+      if (byLabel !== 0) {
+        return byLabel;
+      }
+
+      return left.id.localeCompare(right.id);
+    });
+
+    return {
+      id: entry.id,
+      scheduledWorkoutId: entry.scheduled_workout_id,
+      athleteId: entry.athlete_id,
+      energyLevel: entry.energy_level ?? undefined,
+      startedAt: entry.started_at,
+      completedAt: entry.completed_at ?? undefined,
+      pausedAt: entry.paused_at ?? undefined,
+      pausedDurationSeconds: entry.paused_duration_seconds ?? undefined,
+      updatedAt: entry.updated_at,
+      setLogs,
+    };
+  });
 
   const notes = ((notesResult.data ?? []) as WorkoutNoteRow[]).map((entry) => mapWorkoutNoteRow(entry));
   const conversationEntries = ((conversationEntriesResult.data ?? []) as ConversationEntryRow[]).map((entry) => ({
@@ -863,7 +911,7 @@ export async function loadVisibleSupabaseAppState(
     assignments,
     exercises,
     templates,
-    plans: ((plansResult.data ?? []) as TrainingPlanRow[]).map((entry) => mapPlanRow(entry)),
+    plans,
     scheduledWorkouts,
     sessions,
     notes,

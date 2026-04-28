@@ -1442,7 +1442,7 @@ export async function updateWorkoutSetOnServer({
   const timestamp = nowIso();
   let resolvedLogId = logId;
 
-  if (patch.templateExerciseId && patch.setLabel) {
+  if (!resolvedLogId && patch.templateExerciseId && patch.setLabel) {
     const { data: matchingLog, error: matchingLogError } = await admin
       .from("workout_set_logs")
       .select("id")

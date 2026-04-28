@@ -1,9 +1,9 @@
 import { fireEvent, render, screen } from "@testing-library/react";
-import { describe, expect, it, vi } from "vitest";
+import { beforeAll, describe, expect, it, vi } from "vitest";
 
 import { buildProgramDraftFromProgram, CoachDashboard } from "@/components/workout/coach-dashboard";
 import { PROGRAMS_WORKSPACE_VIEW } from "@/components/workout/shared";
-import type { AppState, Exercise, TrainingPlan, UserProfile } from "@/lib/types";
+import { PROGRAMS_DASHBOARD_VIEW, type AppState, type Exercise, type TrainingPlan, type UserProfile } from "@/lib/types";
 
 vi.mock("@/components/workout/conversation-panel", () => ({
   ConversationPanel: () => <div>ConversationPanel</div>,
@@ -40,6 +40,11 @@ vi.mock("@/components/workout/shared", async () => {
 });
 
 const mockUseAppState = vi.fn();
+
+beforeAll(() => {
+  Element.prototype.scrollIntoView = vi.fn();
+  window.scrollTo = vi.fn();
+});
 
 vi.mock("@/providers/app-state-provider", () => ({
   resolveBlockingWorkoutStart: () => null,
@@ -257,7 +262,7 @@ describe("coach program copy", () => {
     expect(draft.workouts[1].exercises[0].targetLoad).toBeUndefined();
   });
 
-  it("copies a program to another user as a new builder draft", () => {
+  it("copies a program to another user as a new builder draft", async () => {
     const state = createState();
     const currentUser = state.users[0];
     const athletes = state.users.slice(1);
@@ -283,7 +288,7 @@ describe("coach program copy", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "Siirry lisäämään treenit" }));
 
-    expect(screen.getByText("Voima ylä")).toBeInTheDocument();
+    expect(await screen.findByText("Voima ylä")).toBeInTheDocument();
     expect(screen.getByText("Selkä pumppi")).toBeInTheDocument();
     expect(screen.getByText("Kuminauhasoutu")).toBeInTheDocument();
     expect(screen.getByText("Penkkipunnerrus")).toBeInTheDocument();

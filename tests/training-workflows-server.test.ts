@@ -412,7 +412,7 @@ describe("training workflows server", () => {
         role: "athlete",
       },
       scheduledWorkoutId: "workout-1",
-      logId: "stale-local-log",
+      logId: "",
       patch: {
         done: true,
         actualReps: 8,

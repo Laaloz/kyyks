@@ -129,7 +129,7 @@ function resolveWorkoutDateShiftDelta(referenceTimestamp: string, nextDate: stri
   return shiftedReference.getTime() - reference.getTime();
 }
 
-type SupabaseAuthSyncSource = "bootstrap" | "event";
+type SupabaseAuthSyncSource = "bootstrap" | "signin" | "event";
 type SupabaseAuthEvent =
   | "INITIAL_SESSION"
   | "SIGNED_IN"
@@ -266,6 +266,37 @@ function clearOptimisticWorkoutArtifacts(state: AppState, scheduledWorkoutId: st
     ),
     notes: state.notes.filter((note) => !sessionIds.has(note.sessionId)),
   };
+}
+
+function clearWorkoutLocalSyncState(
+  scheduledWorkoutId: string,
+  refs: {
+    mutationQueue: Map<string, WorkoutMutationQueueState>;
+    mutationWakeTimeouts: Map<string, number>;
+    setDrafts: Map<string, WorkoutSetDraftState>;
+    setDraftWakeTimeouts: Map<string, number>;
+    recentlyConfirmedSetLogs: RecentlyConfirmedWorkoutSetLogs;
+    recentlyConfirmedWorkoutNotes: RecentlyConfirmedWorkoutNotes;
+    recentlyStartedWorkouts: RecentlyStartedWorkouts;
+  },
+) {
+  const mutationWakeTimeout = refs.mutationWakeTimeouts.get(scheduledWorkoutId);
+  if (mutationWakeTimeout) {
+    window.clearTimeout(mutationWakeTimeout);
+    refs.mutationWakeTimeouts.delete(scheduledWorkoutId);
+  }
+
+  const setDraftWakeTimeout = refs.setDraftWakeTimeouts.get(scheduledWorkoutId);
+  if (setDraftWakeTimeout) {
+    window.clearTimeout(setDraftWakeTimeout);
+    refs.setDraftWakeTimeouts.delete(scheduledWorkoutId);
+  }
+
+  refs.mutationQueue.delete(scheduledWorkoutId);
+  refs.setDrafts.delete(scheduledWorkoutId);
+  refs.recentlyConfirmedSetLogs.delete(scheduledWorkoutId);
+  refs.recentlyConfirmedWorkoutNotes.delete(scheduledWorkoutId);
+  refs.recentlyStartedWorkouts.delete(scheduledWorkoutId);
 }
 
 function mergeStartedWorkoutPayload(
@@ -947,6 +978,10 @@ export function shouldPreserveStoredSessionDuringSupabaseBootstrap(
   return Boolean(persistedAuthenticatedUserId) && source === "event" && !hasResolvedAuthUser;
 }
 
+export function shouldUseLightweightAuthSnapshot(source: SupabaseAuthSyncSource) {
+  return source === "bootstrap" || source === "signin";
+}
+
 export function shouldSyncSupabaseAuthEvent(event: SupabaseAuthEvent) {
   return event !== "INITIAL_SESSION";
 }
@@ -960,7 +995,7 @@ export function shouldRevalidateSupabaseSessionBeforeClearingAuth(
     return false;
   }
 
-  if (source === "bootstrap") {
+  if (source === "bootstrap" || source === "signin") {
     return true;
   }
 
@@ -2493,16 +2528,15 @@ export function AppStateProvider({ children }: PropsWithChildren) {
         return;
       }
 
-      const profile = await fetchSupabaseProfileWithRetry(supabase, authUser.id);
-      if (!active) {
-        return;
-      }
-
       let resolvedUserId: string | null = null;
-      const snapshot = await fetchSupabaseVisibleStateSnapshot({
-        lite: source === "bootstrap",
-        mode: source === "bootstrap" ? "workouts" : "full",
-      });
+      const useLightweightSnapshot = shouldUseLightweightAuthSnapshot(source);
+      const [profile, snapshot] = await Promise.all([
+        fetchSupabaseProfileWithRetry(supabase, authUser.id),
+        fetchSupabaseVisibleStateSnapshot({
+          lite: useLightweightSnapshot,
+          mode: useLightweightSnapshot ? "workouts" : "full",
+        }),
+      ]);
       if (!active) {
         return;
       }
@@ -2518,7 +2552,7 @@ export function AppStateProvider({ children }: PropsWithChildren) {
             recentlyConfirmedWorkoutNotesRef.current,
             recentlyDeletedWorkoutsRef.current,
             recentlyStartedWorkoutsRef.current,
-            source === "bootstrap" ? "workouts" : "full",
+            useLightweightSnapshot ? "workouts" : "full",
           ),
         );
         resolvedUserId = findResolvedUserIdInSnapshot(snapshot, authUser);
@@ -2597,7 +2631,7 @@ export function AppStateProvider({ children }: PropsWithChildren) {
       if (!shouldSyncSupabaseAuthEvent(event as SupabaseAuthEvent)) {
         return;
       }
-      void syncFromAuthUser(session?.user ?? null, "event");
+      void syncFromAuthUser(session?.user ?? null, event === "SIGNED_IN" ? "signin" : "event");
     });
 
     return () => {
@@ -3438,81 +3472,88 @@ function findResolvedUserIdInSnapshot(
         return { ok: false, message: getSupabaseLoginErrorMessage(error.message) };
       }
 
-        const authUser = await resolveSupabaseAuthUserAfterPasswordSignIn({
-          initialUser: data.user,
-          confirmUser: () => withTimeout(confirmCurrentSupabaseAuthUser(supabase), 4000, null),
-        });
-
-        if (!authUser?.email) {
-          void refreshSupabaseVisibleState();
-          return { ok: true, message: "Kirjautuminen hyväksyttiin. Avataan työtilaa..." };
-        }
-
-      let profile: SupabaseProfileRecord | null = null;
-      let resolvedSnapshotUserId: string | null = null;
-      let latestSnapshot: SupabaseVisibleAppStateSnapshot | null = null;
-
-        for (let attempt = 0; attempt < 6; attempt += 1) {
-          profile = await fetchSupabaseProfileWithRetry(supabase, authUser.id, 3, 220);
-        if (profile) {
-          break;
-        }
-
-        try {
-          latestSnapshot = await fetchSupabaseVisibleStateSnapshot({
-            accessToken: data.session?.access_token,
-            throwOnError: true,
+      const authUser = data.user?.email
+        ? data.user
+        : await resolveSupabaseAuthUserAfterPasswordSignIn({
+            initialUser: data.user,
+            confirmUser: () => withTimeout(confirmCurrentSupabaseAuthUser(supabase), 1800, null),
+            attempts: 2,
           });
-        } catch (error) {
-          return {
-            ok: false,
-            message:
-              error instanceof Error && error.message
-                ? error.message
-                : "Käyttäjälle ei löytynyt profiilia tai käyttöoikeutta tähän sovellukseen.",
-          };
-        }
-        resolvedSnapshotUserId = latestSnapshot ? findResolvedUserIdInSnapshot(latestSnapshot, authUser) : null;
 
-        if (latestSnapshot) {
-          setState((previous) =>
-            reconcileSupabaseVisibleState(
-              previous,
-              latestSnapshot as SupabaseVisibleAppStateSnapshot,
-              workoutMutationQueueRef.current,
-              workoutSetDraftsRef.current,
-              recentlyConfirmedSetLogsRef.current,
-              recentlyConfirmedWorkoutNotesRef.current,
-              recentlyDeletedWorkoutsRef.current,
-              recentlyStartedWorkoutsRef.current,
-            ),
-          );
-        }
-
-        if (resolvedSnapshotUserId) {
-          setAuthenticatedUserId(resolvedSnapshotUserId);
-          setImpersonatedUserId(null);
-          setIsAuthTransitionPending(false);
-          return { ok: true };
-        }
-
-          if (attempt < 5) {
-            await waitForNextPaint(2);
-            await waitForDelay(260 * (attempt + 1));
-          }
-        }
+      if (!authUser?.email) {
+        void refreshSupabaseVisibleState({ mode: "workouts" });
+        return { ok: true, message: "Kirjautuminen hyväksyttiin. Avataan työtilaa..." };
+      }
 
       let resolvedUserId: string | null = null;
-      setState((previous) => {
-        const resolution = resolveSupabaseUserForState(previous, authUser, profile);
-        resolvedUserId = resolution.resolvedUserId;
-        return resolution.nextState;
-      });
+      const localResolution = resolveSupabaseUserForState(stateRef.current, authUser, null);
+      resolvedUserId = localResolution.resolvedUserId;
+      setState(localResolution.nextState);
 
-        if (!resolvedUserId) {
-          void refreshSupabaseVisibleState();
-          return { ok: true, message: "Kirjautuminen onnistui. Avataan työtilaa..." };
-        }
+      if (resolvedUserId) {
+        setAuthenticatedUserId(resolvedUserId);
+        setImpersonatedUserId(null);
+        setIsAuthTransitionPending(false);
+        return { ok: true };
+      }
+
+      let profile: SupabaseProfileRecord | null = null;
+      let latestSnapshot: SupabaseVisibleAppStateSnapshot | null = null;
+
+      try {
+        [profile, latestSnapshot] = await Promise.all([
+          fetchSupabaseProfileWithRetry(supabase, authUser.id, 2, 160),
+          fetchSupabaseVisibleStateSnapshot({
+            accessToken: data.session?.access_token,
+            lite: true,
+            mode: "workouts",
+            throwOnError: true,
+          }),
+        ]);
+      } catch (error) {
+        setIsAuthTransitionPending(false);
+        return {
+          ok: false,
+          message:
+            error instanceof Error && error.message
+              ? error.message
+              : "Käyttäjälle ei löytynyt profiilia tai käyttöoikeutta tähän sovellukseen.",
+        };
+      }
+
+      const resolvedSnapshotUserId = latestSnapshot ? findResolvedUserIdInSnapshot(latestSnapshot, authUser) : null;
+
+      if (latestSnapshot) {
+        setState((previous) =>
+          reconcileSupabaseVisibleState(
+            previous,
+            latestSnapshot as SupabaseVisibleAppStateSnapshot,
+            workoutMutationQueueRef.current,
+            workoutSetDraftsRef.current,
+            recentlyConfirmedSetLogsRef.current,
+            recentlyConfirmedWorkoutNotesRef.current,
+            recentlyDeletedWorkoutsRef.current,
+            recentlyStartedWorkoutsRef.current,
+            "workouts",
+          ),
+        );
+      }
+
+      if (resolvedSnapshotUserId) {
+        setAuthenticatedUserId(resolvedSnapshotUserId);
+        setImpersonatedUserId(null);
+        setIsAuthTransitionPending(false);
+        return { ok: true };
+      }
+
+      const profileResolution = resolveSupabaseUserForState(stateRef.current, authUser, profile);
+      resolvedUserId = profileResolution.resolvedUserId;
+      setState(profileResolution.nextState);
+
+      if (!resolvedUserId) {
+        void refreshSupabaseVisibleState({ mode: "workouts" });
+        return { ok: true, message: "Kirjautuminen onnistui. Avataan työtilaa..." };
+      }
 
       setAuthenticatedUserId(resolvedUserId);
       setImpersonatedUserId(null);
@@ -5977,7 +6018,8 @@ function findResolvedUserIdInSnapshot(
           return { ok: false, message: "Kirjaudu sisään ennen treenin poistamista." };
         }
 
-        const workout = state.scheduledWorkouts.find((item) => item.id === scheduledWorkoutId);
+        const currentState = stateRef.current;
+        const workout = currentState.scheduledWorkouts.find((item) => item.id === scheduledWorkoutId);
         if (!workout || workout.athleteId !== currentUser.id) {
           return { ok: false, message: "Treeniä ei löytynyt." };
         }
@@ -5987,7 +6029,17 @@ function findResolvedUserIdInSnapshot(
         }
 
         if (supabase) {
-          const previousState = state;
+          const previousState = currentState;
+          recentlyDeletedWorkoutsRef.current.set(scheduledWorkoutId, Date.now());
+          clearWorkoutLocalSyncState(scheduledWorkoutId, {
+            mutationQueue: workoutMutationQueueRef.current,
+            mutationWakeTimeouts: workoutMutationWakeTimeoutRef.current,
+            setDrafts: workoutSetDraftsRef.current,
+            setDraftWakeTimeouts: workoutSetDraftWakeTimeoutRef.current,
+            recentlyConfirmedSetLogs: recentlyConfirmedSetLogsRef.current,
+            recentlyConfirmedWorkoutNotes: recentlyConfirmedWorkoutNotesRef.current,
+            recentlyStartedWorkouts: recentlyStartedWorkoutsRef.current,
+          });
           setState((current) => domainDeleteScheduledWorkout(current, scheduledWorkoutId));
           const response = await fetch(`/api/workouts/${encodeURIComponent(scheduledWorkoutId)}`, {
             method: "DELETE",
@@ -6000,7 +6052,6 @@ function findResolvedUserIdInSnapshot(
             return { ok: false, message: payload?.message ?? "Treenin poisto epäonnistui." };
           }
 
-          recentlyDeletedWorkoutsRef.current.set(scheduledWorkoutId, Date.now());
           setState((current) => clearOptimisticWorkoutArtifacts(current, scheduledWorkoutId));
           void refreshSupabaseVisibleState({ mode: "workouts" });
           return { ok: true };

@@ -23,6 +23,7 @@ import {
   resolveBlockingWorkoutStart,
   resolveSupabaseUserForState,
   resolvePrimaryCoachIdForAthlete,
+  shouldUseLightweightAuthSnapshot,
   shouldCreateFreshInviteOnResendFailure,
   shouldPreserveStoredSessionDuringSupabaseBootstrap,
   shouldPreserveStoredSessionOnTransientSupabaseNullEvent,
@@ -111,6 +112,12 @@ describe("shouldPreserveStoredSessionDuringSupabaseBootstrap", () => {
     expect(shouldSyncSupabaseAuthEvent("INITIAL_SESSION")).toBe(false);
     expect(shouldSyncSupabaseAuthEvent("SIGNED_IN")).toBe(true);
     expect(shouldSyncSupabaseAuthEvent("SIGNED_OUT")).toBe(true);
+  });
+
+  it("uses lightweight snapshots for bootstrap and fresh password sign-in", () => {
+    expect(shouldUseLightweightAuthSnapshot("bootstrap")).toBe(true);
+    expect(shouldUseLightweightAuthSnapshot("signin")).toBe(true);
+    expect(shouldUseLightweightAuthSnapshot("event")).toBe(false);
   });
 
   it("revalidates an existing session before clearing auth on late null auth events", () => {
@@ -701,6 +708,62 @@ describe("shouldPreserveStoredSessionDuringSupabaseBootstrap", () => {
 
     expect(nextState.scheduledWorkouts.some((workout) => workout.id === "srv_workout_1")).toBe(true);
     expect(nextState.sessions.some((session) => session.scheduledWorkoutId === "srv_workout_1")).toBe(true);
+  });
+
+  it("keeps a just-deleted workout suppressed while the server snapshot catches up", () => {
+    const state = cloneDemoState();
+    const deletedWorkout = {
+      id: "srv_workout_deleted",
+      athleteId: "user_athlete_1",
+      coachId: "user_admin",
+      trainingPlanId: "plan_1",
+      programWorkoutId: "day_1",
+      title: "Penkki",
+      scheduledDate: "2026-03-24T08:00:00.000Z",
+      status: "in_progress" as const,
+      createdAt: "2026-03-24T08:00:00.000Z",
+      updatedAt: "2026-03-24T08:00:00.000Z",
+    };
+
+    const nextState = reconcileSupabaseVisibleState(
+      {
+        ...state,
+        scheduledWorkouts: [],
+        sessions: [],
+      },
+      {
+        users: state.users,
+        bodyMeasurements: state.bodyMeasurements,
+        assignments: state.assignments,
+        exercises: state.exercises,
+        templates: state.templates,
+        plans: state.plans,
+        scheduledWorkouts: [deletedWorkout],
+        sessions: [
+          {
+            id: "session_deleted",
+            scheduledWorkoutId: deletedWorkout.id,
+            athleteId: deletedWorkout.athleteId,
+            startedAt: "2026-03-24T08:00:00.000Z",
+            updatedAt: "2026-03-24T08:00:00.000Z",
+            pausedDurationSeconds: 0,
+            setLogs: [],
+          },
+        ],
+        notes: state.notes,
+        conversationEntries: state.conversationEntries,
+      },
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      new Map([[deletedWorkout.id, Date.now()]]),
+      undefined,
+      "workouts",
+    );
+
+    expect(nextState.scheduledWorkouts.some((workout) => workout.id === deletedWorkout.id)).toBe(false);
+    expect(nextState.sessions.some((session) => session.scheduledWorkoutId === deletedWorkout.id)).toBe(false);
   });
 
   it("rekeys optimistic workout artifacts to the persisted workout id", () => {

@@ -79,7 +79,47 @@ function createSupabaseMock() {
     }
 
     if (state.table === "training_plans") {
-      return { data: [], error: null };
+      return {
+        data: [
+          {
+            id: "plan-1",
+            coach_id: "coach-1",
+            athlete_id: "athlete-1",
+            title: "Voimaohjelma",
+            description: null,
+            status: "active",
+            start_date: "2026-03-01",
+            week_count: 4,
+            workouts: [
+              {
+                id: "day-1",
+                name: "Penkki",
+                splitType: "upper",
+                defaultRestSeconds: 180,
+                exercises: [
+                  {
+                    id: "exercise-template-1",
+                    exerciseId: "exercise-1",
+                    exerciseName: "Bench Press",
+                    instruction: "",
+                    sets: [{ id: "set-1", label: "1", targetReps: 5 }],
+                  },
+                  {
+                    id: "exercise-template-2",
+                    exerciseId: "exercise-2",
+                    exerciseName: "Row",
+                    instruction: "",
+                    sets: [{ id: "set-1", label: "1", targetReps: 8 }],
+                  },
+                ],
+              },
+            ],
+            created_at: "2026-03-01T08:00:00.000Z",
+            updated_at: "2026-03-01T08:00:00.000Z",
+          },
+        ],
+        error: null,
+      };
     }
 
     if (state.table === "scheduled_workouts") {
@@ -125,6 +165,27 @@ function createSupabaseMock() {
     if (state.table === "workout_set_logs") {
       return {
         data: [
+          {
+            id: "log-second",
+            session_id: "session-target",
+            scheduled_workout_id: "workout-1",
+            template_exercise_id: "exercise-template-2",
+            set_id: "set-1",
+            exercise_id: "exercise-2",
+            exercise_name: "Row",
+            muscle_group: "back",
+            superset_group: null,
+            set_label: "1",
+            target_reps: 8,
+            target_reps_min: null,
+            target_reps_max: null,
+            target_load: 60,
+            target_rest_seconds: 180,
+            program_workout_id: "day-1",
+            actual_reps: 8,
+            actual_load: 60,
+            done: true,
+          },
           {
             id: "log-target",
             session_id: "session-target",
@@ -239,12 +300,15 @@ describe("loadVisibleSupabaseAppState", () => {
     ).toBe(true);
     expect(snapshot.sessions ?? []).toHaveLength(1);
     expect(snapshot.sessions?.[0]?.id).toBe("session-target");
-    expect(snapshot.sessions?.[0]?.setLogs ?? []).toHaveLength(1);
+    expect(snapshot.sessions?.[0]?.setLogs ?? []).toHaveLength(2);
     expect(snapshot.sessions?.[0]?.setLogs[0]).toMatchObject({
       id: "log-target",
       actualReps: 5,
       actualLoad: 100,
       done: true,
+    });
+    expect(snapshot.sessions?.[0]?.setLogs[1]).toMatchObject({
+      id: "log-second",
     });
   });
 });
