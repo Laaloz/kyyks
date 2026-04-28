@@ -1,5 +1,5 @@
-import { render, screen } from "@testing-library/react";
-import { describe, expect, it, vi } from "vitest";
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { AdminDashboard } from "@/components/workout/admin-dashboard";
 import { AthleteDashboard } from "@/components/workout/athlete-dashboard";
@@ -34,6 +34,11 @@ vi.mock("@/providers/app-state-provider", () => ({
   canDeleteProgramFromState: () => false,
   useAppState: () => mockUseAppState(),
 }));
+
+afterEach(() => {
+  cleanup();
+  mockUseAppState.mockReset();
+});
 
 function createBaseState() {
   return {
@@ -72,7 +77,7 @@ function createBaseState() {
 }
 
 describe("personal nutrition summary overview wiring", () => {
-  it("renders in athlete overview", () => {
+  it("renders in athlete nutrition view", () => {
     const state = createBaseState();
     mockUseAppState.mockReturnValue({
       authenticatedUser: state.users[0],
@@ -92,11 +97,11 @@ describe("personal nutrition summary overview wiring", () => {
       deleteWorkout: vi.fn(),
     });
 
-    render(<AthleteDashboard view="overview" />);
+    render(<AthleteDashboard view="nutrition" />);
     expect(screen.getByText("PersonalNutritionSummaryCard")).toBeInTheDocument();
   });
 
-  it("renders in coach overview", () => {
+  it("keeps coach overview focused on training and measurements", () => {
     const state = createBaseState();
     const coachUser = { ...state.users[0], id: "coach_1", role: "coach", email: "coach@example.com" };
     state.users = [coachUser];
@@ -126,10 +131,11 @@ describe("personal nutrition summary overview wiring", () => {
     });
 
     render(<CoachDashboard view="overview" />);
-    expect(screen.getByText("PersonalNutritionSummaryCard")).toBeInTheDocument();
+    expect(screen.queryByText("PersonalNutritionSummaryCard")).not.toBeInTheDocument();
+    expect(screen.getByText("OwnTrainingOverviewCard")).toBeInTheDocument();
   });
 
-  it("renders in admin own overview tab", () => {
+  it("keeps admin own overview focused on training and measurements", () => {
     const state = createBaseState();
     const adminUser = { ...state.users[0], id: "admin_1", role: "admin", email: "admin@example.com" };
     state.users = [adminUser];
@@ -144,7 +150,8 @@ describe("personal nutrition summary overview wiring", () => {
 
     render(<AdminDashboard view="overview" />);
     expect(screen.queryByText("PersonalNutritionSummaryCard")).not.toBeInTheDocument();
-    screen.getByRole("tab", { name: "Oma" }).click();
-    expect(screen.getByText("PersonalNutritionSummaryCard")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("tab", { name: "Oma" }));
+    expect(screen.queryByText("PersonalNutritionSummaryCard")).not.toBeInTheDocument();
+    expect(screen.getByText("OwnTrainingOverviewCard")).toBeInTheDocument();
   });
 });

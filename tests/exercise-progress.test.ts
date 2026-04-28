@@ -67,14 +67,19 @@ function createLog(id: string, overrides: Partial<WorkoutSetLog> = {}): WorkoutS
   };
 }
 
-function createSession(id: string, scheduledWorkoutId: string, completedAt: string, setLogs: WorkoutSetLog[]): WorkoutSession {
+function createSession(
+  id: string,
+  scheduledWorkoutId: string,
+  completedAt: string | undefined,
+  setLogs: WorkoutSetLog[],
+): WorkoutSession {
   return {
     id,
     scheduledWorkoutId,
     athleteId: "athlete_1",
     startedAt: "2026-04-10T08:00:00.000Z",
     completedAt,
-    updatedAt: completedAt,
+    updatedAt: completedAt ?? "2026-04-10T08:30:00.000Z",
     setLogs,
   };
 }
@@ -145,7 +150,7 @@ describe("exercise progress helpers", () => {
       createWorkout("workout_2", { programWorkoutId: "program_1", completedAt: "2026-04-12T09:00:00.000Z" }),
     ];
     state.sessions = [
-      createSession("session_1", "workout_1", "2026-04-10T09:00:00.000Z", [
+      createSession("session_1", "workout_1", undefined, [
         createLog("1", { scheduledWorkoutId: "workout_1", actualLoad: 100, actualReps: 5 }),
       ]),
       createSession("session_2", "workout_2", "2026-04-12T09:00:00.000Z", [

@@ -8,6 +8,8 @@ import {
   calculateMacroTarget,
   calculateRecipeNutrition,
   getActiveMealPlanForAthlete,
+  getMealSlotGroupForTag,
+  getMealSlotGroupKcalRange,
   getMealSlotKcalRange,
   joinRecipeInstructionSteps,
   scaleRecipeIngredient,
@@ -283,6 +285,11 @@ describe("nutrition helpers", () => {
   it("resolves meal slot range boundaries and status safely", () => {
     const breakfastRange = getMealSlotKcalRange("breakfast", 2400);
     expect(breakfastRange).toEqual([360, 480]);
+    expect(getMealSlotKcalRange("evening_snack", 2400)).toEqual(breakfastRange);
+    expect(getMealSlotKcalRange("dinner", 2400)).toEqual(getMealSlotKcalRange("lunch", 2400));
+    expect(getMealSlotGroupKcalRange("morning_evening", 2400)).toEqual([360, 480]);
+    expect(getMealSlotGroupForTag("breakfast").id).toBe("morning_evening");
+    expect(getMealSlotGroupForTag("evening_snack").id).toBe("morning_evening");
 
     const withinComparison = buildRecipeGoalComparison(
       "breakfast",

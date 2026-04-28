@@ -25,7 +25,7 @@ describe("getVisiblePendingInvites", () => {
         coachId: "coach_1",
         status: "pending",
         createdAt: "2026-03-24T08:00:00.000Z",
-        expiresAt: "2026-03-31T08:00:00.000Z",
+        expiresAt: "2026-05-31T08:00:00.000Z",
       },
       {
         id: "invite_real",
@@ -36,7 +36,7 @@ describe("getVisiblePendingInvites", () => {
         coachId: "coach_1",
         status: "pending",
         createdAt: "2026-03-24T08:00:00.000Z",
-        expiresAt: "2026-03-31T08:00:00.000Z",
+        expiresAt: "2026-05-31T08:00:00.000Z",
       },
     ];
     const users: UserProfile[] = [

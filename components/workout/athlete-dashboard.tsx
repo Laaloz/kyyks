@@ -1926,45 +1926,7 @@ export function AthleteDashboard({
                         <p className="mt-2 max-w-3xl text-sm text-[var(--text-muted)]">{program.description}</p>
                       ) : null}
                       <div className="mt-4 grid gap-3 md:grid-cols-2 2xl:grid-cols-3">
-                        {[...(program.workouts ?? [])]
-                          .sort((a, b) => {
-                            const aActiveScheduled = activeScheduledByProgramWorkoutId.get(a.id);
-                            const bActiveScheduled = activeScheduledByProgramWorkoutId.get(b.id);
-                            const aStatus = aActiveScheduled ? resolveWorkoutStatus(aActiveScheduled) : undefined;
-                            const bStatus = bActiveScheduled ? resolveWorkoutStatus(bActiveScheduled) : undefined;
-                            const aResumable = Boolean(
-                              aActiveScheduled &&
-                                aStatus === "cancelled" &&
-                                scheduledWithSessionIds.has(aActiveScheduled.id),
-                            );
-                            const bResumable = Boolean(
-                              bActiveScheduled &&
-                                bStatus === "cancelled" &&
-                                scheduledWithSessionIds.has(bActiveScheduled.id),
-                            );
-                            const aInProgress = aStatus === "in_progress";
-                            const bInProgress = bStatus === "in_progress";
-
-                            if (aResumable !== bResumable) {
-                              return aResumable ? -1 : 1;
-                            }
-                            if (aInProgress !== bInProgress) {
-                              return aInProgress ? -1 : 1;
-                            }
-
-                            const aCompletionCount = currentUser
-                              ? countWorkoutCompletions(state, currentUser.id, {
-                                  programWorkoutId: a.id,
-                                })
-                              : 0;
-                            const bCompletionCount = currentUser
-                              ? countWorkoutCompletions(state, currentUser.id, {
-                                  programWorkoutId: b.id,
-                                })
-                              : 0;
-                            return bCompletionCount - aCompletionCount;
-                          })
-                          .map((workout) => {
+                        {(program.workouts ?? []).map((workout) => {
                           const setCount = workout.exercises.reduce((sum, exercise) => sum + exercise.sets.length, 0);
                           const completionCount =
                             currentUser

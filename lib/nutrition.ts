@@ -44,6 +44,16 @@ export type RecipeCompatibilityAlert = {
 };
 
 export type MealSlotKcalStatus = "below" | "within" | "above";
+export type MealSlotGroupId = "morning_evening" | "main" | "snack";
+
+export type MealSlotGroup = {
+  id: MealSlotGroupId;
+  label: string;
+  shortLabel: string;
+  description: string;
+  dailySlots: number;
+  tags: readonly MealTag[];
+};
 
 export type RecipeGoalComparison = {
   dailyShare: {
@@ -56,6 +66,39 @@ export type RecipeGoalComparison = {
     range: readonly [number, number];
     status: MealSlotKcalStatus;
   };
+};
+
+export const mealSlotGroups: readonly MealSlotGroup[] = [
+  {
+    id: "morning_evening",
+    label: "Aamu / iltapala",
+    shortLabel: "Aamu/ilta",
+    description: "Aamupala ja iltapala jakavat saman kcal-haarukan, joten niitä voi vaihtaa keskenään.",
+    dailySlots: 2,
+    tags: ["breakfast", "evening_snack"],
+  },
+  {
+    id: "main",
+    label: "Lounas / illallinen",
+    shortLabel: "Lounas/illallinen",
+    description: "Lounas ja illallinen ovat saman kokoisia pääaterioita ja toimivat ristiin.",
+    dailySlots: 2,
+    tags: ["lunch", "dinner"],
+  },
+  {
+    id: "snack",
+    label: "Välipalat",
+    shortLabel: "Välipalat",
+    description: "Välipalat pidetään omassa kevyemmässä vaihtoryhmässään.",
+    dailySlots: 1,
+    tags: ["snack"],
+  },
+] as const;
+
+const mealSlotGroupRanges: Record<MealSlotGroupId, [number, number]> = {
+  morning_evening: [0.15, 0.2],
+  main: [0.25, 0.3],
+  snack: [0.1, 0.15],
 };
 
 function nowIso() {
@@ -129,21 +172,25 @@ export function mealTagLabel(mealTag: MealTag) {
   }
 }
 
-export function getMealSlotKcalRange(mealTag: MealTag, targetKcal?: number) {
+export function getMealSlotGroupForTag(mealTag: MealTag) {
+  return mealSlotGroups.find((group) => group.tags.includes(mealTag)) ?? mealSlotGroups[2];
+}
+
+export function mealSlotGroupLabel(groupId: MealSlotGroupId) {
+  return mealSlotGroups.find((group) => group.id === groupId)?.label ?? "Ateriaryhmä";
+}
+
+export function getMealSlotGroupKcalRange(groupId: MealSlotGroupId, targetKcal?: number) {
   if (!targetKcal || targetKcal <= 0) {
     return null;
   }
 
-  const ranges: Record<MealTag, [number, number]> = {
-    breakfast: [0.15, 0.2],
-    lunch: [0.25, 0.3],
-    snack: [0.1, 0.15],
-    dinner: [0.25, 0.3],
-    evening_snack: [0.1, 0.15],
-  };
-
-  const [minRatio, maxRatio] = ranges[mealTag];
+  const [minRatio, maxRatio] = mealSlotGroupRanges[groupId];
   return [Math.round(targetKcal * minRatio), Math.round(targetKcal * maxRatio)] as const;
+}
+
+export function getMealSlotKcalRange(mealTag: MealTag, targetKcal?: number) {
+  return getMealSlotGroupKcalRange(getMealSlotGroupForTag(mealTag).id, targetKcal);
 }
 
 function resolveMealSlotKcalStatus(kcal: number, range: readonly [number, number]): MealSlotKcalStatus {

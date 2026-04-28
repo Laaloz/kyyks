@@ -9,16 +9,17 @@ import {
   buildRecipeGoalComparison,
   getActiveMealPlanForAthlete,
   getMealPlanRecipes,
-  getMealSlotKcalRange,
+  getMealSlotGroupForTag,
+  getMealSlotGroupKcalRange,
   getRecipeCompatibilityAlerts,
+  mealSlotGroups,
   mealTagLabel,
   resolveRecipeNutritionPreview,
   scaleRecipeIngredient,
   splitRecipeInstructions,
+  type MealSlotGroupId,
 } from "@/lib/nutrition";
 import type { AppState, MealTag, Recipe, UserProfile } from "@/lib/types";
-
-const mealTagOrder: MealTag[] = ["breakfast", "lunch", "snack", "dinner", "evening_snack"];
 
 function formatQuantity(value: number) {
   return Number.isInteger(value) ? String(value) : String(Math.round(value * 10) / 10);
@@ -396,35 +397,42 @@ export function NutritionAthleteCard({
   const assignedTemplate = assignedPlan
     ? state.mealPlanTemplates.find((template) => template.id === assignedPlan.templateId) ?? null
     : null;
-  const mealPlanRecipes = getMealPlanRecipes(state, assignedPlan);
+  const mealPlanRecipes = useMemo(() => getMealPlanRecipes(state, assignedPlan), [state, assignedPlan]);
 
-  if (!nutritionProfile && !assignedPlan) {
-    return null;
-  }
-
-  const groupedMealPlanRecipes = mealPlanRecipes.reduce<Partial<Record<MealTag, typeof mealPlanRecipes>>>((groups, item) => {
-    const existing = groups[item.mealTag] ?? [];
-    return {
-      ...groups,
-      [item.mealTag]: [...existing, item],
-    };
-  }, {});
-  const availableMealTags = mealTagOrder.filter((mealTag) => (groupedMealPlanRecipes[mealTag] ?? []).length > 0);
-  const [selectedMealTag, setSelectedMealTag] = useState<MealTag | null>(availableMealTags[0] ?? null);
+  const groupedMealPlanRecipes = useMemo(
+    () =>
+      mealPlanRecipes.reduce<Partial<Record<MealSlotGroupId, typeof mealPlanRecipes>>>((groups, item) => {
+        const groupId = getMealSlotGroupForTag(item.mealTag).id;
+        const existing = groups[groupId] ?? [];
+        return {
+          ...groups,
+          [groupId]: [...existing, item],
+        };
+      }, {}),
+    [mealPlanRecipes],
+  );
+  const availableMealGroups = useMemo(
+    () => mealSlotGroups.filter((group) => (groupedMealPlanRecipes[group.id] ?? []).length > 0),
+    [groupedMealPlanRecipes],
+  );
+  const [selectedMealGroupId, setSelectedMealGroupId] = useState<MealSlotGroupId | null>(availableMealGroups[0]?.id ?? null);
   const [selectedRecipeId, setSelectedRecipeId] = useState<string | null>(null);
   const [selectedServings, setSelectedServings] = useState<number>(1);
 
   useEffect(() => {
-    if (availableMealTags.length === 0) {
-      setSelectedMealTag(null);
+    if (availableMealGroups.length === 0) {
+      setSelectedMealGroupId(null);
       setSelectedRecipeId(null);
       return;
     }
 
-    setSelectedMealTag((current) => (current && availableMealTags.includes(current) ? current : availableMealTags[0]));
-  }, [availableMealTags]);
+    setSelectedMealGroupId((current) =>
+      current && availableMealGroups.some((group) => group.id === current) ? current : availableMealGroups[0].id,
+    );
+  }, [availableMealGroups]);
 
-  const selectedMealItems = selectedMealTag ? groupedMealPlanRecipes[selectedMealTag] ?? [] : [];
+  const selectedMealGroup = selectedMealGroupId ? mealSlotGroups.find((group) => group.id === selectedMealGroupId) ?? null : null;
+  const selectedMealItems = selectedMealGroupId ? groupedMealPlanRecipes[selectedMealGroupId] ?? [] : [];
   const selectedRecipeEntry = useMemo(
     () => selectedMealItems.find((item) => item.recipe.id === selectedRecipeId) ?? null,
     [selectedMealItems, selectedRecipeId],
@@ -446,6 +454,10 @@ export function NutritionAthleteCard({
     return resolveRecipeNutritionPreview(selectedRecipeEntry.recipe, state.ingredientsCatalog).nutritionPerServing;
   }, [selectedRecipeEntry, state.ingredientsCatalog]);
 
+  if (!nutritionProfile && !assignedPlan) {
+    return null;
+  }
+
   return (
     <Card className="border-[var(--border-strong)]">
       <div className="space-y-5">
@@ -453,7 +465,7 @@ export function NutritionAthleteCard({
           <p className="text-xs font-semibold tracking-[0.04em] text-[var(--text-subtle)]">Ruokalista</p>
           <CardTitle className="mt-2 text-balance text-2xl leading-tight">Päivän ateriat</CardTitle>
           <CardDescription className="mt-2">
-            Valitse ateriaryhmä ja avaa sen alta haluamasi resepti omaan näkymään ilman, että koko lista venyy mobiilissa pitkäksi.
+            Valitse vaihtoryhmä ja avaa sen alta haluamasi resepti omaan näkymään ilman, että koko lista venyy mobiilissa pitkäksi.
           </CardDescription>
         </div>
 
@@ -486,22 +498,22 @@ export function NutritionAthleteCard({
                 <p className="mt-1 text-sm text-[var(--text-muted)]">{assignedTemplate.description}</p>
               ) : null}
               <p className="mt-2 text-sm text-[var(--text-muted)]">
-                Valitse ensin ateriaryhmä ja selaa sen alta sopivia vaihtoehtoja. Kun napautat reseptiä, se aukeaa omaan selkeään reseptinäkymään.
+                Valitse ensin vaihtoryhmä ja selaa sen alta sopivia vaihtoehtoja. Kun napautat reseptiä, se aukeaa omaan selkeään reseptinäkymään.
               </p>
             </div>
 
-            {availableMealTags.length > 0 ? (
+            {availableMealGroups.length > 0 ? (
               <div className="space-y-4">
-                <div className="grid grid-cols-2 gap-2 xl:grid-cols-5">
-                  {availableMealTags.map((mealTag) => {
-                    const items = groupedMealPlanRecipes[mealTag] ?? [];
-                    const selected = selectedMealTag === mealTag;
-                    const slotRange = getMealSlotKcalRange(mealTag, nutritionProfile?.targetKcal);
+                <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
+                  {availableMealGroups.map((group) => {
+                    const items = groupedMealPlanRecipes[group.id] ?? [];
+                    const selected = selectedMealGroupId === group.id;
+                    const slotRange = getMealSlotGroupKcalRange(group.id, nutritionProfile?.targetKcal);
                     const slotGuidance = slotRange ? `${slotRange[0]}-${slotRange[1]} kcal` : null;
 
                     return (
                       <button
-                        key={mealTag}
+                        key={group.id}
                         type="button"
                         className={`min-w-0 rounded-2xl border px-4 py-4 text-left transition ${
                           selected
@@ -509,25 +521,25 @@ export function NutritionAthleteCard({
                             : "border-[var(--border)] bg-[var(--surface)] hover:bg-[var(--surface-2)]"
                         }`}
                         onClick={() => {
-                          setSelectedMealTag(mealTag);
+                          setSelectedMealGroupId(group.id);
                           setSelectedRecipeId(null);
                         }}
                       >
-                        <p className="text-xs font-semibold tracking-[0.04em] text-[var(--text-subtle)]">{mealTagLabel(mealTag)}</p>
+                        <p className="text-xs font-semibold tracking-[0.04em] text-[var(--text-subtle)]">{group.label}</p>
                         <p className="mt-2 text-base font-semibold text-[var(--text)]">{items.length} vaihtoehtoa</p>
                         <p className="mt-1 text-sm text-[var(--text-muted)]">
-                          {slotGuidance ?? "Valitse tilanteeseen sopiva vaihtoehto."}
+                          {slotGuidance ?? group.description}
                         </p>
                       </button>
                     );
                   })}
                 </div>
 
-                {selectedMealTag ? (
+                {selectedMealGroup ? (
                   <div className="space-y-4">
                     <div className="flex items-start justify-between gap-4 px-1">
                       <div>
-                        <p className="text-xs font-semibold tracking-[0.04em] text-[var(--text-subtle)]">{mealTagLabel(selectedMealTag)}</p>
+                        <p className="text-xs font-semibold tracking-[0.04em] text-[var(--text-subtle)]">{selectedMealGroup.label}</p>
                         <p className="mt-1 text-sm text-[var(--text-muted)]">Valitse resepti listasta avataksesi tarkemmat tiedot.</p>
                       </div>
                       <p className="text-sm text-[var(--text-muted)]">{selectedMealItems.length} reseptiä</p>
@@ -560,28 +572,28 @@ export function NutritionAthleteCard({
                                   <ChevronDown className="size-3.5" aria-hidden="true" />
                                 </div>
                               </div>
-                                <p className="mt-1 text-sm text-[var(--text-muted)]">
-                                  {item.recipe.description ?? "Valmis ateriasuositus tämän ateriaryhmän sisälle."}
-                                </p>
-                                <div className="mt-3 flex flex-wrap gap-2">
-                                  {macroPill("kcal", `${recipeNutrition.kcal}`)}
-                                  {macroPill("P", `${Math.round(recipeNutrition.proteinG)} g`)}
-                                  {macroPill("H", `${Math.round(recipeNutrition.carbsG)} g`)}
-                                  {macroPill("R", `${Math.round(recipeNutrition.fatG)} g`)}
+                              <p className="mt-1 text-sm text-[var(--text-muted)]">
+                                {item.recipe.description ?? "Valmis ateriasuositus tämän vaihtoryhmän sisälle."}
+                              </p>
+                              <div className="mt-3 flex flex-wrap gap-2">
+                                {macroPill("kcal", `${recipeNutrition.kcal}`)}
+                                {macroPill("P", `${Math.round(recipeNutrition.proteinG)} g`)}
+                                {macroPill("H", `${Math.round(recipeNutrition.carbsG)} g`)}
+                                {macroPill("R", `${Math.round(recipeNutrition.fatG)} g`)}
+                              </div>
+                              {goalComparison ? (
+                                <div className="mt-3 rounded-2xl border border-[var(--border)] bg-[var(--surface)] px-3 py-3 text-sm text-[var(--text-muted)]">
+                                  <p className="font-semibold text-[var(--text)]">
+                                    {formatShareValue(goalComparison.dailyShare.kcal)} päivän energiasta
+                                  </p>
+                                  <p className="mt-1">
+                                    P {formatShareValue(goalComparison.dailyShare.proteinG)} · H {formatShareValue(goalComparison.dailyShare.carbsG)} · R {formatShareValue(goalComparison.dailyShare.fatG)}
+                                  </p>
+                                  <p className="mt-1">
+                                    {mealTagPossessiveLabel(item.mealTag)} suositus {goalComparison.mealSlot.range[0]}-{goalComparison.mealSlot.range[1]} kcal, ja tämä annos {mealSlotStatusLabel(goalComparison.mealSlot.status)}.
+                                  </p>
                                 </div>
-                                {goalComparison ? (
-                                  <div className="mt-3 rounded-2xl border border-[var(--border)] bg-[var(--surface)] px-3 py-3 text-sm text-[var(--text-muted)]">
-                                    <p className="font-semibold text-[var(--text)]">
-                                      {formatShareValue(goalComparison.dailyShare.kcal)} päivän energiasta
-                                    </p>
-                                    <p className="mt-1">
-                                      P {formatShareValue(goalComparison.dailyShare.proteinG)} · H {formatShareValue(goalComparison.dailyShare.carbsG)} · R {formatShareValue(goalComparison.dailyShare.fatG)}
-                                    </p>
-                                    <p className="mt-1">
-                                      {mealTagPossessiveLabel(item.mealTag)} suositus {goalComparison.mealSlot.range[0]}-{goalComparison.mealSlot.range[1]} kcal, ja tämä annos {mealSlotStatusLabel(goalComparison.mealSlot.status)}.
-                                    </p>
-                                  </div>
-                                ) : null}
+                              ) : null}
                             </div>
                           </button>
                         );
@@ -598,9 +610,9 @@ export function NutritionAthleteCard({
           </div>
         )}
 
-        {selectedMealTag && selectedRecipeEntry && selectedRecipeNutrition ? (
+        {selectedRecipeEntry && selectedRecipeNutrition ? (
           <RecipeDetailDialog
-            mealTag={selectedMealTag}
+            mealTag={selectedRecipeEntry.mealTag}
             recipe={selectedRecipeEntry.recipe}
             nutrition={selectedRecipeNutrition}
             nutritionProfile={nutritionProfile}

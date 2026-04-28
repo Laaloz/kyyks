@@ -1734,8 +1734,12 @@ export function AthleteSessionPanel({
       </div>
 
       {status !== "completed" && restTotalSeconds > 0 && restExerciseKey ? (
-        <div className="sticky bottom-[max(env(safe-area-inset-bottom),0.75rem)] z-30 mt-4 w-full min-w-0 max-w-full md:fixed md:bottom-3 md:right-6 md:left-auto md:mt-0 md:w-[min(18rem,calc(100vw-2rem))]">
-          <div className="ml-auto w-full min-w-0 max-w-[calc(100vw-1rem)] overflow-hidden rounded-2xl border border-[color-mix(in_srgb,var(--accent)_50%,var(--border))] bg-[color-mix(in_srgb,var(--surface)_94%,var(--surface-3))] px-3 py-2.5 shadow-[0_12px_26px_-20px_var(--shadow)] backdrop-blur md:max-w-full">
+        <div className="sticky bottom-[max(env(safe-area-inset-bottom),0.75rem)] z-30 mx-auto mt-4 box-border w-[min(100%,calc(100dvw-1rem))] min-w-0 max-w-[calc(100dvw-1rem)] md:fixed md:bottom-3 md:right-3 md:left-auto md:mt-0 md:w-[min(18rem,calc(100dvw-1.5rem))] md:max-w-[calc(100dvw-1.5rem)] lg:right-6 lg:w-[min(18rem,calc(100dvw-3rem))] lg:max-w-[calc(100dvw-3rem)]">
+          <div
+            role="status"
+            aria-label="Lepoajastin"
+            className="box-border w-full min-w-0 max-w-full overflow-hidden rounded-2xl border border-[color-mix(in_srgb,var(--accent)_50%,var(--border))] bg-[color-mix(in_srgb,var(--surface)_94%,var(--surface-3))] px-3 py-2.5 shadow-[0_12px_26px_-20px_var(--shadow)] backdrop-blur"
+          >
             <div className="flex items-start justify-between gap-3">
               <div className="min-w-0 flex-1">
                 <p className="text-[10px] font-semibold uppercase tracking-[0.06em] text-[var(--text-subtle)]">
@@ -1748,7 +1752,7 @@ export function AthleteSessionPanel({
                   {formatDuration(restSecondsLeft)}
                 </p>
                 <p className="text-[10px] text-[var(--text-subtle)]">
-                  {restRunning ? "Kaynnissa" : "Valmis"}
+                  {restRunning ? "Käynnissä" : "Valmis"}
                 </p>
               </div>
             </div>
@@ -1760,19 +1764,19 @@ export function AthleteSessionPanel({
                 }}
               />
             </div>
-            <div className="mt-2 flex flex-wrap items-center justify-between gap-2 text-[11px] text-[var(--text-subtle)]">
-              <span className="min-w-0 flex-1">Aloitus {formatDuration(restTotalSeconds)}</span>
-              <div className="flex shrink-0 flex-wrap items-center justify-end gap-1.5">
+            <div className="mt-2 grid min-w-0 grid-cols-1 gap-2 text-[11px] text-[var(--text-subtle)] min-[360px]:grid-cols-[minmax(0,1fr)_auto] min-[360px]:items-center">
+              <span className="min-w-0 truncate">Aloitus {formatDuration(restTotalSeconds)}</span>
+              <div className="flex min-w-0 max-w-full flex-wrap items-center justify-end gap-1.5">
                 <button
                   type="button"
-                  className="rounded-full border border-[var(--border)] bg-[var(--surface)] px-2 py-1 text-[11px] font-medium text-[var(--text-muted)] transition hover:border-[var(--border-strong)] hover:text-[var(--text)]"
+                  className="max-w-full whitespace-nowrap rounded-full border border-[var(--border)] bg-[var(--surface)] px-2 py-1 text-[11px] font-medium text-[var(--text-muted)] transition hover:border-[var(--border-strong)] hover:text-[var(--text)]"
                   onClick={skipRestTimer}
                 >
                   Ohita
                 </button>
                 <button
                   type="button"
-                  className="rounded-full border border-[var(--border)] bg-[var(--surface)] px-2 py-1 text-[11px] font-medium text-[var(--text-muted)] transition hover:border-[var(--border-strong)] hover:text-[var(--text)]"
+                  className="max-w-full whitespace-nowrap rounded-full border border-[var(--border)] bg-[var(--surface)] px-2 py-1 text-[11px] font-medium text-[var(--text-muted)] transition hover:border-[var(--border-strong)] hover:text-[var(--text)]"
                   onClick={restartRestTimer}
                 >
                   Uudelleen

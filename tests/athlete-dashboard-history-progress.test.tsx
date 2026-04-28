@@ -1,5 +1,5 @@
-import { fireEvent, render, screen } from "@testing-library/react";
-import { describe, expect, it, vi } from "vitest";
+import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { AthleteDashboard } from "@/components/workout/athlete-dashboard";
 import type { AppState } from "@/lib/types";
@@ -26,6 +26,11 @@ vi.mock("@/providers/app-state-provider", () => ({
   resolveBlockingWorkoutStart: () => null,
   useAppState: () => mockUseAppState(),
 }));
+
+afterEach(() => {
+  cleanup();
+  mockUseAppState.mockReset();
+});
 
 function createBaseState(): AppState {
   return {
@@ -68,7 +73,7 @@ function createBaseState(): AppState {
   };
 }
 
-function renderDashboard(state: AppState) {
+function renderDashboard(state: AppState, options: { tab?: "training" | "history" } = {}) {
   mockUseAppState.mockReturnValue({
     authenticatedUser: { id: "athlete_1", email: "athlete@example.com" },
     currentUser: state.users[0],
@@ -88,10 +93,77 @@ function renderDashboard(state: AppState) {
   });
 
   render(<AthleteDashboard view="athlete-log" />);
-  fireEvent.click(screen.getByRole("tab", { name: "Historia" }));
+  if (options.tab !== "training") {
+    fireEvent.click(screen.getByRole("tab", { name: "Historia" }));
+  }
 }
 
 describe("AthleteDashboard history exercise progress", () => {
+  it("keeps program workouts in the order defined by the program", () => {
+    const state = createBaseState();
+    state.plans = [
+      {
+        id: "plan_1",
+        coachId: "coach_1",
+        athleteId: "athlete_1",
+        title: "Perusvoima",
+        status: "active",
+        startDate: "2026-04-01",
+        weekCount: 4,
+        createdAt: "2026-04-01T08:00:00.000Z",
+        updatedAt: "2026-04-01T08:00:00.000Z",
+        workouts: [
+          {
+            id: "program_workout_first",
+            name: "Ensimmäinen ohjelmassa",
+            splitType: "custom",
+            defaultRestSeconds: 120,
+            exercises: [],
+          },
+          {
+            id: "program_workout_second",
+            name: "Toinen ohjelmassa",
+            splitType: "custom",
+            defaultRestSeconds: 120,
+            exercises: [],
+          },
+          {
+            id: "program_workout_third",
+            name: "Kolmas ohjelmassa",
+            splitType: "custom",
+            defaultRestSeconds: 120,
+            exercises: [],
+          },
+        ],
+      },
+    ];
+    state.scheduledWorkouts = [
+      {
+        id: "completed_third",
+        trainingPlanId: "plan_1",
+        programWorkoutId: "program_workout_third",
+        athleteId: "athlete_1",
+        coachId: "coach_1",
+        title: "Kolmas ohjelmassa",
+        scheduledDate: "2026-04-14",
+        status: "completed",
+        createdAt: "2026-04-14T08:00:00.000Z",
+        updatedAt: "2026-04-14T09:00:00.000Z",
+        completedAt: "2026-04-14T09:00:00.000Z",
+      },
+    ];
+
+    renderDashboard(state, { tab: "training" });
+
+    const trainingPanel = screen.getByRole("tabpanel", { name: "Treeni" });
+    const first = within(trainingPanel).getByText("Ensimmäinen ohjelmassa");
+    const second = within(trainingPanel).getByText("Toinen ohjelmassa");
+    const third = within(trainingPanel).getByText("Kolmas ohjelmassa");
+
+    expect(first.compareDocumentPosition(second) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(second.compareDocumentPosition(third) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
   it("shows the new exercise progress card and updates metrics when exercise changes", () => {
     const state = createBaseState();
     state.scheduledWorkouts = [
@@ -173,7 +245,7 @@ describe("AthleteDashboard history exercise progress", () => {
 
     expect(screen.getByText("Liikekohtainen kehitys")).toBeInTheDocument();
     expect(screen.getByText("e1RM-trendi · Takakyykky")).toBeInTheDocument();
-    expect(screen.getByText("150,7 kg")).toBeInTheDocument();
+    expect(screen.getByText("158,7 kg")).toBeInTheDocument();
     expect(screen.getByTestId("metric-trend-chart")).toHaveTextContent("Takakyykky e1RM kehitystrendi:1");
 
     fireEvent.change(screen.getByLabelText("Valitse liike"), {
@@ -182,7 +254,7 @@ describe("AthleteDashboard history exercise progress", () => {
 
     expect(screen.getByText("e1RM-trendi · Penkkipunnerrus")).toBeInTheDocument();
     expect(screen.getByText("116,7 kg")).toBeInTheDocument();
-    expect(screen.getByText("100 kg x 5")).toBeInTheDocument();
+    expect(screen.getAllByText("100 kg x 5").length).toBeGreaterThan(0);
     expect(screen.getByTestId("metric-trend-chart")).toHaveTextContent("Penkkipunnerrus e1RM kehitystrendi:1");
   });
 

@@ -10,7 +10,21 @@ import { InlineFeedback } from "@/components/workout/inline-feedback";
 import { NutritionAthleteCard } from "@/components/workout/nutrition-athlete-card";
 import { PersonalNutritionSummaryCard } from "@/components/workout/personal-nutrition-summary-card";
 import { getMeasurementsForUser } from "@/lib/body-metrics";
-import { calculateMacroTarget, calculateRecipeNutrition, getMacroGoalGuidance, getMealSlotKcalRange, getMissingMacroProfileFields, getRecipeCompatibilityAlerts, joinRecipeInstructionSteps, mealTagLabel, resolveRecipeNutritionPreview, splitRecipeInstructions } from "@/lib/nutrition";
+import {
+  calculateMacroTarget,
+  calculateRecipeNutrition,
+  getMacroGoalGuidance,
+  getMealSlotGroupForTag,
+  getMealSlotGroupKcalRange,
+  getMissingMacroProfileFields,
+  getRecipeCompatibilityAlerts,
+  joinRecipeInstructionSteps,
+  mealSlotGroups,
+  mealTagLabel,
+  resolveRecipeNutritionPreview,
+  splitRecipeInstructions,
+  type MealSlotGroupId,
+} from "@/lib/nutrition";
 import { canActAsCoach } from "@/lib/role-access";
 import type {
   Ingredient,
@@ -109,8 +123,8 @@ function splitKnownAndCustom(values: string[], knownOptions: readonly string[]) 
   };
 }
 
-function mealSlotKcalGuidance(mealTag: MealTag, targetKcal?: number) {
-  const range = getMealSlotKcalRange(mealTag, targetKcal);
+function mealSlotGroupKcalGuidance(groupId: MealSlotGroupId, targetKcal?: number) {
+  const range = getMealSlotGroupKcalRange(groupId, targetKcal);
   if (!range) {
     return null;
   }
@@ -736,15 +750,17 @@ export function NutritionAdminPanel() {
   const templatePreview = state.mealPlanTemplates.slice(0, 4);
   const selectedTemplatePreview = useMemo(
     () =>
-      mealTags.reduce<Array<{ mealTag: MealTag; recipe: (typeof state.recipes)[number] }>>((items, mealTag) => {
+      mealTags.reduce<Array<{ mealTag: MealTag; mealSlotGroupId: MealSlotGroupId; recipe: (typeof state.recipes)[number] }>>((items, mealTag) => {
         const recipes = templateForm[mealTag]
           .map((recipeId) => state.recipes.find((recipe) => recipe.id === recipeId))
           .filter((recipe): recipe is (typeof state.recipes)[number] => Boolean(recipe));
+        const mealSlotGroupId = getMealSlotGroupForTag(mealTag).id;
 
         return [
           ...items,
           ...recipes.map((recipe) => ({
             mealTag,
+            mealSlotGroupId,
             recipe,
           })),
         ];
@@ -753,18 +769,18 @@ export function NutritionAdminPanel() {
   );
   const groupedTemplatePreview = useMemo(
     () =>
-      selectedTemplatePreview.reduce<Partial<Record<MealTag, typeof selectedTemplatePreview>>>((groups, item) => {
-        const existing = groups[item.mealTag] ?? [];
+      selectedTemplatePreview.reduce<Partial<Record<MealSlotGroupId, typeof selectedTemplatePreview>>>((groups, item) => {
+        const existing = groups[item.mealSlotGroupId] ?? [];
         return {
           ...groups,
-          [item.mealTag]: [...existing, item],
+          [item.mealSlotGroupId]: [...existing, item],
         };
       }, {}),
     [selectedTemplatePreview],
   );
   const templateDailyMacroPreview = useMemo(() => {
-    const mealGroups = mealTags.flatMap((mealTag) => {
-      const items = groupedTemplatePreview[mealTag] ?? [];
+    const mealGroups = mealSlotGroups.flatMap((group) => {
+      const items = groupedTemplatePreview[group.id] ?? [];
       if (items.length === 0) {
         return [];
       }
@@ -797,7 +813,7 @@ export function NutritionAdminPanel() {
         carbsG: totals.carbsG / entries.length,
         fatG: totals.fatG / entries.length,
       };
-      const targetRange = getMealSlotKcalRange(mealTag, displayedTargetKcal);
+      const targetRange = getMealSlotGroupKcalRange(group.id, displayedTargetKcal);
       const targetMidpoint = targetRange ? (targetRange[0] + targetRange[1]) / 2 : null;
       const recommended = entries.reduce((best, entry) => {
         if (!best) {
@@ -816,7 +832,9 @@ export function NutritionAdminPanel() {
       }, null as (typeof entries)[number] | null);
 
       return [{
-        mealTag,
+        mealSlotGroupId: group.id,
+        label: group.label,
+        dailySlots: group.dailySlots,
         itemCount: entries.length,
         targetRange,
         min,
@@ -855,14 +873,23 @@ export function NutritionAdminPanel() {
       }), source[0]);
     };
 
-    const recommendedItems = mealGroups
-      .map((group) => group.recommended?.nutrition)
-      .filter((item): item is NonNullable<(typeof mealGroups)[number]["recommended"]>["nutrition"] => Boolean(item));
+    const multiply = (
+      item: { kcal: number; proteinG: number; carbsG: number; fatG: number },
+      multiplier: number,
+    ) => ({
+      kcal: item.kcal * multiplier,
+      proteinG: item.proteinG * multiplier,
+      carbsG: item.carbsG * multiplier,
+      fatG: item.fatG * multiplier,
+    });
 
-    const recommendedTotals = combine(recommendedItems, "sum");
-    const minTotals = combine(mealGroups.map((group) => group.min), "sum");
-    const maxTotals = combine(mealGroups.map((group) => group.max), "sum");
-    const avgTotals = combine(mealGroups.map((group) => group.avg), "sum");
+    const recommendedTotals = combine(
+      mealGroups.map((group) => multiply(group.recommended?.nutrition ?? group.avg, group.dailySlots)),
+      "sum",
+    );
+    const minTotals = combine(mealGroups.map((group) => multiply(group.min, group.dailySlots)), "sum");
+    const maxTotals = combine(mealGroups.map((group) => multiply(group.max, group.dailySlots)), "sum");
+    const avgTotals = combine(mealGroups.map((group) => multiply(group.avg, group.dailySlots)), "sum");
     const targetGap = displayedTargetKcal ? recommendedTotals.kcal - displayedTargetKcal : null;
 
     return {
@@ -874,8 +901,12 @@ export function NutritionAdminPanel() {
       targetGap,
     };
   }, [displayedTargetKcal, groupedTemplatePreview, state.ingredientsCatalog]);
-  const filledMealTags = mealTags.filter((mealTag) => templateForm[mealTag].length > 0);
-  const missingMealTags = mealTags.filter((mealTag) => templateForm[mealTag].length === 0);
+  const filledMealSlotGroups = mealSlotGroups.filter((group) =>
+    group.tags.some((mealTag) => templateForm[mealTag].length > 0),
+  );
+  const missingMealSlotGroups = mealSlotGroups.filter((group) =>
+    group.tags.every((mealTag) => templateForm[mealTag].length === 0),
+  );
   const templatePreviewRecipeCount = selectedTemplatePreview.length;
   const recipesByMealTag = useMemo(
     () => ({
@@ -1123,7 +1154,7 @@ export function NutritionAdminPanel() {
                     </button>
                     <button type="button" className="w-full rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-4 text-left transition hover:border-[var(--border-strong)] hover:bg-[var(--surface-2)]" onClick={() => setActiveSection("plans")}>
                       <p className="text-sm font-semibold text-[var(--text)]">3. Kokoa päivä ja jaa</p>
-                      <p className="mt-1 text-sm text-[var(--text-muted)]">Valitse reseptit päivän slotteihin ja aktivoi pohja käyttäjälle tai itsellesi.</p>
+                      <p className="mt-1 text-sm text-[var(--text-muted)]">Valitse reseptit vaihtoryhmiin ja aktivoi pohja käyttäjälle tai itsellesi.</p>
                     </button>
                   </div>
                 </section>
@@ -2106,78 +2137,89 @@ export function NutritionAdminPanel() {
                     <Label htmlFor="template-description">Kuvaus</Label>
                     <Input id="template-description" value={templateForm.description} onChange={(event) => setTemplateForm((current) => ({ ...current, description: event.target.value }))} />
                   </div>
-                  {mealTags.map((mealTag) => (
-                    <div key={mealTag} className="space-y-3 rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-4">
-                      <div>
-                        <Label>{mealTagLabel(mealTag)}</Label>
-                        <p className="mt-1 text-xs text-[var(--text-muted)]">Valitse useita vaihtoehtoja saman ateriaryhmän sisälle. Käyttäjä voi syödä niitä ristiin sen mukaan, mikä arjessa toimii parhaiten.</p>
-                        <p className="mt-1 text-xs font-medium text-[var(--text-subtle)]">
-                          {mealSlotKcalGuidance(mealTag, displayedTargetKcal)
-                            ? `Tyypillinen haarukka noin ${mealSlotKcalGuidance(mealTag, displayedTargetKcal)}`
-                            : "Lisää tai valitse käyttäjälle kcal-tavoite, niin näkymään tulee suuntaa-antava haarukka."}
-                        </p>
+                  {mealSlotGroups.map((group) => {
+                    const groupRecipes = group.tags.flatMap((mealTag) => recipesByMealTag[mealTag] ?? []);
+                    const selectedCount = group.tags.reduce((count, mealTag) => count + templateForm[mealTag].length, 0);
+                    const slotGuidance = mealSlotGroupKcalGuidance(group.id, displayedTargetKcal);
+
+                    return (
+                      <div key={group.id} className="space-y-3 rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-4">
+                        <div>
+                          <Label>{group.label}</Label>
+                          <p className="mt-1 text-xs text-[var(--text-muted)]">{group.description}</p>
+                          <p className="mt-1 text-xs text-[var(--text-muted)]">
+                            Päivän rungossa tästä ryhmästä käytetään {group.dailySlots} {group.dailySlots === 1 ? "ateria" : "ateriaa"}.
+                          </p>
+                          <p className="mt-1 text-xs font-medium text-[var(--text-subtle)]">
+                            {slotGuidance
+                              ? `Tyypillinen haarukka noin ${slotGuidance}`
+                              : "Lisää tai valitse käyttäjälle kcal-tavoite, niin näkymään tulee suuntaa-antava haarukka."}
+                          </p>
+                        </div>
+                        <div className="grid gap-3 sm:grid-cols-2">
+                          {groupRecipes.length > 0 ? groupRecipes.map((recipe) => {
+                            const recipeMealTag = recipe.mealTag;
+                            const isSelected = templateForm[recipeMealTag].includes(recipe.id);
+                            const nutrition = resolveRecipeNutritionPreview(recipe, state.ingredientsCatalog).nutritionPerServing;
+                            return (
+                              <button
+                                key={recipe.id}
+                                type="button"
+                                className={`rounded-2xl border p-3 text-left transition ${isSelected ? "border-[var(--border-strong)] bg-[var(--surface-2)] text-[var(--text)] shadow-[0_0_0_1px_var(--border-strong)]" : "border-[var(--border)] bg-[var(--surface)] text-[var(--text-muted)] hover:border-[var(--border-strong)] hover:text-[var(--text)]"}`}
+                                onClick={() => setTemplateForm((current) => ({
+                                  ...current,
+                                  [recipeMealTag]: current[recipeMealTag].includes(recipe.id)
+                                    ? current[recipeMealTag].filter((item) => item !== recipe.id)
+                                    : [...current[recipeMealTag], recipe.id],
+                                }))}
+                                aria-pressed={isSelected}
+                              >
+                                <div className="flex items-start justify-between gap-3">
+                                  <div>
+                                    <p className="font-medium text-[var(--text)]">{recipe.name}</p>
+                                    {recipe.description ? (
+                                      <p className="mt-1 line-clamp-2 text-xs text-[var(--text-muted)]">{recipe.description}</p>
+                                    ) : null}
+                                  </div>
+                                  <Badge className={isSelected ? "border-[var(--border-strong)] bg-[var(--surface-3)] text-[var(--text)]" : undefined}>
+                                    {isSelected ? "Valittu" : "Valitse"}
+                                  </Badge>
+                                </div>
+                                <p className="mt-2 text-xs font-medium text-[var(--text-subtle)]">{mealTagLabel(recipe.mealTag)}</p>
+                                <div className="mt-3 grid grid-cols-4 gap-2 rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-2 text-center">
+                                  <div>
+                                    <p className="text-[11px] uppercase tracking-[0.18em] text-[var(--text-subtle)]">kcal</p>
+                                    <p className="mt-1 text-sm font-semibold text-[var(--text)]">{formatRecipeMacroValue(nutrition?.kcal)}</p>
+                                  </div>
+                                  <div>
+                                    <p className="text-[11px] uppercase tracking-[0.18em] text-[var(--text-subtle)]">P</p>
+                                    <p className="mt-1 text-sm font-semibold text-[var(--text)]">{formatRecipeMacroValue(nutrition?.proteinG)} g</p>
+                                  </div>
+                                  <div>
+                                    <p className="text-[11px] uppercase tracking-[0.18em] text-[var(--text-subtle)]">H</p>
+                                    <p className="mt-1 text-sm font-semibold text-[var(--text)]">{formatRecipeMacroValue(nutrition?.carbsG)} g</p>
+                                  </div>
+                                  <div>
+                                    <p className="text-[11px] uppercase tracking-[0.18em] text-[var(--text-subtle)]">R</p>
+                                    <p className="mt-1 text-sm font-semibold text-[var(--text)]">{formatRecipeMacroValue(nutrition?.fatG)} g</p>
+                                  </div>
+                                </div>
+                              </button>
+                            );
+                          }) : <p className="text-sm text-[var(--text-muted)]">Tässä vaihtoryhmässä ei ole vielä reseptejä.</p>}
+                        </div>
+                        <p className="text-xs text-[var(--text-muted)]">Valittuna {selectedCount} vaihtoehtoa.</p>
                       </div>
-                      <div className="grid gap-3 sm:grid-cols-2">
-                        {recipesByMealTag[mealTag].length > 0 ? recipesByMealTag[mealTag].map((recipe) => {
-                          const isSelected = templateForm[mealTag].includes(recipe.id);
-                          const nutrition = resolveRecipeNutritionPreview(recipe, state.ingredientsCatalog).nutritionPerServing;
-                          return (
-                            <button
-                              key={recipe.id}
-                              type="button"
-                              className={`rounded-2xl border p-3 text-left transition ${isSelected ? "border-[var(--border-strong)] bg-[var(--surface-2)] text-[var(--text)] shadow-[0_0_0_1px_var(--border-strong)]" : "border-[var(--border)] bg-[var(--surface)] text-[var(--text-muted)] hover:border-[var(--border-strong)] hover:text-[var(--text)]"}`}
-                              onClick={() => setTemplateForm((current) => ({
-                                ...current,
-                                [mealTag]: current[mealTag].includes(recipe.id)
-                                  ? current[mealTag].filter((item) => item !== recipe.id)
-                                  : [...current[mealTag], recipe.id],
-                              }))}
-                              aria-pressed={isSelected}
-                            >
-                              <div className="flex items-start justify-between gap-3">
-                                <div>
-                                  <p className="font-medium text-[var(--text)]">{recipe.name}</p>
-                                  {recipe.description ? (
-                                    <p className="mt-1 line-clamp-2 text-xs text-[var(--text-muted)]">{recipe.description}</p>
-                                  ) : null}
-                                </div>
-                                <Badge className={isSelected ? "border-[var(--border-strong)] bg-[var(--surface-3)] text-[var(--text)]" : undefined}>
-                                  {isSelected ? "Valittu" : "Valitse"}
-                                </Badge>
-                              </div>
-                              <div className="mt-3 grid grid-cols-4 gap-2 rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-2 text-center">
-                                <div>
-                                  <p className="text-[11px] uppercase tracking-[0.18em] text-[var(--text-subtle)]">kcal</p>
-                                  <p className="mt-1 text-sm font-semibold text-[var(--text)]">{formatRecipeMacroValue(nutrition?.kcal)}</p>
-                                </div>
-                                <div>
-                                  <p className="text-[11px] uppercase tracking-[0.18em] text-[var(--text-subtle)]">P</p>
-                                  <p className="mt-1 text-sm font-semibold text-[var(--text)]">{formatRecipeMacroValue(nutrition?.proteinG)} g</p>
-                                </div>
-                                <div>
-                                  <p className="text-[11px] uppercase tracking-[0.18em] text-[var(--text-subtle)]">H</p>
-                                  <p className="mt-1 text-sm font-semibold text-[var(--text)]">{formatRecipeMacroValue(nutrition?.carbsG)} g</p>
-                                </div>
-                                <div>
-                                  <p className="text-[11px] uppercase tracking-[0.18em] text-[var(--text-subtle)]">R</p>
-                                  <p className="mt-1 text-sm font-semibold text-[var(--text)]">{formatRecipeMacroValue(nutrition?.fatG)} g</p>
-                                </div>
-                              </div>
-                            </button>
-                          );
-                        }) : <p className="text-sm text-[var(--text-muted)]">Tässä kategoriassa ei ole vielä reseptejä.</p>}
-                      </div>
-                      <p className="text-xs text-[var(--text-muted)]">Valittuna {templateForm[mealTag].length} vaihtoehtoa.</p>
-                    </div>
-                  ))}
+                    );
+                  })}
                   <div className="space-y-2">
-                    {missingMealTags.length > 0 ? (
+                    {missingMealSlotGroups.length > 0 ? (
                       <div className="rounded-2xl border border-[color:color-mix(in_srgb,var(--warning)_35%,var(--border))] bg-[color:color-mix(in_srgb,var(--warning)_12%,var(--surface))] px-4 py-3 text-sm text-[var(--warning)]">
-                        Ateriapohjasta puuttuu vielä: {missingMealTags.map((mealTag) => mealTagLabel(mealTag)).join(", ")}. Voit silti tallentaa luonnoksen jo nyt.
+                        Ateriapohjasta puuttuu vielä: {missingMealSlotGroups.map((group) => group.label).join(", ")}. Voit silti tallentaa luonnoksen jo nyt.
                       </div>
                     ) : (
                       <div className="rounded-2xl border border-[color:color-mix(in_srgb,var(--success)_35%,var(--border))] bg-[color:color-mix(in_srgb,var(--success)_12%,var(--surface))] px-4 py-3 text-sm text-[var(--success)]">
-                        Kaikki ateriaryhmät on täytetty. Pohja on valmis tallennettavaksi.
+                        Kaikki vaihtoryhmät on täytetty. Pohja on valmis tallennettavaksi.
                       </div>
                     )}
                     <Button type="button" disabled={isSavingMealPlanTemplate} onClick={() => void handleSaveTemplate()}>
@@ -2240,7 +2282,7 @@ export function NutritionAdminPanel() {
                 <div className="rounded-3xl border border-[var(--border)] bg-[var(--surface-2)] p-4">
                   <p className="text-sm font-semibold text-[var(--text)]">Käyttäjän esikatselu</p>
                   <p className="mt-1 text-sm text-[var(--text-muted)]">
-                    Näin nykyinen luonnos näkyisi käyttäjälle ateriaryhmittäin vaihtoehtoina.
+                    Näin nykyinen luonnos näkyisi käyttäjälle vaihtoryhmittäin vaihtoehtoina.
                   </p>
 
                   {selectedTemplatePreview.length > 0 ? (
@@ -2250,7 +2292,7 @@ export function NutritionAdminPanel() {
                           {templateForm.name.trim() || "Luonnos ilman nimeä"}
                         </p>
                         <p className="mt-1 text-sm text-[var(--text-muted)]">
-                          {templateForm.description.trim() || "Ateriapohja näyttää vaihtoehdot per ateriaryhmä. Käyttäjä voi valita arkeen sopivat vaihtoehdot ilman että kaikki listatut annokset kuuluvat samaan päivään."}
+                          {templateForm.description.trim() || "Ateriapohja näyttää vaihtoehdot per vaihtoryhmä. Käyttäjä voi valita arkeen sopivat vaihtoehdot ilman että kaikki listatut annokset kuuluvat samaan päivään."}
                         </p>
                       </div>
 
@@ -2261,14 +2303,14 @@ export function NutritionAdminPanel() {
                           <p className="mt-1 text-sm text-[var(--text-muted)]">reseptiä luonnoksessa</p>
                         </div>
                         <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-4">
-                          <p className="text-xs font-semibold tracking-[0.04em] text-[var(--text-subtle)]">Täytetyt ateriaryhmät</p>
-                          <p className="mt-2 text-2xl font-semibold text-[var(--text)]">{filledMealTags.length} / {mealTags.length}</p>
+                          <p className="text-xs font-semibold tracking-[0.04em] text-[var(--text-subtle)]">Täytetyt vaihtoryhmät</p>
+                          <p className="mt-2 text-2xl font-semibold text-[var(--text)]">{filledMealSlotGroups.length} / {mealSlotGroups.length}</p>
                           <p className="mt-1 text-sm text-[var(--text-muted)]">ryhmää mukana luonnoksessa</p>
                         </div>
                         <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-4">
                           <p className="text-xs font-semibold tracking-[0.04em] text-[var(--text-subtle)]">Puuttuu vielä</p>
                           <p className="mt-2 text-sm font-semibold text-[var(--text)]">
-                            {missingMealTags.length > 0 ? missingMealTags.map((mealTag) => mealTagLabel(mealTag)).join(", ") : "Ei puuttuvia ryhmiä"}
+                            {missingMealSlotGroups.length > 0 ? missingMealSlotGroups.map((group) => group.label).join(", ") : "Ei puuttuvia ryhmiä"}
                           </p>
                         </div>
                       </div>
@@ -2279,7 +2321,7 @@ export function NutritionAdminPanel() {
                             <div>
                               <p className="text-sm font-semibold text-[var(--text)]">Päivän makroarvio</p>
                               <p className="mt-1 text-sm text-[var(--text-muted)]">
-                                Yhteenveto näyttää yhden suositellun päivän sekä vaihteluvälin, kun käyttäjä valitsee kustakin ateriaryhmästä yhden vaihtoehdon.
+                                Yhteenveto näyttää yhden suositellun päivän sekä vaihteluvälin. Aamu/ilta ja lounas/illallinen lasketaan päivän rungossa kahteen ateriaan.
                               </p>
                             </div>
                             <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface-2)] px-3 py-2 text-sm text-[var(--text-muted)]">
@@ -2304,7 +2346,7 @@ export function NutritionAdminPanel() {
                                 P {Math.round(templateDailyMacroPreview.recommendedTotals.proteinG)} g · H {Math.round(templateDailyMacroPreview.recommendedTotals.carbsG)} g · R {Math.round(templateDailyMacroPreview.recommendedTotals.fatG)} g
                               </p>
                               <p className="mt-2 text-sm text-[var(--text-muted)]">
-                                Valitsee kustakin ateriaryhmästä vaihtoehdon, joka osuu parhaiten kyseisen slotin tavoiteikkunaan.
+                                Valitsee kustakin vaihtoryhmästä vaihtoehdon, joka osuu parhaiten kyseisen slotin tavoiteikkunaan. Aamu/ilta ja lounas/illallinen huomioidaan kahtena ateriana.
                               </p>
                             </div>
                             <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface-2)] p-4">
@@ -2325,13 +2367,16 @@ export function NutritionAdminPanel() {
 
                           <div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-5">
                             {templateDailyMacroPreview.mealGroups.map((group) => (
-                              <div key={`daily-summary-${group.mealTag}`} className="rounded-2xl border border-[var(--border)] bg-[var(--surface-2)] p-4">
-                                <p className="text-xs font-semibold tracking-[0.04em] text-[var(--text-subtle)]">{mealTagLabel(group.mealTag)}</p>
+                              <div key={`daily-summary-${group.mealSlotGroupId}`} className="rounded-2xl border border-[var(--border)] bg-[var(--surface-2)] p-4">
+                                <p className="text-xs font-semibold tracking-[0.04em] text-[var(--text-subtle)]">{group.label}</p>
                                 <p className="mt-2 text-sm font-semibold text-[var(--text)]">
                                   {group.recommended?.recipe.name ?? "Ei suositusta"}
                                 </p>
                                 <p className="mt-1 text-sm text-[var(--text-muted)]">
                                   {Math.round(group.recommended?.nutrition.kcal ?? group.avg.kcal)} kcal · P {Math.round(group.recommended?.nutrition.proteinG ?? group.avg.proteinG)} g
+                                </p>
+                                <p className="mt-1 text-xs text-[var(--text-subtle)]">
+                                  {group.dailySlots} {group.dailySlots === 1 ? "ateria" : "ateriaa"} päivässä
                                 </p>
                                 <p className="mt-2 text-xs text-[var(--text-subtle)]">
                                   Haarukka: {formatMacroRange(group.min.kcal, group.max.kcal, "kcal")}
@@ -2347,18 +2392,18 @@ export function NutritionAdminPanel() {
                         </div>
                       ) : null}
 
-                      {mealTags.map((mealTag) => {
-                        const items = groupedTemplatePreview[mealTag] ?? [];
+                      {mealSlotGroups.map((group) => {
+                        const items = groupedTemplatePreview[group.id] ?? [];
                         if (items.length === 0) {
                           return null;
                         }
 
-                        const slotGuidance = mealSlotKcalGuidance(mealTag, displayedTargetKcal);
+                        const slotGuidance = mealSlotGroupKcalGuidance(group.id, displayedTargetKcal);
                         return (
-                          <div key={`preview-${mealTag}`} className="rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-4">
+                          <div key={`preview-${group.id}`} className="rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-4">
                             <div className="flex items-start justify-between gap-4">
                               <div>
-                                <p className="text-xs font-semibold tracking-[0.04em] text-[var(--text-subtle)]">{mealTagLabel(mealTag)}</p>
+                                <p className="text-xs font-semibold tracking-[0.04em] text-[var(--text-subtle)]">{group.label}</p>
                                 <p className="mt-1 text-sm text-[var(--text-muted)]">
                                   {slotGuidance ? `Tyypillinen haarukka: ${slotGuidance}` : "Valitse tilanteeseen sopiva vaihtoehto."}
                                 </p>
@@ -2373,12 +2418,12 @@ export function NutritionAdminPanel() {
                                 const nutrition = resolveRecipeNutritionPreview(item.recipe, state.ingredientsCatalog).nutritionPerServing;
                                 const compatibilityAlerts = getRecipeCompatibilityAlerts(item.recipe, previewCompatibilityProfile);
                                 return (
-                                  <div key={`preview-${mealTag}-${item.recipe.id}`} className="rounded-2xl border border-[var(--border)] bg-[var(--surface-2)] p-4">
+                                  <div key={`preview-${group.id}-${item.mealTag}-${item.recipe.id}`} className="rounded-2xl border border-[var(--border)] bg-[var(--surface-2)] p-4">
                                     <div className="flex items-start justify-between gap-4">
                                       <div>
                                         <p className="text-lg font-semibold text-[var(--text)]">{item.recipe.name}</p>
                                         <p className="mt-1 text-sm text-[var(--text-muted)]">
-                                          {item.recipe.description ?? "Valmis ateriasuositus tämän ateriaryhmän sisälle."}
+                                          {item.recipe.description ?? "Valmis ateriasuositus tämän vaihtoryhmän sisälle."}
                                         </p>
                                       </div>
                                       <div className="text-right text-sm text-[var(--text-muted)]">
@@ -2415,7 +2460,7 @@ export function NutritionAdminPanel() {
                     </div>
                   ) : (
                     <div className="mt-4 rounded-2xl border border-dashed border-[var(--border-strong)] bg-[var(--surface)] px-4 py-5 text-sm text-[var(--text-muted)]">
-                      Valitse reseptejä ateriaryhmiin, niin esikatselu näyttää heti miltä pohja näkyy käyttäjälle.
+                      Valitse reseptejä vaihtoryhmiin, niin esikatselu näyttää heti miltä pohja näkyy käyttäjälle.
                     </div>
                   )}
                 </div>

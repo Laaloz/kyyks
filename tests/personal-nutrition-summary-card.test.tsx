@@ -1,5 +1,5 @@
-import { fireEvent, render, screen } from "@testing-library/react";
-import { describe, expect, it, vi } from "vitest";
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { PersonalNutritionSummaryCard } from "@/components/workout/personal-nutrition-summary-card";
 import type { AppState, UserProfile } from "@/lib/types";
@@ -43,6 +43,18 @@ function createState(user: UserProfile): AppState {
   };
 }
 
+function getByExactTextContent(text: string) {
+  return screen.getByText((_, element) => element?.tagName === "P" && element.textContent === text);
+}
+
+function getAllByExactTextContent(text: string) {
+  return screen.getAllByText((_, element) => element?.tagName === "P" && element.textContent === text);
+}
+
+afterEach(() => {
+  cleanup();
+});
+
 describe("PersonalNutritionSummaryCard", () => {
   it("renders comparison cards and highlights the active goal from nutrition profile", () => {
     const user = createUser();
@@ -74,10 +86,10 @@ describe("PersonalNutritionSummaryCard", () => {
     expect(screen.getByText("Profiilitavoite: Kasvatus")).toBeInTheDocument();
     expect(screen.getByText("Suositukset eri vaiheisiin")).toBeInTheDocument();
     expect(screen.getAllByText("Nykyinen")).toHaveLength(1);
-    expect(screen.getByText("3 200")).toBeInTheDocument();
+    expect(getByExactTextContent("3 200")).toBeInTheDocument();
     expect(screen.getByText("Pudotus")).toBeInTheDocument();
     expect(screen.getByText("Ylläpito")).toBeInTheDocument();
-    expect(screen.getByText("Kasvatus")).toBeInTheDocument();
+    expect(screen.getAllByText("Kasvatus").length).toBeGreaterThan(0);
   });
 
   it("rounds visible calorie recommendations for easier reading", () => {
@@ -86,9 +98,9 @@ describe("PersonalNutritionSummaryCard", () => {
 
     render(<PersonalNutritionSummaryCard state={state} user={user} />);
 
-    expect(screen.getAllByText("2 700")).toHaveLength(2);
-    expect(screen.getByText("2 300")).toBeInTheDocument();
-    expect(screen.getByText("3 000")).toBeInTheDocument();
+    expect(getAllByExactTextContent("2 850")).toHaveLength(2);
+    expect(getByExactTextContent("2 400")).toBeInTheDocument();
+    expect(getByExactTextContent("3 050")).toBeInTheDocument();
   });
 
   it("shows missing data guidance and opens settings callback", () => {

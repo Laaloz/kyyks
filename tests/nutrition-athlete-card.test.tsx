@@ -71,6 +71,34 @@ function createState(user: UserProfile): AppState {
         createdAt: "2026-04-01T08:00:00.000Z",
         updatedAt: "2026-04-01T08:00:00.000Z",
       },
+      {
+        id: "recipe_2",
+        name: "Iltarahka",
+        description: "Kevyt iltapala.",
+        instructions: "1. Sekoita.\n2. Tarjoile.",
+        mealTag: "evening_snack",
+        dietaryFlags: [],
+        allergies: [],
+        ownerRole: "admin",
+        createdBy: "admin_1",
+        defaultServings: 1,
+        minServings: 1,
+        maxServings: 4,
+        ingredients: [
+          {
+            id: "recipe_ingredient_2",
+            ingredientId: "ingredient_1",
+            ingredientName: "Kanan rintafilee",
+            quantity: 180,
+            normalizedQuantity: 180,
+            unit: "g",
+            ingredientRole: "main",
+            scalingMode: "linear",
+          },
+        ],
+        createdAt: "2026-04-01T08:00:00.000Z",
+        updatedAt: "2026-04-01T08:00:00.000Z",
+      },
     ],
     mealPlanTemplates: [
       {
@@ -84,6 +112,12 @@ function createState(user: UserProfile): AppState {
             mealTag: "lunch",
             recipeId: "recipe_1",
             sortOrder: 0,
+          },
+          {
+            id: "template_item_2",
+            mealTag: "evening_snack",
+            recipeId: "recipe_2",
+            sortOrder: 1,
           },
         ],
         createdAt: "2026-04-01T08:00:00.000Z",
@@ -103,6 +137,12 @@ function createState(user: UserProfile): AppState {
             mealTag: "lunch",
             recipeId: "recipe_1",
             sortOrder: 0,
+          },
+          {
+            id: "assigned_item_2",
+            mealTag: "evening_snack",
+            recipeId: "recipe_2",
+            sortOrder: 1,
           },
         ],
         active: true,
@@ -154,6 +194,8 @@ describe("NutritionAthleteCard", () => {
 
     render(<NutritionAthleteCard state={state} user={user} />);
 
+    expect(screen.getByRole("button", { name: /Aamu \/ iltapala/i })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: /Lounas \/ illallinen/i }));
     expect(screen.getByText("20 % päivän energiasta")).toBeInTheDocument();
     expect(screen.getByText("P 25 % · H 20 % · R 25 %")).toBeInTheDocument();
     expect(screen.getByText("Lounaan suositus 625-750 kcal, ja tämä annos hieman alle haarukan.")).toBeInTheDocument();

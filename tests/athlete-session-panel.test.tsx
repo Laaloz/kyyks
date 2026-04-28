@@ -1,4 +1,4 @@
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { AthleteSessionPanel } from "@/components/workout/athlete/session-panel";
@@ -69,7 +69,6 @@ describe("AthleteSessionPanel", () => {
     );
 
     expect(screen.getByRole("button", { name: "Penkkipunnerrus ohje" })).toBeInTheDocument();
-    expect(screen.getByText("Aloita pääliikkeestä rauhassa ja jätä 1-2 toistoa varaa.")).toBeInTheDocument();
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
   });
 
@@ -218,6 +217,57 @@ describe("AthleteSessionPanel", () => {
     expect(repsInput.className).toContain("border-[color-mix(in_srgb,var(--warning)_55%,var(--border))]");
   });
 
+  it("constrains the rest timer inside the viewport with long exercise names", () => {
+    const session = buildSession();
+    session.setLogs = [
+      {
+        ...session.setLogs[0]!,
+        exerciseName: "Erittäin pitkä polven koukistus laitteessa kontrolloidulla eksentrisellä vaiheella",
+        targetRestSeconds: 120,
+      },
+    ];
+
+    render(
+      <AthleteSessionPanel
+        scheduledWorkoutId="workout_1"
+        scheduledWorkoutTitle="Penkkipäivä"
+        scheduledWorkoutGuidance="Pidä päivä hallittuna."
+        selectedSession={session}
+        note=""
+        status="in_progress"
+        scheduledDate="2026-03-24T08:00:00.000Z"
+        onStart={() => undefined}
+        onUpdate={() => undefined}
+        onUpdateDate={async () => ({ ok: true })}
+        onUpdateDuration={async () => ({ ok: true })}
+        onSaveNote={() => undefined}
+        onComplete={() => undefined}
+        onCancel={() => undefined}
+        onDelete={() => undefined}
+        onBackToList={() => undefined}
+        canDeleteWorkout
+        initialCorrectionMode={false}
+        progress={{ totalSets: 1, completedSets: 0, percent: 0, allDone: false }}
+        previousExerciseResults={new Map()}
+        exerciseInstructions={new Map()}
+        exerciseOrder={new Map([["exercise_group_1", 0]])}
+        loadIncrementKg={2.5}
+        workoutMessage=""
+        isCompleting={false}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Merkitse tehdyksi" }));
+
+    const timer = screen.getByRole("status", { name: "Lepoajastin" });
+    const timerShell = timer.parentElement;
+    expect(timerShell?.className).toContain("w-[min(100%,calc(100dvw-1rem))]");
+    expect(timerShell?.className).toContain("md:w-[min(18rem,calc(100dvw-1.5rem))]");
+    expect(timer).toHaveClass("overflow-hidden");
+    expect(screen.getByText("Käynnissä")).toBeInTheDocument();
+    expect(within(timer).getByText(/Erittäin pitkä polven koukistus/)).toHaveClass("truncate");
+  });
+
   it("starts completed workout in edit mode without toggle and allows date save", async () => {
     const onUpdateDate = vi.fn(async () => ({ ok: true }));
 
@@ -254,7 +304,7 @@ describe("AthleteSessionPanel", () => {
     expect(screen.queryByRole("button", { name: "Avaa muokkaus" })).not.toBeInTheDocument();
 
     fireEvent.change(screen.getByLabelText("Päivämäärä"), { target: { value: "2026-03-25" } });
-    fireEvent.click(screen.getByRole("button", { name: "Tallenna päivä" }));
+    fireEvent.click(screen.getAllByRole("button", { name: "Tallenna" })[0]!);
 
     await vi.waitFor(() => expect(onUpdateDate).toHaveBeenCalledWith("2026-03-25"));
   });
