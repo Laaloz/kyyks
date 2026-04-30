@@ -101,6 +101,39 @@ const mealSlotGroupRanges: Record<MealSlotGroupId, [number, number]> = {
   snack: [0.1, 0.15],
 };
 
+const ingredientNameAliases: Record<string, readonly string[]> = {
+  "100 kauraleipa": ["100% kauraleipä", "kauraleipä"],
+  "aamupala kevyenraikas 5 sulatejuustoviipale": ["sulatejuustoviipale", "juusto alle 10%"],
+  "bbq kastike ilman lisattya sokeria": ["bbq-kastike ilman lisättyä sokeria"],
+  "jaavuorisalaatti": ["jäävuorisalaatti"],
+  "jasmiiniriisi kuiva": ["riisi", "basmatiriisi"],
+  "kevyt juustoraaste 12": ["juustoraaste 12%", "kadett lempeä 12% juustoraaste"],
+  "kevyt juusto": ["juusto 17%", "juusto alle 10%"],
+  "kot go kanafileepyorykat": ["kanafileepyörykät", "kanapyörykät"],
+  "maapahkinavoi 99": ["maapähkinävoi"],
+  "maissikakku chian siemenia ja suolaa friggs": ["maissikakku", "riisikakku"],
+  "margariini alle 50 rasvaa": ["margariini"],
+  "naudan jauheliha 10": ["jauheliha 10%", "naudan jauheliha max 10%"],
+  "naudan paistijauheliha 5": ["naudan jauheliha 5%", "paistijauheliha 5%"],
+  "oliivioljy": ["oliiviöljy"],
+  "profeel proteiinirahka": ["proteiinirahka", "rahka"],
+  "profeel proteiinivanukas": ["proteiinivanukas"],
+  "profeel proteiinivanukas suklaa": ["proteiinivanukas suklaa", "profeel proteiinivanukas"],
+  "proteiinijuoma vahasokerinen": ["proteiinijuoma vähäsokerinen"],
+  "proteiinirahka maustamaton": ["rahka maustamaton", "rahka"],
+  "rasvaton maito": ["maito rasvaton"],
+  "ruisleipa": ["ruisleipä", "ruispalat"],
+  "skyr wanhanajan vanilja": ["skyr vanilja", "skyr"],
+  "skyrdrik": ["skyr drink", "proteiinijuoma"],
+  "sweet chili kastike vahemman sokeria": ["sweet chili -kastike vähemmän sokeria", "sweet chili kastike"],
+  "taysjyvaleipa": ["täysjyväleipä"],
+  "tonnikala vedessa": ["tonnikala vedessä", "tonnikala"],
+  "tortilla": ["tortilla original large", "tortilla large"],
+  "tortilla original large": ["tortilla", "tortilla large"],
+  "vahasukerinen mysli": ["vähäsokerinen mysli", "mysli"],
+  "vahasokerinen granola": ["vähäsokerinen granola", "granola"],
+};
+
 function nowIso() {
   return new Date().toISOString();
 }
@@ -155,6 +188,60 @@ function normalizeFoodText(value: string) {
     .toLowerCase()
     .normalize("NFD")
     .replace(/[\u0300-\u036f]/g, "");
+}
+
+function normalizeIngredientLookupText(value: string) {
+  return normalizeFoodText(value)
+    .replace(/[%]/g, " ")
+    .replace(/&/g, " ")
+    .replace(/[^a-z0-9]+/g, " ")
+    .trim();
+}
+
+type IngredientCatalogLookupItem = Pick<Ingredient, "id" | "name" | "displayName">;
+
+function getIngredientLookupCandidates(value: string | undefined) {
+  if (!value?.trim()) {
+    return [];
+  }
+
+  const normalized = normalizeIngredientLookupText(value);
+  return [normalized, ...(ingredientNameAliases[normalized] ?? []).map((alias) => normalizeIngredientLookupText(alias))]
+    .filter(Boolean);
+}
+
+export function resolveIngredientCatalogMatch<TIngredient extends IngredientCatalogLookupItem>(
+  recipeIngredient: Pick<RecipeIngredient, "ingredientId" | "ingredientName">,
+  ingredients: TIngredient[],
+) {
+  if (recipeIngredient.ingredientId) {
+    const matchById = ingredients.find((ingredient) => ingredient.id === recipeIngredient.ingredientId);
+    if (matchById) {
+      return matchById;
+    }
+  }
+
+  const candidates = getIngredientLookupCandidates(recipeIngredient.ingredientName);
+  if (candidates.length === 0) {
+    return undefined;
+  }
+
+  const ingredientByName = new Map<string, TIngredient>();
+  for (const ingredient of ingredients) {
+    ingredientByName.set(normalizeIngredientLookupText(ingredient.name), ingredient);
+    if (ingredient.displayName?.trim()) {
+      ingredientByName.set(normalizeIngredientLookupText(ingredient.displayName), ingredient);
+    }
+  }
+
+  for (const candidate of candidates) {
+    const directMatch = ingredientByName.get(candidate);
+    if (directMatch) {
+      return directMatch;
+    }
+  }
+
+  return undefined;
 }
 
 export function mealTagLabel(mealTag: MealTag) {
@@ -487,8 +574,11 @@ export function calculateRecipeNutrition(
   const ingredientById = new Map(ingredients.map((ingredient) => [ingredient.id, ingredient]));
   const totals = recipe.ingredients.reduce(
     (sum, item) => {
+      const ingredient = item.ingredientId
+        ? ingredientById.get(item.ingredientId) ?? resolveIngredientCatalogMatch(item, ingredients)
+        : resolveIngredientCatalogMatch(item, ingredients);
       const contribution = resolveIngredientNutritionContribution(
-        item.ingredientId ? ingredientById.get(item.ingredientId) : undefined,
+        ingredient,
         item,
         1,
       );

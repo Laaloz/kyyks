@@ -1,6 +1,6 @@
 import "server-only";
 
-import { resolveRecipeIngredientNormalizedQuantity } from "@/lib/nutrition";
+import { resolveIngredientCatalogMatch, resolveRecipeIngredientNormalizedQuantity } from "@/lib/nutrition";
 import { canActAsCoach } from "@/lib/role-access";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import type {
@@ -226,46 +226,62 @@ export async function saveRecipeOnServer(requester: Requester, input: RecipeInpu
     recipeId = data.id;
   }
 
-  const ingredientIds = Array.from(new Set(
-    input.ingredients
-      .map((ingredient) => ingredient.ingredientId)
-      .filter((value): value is string => Boolean(value)),
-  ));
-  const ingredientMap = new Map<string, { gramsPerUnit?: number }>();
-  if (ingredientIds.length > 0) {
+  const ingredientCatalog: Array<{ id: string; name: string; displayName?: string; gramsPerUnit?: number }> = [];
+  const pageSize = 1000;
+  for (let from = 0; ; from += pageSize) {
     const { data: catalogRows, error: catalogError } = await supabase
       .from("ingredient_catalog")
-      .select("id,grams_per_unit")
-      .in("id", ingredientIds);
+      .select("id,name,display_name,grams_per_unit")
+      .range(from, from + pageSize - 1);
 
     if (catalogError) {
       return { ok: false as const, message: catalogError.message || "Raaka-ainekirjaston haku epäonnistui." };
     }
 
-    for (const row of catalogRows ?? []) {
-      ingredientMap.set(row.id, { gramsPerUnit: row.grams_per_unit ?? undefined });
+    const rows = catalogRows ?? [];
+    ingredientCatalog.push(
+      ...rows.map((row) => ({
+        id: row.id,
+        name: row.name,
+        displayName: row.display_name ?? undefined,
+        gramsPerUnit: row.grams_per_unit ?? undefined,
+      })),
+    );
+
+    if (rows.length < pageSize) {
+      break;
     }
   }
 
-  const ingredientPayload = input.ingredients.map((ingredient, index) => ({
-    recipe_id: recipeId,
-    ingredient_id: ingredient.ingredientId ?? null,
-    ingredient_name: ingredient.ingredientName?.trim() || "",
-    group_label: ingredient.groupLabel?.trim() || null,
-    alternatives: ingredient.alternatives?.map((value) => value.trim()).filter(Boolean) ?? [],
-    quantity: ingredient.quantity ?? null,
-    unit: ingredient.unit,
-    display_quantity: ingredient.displayQuantity?.trim() || null,
-    display_unit: ingredient.displayUnit?.trim() || null,
-    normalized_quantity: resolveRecipeIngredientNormalizedQuantity(
-      ingredient.quantity,
-      ingredient.unit,
-      ingredient.ingredientId ? ingredientMap.get(ingredient.ingredientId) : undefined,
-    ) ?? null,
-    ingredient_role: ingredient.ingredientRole,
-    scaling_mode: ingredient.scalingMode,
-    sort_order: index,
-  }));
+  const ingredientPayload = input.ingredients.map((ingredient, index) => {
+    const catalogIngredient = resolveIngredientCatalogMatch(
+      {
+        ingredientId: ingredient.ingredientId,
+        ingredientName: ingredient.ingredientName ?? "",
+      },
+      ingredientCatalog,
+    );
+
+    return {
+      recipe_id: recipeId,
+      ingredient_id: catalogIngredient?.id ?? null,
+      ingredient_name: ingredient.ingredientName?.trim() || catalogIngredient?.displayName || catalogIngredient?.name || "",
+      group_label: ingredient.groupLabel?.trim() || null,
+      alternatives: ingredient.alternatives?.map((value) => value.trim()).filter(Boolean) ?? [],
+      quantity: ingredient.quantity ?? null,
+      unit: ingredient.unit,
+      display_quantity: ingredient.displayQuantity?.trim() || null,
+      display_unit: ingredient.displayUnit?.trim() || null,
+      normalized_quantity: resolveRecipeIngredientNormalizedQuantity(
+        ingredient.quantity,
+        ingredient.unit,
+        catalogIngredient,
+      ) ?? null,
+      ingredient_role: ingredient.ingredientRole,
+      scaling_mode: ingredient.scalingMode,
+      sort_order: index,
+    };
+  });
 
   const { error: ingredientsError } = await supabase.from("recipe_ingredients").insert(ingredientPayload);
   if (ingredientsError) {

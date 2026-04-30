@@ -14,7 +14,8 @@
     "typecheck": "tsc --noEmit",
     "import:fineli": "node scripts/import-fineli.mjs",
     "import:manual-ingredients": "node scripts/import-manual-ingredients.mjs",
-    "import:recipes": "node scripts/import-recipe-seed.mjs"
+    "import:recipes": "node scripts/import-recipe-seed.mjs",
+    "repair:recipe-ingredients": "node scripts/repair-recipe-ingredient-links.mjs"
   },
   "dependencies": {
     "@hcaptcha/react-hcaptcha": "^2.0.2",

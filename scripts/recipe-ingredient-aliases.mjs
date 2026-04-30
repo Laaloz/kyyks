@@ -1,7 +1,43 @@
 export const ingredientAliases = {
+  "100 kauraleipa": [
+    "100% kauraleipä",
+    "kauraleipä",
+  ],
+  "aamupala kevyenraikas 5 sulatejuustoviipale": [
+    "aamupala kevyenraikas 5% sulatejuustoviipale",
+    "sulatejuustoviipale",
+    "juusto alle 10%",
+  ],
+  "bbq kastike ilman lisattya sokeria": [
+    "bbq-kastike ilman lisattya sokeria",
+    "bbq-kastike ilman lisättyä sokeria",
+  ],
+  "jasmiiniriisi kuiva": [
+    "jasmiiniriisi, kuiva",
+    "basmatiriisi",
+    "riisi",
+  ],
+  "kot go kanafileepyorykat": [
+    "kot&go kanafileepyörykät",
+    "kanafileepyörykät",
+  ],
+  "maapahkinavoi 99": [
+    "maapähkinävoi 99%",
+    "maapähkinävoi",
+  ],
+  "maissikakku chian siemenia ja suolaa friggs": [
+    "maissikakku chian siemeniä ja suolaa friggs",
+    "maissikakku",
+    "riisikakku",
+  ],
+  "margariini alle 50 rasvaa": [
+    "margariini alle 50% rasvaa",
+    "margariini",
+  ],
   "proteiinirahka maustamaton": [
     "proteiinirahka maustamaton",
     "rahka maustamaton",
+    "rahka",
   ],
   "kevyt juusto": [
     "kevyt juusto",
@@ -24,10 +60,13 @@ export const ingredientAliases = {
     "taysjyvaleipa",
     "taysjyva leipa",
     "leipa taysjyva",
+    "täysjyväleipä",
   ],
   "ruisleipa": [
     "ruisleipa",
     "ruisleipa viipale",
+    "ruisleipä",
+    "ruispalat",
   ],
   "maustamaton jogurtti": [
     "maustamaton jogurtti",
@@ -46,11 +85,15 @@ export const ingredientAliases = {
     "vahasukerinen mysli",
     "vahasokerinen mysli",
     "mysli vahasokerinen",
+    "vähäsokerinen mysli",
+    "mysli",
   ],
   "vahasokerinen granola": [
     "vahasokerinen granola",
     "vahasukerinen granola",
     "granola vahasokerinen",
+    "vähäsokerinen granola",
+    "granola",
   ],
   "wok-vihannekset": [
     "wok-vihannekset",
@@ -61,7 +104,17 @@ export const ingredientAliases = {
     "jauheliha 10%",
     "naudan jauheliha max 10%",
   ],
+  "naudan jauheliha 10": [
+    "naudan jauheliha 10%",
+    "jauheliha 10%",
+    "naudan jauheliha max 10%",
+  ],
   "naudan paistijauheliha 5%": [
+    "naudan paistijauheliha 5%",
+    "paistijauheliha 5%",
+    "naudan jauheliha 5%",
+  ],
+  "naudan paistijauheliha 5": [
     "naudan paistijauheliha 5%",
     "paistijauheliha 5%",
     "naudan jauheliha 5%",
@@ -88,6 +141,7 @@ export const ingredientAliases = {
     "bbq-kastike ilman lisattya sokeria",
     "bbq kastike ilman lisattya sokeria",
     "poppamies bbq ilman lisattya sokeria",
+    "bbq-kastike ilman lisättyä sokeria",
   ],
   "philadelphia light 11%": [
     "philadelphia light 11%",
@@ -106,5 +160,43 @@ export const ingredientAliases = {
   "riisikakku": [
     "riisikakku",
     "riisikakut",
+    "maissikakku",
+  ],
+  "tortilla": [
+    "tortilla original large",
+    "tortilla large",
+  ],
+  "profeel proteiinirahka": [
+    "profeel proteiinirahka",
+    "proteiinirahka",
+    "rahka",
+  ],
+  "profeel proteiinivanukas": [
+    "profeel proteiinivanukas",
+    "proteiinivanukas",
+  ],
+  "profeel proteiinivanukas suklaa": [
+    "profeel proteiinivanukas suklaa",
+    "proteiinivanukas suklaa",
+    "profeel proteiinivanukas",
+  ],
+  "profeel proteiinimousse suklaa": [
+    "profeel proteiinimousse suklaa",
+    "proteiinimousse suklaa",
+  ],
+  "skyr wanhanajan vanilja": [
+    "skyr wanhanajan vanilja",
+    "skyr vanilja",
+    "skyr",
+  ],
+  "skyrdrik": [
+    "skyrdrik",
+    "skyr drink",
+    "proteiinijuoma",
+  ],
+  "sweet chili kastike vahemman sokeria": [
+    "sweet chili -kastike vähemmän sokeria",
+    "sweet chili kastike vähemmän sokeria",
+    "sweet chili kastike",
   ],
 };

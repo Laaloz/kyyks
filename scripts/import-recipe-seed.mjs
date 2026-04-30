@@ -86,7 +86,7 @@ async function fetchIngredientCatalogMap(supabase) {
     const to = from + pageSize - 1;
     const { data, error } = await supabase
       .from("ingredient_catalog")
-      .select("id,name,grams_per_unit")
+      .select("id,name,display_name,grams_per_unit")
       .range(from, to);
 
     if (error) {
@@ -99,6 +99,12 @@ async function fetchIngredientCatalogMap(supabase) {
         id: row.id,
         gramsPerUnit: row.grams_per_unit,
       });
+      if (row.display_name) {
+        ingredientCatalogMap.set(normalizeName(row.display_name), {
+          id: row.id,
+          gramsPerUnit: row.grams_per_unit,
+        });
+      }
     });
 
     if (rows.length < pageSize) {

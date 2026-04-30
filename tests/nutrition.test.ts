@@ -241,6 +241,64 @@ describe("nutrition helpers", () => {
     expect(summary.nutritionPerServing.kcal).toBeGreaterThan(300);
   });
 
+  it("falls back to ingredient names and aliases when recipe ingredient ids are missing", () => {
+    const summary = calculateRecipeNutrition(
+      {
+        defaultServings: 1,
+        ingredients: [
+          {
+            id: "missing_direct_id",
+            ingredientName: "Kanan rintafilee",
+            quantity: 200,
+            unit: "g",
+            ingredientRole: "main",
+            scalingMode: "linear",
+          },
+          {
+            id: "missing_alias_id",
+            ingredientName: "Tortilla",
+            quantity: 62,
+            unit: "g",
+            ingredientRole: "main",
+            scalingMode: "linear",
+          },
+        ],
+      },
+      [
+        {
+          id: "ingredient_chicken",
+          name: "Kanan rintafilee",
+          source: "manual",
+          ownerRole: "admin",
+          createdBy: "admin_1",
+          kcalPer100: 110,
+          proteinPer100: 23.1,
+          carbsPer100: 0,
+          fatPer100: 1.2,
+          createdAt: "2026-04-01T08:00:00.000Z",
+          updatedAt: "2026-04-01T08:00:00.000Z",
+        },
+        {
+          id: "ingredient_tortilla",
+          name: "Tortilla original large",
+          displayName: "Tortilla original large",
+          source: "manual",
+          ownerRole: "admin",
+          createdBy: "admin_1",
+          kcalPer100: 310,
+          proteinPer100: 8,
+          carbsPer100: 52,
+          fatPer100: 7,
+          createdAt: "2026-04-01T08:00:00.000Z",
+          updatedAt: "2026-04-01T08:00:00.000Z",
+        },
+      ],
+    );
+
+    expect(summary.nutritionPerServing.kcal).toBeGreaterThan(400);
+    expect(summary.nutritionPerServing.proteinG).toBeGreaterThan(45);
+  });
+
   it("builds recipe goal comparison from active profile targets", () => {
     const comparison = buildRecipeGoalComparison(
       "lunch",
