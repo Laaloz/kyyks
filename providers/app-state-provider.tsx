@@ -65,6 +65,7 @@ import type {
   NutritionProfileInput,
   PasswordResetRequest,
   ProgramBuilderInput,
+  ProgramWorkoutExercise,
   ProgramUpdateInput,
   RecipeInput,
   Role,
@@ -2285,6 +2286,33 @@ interface AppStateContextValue {
   updateWorkoutDate: (scheduledWorkoutId: string, scheduledDate: string) => Promise<ActionResult>;
   updateWorkoutDuration: (scheduledWorkoutId: string, durationSeconds: number) => Promise<ActionResult>;
   updateWorkoutSet: (scheduledWorkoutId: string, logId: string, patch: WorkoutUpdateInput) => Promise<void>;
+  updateWorkoutExerciseStructure: (
+    scheduledWorkoutId: string,
+    action:
+      | {
+          type: "replace";
+          templateExerciseId: string;
+          exerciseId: string;
+          customExerciseName?: string;
+          setCount?: number;
+          targetReps?: number;
+          targetLoad?: number;
+          restSeconds?: number;
+        }
+      | {
+          type: "add_extra";
+          exerciseId: string;
+          customExerciseName?: string;
+          setCount?: number;
+          targetReps?: number;
+          targetLoad?: number;
+          restSeconds?: number;
+        }
+      | {
+          type: "remove";
+          templateExerciseId: string;
+        },
+  ) => Promise<ActionResult>;
   saveWorkoutNote: (scheduledWorkoutId: string, body: string) => void;
   completeWorkout: (scheduledWorkoutId: string) => Promise<ActionResult>;
   cancelWorkout: (scheduledWorkoutId: string) => Promise<ActionResult>;
@@ -5911,6 +5939,244 @@ function findResolvedUserIdInSnapshot(
         );
         scheduleWorkoutSetDraftSync(scheduledWorkoutId);
       },
+      async updateWorkoutExerciseStructure(scheduledWorkoutId, action) {
+        if (!currentUser) {
+          return { ok: false, message: "Kirjaudu sisään ennen treenin muokkausta." };
+        }
+
+        const currentState = stateRef.current;
+        const workout = currentState.scheduledWorkouts.find((item) => item.id === scheduledWorkoutId);
+        if (!workout || (!isAdminRole(currentUser.role) && workout.athleteId !== currentUser.id)) {
+          return { ok: false, message: "Treeniä ei löytynyt." };
+        }
+        if (!workout.trainingPlanId || !workout.programWorkoutId) {
+          return { ok: false, message: "Muokkaus onnistuu vain ohjelmatreeneihin." };
+        }
+
+        const targetExercise = action.type === "remove"
+          ? null
+          : currentState.exercises.find((exercise) => exercise.id === action.exerciseId);
+        const resolvedExerciseId = targetExercise?.id ?? (action.type === "remove" ? "" : `custom_${crypto.randomUUID()}`);
+        const resolvedExerciseName = targetExercise?.name ?? (action.type === "remove" ? "" : action.customExerciseName?.trim() ?? "Oma liike");
+        const resolvedMuscleGroup = targetExercise?.category as ProgramWorkoutExercise["muscleGroup"] | undefined;
+
+        if (action.type !== "remove" && !targetExercise && !action.customExerciseName?.trim()) {
+          return { ok: false, message: "Anna oman liikkeen nimi." };
+        }
+
+        const updatedAt = new Date().toISOString();
+        const extraId = action.type === "add_extra" ? `extra_${crypto.randomUUID()}` : null;
+
+        setState((previous) => {
+          const nextPlans = previous.plans.map((plan) => {
+            if (plan.id !== workout.trainingPlanId) {
+              return plan;
+            }
+
+            return {
+              ...plan,
+              updatedAt,
+              workouts: (plan.workouts ?? []).map((programWorkout) => {
+                if (programWorkout.id !== workout.programWorkoutId) {
+                  return programWorkout;
+                }
+
+                if (action.type === "replace") {
+                  const targetProgramExercise = programWorkout.exercises.find((item) => item.id === action.templateExerciseId);
+                  const nextSetCount = Math.min(8, Math.max(1, action.setCount ?? targetProgramExercise?.sets.length ?? 1));
+                  return {
+                    ...programWorkout,
+                    exercises: programWorkout.exercises.map((exercise) =>
+                      exercise.id === action.templateExerciseId
+                        ? {
+                            ...exercise,
+                            exerciseId: resolvedExerciseId,
+                            exerciseName: resolvedExerciseName,
+                            muscleGroup: resolvedMuscleGroup,
+                            sets: Array.from({ length: nextSetCount }, (_, index) => {
+                              const existing = exercise.sets[index];
+                              return {
+                                id: existing?.id ?? `${exercise.id}_set_${index + 1}`,
+                                label: String(index + 1),
+                                targetReps: action.targetReps ?? existing?.targetReps ?? 12,
+                                targetLoad: action.targetLoad ?? existing?.targetLoad,
+                                restSeconds: action.restSeconds ?? existing?.restSeconds ?? programWorkout.defaultRestSeconds,
+                              };
+                            }),
+                          }
+                        : exercise,
+                    ),
+                  };
+                }
+
+                if (action.type === "remove") {
+                  return {
+                    ...programWorkout,
+                    exercises: programWorkout.exercises.filter((exercise) => exercise.id !== action.templateExerciseId),
+                  };
+                }
+
+                const setCount = Math.min(8, Math.max(1, action.setCount ?? 3));
+                const targetReps = Math.min(50, Math.max(1, action.targetReps ?? 12));
+                const restSeconds = Math.min(900, Math.max(15, action.restSeconds ?? programWorkout.defaultRestSeconds));
+                const extraSets = Array.from({ length: setCount }, (_, index) => ({
+                  id: `${extraId}_set_${index + 1}`,
+                  label: String(index + 1),
+                  targetReps,
+                  targetLoad: action.targetLoad,
+                  restSeconds,
+                }));
+
+                return {
+                  ...programWorkout,
+                  exercises: [
+                    ...programWorkout.exercises,
+                    {
+                      id: extraId!,
+                      exerciseId: resolvedExerciseId,
+                      exerciseName: resolvedExerciseName,
+                      muscleGroup: resolvedMuscleGroup,
+                      instruction: "",
+                      sets: extraSets,
+                    },
+                  ],
+                };
+              }),
+            };
+          });
+
+          const nextSessions = previous.sessions.map((session) => {
+            if (session.scheduledWorkoutId !== scheduledWorkoutId) {
+              return session;
+            }
+
+            if (action.type === "replace") {
+              const targetLogs = session.setLogs.filter((log) => log.templateExerciseId === action.templateExerciseId);
+              const nextSetCount = Math.min(8, Math.max(1, action.setCount ?? targetLogs.length ?? 1));
+              const baseLog = targetLogs[0];
+              const rebuilt = Array.from({ length: nextSetCount }, (_, index) => {
+                const existing = targetLogs[index];
+                return {
+                  id: existing?.id ?? `temp_${scheduledWorkoutId}_${action.templateExerciseId}_${index + 1}`,
+                  scheduledWorkoutId,
+                  templateExerciseId: action.templateExerciseId,
+                  setId: existing?.setId ?? `${action.templateExerciseId}_set_${index + 1}`,
+                  exerciseId: resolvedExerciseId,
+                  exerciseName: resolvedExerciseName,
+                  muscleGroup: resolvedMuscleGroup,
+                  setLabel: String(index + 1),
+                  targetReps: action.targetReps ?? existing?.targetReps ?? baseLog?.targetReps ?? 12,
+                  targetLoad: action.targetLoad ?? existing?.targetLoad ?? baseLog?.targetLoad,
+                  targetRestSeconds: action.restSeconds ?? existing?.targetRestSeconds ?? baseLog?.targetRestSeconds,
+                  programWorkoutId: workout.programWorkoutId,
+                  actualReps: existing?.actualReps,
+                  actualLoad: existing?.actualLoad,
+                  done: existing?.done ?? false,
+                };
+              });
+
+              return {
+                ...session,
+                updatedAt,
+                setLogs: [
+                  ...session.setLogs.filter((log) => log.templateExerciseId !== action.templateExerciseId),
+                  ...rebuilt,
+                ],
+              };
+            }
+
+            if (action.type === "remove") {
+              return {
+                ...session,
+                updatedAt,
+                setLogs: session.setLogs.filter((log) => log.templateExerciseId !== action.templateExerciseId),
+              };
+            }
+
+            const setCount = Math.min(8, Math.max(1, action.setCount ?? 3));
+            const targetReps = Math.min(50, Math.max(1, action.targetReps ?? 12));
+            const restSeconds = Math.min(900, Math.max(15, action.restSeconds ?? 120));
+            const extraLogs = Array.from({ length: setCount }, (_, index) => ({
+              id: `temp_${extraId}_${index + 1}`,
+              scheduledWorkoutId,
+              templateExerciseId: extraId!,
+              setId: `${extraId}_set_${index + 1}`,
+              exerciseId: resolvedExerciseId,
+              exerciseName: resolvedExerciseName,
+              muscleGroup: resolvedMuscleGroup,
+              setLabel: String(index + 1),
+              targetReps,
+              targetLoad: action.targetLoad,
+              targetRestSeconds: restSeconds,
+              programWorkoutId: workout.programWorkoutId,
+              actualReps: targetReps,
+              actualLoad: action.targetLoad,
+              done: false,
+            }));
+
+            return {
+              ...session,
+              updatedAt,
+              setLogs: [...session.setLogs, ...extraLogs],
+            };
+          });
+
+          return {
+            ...previous,
+            plans: nextPlans,
+            sessions: nextSessions,
+          };
+        });
+
+        if (!supabase) {
+          return { ok: true };
+        }
+
+        const payload =
+          action.type === "replace"
+            ? {
+                type: "replace" as const,
+                templateExerciseId: action.templateExerciseId,
+                exerciseId: resolvedExerciseId,
+                exerciseName: resolvedExerciseName,
+                muscleGroup: targetExercise?.category,
+                setCount: action.setCount,
+                targetReps: action.targetReps,
+                targetLoad: action.targetLoad,
+                restSeconds: action.restSeconds,
+              }
+            : action.type === "add_extra"
+            ? {
+                type: "add_extra" as const,
+                exerciseId: resolvedExerciseId,
+                exerciseName: resolvedExerciseName,
+                muscleGroup: targetExercise?.category,
+                setCount: action.setCount,
+                targetReps: action.targetReps,
+                targetLoad: action.targetLoad,
+                restSeconds: action.restSeconds,
+              }
+            : {
+                type: "remove" as const,
+                templateExerciseId: action.templateExerciseId,
+              };
+
+        const response = await fetch(`/api/workouts/${encodeURIComponent(scheduledWorkoutId)}/exercise-structure`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify(payload),
+        }).catch(() => null);
+        const resultPayload = (response ? await response.json().catch(() => null) : null) as { message?: string } | null;
+        if (!response?.ok) {
+          await refreshSupabaseVisibleState();
+          return { ok: false, message: resultPayload?.message ?? "Liikemuutoksen tallennus epäonnistui." };
+        }
+
+        void refreshSupabaseVisibleState({ mode: "workouts" });
+        return { ok: true };
+      },
       saveWorkoutNote(scheduledWorkoutId, body) {
         if (!currentUser) {
           return;
@@ -5959,7 +6225,19 @@ function findResolvedUserIdInSnapshot(
         }
 
         if (supabase) {
-          await flushPendingWorkoutSetDrafts(scheduledWorkoutId);
+          const flushPromise = flushPendingWorkoutSetDrafts(scheduledWorkoutId);
+          const flushTimedOut = await new Promise<boolean>((resolve) => {
+            const timeout = window.setTimeout(() => resolve(true), 450);
+            void flushPromise
+              .then(() => resolve(false))
+              .catch(() => resolve(false))
+              .finally(() => window.clearTimeout(timeout));
+          });
+          if (flushTimedOut) {
+            console.info("[workout-ui] complete-continues-with-pending-set-sync", {
+              scheduledWorkoutId,
+            });
+          }
 
           const refreshedState = stateRef.current;
           if (!canCompleteSession(refreshedState, scheduledWorkoutId)) {

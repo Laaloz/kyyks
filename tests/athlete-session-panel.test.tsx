@@ -101,6 +101,8 @@ describe("AthleteSessionPanel", () => {
         exerciseInstructions={new Map([["exercise_group_1", longInstruction]])}
         exerciseOrder={new Map([["exercise_group_1", 0]])}
         loadIncrementKg={2.5}
+        availableExercises={[]}
+        onExerciseStructureUpdate={async () => ({ ok: true })}
         workoutMessage=""
         isCompleting={false}
       />,
@@ -152,6 +154,8 @@ describe("AthleteSessionPanel", () => {
         exerciseInstructions={new Map()}
         exerciseOrder={new Map([["exercise_group_1", 0]])}
         loadIncrementKg={2.5}
+        availableExercises={[]}
+        onExerciseStructureUpdate={async () => ({ ok: true })}
         workoutMessage=""
         isCompleting={false}
       />,
@@ -207,6 +211,8 @@ describe("AthleteSessionPanel", () => {
         exerciseInstructions={new Map()}
         exerciseOrder={new Map([["exercise_group_1", 0]])}
         loadIncrementKg={2.5}
+        availableExercises={[]}
+        onExerciseStructureUpdate={async () => ({ ok: true })}
         workoutMessage=""
         isCompleting={false}
       />,

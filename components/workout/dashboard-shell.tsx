@@ -24,21 +24,42 @@ type AthleteOverviewFocusTarget = "measurements";
 const MEASUREMENT_REMINDER_STORAGE_VERSION = "v2";
 const WORKSPACE_VIEW_STORAGE_VERSION = "v1";
 const MEASUREMENTS_SECTION_ID = "overview-measurements";
+const MOBILE_PRIMARY_NAV_MAX_ITEMS = 4;
+
+function ensureWorkoutNavItemVisible(items: PrimaryWorkspaceView[]) {
+  if (!items.includes("athlete-log")) {
+    return items.slice(0, MOBILE_PRIMARY_NAV_MAX_ITEMS);
+  }
+
+  const limitedItems = items.slice(0, MOBILE_PRIMARY_NAV_MAX_ITEMS);
+  const withoutWorkout = limitedItems.filter((item) => item !== "athlete-log");
+  const fallbackWithWorkout = [...withoutWorkout, "athlete-log"].slice(0, MOBILE_PRIMARY_NAV_MAX_ITEMS);
+
+  if (!fallbackWithWorkout.includes("athlete-log")) {
+    return limitedItems;
+  }
+
+  const workoutMiddleIndex = Math.floor(MOBILE_PRIMARY_NAV_MAX_ITEMS / 2);
+  const clampedWorkoutIndex = Math.min(workoutMiddleIndex, Math.max(fallbackWithWorkout.length - 1, 0));
+  const reorderedItems = fallbackWithWorkout.filter((item) => item !== "athlete-log");
+  reorderedItems.splice(clampedWorkoutIndex, 0, "athlete-log");
+  return reorderedItems.slice(0, MOBILE_PRIMARY_NAV_MAX_ITEMS);
+}
 
 function mobilePrimaryNavItemsForRole(role: Role): PrimaryWorkspaceView[] {
   if (role === "athlete") {
-    return ["athlete-log", "overview", "nutrition", "conversation"];
+    return ["overview", "nutrition", "athlete-log", "conversation"];
   }
 
   if (role === "independent_athlete") {
-    return ["athlete-log", "overview", "nutrition", PROGRAMS_WORKSPACE_VIEW, "conversation"];
+    return ["overview", "nutrition", "athlete-log", PROGRAMS_WORKSPACE_VIEW];
   }
 
   if (role === "admin") {
-    return ["athlete-log", "overview", "nutrition", "users"];
+    return ["overview", "nutrition", "athlete-log", "users"];
   }
 
-  return ["athlete-log", "overview", "nutrition", PROGRAMS_WORKSPACE_VIEW, "athletes"];
+  return ["overview", "nutrition", "athlete-log", PROGRAMS_WORKSPACE_VIEW, "athletes"];
 }
 
 function navItemsForRole(role: Role): PrimaryWorkspaceView[] {
@@ -107,6 +128,7 @@ export function DashboardShell() {
   const [athleteOverviewFocusTarget, setAthleteOverviewFocusTarget] = useState<AthleteOverviewFocusTarget | null>(null);
   const previousUserIdRef = useRef<string | null>(null);
   const navButtonRefs = useRef<Record<string, HTMLButtonElement | null>>({});
+  const skipNextAutoTopScrollRef = useRef(false);
   const [profileImageFailed, setProfileImageFailed] = useState(false);
 
   if (!currentUser) {
@@ -136,10 +158,10 @@ export function DashboardShell() {
     "athlete-log": Dumbbell,
     conversation: MessageSquare,
   };
-  const mobilePrimaryNavItems = mobilePrimaryNavItemsForRole(currentUser.role).filter((item) => navItems.includes(item));
+  const preferredMobilePrimaryNavItems = mobilePrimaryNavItemsForRole(currentUser.role).filter((item) => navItems.includes(item));
+  const mobilePrimaryNavItems = ensureWorkoutNavItemVisible(preferredMobilePrimaryNavItems);
   const mobileOverflowNavItems = navItems.filter((item) => !mobilePrimaryNavItems.includes(item));
-  const [mobileWorkoutNavItem, ...mobileSecondaryNavItems] = mobilePrimaryNavItems;
-  const mobileNavSlotCount = (mobileWorkoutNavItem ? 1 : 0) + mobileSecondaryNavItems.length + 1;
+  const mobileNavSlotCount = mobilePrimaryNavItems.length + 1;
   const activePrimaryView =
     view === "settings" ? resolveInitialView(currentUser.role, currentUser.settings?.defaultDashboardView) : view;
   const activeTabId = `workspace-tab-${activePrimaryView}`;
@@ -220,6 +242,7 @@ export function DashboardShell() {
       window.location.hash = MEASUREMENTS_SECTION_ID;
     }
 
+    skipNextAutoTopScrollRef.current = true;
     setIsMeasurementReminderOpen(false);
     setAthleteOverviewFocusTarget("measurements");
     setView("overview");
@@ -288,6 +311,11 @@ export function DashboardShell() {
 
   useEffect(() => {
     if (typeof window === "undefined") {
+      return;
+    }
+
+    if (skipNextAutoTopScrollRef.current) {
+      skipNextAutoTopScrollRef.current = false;
       return;
     }
 
@@ -379,7 +407,7 @@ export function DashboardShell() {
 
   return (
     <div
-      className={`mx-auto flex max-w-7xl flex-col px-4 py-4 sm:px-6 lg:px-8 ${
+      className={`mx-auto flex max-w-7xl flex-col overflow-x-hidden px-4 py-4 sm:px-6 lg:px-8 ${
         view === "conversation"
           ? "h-[100svh] overflow-hidden gap-4 pb-28 lg:gap-4 lg:pb-4"
           : "min-h-screen gap-4 pb-28 lg:gap-6 lg:pb-4"
@@ -567,7 +595,7 @@ export function DashboardShell() {
         </div>
       </header>
 
-      <main id="main-content" className={view === "conversation" ? "flex min-h-0 flex-1" : undefined}>
+      <main id="main-content" className={view === "conversation" ? "flex min-h-0 min-w-0 flex-1 overflow-x-hidden" : "min-w-0 overflow-x-hidden"}>
         {view === "settings" ? (
           <UserSettingsPanel />
         ) : (
@@ -576,7 +604,7 @@ export function DashboardShell() {
             id={activePanelId}
             aria-labelledby={activeTabId}
             tabIndex={0}
-            className={view === "conversation" ? "flex min-h-0 flex-1" : undefined}
+            className={view === "conversation" ? "flex min-h-0 min-w-0 flex-1 overflow-x-hidden" : "min-w-0 overflow-x-hidden"}
           >
             {view === "athlete-log" ? (
               <AthleteDashboard
@@ -625,52 +653,15 @@ export function DashboardShell() {
           <div
             className="grid gap-1"
             style={{
-              gridTemplateColumns: mobileWorkoutNavItem
-                ? `minmax(5.45rem, 1.05fr) repeat(${Math.max(mobileNavSlotCount - 1, 1)}, minmax(0, 1fr))`
-                : `repeat(${mobileNavSlotCount}, minmax(0, 1fr))`,
+              gridTemplateColumns: `repeat(${Math.max(mobileNavSlotCount, 1)}, minmax(0, 1fr))`,
             }}
           >
-            {mobileWorkoutNavItem ? (
-              <button
-                type="button"
-                className={`group relative flex min-w-[5.45rem] flex-col items-center justify-center gap-0.5 rounded-[1.02rem] px-3.25 py-1.5 text-[14px] leading-none transition hover:bg-[var(--nav-workout-hover-bg)] ${
-                  view === mobileWorkoutNavItem
-                    ? "bg-[var(--nav-active-bg)] text-[var(--accent)]"
-                    : "bg-[var(--nav-workout-bg)] text-[var(--text)]"
-                }`}
-                aria-current={view === mobileWorkoutNavItem ? "page" : undefined}
-                onClick={() => setView(mobileWorkoutNavItem)}
-              >
-                {view === mobileWorkoutNavItem ? (
-                  <span className="absolute bottom-0 left-1/2 h-0.5 w-6 -translate-x-1/2 rounded-full bg-[var(--accent)]" aria-hidden="true" />
-                ) : null}
-                <span
-                  className={`relative flex size-7 items-center justify-center rounded-full ${
-                    view === mobileWorkoutNavItem
-                      ? "bg-[var(--nav-group-icon-active-bg)] text-[var(--accent)]"
-                      : "bg-[var(--nav-workout-icon-bg)] text-[var(--text)] group-hover:bg-[var(--nav-group-icon-active-bg)]"
-                  }`}
-                  aria-hidden="true"
-                >
-                  {(() => {
-                    const Icon = navIconByView[mobileWorkoutNavItem];
-                    return <Icon className="size-[0.95rem]" aria-hidden="true" />;
-                  })()}
-                </span>
-                <span className={`max-w-full truncate text-[14px] font-normal ${view === mobileWorkoutNavItem ? "text-[var(--accent)]" : "text-[var(--text)]"}`}>
-                  {mobileNavLabelByView[mobileWorkoutNavItem]}
-                </span>
-              </button>
-            ) : null}
-
-            <div
-              className="grid min-w-0 grid-flow-col auto-cols-fr gap-1 rounded-[1.02rem] bg-transparent"
-              style={{ gridColumn: `span ${Math.max(mobileNavSlotCount - (mobileWorkoutNavItem ? 1 : 0), 1)} / span ${Math.max(mobileNavSlotCount - (mobileWorkoutNavItem ? 1 : 0), 1)}` }}
-            >
-              {mobileSecondaryNavItems.map((item) => {
+            <div className="grid min-w-0 grid-flow-col auto-cols-fr gap-1 rounded-[1.02rem] bg-transparent" style={{ gridColumn: `span ${Math.max(mobileNavSlotCount, 1)} / span ${Math.max(mobileNavSlotCount, 1)}` }}>
+              {mobilePrimaryNavItems.map((item) => {
                 const Icon = navIconByView[item];
                 const isActive = view === item;
                 const tabLabel = mobileNavLabelByView[item];
+                const isWorkoutItem = item === "athlete-log";
 
                 return (
                   <button
@@ -679,7 +670,9 @@ export function DashboardShell() {
                     className={`relative flex min-w-0 flex-col items-center justify-center gap-0.5 rounded-[1.02rem] px-1 py-1.5 text-[14px] font-normal leading-none transition ${
                       isActive
                         ? "bg-[var(--nav-active-bg)] text-[var(--accent)]"
-                        : "bg-transparent text-[var(--text-muted)]"
+                        : isWorkoutItem
+                          ? "bg-[var(--nav-workout-bg)] text-[var(--text)]"
+                          : "bg-transparent text-[var(--text-muted)]"
                     }`}
                     aria-current={isActive ? "page" : undefined}
                     onClick={() => setView(item)}
@@ -691,7 +684,9 @@ export function DashboardShell() {
                       className={`relative flex size-6.5 items-center justify-center rounded-full ${
                         isActive
                           ? "bg-[var(--nav-group-icon-active-bg)] text-[var(--accent)]"
-                          : "bg-[var(--nav-group-icon-bg)] text-[var(--text)]"
+                          : isWorkoutItem
+                            ? "bg-[var(--nav-workout-icon-bg)] text-[var(--text)]"
+                            : "bg-[var(--nav-group-icon-bg)] text-[var(--text)]"
                       }`}
                       aria-hidden="true"
                     >

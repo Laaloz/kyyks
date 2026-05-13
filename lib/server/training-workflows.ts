@@ -5,6 +5,8 @@ import { canManagePrograms, isAdminRole, isAthleteRole } from "@/lib/role-access
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import type {
   Exercise,
+  ProgramWorkoutExercise,
+  ProgramWorkoutSet,
   ProgramBuilderInput,
   ProgramStatus,
   ProgramUpdateInput,
@@ -42,6 +44,10 @@ type WorkoutMutationResult =
 type WorkoutNoteMutationResult =
   | { ok: true; updatedAt: string }
   | { ok: false; message: string; code?: "stale_note" | "not_found" | "invalid_state" | "forbidden" };
+
+type WorkoutExerciseMutationResult =
+  | { ok: true; updatedAt: string }
+  | { ok: false; message: string; code?: "not_found" | "invalid_state" | "forbidden" };
 
 type StartedWorkoutPayload = {
   scheduledWorkout: ScheduledWorkout;
@@ -1853,6 +1859,309 @@ export async function saveWorkoutNoteOnServer({
   }
 
   return { ok: true as const, updatedAt: payload.note_updated_at };
+}
+
+export async function updateWorkoutExerciseStructureOnServer({
+  requester,
+  scheduledWorkoutId,
+  action,
+}: {
+  requester: RequesterProfile;
+  scheduledWorkoutId: string;
+  action:
+    | {
+        type: "replace";
+        templateExerciseId: string;
+        exerciseId: string;
+        exerciseName: string;
+        muscleGroup?: ProgramWorkoutExercise["muscleGroup"];
+        setCount?: number;
+        targetReps?: number;
+        targetLoad?: number;
+        restSeconds?: number;
+      }
+    | {
+        type: "add_extra";
+        exerciseId: string;
+        exerciseName: string;
+        muscleGroup?: ProgramWorkoutExercise["muscleGroup"];
+        setCount?: number;
+        targetReps?: number;
+        targetLoad?: number;
+        restSeconds?: number;
+      }
+    | {
+        type: "remove";
+        templateExerciseId: string;
+      };
+}): Promise<WorkoutExerciseMutationResult> {
+  const admin = createSupabaseAdminClient();
+  if (!admin) {
+    return { ok: false as const, message: "Supabase admin -yhteys puuttuu. Tarkista service role -avain." };
+  }
+
+  const { data: workout } = await admin
+    .from("scheduled_workouts")
+    .select("id, athlete_id, status, training_plan_id, program_workout_id")
+    .eq("id", scheduledWorkoutId)
+    .maybeSingle<{
+      id: string;
+      athlete_id: string;
+      status: ScheduledWorkout["status"];
+      training_plan_id: string | null;
+      program_workout_id: string | null;
+    }>();
+
+  if (!workout || (!isAdminRole(requester.role) && workout.athlete_id !== requester.id)) {
+    return { ok: false as const, message: "Treeniä ei löytynyt.", code: "forbidden" };
+  }
+  if (!workout.training_plan_id || !workout.program_workout_id) {
+    return { ok: false as const, message: "Muokkaus onnistuu vain ohjelmatreeneihin.", code: "invalid_state" };
+  }
+  if (workout.status !== "in_progress" && workout.status !== "completed") {
+    return { ok: false as const, message: "Liikkeitä voi muokata vain aktiivisesta tai valmiista treenistä.", code: "invalid_state" };
+  }
+
+  const [{ data: session }, { data: planRow }] = await Promise.all([
+    admin
+      .from("workout_sessions")
+      .select("id")
+      .eq("scheduled_workout_id", scheduledWorkoutId)
+      .order("updated_at", { ascending: false })
+      .order("id", { ascending: false })
+      .limit(1)
+      .maybeSingle<{ id: string }>(),
+    admin
+      .from("training_plans")
+      .select("id, workouts")
+      .eq("id", workout.training_plan_id)
+      .maybeSingle<{ id: string; workouts: TrainingPlan["workouts"] }>(),
+  ]);
+
+  if (!session || !planRow?.workouts?.length) {
+    return { ok: false as const, message: "Treenin liikkeitä ei voitu ladata.", code: "not_found" };
+  }
+
+  const targetWorkout = planRow.workouts.find((item) => item.id === workout.program_workout_id);
+  if (!targetWorkout) {
+    return { ok: false as const, message: "Ohjelmapäivää ei löytynyt.", code: "not_found" };
+  }
+
+  const resolvedTargetLoad =
+    action.type === "remove"
+      ? undefined
+      : action.targetLoad ??
+        (await buildAutofillSnapshotMaps(workout.athlete_id, [action.exerciseId], admin)).byExercise.get(action.exerciseId)?.actualLoad ??
+        0;
+
+  const timestamp = nowIso();
+  const updatedWorkouts = planRow.workouts.map((programWorkout) => {
+    if (programWorkout.id !== workout.program_workout_id) {
+      return programWorkout;
+    }
+
+    if (action.type === "replace") {
+      const nextSetCount = Math.min(8, Math.max(1, action.setCount ?? programWorkout.exercises.find((item) => item.id === action.templateExerciseId)?.sets.length ?? 3));
+      return {
+        ...programWorkout,
+        exercises: programWorkout.exercises.map((exercise) =>
+          exercise.id === action.templateExerciseId
+            ? {
+                ...exercise,
+                exerciseId: action.exerciseId,
+                exerciseName: action.exerciseName,
+                muscleGroup: action.muscleGroup,
+                sets: Array.from({ length: nextSetCount }, (_, index) => {
+                  const existing = exercise.sets[index];
+                  return {
+                    id: existing?.id ?? `${exercise.id}_set_${index + 1}`,
+                    label: String(index + 1),
+                    targetReps: action.targetReps ?? existing?.targetReps ?? 12,
+                    targetRepsMin: undefined,
+                    targetRepsMax: undefined,
+                    targetLoad: resolvedTargetLoad ?? existing?.targetLoad,
+                    restSeconds: action.restSeconds ?? existing?.restSeconds ?? programWorkout.defaultRestSeconds,
+                  };
+                }),
+              }
+            : exercise,
+        ),
+      };
+    }
+
+    if (action.type === "remove") {
+      if (programWorkout.exercises.length <= 1) {
+        return programWorkout;
+      }
+      return {
+        ...programWorkout,
+        exercises: programWorkout.exercises.filter((exercise) => exercise.id !== action.templateExerciseId),
+      };
+    }
+
+    const setCount = Math.min(8, Math.max(1, action.setCount ?? 3));
+    const reps = Math.min(50, Math.max(1, action.targetReps ?? 12));
+    const restSeconds = Math.min(900, Math.max(15, action.restSeconds ?? programWorkout.defaultRestSeconds ?? 120));
+    const extraExerciseId = `extra_${crypto.randomUUID()}`;
+    const nextSets: ProgramWorkoutSet[] = Array.from({ length: setCount }, (_, index) => ({
+      id: `${extraExerciseId}_set_${index + 1}`,
+      label: String(index + 1),
+      targetReps: reps,
+      targetLoad: resolvedTargetLoad,
+      restSeconds,
+    }));
+    const nextExercise: ProgramWorkoutExercise = {
+      id: extraExerciseId,
+      exerciseId: action.exerciseId,
+      exerciseName: action.exerciseName,
+      muscleGroup: action.muscleGroup,
+      instruction: "",
+      sets: nextSets,
+    };
+
+    return {
+      ...programWorkout,
+      exercises: [...programWorkout.exercises, nextExercise],
+    };
+  });
+
+  const updates: Array<PromiseLike<{ error: unknown }>> = [
+    admin
+      .from("training_plans")
+      .update({ workouts: updatedWorkouts, updated_at: timestamp })
+      .eq("id", workout.training_plan_id),
+  ];
+
+  if (action.type === "replace") {
+    const { data: existingLogs } = await admin
+      .from("workout_set_logs")
+      .select("id, set_id")
+      .eq("scheduled_workout_id", scheduledWorkoutId)
+      .eq("template_exercise_id", action.templateExerciseId)
+      .order("set_label", { ascending: true });
+
+    const targetProgramWorkout = updatedWorkouts.find((item) => item.id === workout.program_workout_id);
+    const targetExercise = targetProgramWorkout?.exercises.find((item) => item.id === action.templateExerciseId);
+    const nextSets = targetExercise?.sets ?? [];
+    const existingByIndex = existingLogs ?? [];
+
+    updates.push(
+      admin
+        .from("workout_set_logs")
+        .update({
+          exercise_id: action.exerciseId,
+          exercise_name: action.exerciseName,
+          muscle_group: action.muscleGroup ?? null,
+          target_reps: action.targetReps ?? undefined,
+          target_load: resolvedTargetLoad,
+          target_rest_seconds: action.restSeconds ?? undefined,
+          updated_at: timestamp,
+        })
+        .eq("scheduled_workout_id", scheduledWorkoutId)
+        .eq("template_exercise_id", action.templateExerciseId),
+    );
+
+    if (nextSets.length > existingByIndex.length) {
+      const toInsert = nextSets.slice(existingByIndex.length).map((set, index) => ({
+        session_id: session.id,
+        scheduled_workout_id: scheduledWorkoutId,
+        template_exercise_id: action.templateExerciseId,
+        set_id: set.id,
+        exercise_id: action.exerciseId,
+        exercise_name: action.exerciseName,
+        muscle_group: action.muscleGroup ?? null,
+        superset_group: null,
+        set_label: String(existingByIndex.length + index + 1),
+        target_reps: set.targetReps,
+        target_reps_min: set.targetRepsMin ?? null,
+        target_reps_max: set.targetRepsMax ?? null,
+        target_load: set.targetLoad ?? resolvedTargetLoad ?? null,
+        target_rest_seconds: set.restSeconds ?? null,
+        program_workout_id: workout.program_workout_id,
+        actual_reps: resolveDefaultActualReps(set),
+        actual_load: resolveDefaultActualLoad(set) ?? null,
+        done: false,
+        updated_at: timestamp,
+      }));
+      updates.push(admin.from("workout_set_logs").insert(toInsert));
+    }
+
+    if (nextSets.length < existingByIndex.length) {
+      const toDeleteIds = existingByIndex.slice(nextSets.length).map((log) => log.id);
+      if (toDeleteIds.length) {
+        updates.push(admin.from("workout_set_logs").delete().in("id", toDeleteIds));
+      }
+    }
+
+    existingByIndex.slice(0, nextSets.length).forEach((log, index) => {
+      const set = nextSets[index]!;
+      updates.push(
+        admin
+          .from("workout_set_logs")
+          .update({
+            set_id: set.id,
+            set_label: set.label,
+            target_reps: set.targetReps,
+            target_reps_min: set.targetRepsMin ?? null,
+            target_reps_max: set.targetRepsMax ?? null,
+            target_load: set.targetLoad ?? resolvedTargetLoad ?? null,
+            target_rest_seconds: set.restSeconds ?? null,
+            updated_at: timestamp,
+          })
+          .eq("id", log.id),
+      );
+    });
+  } else if (action.type === "add_extra") {
+    const programWorkout = updatedWorkouts.find((item) => item.id === workout.program_workout_id)!;
+    const newExercise = programWorkout.exercises[programWorkout.exercises.length - 1]!;
+    updates.push(
+      admin.from("workout_set_logs").insert(
+        newExercise.sets.map((set) => ({
+          session_id: session.id,
+          scheduled_workout_id: scheduledWorkoutId,
+          template_exercise_id: newExercise.id,
+          set_id: set.id,
+          exercise_id: newExercise.exerciseId ?? `custom_${newExercise.id}`,
+          exercise_name: newExercise.exerciseName,
+          muscle_group: newExercise.muscleGroup ?? null,
+          superset_group: null,
+          set_label: set.label,
+          target_reps: set.targetReps,
+          target_reps_min: set.targetRepsMin ?? null,
+          target_reps_max: set.targetRepsMax ?? null,
+          target_load: set.targetLoad ?? resolvedTargetLoad ?? null,
+          target_rest_seconds: set.restSeconds ?? null,
+          program_workout_id: workout.program_workout_id,
+          actual_reps: resolveDefaultActualReps(set),
+          actual_load: resolveDefaultActualLoad(set) ?? null,
+          done: false,
+          updated_at: timestamp,
+        })),
+      ),
+    );
+  } else {
+    updates.push(
+      admin
+        .from("workout_set_logs")
+        .delete()
+        .eq("scheduled_workout_id", scheduledWorkoutId)
+        .eq("template_exercise_id", action.templateExerciseId),
+    );
+  }
+
+  updates.push(
+    admin
+      .from("workout_sessions")
+      .update({ updated_at: timestamp })
+      .eq("scheduled_workout_id", scheduledWorkoutId),
+  );
+
+  const results = await Promise.all(updates);
+  if (results.some((result) => Boolean(result.error))) {
+    return { ok: false as const, message: "Liikemuutoksen tallennus epäonnistui." };
+  }
+
+  return { ok: true as const, updatedAt: timestamp };
 }
 
 export async function completeWorkoutOnServer({

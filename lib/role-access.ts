@@ -20,7 +20,7 @@ const adminWorkspaceViews: DashboardHomeView[] = [
 ];
 
 const athleteWorkspaceViews: DashboardHomeView[] = ["athlete-log", "overview", "nutrition", "conversation"];
-const independentAthleteWorkspaceViews: DashboardHomeView[] = ["athlete-log", "overview", "nutrition", PROGRAMS_DASHBOARD_VIEW, "conversation"];
+const independentAthleteWorkspaceViews: DashboardHomeView[] = ["athlete-log", "overview", "nutrition", PROGRAMS_DASHBOARD_VIEW];
 
 export function isAthleteRole(role: Role | null | undefined): role is AthleteRole {
   return role === "athlete" || role === "independent_athlete";

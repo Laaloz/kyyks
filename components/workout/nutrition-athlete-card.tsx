@@ -459,7 +459,7 @@ export function NutritionAthleteCard({
   }
 
   return (
-    <Card className="border-[var(--border-strong)]">
+    <Card className="max-w-full overflow-x-clip border-[var(--border-strong)] [contain:inline-size]">
       <div className="space-y-5">
         <div>
           <p className="text-xs font-semibold tracking-[0.04em] text-[var(--text-subtle)]">Ruokalista</p>

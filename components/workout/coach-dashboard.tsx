@@ -1242,35 +1242,33 @@ export function CoachDashboard({
 
       {view === PROGRAMS_WORKSPACE_VIEW && (
         <div className="grid gap-4">
-          <div className="w-full rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-2">
-            <div className="grid w-full grid-cols-2 rounded-2xl border border-[var(--border)] bg-[var(--surface-2)] p-1">
-              <button
-                type="button"
-                className={cn(
-                  "min-w-0 rounded-xl px-4 py-2.5 text-sm font-semibold transition",
-                  programWorkspaceTab === "library"
-                    ? "border border-[color:color-mix(in_srgb,var(--accent)_18%,var(--border))] bg-[color:color-mix(in_srgb,var(--accent)_10%,var(--surface))] text-[var(--accent)] shadow-[0_8px_18px_-20px_var(--accent)]"
-                    : "border border-transparent text-[var(--text-muted)] hover:bg-[var(--surface)] hover:text-[var(--text)]",
-                )}
-                aria-pressed={programWorkspaceTab === "library"}
-                onClick={() => setProgramWorkspaceTab("library")}
-              >
-                Ohjelmakirjasto
-              </button>
-              <button
-                type="button"
-                className={cn(
-                  "min-w-0 rounded-xl px-4 py-2.5 text-sm font-semibold transition",
-                  programWorkspaceTab === "builder"
-                    ? "border border-[color:color-mix(in_srgb,var(--accent)_18%,var(--border))] bg-[color:color-mix(in_srgb,var(--accent)_10%,var(--surface))] text-[var(--accent)] shadow-[0_8px_18px_-20px_var(--accent)]"
-                    : "border border-transparent text-[var(--text-muted)] hover:bg-[var(--surface)] hover:text-[var(--text)]",
-                )}
-                aria-pressed={programWorkspaceTab === "builder"}
-                onClick={() => setProgramWorkspaceTab("builder")}
-              >
-                Rakenna ohjelma
-              </button>
-            </div>
+          <div className="grid w-full grid-cols-2 rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-1">
+            <button
+              type="button"
+              className={cn(
+                "min-w-0 rounded-xl px-4 py-2.5 text-sm font-semibold transition",
+                programWorkspaceTab === "library"
+                  ? "border border-[color:color-mix(in_srgb,var(--accent)_18%,var(--border))] bg-[color:color-mix(in_srgb,var(--accent)_10%,var(--surface))] text-[var(--accent)] shadow-[0_8px_18px_-20px_var(--accent)]"
+                  : "border border-transparent text-[var(--text-muted)] hover:bg-[var(--surface)] hover:text-[var(--text)]",
+              )}
+              aria-pressed={programWorkspaceTab === "library"}
+              onClick={() => setProgramWorkspaceTab("library")}
+            >
+              Ohjelmakirjasto
+            </button>
+            <button
+              type="button"
+              className={cn(
+                "min-w-0 rounded-xl px-4 py-2.5 text-sm font-semibold transition",
+                programWorkspaceTab === "builder"
+                  ? "border border-[color:color-mix(in_srgb,var(--accent)_18%,var(--border))] bg-[color:color-mix(in_srgb,var(--accent)_10%,var(--surface))] text-[var(--accent)] shadow-[0_8px_18px_-20px_var(--accent)]"
+                  : "border border-transparent text-[var(--text-muted)] hover:bg-[var(--surface)] hover:text-[var(--text)]",
+              )}
+              aria-pressed={programWorkspaceTab === "builder"}
+              onClick={() => setProgramWorkspaceTab("builder")}
+            >
+              Rakenna ohjelma
+            </button>
           </div>
 
           {programWorkspaceTab === "builder" ? (
@@ -2915,7 +2913,7 @@ function CoachAthleteInsights({
             Seuraa toteumaa, kehitystä ja kehon seurantaa yhdestä paikasta.
           </CardDescription>
         </div>
-        <div className="w-full lg:w-72">
+        <div className="w-full">
           <Label htmlFor="coach-athlete-insight-select">Treenaaja</Label>
           <Select
             id="coach-athlete-insight-select"
@@ -3009,7 +3007,7 @@ function CoachAthleteInsights({
                   <p className="text-sm font-semibold text-[var(--text)]">Kehitystrendi</p>
                   <p className="mt-1 text-sm text-[var(--text-muted)]">Valitse paino, vyötärö tai volyymi.</p>
                 </div>
-                <div className="grid w-full grid-cols-3 rounded-xl border border-[var(--border)] bg-[var(--surface-2)] p-1 sm:w-auto">
+                <div className="grid w-full grid-cols-3 rounded-xl border border-[var(--border)] bg-[var(--surface)] p-1 sm:w-auto">
                   <button
                     type="button"
                     className={`w-full rounded-lg px-3 py-2 text-sm font-medium transition ${
