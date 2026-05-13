@@ -26,14 +26,16 @@ const WORKSPACE_VIEW_STORAGE_VERSION = "v1";
 const MEASUREMENTS_SECTION_ID = "overview-measurements";
 const MOBILE_PRIMARY_NAV_MAX_ITEMS = 4;
 
-function ensureWorkoutNavItemVisible(items: PrimaryWorkspaceView[]) {
+function ensureWorkoutNavItemVisible(items: PrimaryWorkspaceView[]): PrimaryWorkspaceView[] {
   if (!items.includes("athlete-log")) {
     return items.slice(0, MOBILE_PRIMARY_NAV_MAX_ITEMS);
   }
 
   const limitedItems = items.slice(0, MOBILE_PRIMARY_NAV_MAX_ITEMS);
-  const withoutWorkout = limitedItems.filter((item) => item !== "athlete-log");
-  const fallbackWithWorkout = [...withoutWorkout, "athlete-log"].slice(0, MOBILE_PRIMARY_NAV_MAX_ITEMS);
+  const withoutWorkout: PrimaryWorkspaceView[] = limitedItems.filter((item) => item !== "athlete-log");
+  const fallbackWithWorkout: PrimaryWorkspaceView[] = withoutWorkout
+    .slice(0, Math.max(MOBILE_PRIMARY_NAV_MAX_ITEMS - 1, 0))
+    .concat("athlete-log");
 
   if (!fallbackWithWorkout.includes("athlete-log")) {
     return limitedItems;
@@ -41,7 +43,7 @@ function ensureWorkoutNavItemVisible(items: PrimaryWorkspaceView[]) {
 
   const workoutMiddleIndex = Math.floor(MOBILE_PRIMARY_NAV_MAX_ITEMS / 2);
   const clampedWorkoutIndex = Math.min(workoutMiddleIndex, Math.max(fallbackWithWorkout.length - 1, 0));
-  const reorderedItems = fallbackWithWorkout.filter((item) => item !== "athlete-log");
+  const reorderedItems: PrimaryWorkspaceView[] = fallbackWithWorkout.filter((item) => item !== "athlete-log");
   reorderedItems.splice(clampedWorkoutIndex, 0, "athlete-log");
   return reorderedItems.slice(0, MOBILE_PRIMARY_NAV_MAX_ITEMS);
 }
