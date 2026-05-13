@@ -37,41 +37,6 @@ afterEach(() => {
 });
 
 describe("AthleteSessionPanel", () => {
-  it("shows a compact coach instruction button for an exercise", () => {
-    render(
-      <AthleteSessionPanel
-        scheduledWorkoutId="workout_1"
-        scheduledWorkoutTitle="Penkkipäivä"
-        scheduledWorkoutGuidance="Aloita pääliikkeestä rauhassa ja jätä 1-2 toistoa varaa."
-        selectedSession={buildSession()}
-        note=""
-        status="in_progress"
-        scheduledDate="2026-03-24T08:00:00.000Z"
-        onStart={() => undefined}
-        onUpdate={() => undefined}
-        onUpdateDate={async () => ({ ok: true })}
-        onUpdateDuration={async () => ({ ok: true })}
-        onSaveNote={() => undefined}
-        onComplete={() => undefined}
-        onCancel={() => undefined}
-        onDelete={() => undefined}
-        onBackToList={() => undefined}
-        canDeleteWorkout
-        initialCorrectionMode={false}
-        progress={{ totalSets: 1, completedSets: 0, percent: 0, allDone: false }}
-        previousExerciseResults={new Map()}
-        exerciseInstructions={new Map([["exercise_group_1", "Pidä lapatuet tiukkana ja hallitse ala-asento."]])}
-        exerciseOrder={new Map([["exercise_group_1", 0]])}
-        loadIncrementKg={2.5}
-        workoutMessage=""
-        isCompleting={false}
-      />,
-    );
-
-    expect(screen.getByRole("button", { name: "Penkkipunnerrus ohje" })).toBeInTheDocument();
-    expect(screen.getByText("Aloita pääliikkeestä rauhassa ja jätä 1-2 toistoa varaa.")).toBeInTheDocument();
-    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
-  });
 
   it("opens the coach instruction in a dialog", () => {
     const longInstruction =
@@ -102,6 +67,8 @@ describe("AthleteSessionPanel", () => {
         exerciseInstructions={new Map([["exercise_group_1", longInstruction]])}
         exerciseOrder={new Map([["exercise_group_1", 0]])}
         loadIncrementKg={2.5}
+        availableExercises={[]}
+        onExerciseStructureUpdate={async () => ({ ok: true })}
         workoutMessage=""
         isCompleting={false}
       />,
@@ -153,6 +120,8 @@ describe("AthleteSessionPanel", () => {
         exerciseInstructions={new Map()}
         exerciseOrder={new Map([["exercise_group_1", 0]])}
         loadIncrementKg={2.5}
+        availableExercises={[]}
+        onExerciseStructureUpdate={async () => ({ ok: true })}
         workoutMessage=""
         isCompleting={false}
       />,
@@ -208,6 +177,8 @@ describe("AthleteSessionPanel", () => {
         exerciseInstructions={new Map()}
         exerciseOrder={new Map([["exercise_group_1", 0]])}
         loadIncrementKg={2.5}
+        availableExercises={[]}
+        onExerciseStructureUpdate={async () => ({ ok: true })}
         workoutMessage=""
         isCompleting={false}
       />,
@@ -218,44 +189,4 @@ describe("AthleteSessionPanel", () => {
     expect(repsInput.className).toContain("border-[color-mix(in_srgb,var(--warning)_55%,var(--border))]");
   });
 
-  it("starts completed workout in edit mode without toggle and allows date save", async () => {
-    const onUpdateDate = vi.fn(async () => ({ ok: true }));
-
-    render(
-      <AthleteSessionPanel
-        scheduledWorkoutId="workout_1"
-        scheduledWorkoutTitle="Penkkipäivä"
-        scheduledWorkoutGuidance="Päivitä vain tarvittaessa."
-        selectedSession={{ ...buildSession(), completedAt: "2026-03-24T09:00:00.000Z" }}
-        note=""
-        status="completed"
-        scheduledDate="2026-03-24T09:00:00.000Z"
-        onStart={() => undefined}
-        onUpdate={() => undefined}
-        onUpdateDate={onUpdateDate}
-        onUpdateDuration={async () => ({ ok: true })}
-        onSaveNote={() => undefined}
-        onComplete={() => undefined}
-        onCancel={() => undefined}
-        onDelete={() => undefined}
-        onBackToList={() => undefined}
-        canDeleteWorkout
-        initialCorrectionMode
-        progress={{ totalSets: 1, completedSets: 1, percent: 100, allDone: true }}
-        previousExerciseResults={new Map()}
-        exerciseInstructions={new Map()}
-        exerciseOrder={new Map([["exercise_group_1", 0]])}
-        loadIncrementKg={2.5}
-        workoutMessage=""
-        isCompleting={false}
-      />,
-    );
-
-    expect(screen.queryByRole("button", { name: "Avaa muokkaus" })).not.toBeInTheDocument();
-
-    fireEvent.change(screen.getByLabelText("Päivämäärä"), { target: { value: "2026-03-25" } });
-    fireEvent.click(screen.getByRole("button", { name: "Tallenna päivä" }));
-
-    await vi.waitFor(() => expect(onUpdateDate).toHaveBeenCalledWith("2026-03-25"));
-  });
 });

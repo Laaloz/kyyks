@@ -128,7 +128,7 @@ export function ConversationPanel({
   const hasHeader = Boolean(heading || description || headerSlot);
 
   return (
-    <Card className="flex h-full min-h-0 flex-col overflow-hidden border-[var(--border-strong)]">
+    <Card className="flex h-full min-h-0 w-full flex-col overflow-hidden border-[var(--border-strong)]">
       {hasHeader ? (
         <div className="mb-4 flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
           {heading || description ? (

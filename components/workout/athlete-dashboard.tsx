@@ -251,6 +251,7 @@ export function AthleteDashboard({
     updateWorkoutDate,
     updateWorkoutDuration,
     updateWorkoutSet,
+    updateWorkoutExerciseStructure,
     saveWorkoutNote,
     addConversationComment,
     completeWorkout,
@@ -1106,7 +1107,7 @@ export function AthleteDashboard({
   }, [openHistoryMenuWorkoutId]);
 
   return (
-    <div className="grid gap-6">
+    <div className="grid min-w-0 max-w-full gap-6 overflow-x-clip [contain:inline-size]">
       {isDebugEnabled && currentUser ? (
         <Card className="border-[var(--danger)] bg-[var(--surface)]">
           <p className="text-xs font-semibold tracking-[0.04em] text-[var(--danger)]">Debug</p>
@@ -1131,7 +1132,7 @@ export function AthleteDashboard({
       ) : null}
 
       {view === "overview" && (
-        <Card className="border-[var(--border-strong)]">
+        <Card className="max-w-full overflow-x-clip border-[var(--border-strong)] [contain:inline-size]">
           <div className="space-y-4">
             <div>
               <p className="text-xs font-semibold tracking-[0.04em] text-[var(--text-subtle)]">Yhteenveto</p>
@@ -1140,11 +1141,11 @@ export function AthleteDashboard({
                 Näet viikon etenemisen, viimeisimmän treenin ja seuraavan askeleen yhdellä silmäyksellä.
               </CardDescription>
             </div>
-            <div className="grid gap-3 lg:grid-cols-[1.2fr_0.8fr]">
-              <div className="rounded-3xl border border-[var(--border)] bg-[var(--surface-2)] p-4">
-                <div className="grid gap-4 md:grid-cols-[auto_1fr] md:items-center">
+            <div className="grid min-w-0 gap-3 lg:grid-cols-[1.2fr_0.8fr]">
+              <div className="min-w-0 overflow-hidden rounded-3xl border border-[var(--border)] bg-[var(--surface-2)] p-4">
+                <div className="grid min-w-0 gap-4 md:grid-cols-[auto_1fr] md:items-center">
                   <ProgressRing label="Viikon eteneminen" percent={weeklyInsights.completionRate} showLabel={false} />
-                  <div className="space-y-4">
+                  <div className="min-w-0 space-y-4">
                     <div className="text-center">
                       <div className="flex items-center justify-center gap-1">
                         <p className="text-xs font-semibold tracking-[0.04em] text-[var(--text-subtle)]">Viikon eteneminen</p>
@@ -1161,7 +1162,7 @@ export function AthleteDashboard({
                       </p>
                     </div>
                     <div className="grid gap-3 sm:grid-cols-2">
-                      <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface)] px-4 py-3">
+                      <div className="min-w-0 rounded-2xl border border-[var(--border)] bg-[var(--surface)] px-4 py-3">
                         <div className="flex items-center gap-1">
                           <p className="text-xs font-semibold tracking-[0.04em] text-[var(--text-subtle)]">Volyymi tällä viikolla</p>
                           <InfoTooltip text="Luku lasketaan valmiista sarjoista kaavalla kuorma x toistot." />
@@ -1171,9 +1172,9 @@ export function AthleteDashboard({
                         </p>
                         <p className="mt-1 text-xs text-[var(--text-subtle)]">Valmiit sarjat yhteensä</p>
                       </div>
-                      <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface)] px-4 py-3">
+                      <div className="min-w-0 rounded-2xl border border-[var(--border)] bg-[var(--surface)] px-4 py-3">
                         <p className="text-xs font-semibold tracking-[0.04em] text-[var(--text-subtle)]">Viimeisin valmis treeni</p>
-                        <p className="mt-1 text-base font-semibold text-[var(--text)]">
+                        <p className="mt-1 break-words text-base font-semibold text-[var(--text)]">
                           {weeklyInsights.latestCompleted
                             ? normalizeWorkoutHistoryTitle(weeklyInsights.latestCompleted.title)
                             : "Ei vielä valmiita treenejä"}
@@ -1188,7 +1189,7 @@ export function AthleteDashboard({
                   </div>
                 </div>
               </div>
-              <div className="rounded-3xl border border-[var(--border)] bg-[var(--surface-2)] p-4">
+              <div className="min-w-0 overflow-hidden rounded-3xl border border-[var(--border)] bg-[var(--surface-2)] p-4">
                 <p className="text-xs font-semibold tracking-[0.04em] text-[var(--text-subtle)]">
                   {highlightedWorkoutState === "active"
                     ? "Aktiivinen treeni"
@@ -1196,7 +1197,7 @@ export function AthleteDashboard({
                       ? "Keskeytetty treeni"
                       : "Seuraava askel"}
                 </p>
-                <p className="mt-2 text-lg font-semibold text-[var(--text)]">
+                <p className="mt-2 break-words text-lg font-semibold text-[var(--text)]">
                   {highlightedWorkout
                     ? normalizeWorkoutHistoryTitle(highlightedWorkout.title)
                     : athletePrograms.length
@@ -1532,11 +1533,11 @@ export function AthleteDashboard({
         </div>
       ) : null}
 
-      {(view === "overview" || view === "nutrition") && currentUser ? (
+      {view === "nutrition" && currentUser ? (
         <PersonalNutritionSummaryCard state={state} user={currentUser} onOpenSettings={onOpenSettings} />
       ) : null}
 
-      {(view === "overview" || view === "nutrition") && currentUser ? <NutritionAthleteCard state={state} user={currentUser} /> : null}
+      {view === "nutrition" && currentUser ? <NutritionAthleteCard state={state} user={currentUser} /> : null}
 
       {view === "conversation" && currentUser ? (
         <ConversationPanel
@@ -1657,6 +1658,16 @@ export function AthleteDashboard({
                   return result;
                 }}
                 onSaveNote={(body) => saveWorkoutNote(selectedWorkout.id, body)}
+                onExerciseStructureUpdate={async (action) => {
+                  const result = await updateWorkoutExerciseStructure(selectedWorkout.id, action);
+                  setWorkoutMessage(result.ok ? "Treenin liikerakenne päivitettiin." : result.message);
+                  if (result.ok) {
+                    notify({ tone: "success", message: "Treenin liikerakenne päivitettiin." });
+                  } else {
+                    notify({ tone: "danger", message: result.message });
+                  }
+                  return result;
+                }}
                 onComplete={async () => {
                   const completedWorkoutId = selectedWorkout.id;
                   const completionPercent = progress?.percent ?? 0;
@@ -1773,6 +1784,7 @@ export function AthleteDashboard({
                 previousExerciseResults={previousExerciseResults}
                 exerciseInstructions={selectedWorkoutInstructions}
                 exerciseOrder={selectedWorkoutExerciseOrder}
+                availableExercises={state.exercises}
                 loadIncrementKg={currentUser?.settings?.loadIncrementKg ?? 2.5}
                 activeWorkoutCount={inProgressCount}
                 workoutMessage={workoutMessage}

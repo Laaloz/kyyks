@@ -121,7 +121,7 @@ function RecipeDetailDialog({
         </div>
 
         <div className="flex-1 overflow-y-auto px-4 py-4 sm:px-5">
-          <div className="-mx-1 flex snap-x gap-3 overflow-x-auto px-1 pb-1 sm:mx-0 sm:grid sm:grid-cols-4 sm:overflow-visible sm:px-0">
+          <div className="flex snap-x gap-3 overflow-x-auto px-1 pb-1 sm:grid sm:grid-cols-4 sm:overflow-visible sm:px-0">
             <div className="min-w-[9.5rem] snap-start rounded-2xl border border-[var(--border)] bg-[var(--surface-2)] px-4 py-3 sm:min-w-0">
               <p className="text-xs font-semibold tracking-[0.04em] text-[var(--text-subtle)]">Per annos</p>
               <p className="mt-1 text-lg font-semibold text-[var(--text)]">{nutrition.kcal} kcal</p>
@@ -176,7 +176,7 @@ function RecipeDetailDialog({
               </div>
             </div>
 
-            <div className="-mx-1 mt-4 flex snap-x gap-3 overflow-x-auto px-1 pb-1 sm:mx-0 sm:grid sm:grid-cols-4 sm:overflow-visible sm:px-0">
+            <div className="mt-4 flex snap-x gap-3 overflow-x-auto pb-1 sm:grid sm:grid-cols-4 sm:overflow-visible">
               <div>
                 <p className="text-xs font-semibold tracking-[0.04em] text-[var(--text-subtle)]">Koko satsi</p>
                 <p className="mt-1 text-lg font-semibold text-[var(--text)]">{batchNutrition.kcal} kcal</p>
@@ -320,7 +320,7 @@ export function NutritionAthleteCard({
   };
 
   return (
-    <Card className="border-[var(--border-strong)]">
+    <Card className="max-w-full overflow-x-clip border-[var(--border-strong)] [contain:inline-size]">
       <div className="space-y-5">
         <div>
           <p className="text-xs font-semibold tracking-[0.04em] text-[var(--text-subtle)]">Ruokalista</p>
@@ -331,20 +331,20 @@ export function NutritionAthleteCard({
         </div>
 
         {nutritionProfile ? (
-          <div className="-mx-1 flex snap-x gap-3 overflow-x-auto px-1 pb-1 sm:mx-0 sm:grid sm:grid-cols-4 sm:overflow-visible sm:px-0">
-            <div className="min-w-[10.5rem] snap-start rounded-2xl border border-[var(--border)] bg-[var(--surface-2)] px-4 py-3 sm:min-w-0">
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+            <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface-2)] px-4 py-3">
               <p className="text-xs font-semibold tracking-[0.04em] text-[var(--text-subtle)]">Tavoite kcal</p>
               <p className="mt-1 text-xl font-semibold text-[var(--text)]">{nutritionProfile.targetKcal}</p>
             </div>
-            <div className="min-w-[10.5rem] snap-start rounded-2xl border border-[var(--border)] bg-[var(--surface-2)] px-4 py-3 sm:min-w-0">
+            <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface-2)] px-4 py-3">
               <p className="text-xs font-semibold tracking-[0.04em] text-[var(--text-subtle)]">Proteiini</p>
               <p className="mt-1 text-xl font-semibold text-[var(--text)]">{nutritionProfile.proteinG} g</p>
             </div>
-            <div className="min-w-[10.5rem] snap-start rounded-2xl border border-[var(--border)] bg-[var(--surface-2)] px-4 py-3 sm:min-w-0">
+            <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface-2)] px-4 py-3">
               <p className="text-xs font-semibold tracking-[0.04em] text-[var(--text-subtle)]">Hiilarit</p>
               <p className="mt-1 text-xl font-semibold text-[var(--text)]">{nutritionProfile.carbsG} g</p>
             </div>
-            <div className="min-w-[10.5rem] snap-start rounded-2xl border border-[var(--border)] bg-[var(--surface-2)] px-4 py-3 sm:min-w-0">
+            <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface-2)] px-4 py-3">
               <p className="text-xs font-semibold tracking-[0.04em] text-[var(--text-subtle)]">Rasva</p>
               <p className="mt-1 text-xl font-semibold text-[var(--text)]">{nutritionProfile.fatG} g</p>
             </div>
@@ -362,7 +362,7 @@ export function NutritionAthleteCard({
 
             {availableMealTags.length > 0 ? (
               <div className="space-y-4">
-                <div className="-mx-1 flex snap-x gap-2 overflow-x-auto px-1 pb-1 xl:mx-0 xl:grid xl:grid-cols-5 xl:overflow-visible xl:px-0">
+                <div className="grid w-full min-w-0 gap-2">
                   {availableMealTags.map((mealTag) => {
                     const items = groupedMealPlanRecipes[mealTag] ?? [];
                     const selected = selectedMealTag === mealTag;
@@ -372,7 +372,7 @@ export function NutritionAthleteCard({
                       <button
                         key={mealTag}
                         type="button"
-                        className={`min-w-[11rem] snap-start rounded-2xl border px-4 py-4 text-left transition xl:min-w-0 ${
+                        className={`w-full rounded-2xl border px-4 py-4 text-left transition ${
                           selected
                             ? "border-[color-mix(in_srgb,var(--accent)_35%,var(--border))] bg-[color-mix(in_srgb,var(--accent)_10%,var(--surface))]"
                             : "border-[var(--border)] bg-[var(--surface)] hover:bg-[var(--surface-2)]"
@@ -394,8 +394,8 @@ export function NutritionAthleteCard({
 
                 {selectedMealTag ? (
                   <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-4">
-                    <div className="flex items-start justify-between gap-4">
-                      <div>
+                    <div className="flex min-w-0 items-start justify-between gap-4">
+                      <div className="min-w-0">
                         <p className="text-xs font-semibold tracking-[0.04em] text-[var(--text-subtle)]">{mealTagLabel(selectedMealTag)}</p>
                         <p className="mt-1 text-sm text-[var(--text-muted)]">Valitse resepti listasta avataksesi tarkemmat tiedot.</p>
                       </div>
@@ -421,15 +421,15 @@ export function NutritionAthleteCard({
                               setSelectedRecipeId(item.recipe.id);
                             }}
                           >
-                            <div className="flex items-start justify-between gap-4">
-                              <div>
+                            <div className="flex min-w-0 items-start justify-between gap-4">
+                              <div className="min-w-0">
                                 <p className="text-lg font-semibold text-[var(--text)]">{item.recipe.name}</p>
                                 <p className="mt-1 text-sm text-[var(--text-muted)]">
                                   {item.recipe.description ?? "Valmis ateriasuositus tämän ateriaryhmän sisälle."}
                                 </p>
                                 <p className="mt-3 text-sm font-medium text-[var(--text)]">{isOpen ? "Resepti auki" : "Avaa resepti"}</p>
                               </div>
-                              <div className="text-right text-sm text-[var(--text-muted)]">
+                              <div className="shrink-0 text-right text-sm text-[var(--text-muted)]">
                                 <p>{recipeNutrition.kcal} kcal</p>
                                 <p>P {Math.round(recipeNutrition.proteinG)} g</p>
                                 <p>H {Math.round(recipeNutrition.carbsG)} g</p>

@@ -1,6 +1,6 @@
 "use client";
 
-import { BookOpen, Check, ChevronDown, ChevronUp, GripVertical, MoreHorizontal } from "lucide-react";
+import { BookOpen, Check, ChevronDown, ChevronUp, GripVertical, MoreHorizontal, Plus, Search, Settings2, Trash2 } from "lucide-react";
 import {
   useEffect,
   useLayoutEffect,
@@ -20,7 +20,7 @@ import { InlineFeedback } from "@/components/workout/inline-feedback";
 import { withMinimumDelay } from "@/lib/min-delay";
 import { workoutStatusBadgeClass, workoutStatusLabel } from "@/components/workout/shared";
 import { calculateSessionDurationSeconds } from "@/lib/domain";
-import type { WorkoutSession } from "@/lib/types";
+import type { Exercise, WorkoutSession } from "@/lib/types";
 import { formatDate } from "@/lib/utils";
 
 type PreviousExerciseResult = {
@@ -168,6 +168,184 @@ function CoachInstructionDialog({
         <div className="mt-5 flex justify-end">
           <Button type="button" variant="ghost" onClick={onClose}>
             Sulje
+          </Button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function ExerciseStructureDialog({
+  mode,
+  exerciseName,
+  templateExerciseId,
+  exercises,
+  initialExerciseId,
+  initialSetCount,
+  initialTargetReps,
+  initialRestSeconds,
+  onClose,
+  onSubmit,
+  onRemove,
+}: {
+  mode: "edit" | "add_extra";
+  exerciseName?: string;
+  templateExerciseId?: string;
+  exercises: Exercise[];
+  initialExerciseId?: string;
+  initialSetCount?: number;
+  initialTargetReps?: number;
+  initialRestSeconds?: number;
+  onClose: () => void;
+  onSubmit: (payload: { exerciseId: string; customExerciseName?: string; setCount?: number; targetReps?: number; restSeconds?: number }) => void;
+  onRemove?: (templateExerciseId: string) => void;
+}) {
+  const CUSTOM_EXERCISE_VALUE = "__custom__";
+  const [exerciseId, setExerciseId] = useState(initialExerciseId ?? exercises[0]?.id ?? "");
+  const [customExerciseName, setCustomExerciseName] = useState("");
+  const [setCount, setSetCount] = useState(String(initialSetCount ?? 3));
+  const [targetReps, setTargetReps] = useState(String(initialTargetReps ?? 12));
+  const [restSeconds, setRestSeconds] = useState(String(initialRestSeconds ?? 120));
+  const [isOpen, setIsOpen] = useState(false);
+  const [query, setQuery] = useState("");
+
+  const filteredExercises = useMemo(() => {
+    const normalized = query.trim().toLowerCase();
+    if (!normalized) {
+      return exercises;
+    }
+    return exercises.filter((item) => item.name.toLowerCase().includes(normalized));
+  }, [exercises, query]);
+  const selectedExercise = exercises.find((item) => item.id === exerciseId);
+  const triggerLabel = exerciseId === CUSTOM_EXERCISE_VALUE
+    ? customExerciseName.trim() || "Luo oma liike"
+    : selectedExercise?.name ?? "Valitse liike";
+
+  return (
+    <div
+      className="fixed inset-0 z-40 flex items-end justify-center bg-[color:color-mix(in_srgb,var(--background)_54%,transparent)] p-4 sm:items-center"
+      role="presentation"
+      onClick={onClose}
+    >
+      <div
+        role="dialog"
+        aria-modal="true"
+        className="flex max-h-[88svh] w-full max-w-lg flex-col overflow-hidden rounded-3xl border border-[var(--border-strong)] bg-[var(--surface)] p-4 shadow-[0_24px_60px_-24px_var(--shadow)]"
+        onClick={(event) => event.stopPropagation()}
+      >
+        <p className="text-[11px] font-semibold tracking-[0.06em] text-[var(--accent)]">
+          {mode === "edit" ? "Muokkaa liikettä" : "Lisää extra-liike"}
+        </p>
+        {mode === "edit" && exerciseName ? (
+          <p className="mt-1 text-sm text-[var(--text-muted)]">{exerciseName}</p>
+        ) : null}
+        <div className="mt-3 flex-1 space-y-3 overflow-y-auto pr-1">
+          <div className={`relative ${isOpen ? "z-20 pb-2" : ""}`}>
+            <Label htmlFor="exercise-structure-select">Liike</Label>
+            <button
+              id="exercise-structure-select"
+              type="button"
+              className="mt-1 flex w-full items-center justify-between rounded-xl border border-[var(--border)] bg-[var(--surface)] px-3 py-2 text-left text-sm text-[var(--text)]"
+              onClick={() => setIsOpen((current) => !current)}
+              aria-expanded={isOpen}
+              aria-haspopup="listbox"
+            >
+              <span className="truncate">{triggerLabel}</span>
+              <ChevronDown className="size-4 text-[var(--text-subtle)]" aria-hidden="true" />
+            </button>
+            {isOpen ? (
+              <div className="mt-2 overflow-hidden rounded-2xl border border-[var(--border-strong)] bg-[var(--surface)] shadow-[0_18px_45px_-24px_var(--shadow)]">
+                <div className="border-b border-[var(--border)] p-2">
+                  <div className="relative">
+                    <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-[var(--text-subtle)]" aria-hidden="true" />
+                    <Input value={query} onChange={(event) => setQuery(event.target.value)} className="pl-9" placeholder="Hae liikettä" />
+                  </div>
+                </div>
+                <div className="max-h-[min(36svh,16rem)] overflow-y-auto p-2">
+                  <button
+                    type="button"
+                    className="mb-2 flex w-full items-center justify-between rounded-xl border border-[var(--border)] bg-[var(--surface-2)] px-3 py-2 text-left text-sm"
+                    onClick={() => {
+                      setExerciseId(CUSTOM_EXERCISE_VALUE);
+                      setIsOpen(false);
+                    }}
+                  >
+                    <span>Luo oma liike</span>
+                    {exerciseId === CUSTOM_EXERCISE_VALUE ? <Check className="size-4 text-[var(--accent)]" /> : null}
+                  </button>
+                  {filteredExercises.map((exercise) => (
+                    <button
+                      key={exercise.id}
+                      type="button"
+                      className="flex w-full items-center justify-between rounded-xl px-3 py-2 text-left text-sm hover:bg-[var(--surface-2)]"
+                      onClick={() => {
+                        setExerciseId(exercise.id);
+                        setIsOpen(false);
+                      }}
+                    >
+                      <span className="truncate">{exercise.name}</span>
+                      {exerciseId === exercise.id ? <Check className="size-4 text-[var(--accent)]" /> : null}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            ) : null}
+          </div>
+          {exerciseId === CUSTOM_EXERCISE_VALUE ? (
+            <div>
+              <Label htmlFor="custom-exercise-name">Oman liikkeen nimi</Label>
+              <Input
+                id="custom-exercise-name"
+                value={customExerciseName}
+                onChange={(event) => setCustomExerciseName(event.target.value)}
+                placeholder="Esim. Viparit taljassa"
+              />
+            </div>
+          ) : null}
+          {mode === "add_extra" || mode === "edit" ? (
+            <div className="grid grid-cols-2 gap-2">
+              <div>
+                <Label htmlFor="extra-set-count">Sarjat</Label>
+                <Input id="extra-set-count" value={setCount} onChange={(event) => setSetCount(event.target.value)} inputMode="numeric" placeholder="3" />
+              </div>
+              <div>
+                <Label htmlFor="extra-target-reps">Toistot</Label>
+                <Input id="extra-target-reps" value={targetReps} onChange={(event) => setTargetReps(event.target.value)} inputMode="numeric" placeholder="12" />
+              </div>
+              <div>
+                <Label htmlFor="extra-rest-seconds">Lepo (s)</Label>
+                <Input id="extra-rest-seconds" value={restSeconds} onChange={(event) => setRestSeconds(event.target.value)} inputMode="numeric" placeholder="120" />
+              </div>
+            </div>
+          ) : null}
+        </div>
+        <div className="mt-4 flex shrink-0 justify-end gap-2 border-t border-[var(--border)] pt-3">
+          {mode === "edit" && templateExerciseId && onRemove ? (
+            <Button
+              type="button"
+              variant="ghost"
+              className="mr-auto text-[var(--danger)]"
+              onClick={() => onRemove(templateExerciseId)}
+            >
+              <Trash2 className="mr-1 size-4" aria-hidden="true" />
+              Poista liike
+            </Button>
+          ) : null}
+          <Button type="button" variant="ghost" onClick={onClose}>Sulje</Button>
+          <Button
+            type="button"
+            onClick={() =>
+              onSubmit({
+                exerciseId,
+                customExerciseName: exerciseId === CUSTOM_EXERCISE_VALUE ? customExerciseName.trim() : undefined,
+                setCount: Number(setCount) || undefined,
+                targetReps: Number(targetReps) || undefined,
+                restSeconds: Number(restSeconds) || undefined,
+              })
+            }
+            disabled={!exerciseId || (exerciseId === CUSTOM_EXERCISE_VALUE && !customExerciseName.trim())}
+          >
+            {mode === "edit" ? "Vaihda" : "Lisää"}
           </Button>
         </div>
       </div>
@@ -403,6 +581,8 @@ export function AthleteSessionPanel({
   isCompleting,
   isSessionSyncing,
   loadIncrementKg,
+  availableExercises,
+  onExerciseStructureUpdate,
 }: {
   scheduledWorkoutId: string;
   scheduledWorkoutTitle: string;
@@ -432,6 +612,21 @@ export function AthleteSessionPanel({
   isCompleting: boolean;
   isSessionSyncing?: boolean;
   loadIncrementKg: 1 | 2.5 | 5;
+  availableExercises: Exercise[];
+  onExerciseStructureUpdate: (
+    action:
+      | {
+          type: "replace";
+          templateExerciseId: string;
+          exerciseId: string;
+          customExerciseName?: string;
+          setCount?: number;
+          targetReps?: number;
+          restSeconds?: number;
+        }
+      | { type: "add_extra"; exerciseId: string; customExerciseName?: string; setCount?: number; targetReps?: number; restSeconds?: number }
+      | { type: "remove"; templateExerciseId: string }
+  ) => Promise<{ ok: boolean; message?: string }>;
 }) {
   const [localNote, setLocalNote] = useState(note);
   const noteSaveTimeoutRef = useRef<number | null>(null);
@@ -457,6 +652,19 @@ export function AthleteSessionPanel({
   const [restExerciseName, setRestExerciseName] = useState<string | null>(null);
   const [expandedExerciseKeys, setExpandedExerciseKeys] = useState<Record<string, boolean>>({});
   const [openInstruction, setOpenInstruction] = useState<{ exerciseName: string; instruction: string } | null>(null);
+  const [openExerciseStructure, setOpenExerciseStructure] = useState<
+    | {
+        mode: "edit";
+        templateExerciseId: string;
+        exerciseName: string;
+        initialExerciseId?: string;
+        initialSetCount?: number;
+        initialTargetReps?: number;
+        initialRestSeconds?: number;
+      }
+    | { mode: "add_extra" }
+    | null
+  >(null);
   const [isSecondaryActionsOpen, setIsSecondaryActionsOpen] = useState(false);
   const [secondaryActionsAnchorRect, setSecondaryActionsAnchorRect] = useState<AnchorRect | null>(null);
   const [secondaryActionsMenuStyle, setSecondaryActionsMenuStyle] = useState<CSSProperties | null>(null);
@@ -475,7 +683,6 @@ export function AthleteSessionPanel({
   const [loadDrafts, setLoadDrafts] = useState<Record<string, string>>({});
   const [dragSession, setDragSession] = useState<DragSession | null>(null);
   const secondaryActionsMenuRef = useRef<HTMLDivElement | null>(null);
-
   useEffect(() => {
     const persistedState = readPersistedWorkoutUiState(scheduledWorkoutId);
     if (!persistedState) {
@@ -1243,6 +1450,25 @@ export function AthleteSessionPanel({
             ) : null}
             <button
               type="button"
+              aria-label={`${exerciseName} asetukset`}
+              title="Liikkeen asetukset"
+              className="inline-flex size-8.5 items-center justify-center rounded-full border border-[color-mix(in_srgb,var(--accent)_22%,var(--border))] bg-[color-mix(in_srgb,var(--accent)_7%,var(--surface))] text-[var(--accent)] shadow-[0_4px_12px_-14px_var(--accent)] transition hover:border-[color-mix(in_srgb,var(--accent)_36%,var(--border))] hover:bg-[color-mix(in_srgb,var(--accent)_10%,var(--surface))] hover:opacity-95"
+              onClick={() =>
+                setOpenExerciseStructure({
+                  mode: "edit",
+                  templateExerciseId: logs[0]?.templateExerciseId ?? "",
+                  exerciseName,
+                  initialExerciseId: logs[0]?.exerciseId,
+                  initialSetCount: logs.length,
+                  initialTargetReps: logs[0]?.targetReps,
+                  initialRestSeconds: logs[0]?.targetRestSeconds,
+                })
+              }
+            >
+              <Settings2 className="size-3.5" aria-hidden="true" />
+            </button>
+            <button
+              type="button"
               className={`grid size-8.5 place-items-center rounded-full border transition ${chevronClass}`}
               aria-label={isExpanded ? `Sulje ${exerciseName}` : `Avaa ${exerciseName}`}
               aria-expanded={isExpanded}
@@ -1691,6 +1917,16 @@ export function AthleteSessionPanel({
               </div>
             );
           })}
+          {!readOnly ? (
+            <button
+              type="button"
+              onClick={() => setOpenExerciseStructure({ mode: "add_extra" })}
+              className="mt-2 inline-flex w-full items-center justify-center gap-2 rounded-2xl border border-dashed border-[var(--border-strong)] bg-[var(--surface)] px-4 py-3 text-sm font-semibold text-[var(--text-muted)] transition hover:border-[var(--accent)] hover:text-[var(--accent)]"
+            >
+              <Plus className="size-4" aria-hidden="true" />
+              Lisää extra-liike
+            </button>
+          ) : null}
         </>
       )}
       {openInstruction ? (
@@ -1698,6 +1934,53 @@ export function AthleteSessionPanel({
           exerciseName={openInstruction.exerciseName}
           instruction={openInstruction.instruction}
           onClose={() => setOpenInstruction(null)}
+        />
+      ) : null}
+      {openExerciseStructure ? (
+        <ExerciseStructureDialog
+          mode={openExerciseStructure.mode}
+          exerciseName={openExerciseStructure.mode === "edit" ? openExerciseStructure.exerciseName : undefined}
+          templateExerciseId={openExerciseStructure.mode === "edit" ? openExerciseStructure.templateExerciseId : undefined}
+          exercises={availableExercises}
+          initialExerciseId={openExerciseStructure.mode === "edit" ? openExerciseStructure.initialExerciseId : undefined}
+          initialSetCount={openExerciseStructure.mode === "edit" ? openExerciseStructure.initialSetCount : undefined}
+          initialTargetReps={openExerciseStructure.mode === "edit" ? openExerciseStructure.initialTargetReps : undefined}
+          initialRestSeconds={openExerciseStructure.mode === "edit" ? openExerciseStructure.initialRestSeconds : undefined}
+          onClose={() => setOpenExerciseStructure(null)}
+          onRemove={async (templateExerciseId) => {
+            const confirmed = window.confirm("Poistetaanko liike tältä treeniltä ja ohjelmasta?");
+            if (!confirmed) {
+              return;
+            }
+            await onExerciseStructureUpdate({ type: "remove", templateExerciseId });
+            setOpenExerciseStructure(null);
+          }}
+          onSubmit={async (payload) => {
+            if (openExerciseStructure.mode === "edit") {
+              if (!openExerciseStructure.templateExerciseId) {
+                return;
+              }
+              await onExerciseStructureUpdate({
+                type: "replace",
+                templateExerciseId: openExerciseStructure.templateExerciseId,
+                exerciseId: payload.exerciseId,
+                customExerciseName: payload.customExerciseName,
+                setCount: payload.setCount,
+                targetReps: payload.targetReps,
+                restSeconds: payload.restSeconds,
+              });
+            } else {
+              await onExerciseStructureUpdate({
+                type: "add_extra",
+                exerciseId: payload.exerciseId,
+                customExerciseName: payload.customExerciseName,
+                setCount: payload.setCount,
+                targetReps: payload.targetReps,
+                restSeconds: payload.restSeconds,
+              });
+            }
+            setOpenExerciseStructure(null);
+          }}
         />
       ) : null}
 
@@ -1797,37 +2080,37 @@ export function AthleteSessionPanel({
           {status !== "completed" ? (
             <>
               {showResumeAction ? (
-                <Button
-                  onClick={async () => {
-                    setIsStartingWorkout(true);
-                    try {
-                      await onStart();
-                    } finally {
-                      setIsStartingWorkout(false);
-                    }
-                  }}
-                   type="button"
-                   className="w-full sm:w-auto"
-                   loading={isStartingWorkout}
-                   loadingText="Käynnistetään treeni..."
-                 >
-                   Jatka treeniä
-                 </Button>
+                 <Button
+                   onClick={async () => {
+                     setIsStartingWorkout(true);
+                     try {
+                       await onStart();
+                     } finally {
+                       setIsStartingWorkout(false);
+                     }
+                   }}
+                    type="button"
+                    className="flex-1 sm:flex-none"
+                    loading={isStartingWorkout}
+                    loadingText="Käynnistetään treeni..."
+                  >
+                    Jatka treeniä
+                  </Button>
               ) : (
                 !isCompleting ? (
                   <Button
                     onClick={onComplete}
                      type="button"
-                   className="w-full sm:w-auto"
-                     loading={isCompleting}
-                     loadingText="Tallennetaan..."
-                   >
-                     Merkitse valmiiksi
-                   </Button>
+                    className="flex-1 sm:flex-none"
+                      loading={isCompleting}
+                      loadingText="Tallennetaan..."
+                    >
+                      Merkitse valmiiksi
+                    </Button>
                 ) : null
               )}
               {showBottomBackToList ? (
-                <Button onClick={onBackToList} type="button" variant="ghost" className="w-full sm:w-auto">
+                <Button onClick={onBackToList} type="button" variant="ghost" className="flex-1 sm:flex-none">
                   Takaisin treenilistaan
                 </Button>
               ) : null}
