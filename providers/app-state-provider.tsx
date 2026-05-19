@@ -5344,7 +5344,7 @@ function findResolvedUserIdInSnapshot(
         }
 
         const blockingWorkout = resolveBlockingWorkoutStart(state, currentUser.id, programWorkoutId);
-        if (blockingWorkout) {
+        if (blockingWorkout && !supabase) {
           return {
             ok: false,
             message: `Sinulla on kesken oleva treeni "${displayWorkoutTitle(blockingWorkout.title)}". Jatka se ensin.`,

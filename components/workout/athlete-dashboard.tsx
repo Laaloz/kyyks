@@ -718,6 +718,14 @@ export function AthleteDashboard({
       if (resolveWorkoutStatus(workout) === "cancelled") {
         const result = await withMinimumDelay(startWorkout(scheduledWorkoutId));
         if (!result.ok) {
+          if (result.message === "Treeniä ei löytynyt.") {
+            setDismissedActiveWorkoutId(scheduledWorkoutId);
+            setAthleteLogMode("overview");
+            setSelectedWorkoutId(null);
+            setWorkoutMessage("Kesken oleva treeni poistui näkymästä. Voit aloittaa uuden treenin.");
+            notify({ tone: "info", message: "Kesken oleva treeni poistui näkymästä. Voit aloittaa uuden treenin." });
+            return;
+          }
           setWorkoutMessage(result.message);
           notify({ tone: "danger", message: result.message });
           return;
