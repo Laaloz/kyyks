@@ -6,7 +6,6 @@ import { useEffect, useMemo, useRef, useState } from "react";
 
 import { Button } from "@/components/ui/button";
 import { Input, Label, Select, Textarea } from "@/components/ui/field";
-import { InfoTooltip } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
 
 import {
@@ -63,11 +62,13 @@ function SearchableExerciseSelect({
   selectedExerciseId,
   exerciseOptions,
   onSelect,
+  onOpenChange,
 }: {
   id: string;
   selectedExerciseId: string;
   exerciseOptions: Array<{ id: string; name: string; scope: string; cue: string }>;
   onSelect: (exerciseId: string) => void;
+  onOpenChange?: (open: boolean) => void;
 }) {
   const [isOpen, setIsOpen] = useState(false);
   const [query, setQuery] = useState("");
@@ -93,6 +94,12 @@ function SearchableExerciseSelect({
     if (!isOpen) {
       setQuery("");
     }
+  }, [isOpen]);
+
+  useEffect(() => {
+    onOpenChange?.(isOpen);
+    // Intentionally depend only on open-state changes to avoid callback-identity render loops.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isOpen]);
 
   const filteredExercises = useMemo(() => {
@@ -138,7 +145,9 @@ function SearchableExerciseSelect({
             </div>
           </div>
 
-          <div className="max-h-72 overflow-y-auto p-2">
+          <div
+            className="max-h-72 overflow-y-auto overscroll-contain p-2 [touch-action:pan-y] [-webkit-overflow-scrolling:touch]"
+          >
             <button
               type="button"
               className="flex w-full items-center justify-between rounded-xl border border-[var(--border)] bg-[color:color-mix(in_oklab,var(--accent)_7%,var(--surface))] px-3 py-3 text-left transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)]"
@@ -227,9 +236,10 @@ export function ProgramWorkoutEditor({
     control,
     name: `workouts.${index}.exercises` as const,
   });
-  const defaultRestSeconds = watch(`workouts.${index}.defaultRestSeconds` as const);
   const selectedSplitType = watch(`workouts.${index}.splitType` as const);
   const [internalExpandedExerciseIndex, setInternalExpandedExerciseIndex] = useState<number>(-1);
+  const [openAdvancedByExerciseId, setOpenAdvancedByExerciseId] = useState<Record<string, boolean>>({});
+  const [openSelectByExerciseId, setOpenSelectByExerciseId] = useState<Record<string, boolean>>({});
   const previousExerciseCountRef = useRef(exerciseFields.fields.length);
   const exerciseCardRefs = useRef<Record<string, HTMLDivElement | null>>({});
   const workoutErrors = errors?.[index];
@@ -315,31 +325,9 @@ export function ProgramWorkoutEditor({
                 />
               </div>
             ) : null}
-            <div>
-              <div className="mb-1 flex items-center gap-1">
-                <RequiredLabel className="mb-0" htmlFor={`workout-${index}-default-rest`}>Oletuslepo (s)</RequiredLabel>
-                <InfoTooltip text="Tätä lepoa käytetään uuden liikkeen oletuksena. Voit säätää lepoa myös liikekohtaisesti." />
-              </div>
-              <Input
-                id={`workout-${index}-default-rest`}
-                type="number"
-                min={15}
-                max={600}
-                aria-invalid={Boolean(workoutErrors?.defaultRestSeconds)}
-                aria-describedby={workoutErrors?.defaultRestSeconds ? `workout-${index}-default-rest-error` : undefined}
-                {...register(`workouts.${index}.defaultRestSeconds` as const)}
-              />
-              <FieldError
-                id={`workout-${index}-default-rest-error`}
-                message={workoutErrors?.defaultRestSeconds?.message?.toString()}
-              />
-            </div>
           </div>
           <div className="mt-4">
-            <div className="mb-1 flex items-center gap-1">
-              <RequiredLabel className="mb-0" htmlFor={`workout-${index}-guidance`} optional>Treenin yleisohje</RequiredLabel>
-              <InfoTooltip text="Näkyy treenin yleisohjeena. Pidä tämä tiiviinä: fokus, tempo, varat tai tärkein muistettava asia." />
-            </div>
+            <RequiredLabel htmlFor={`workout-${index}-guidance`} optional>Treenin yleisohje</RequiredLabel>
             <Textarea
               id={`workout-${index}-guidance`}
               aria-invalid={Boolean(workoutErrors?.guidance)}
@@ -413,6 +401,17 @@ export function ProgramWorkoutEditor({
             exerciseErrors?.targetRepsMax,
             exerciseErrors?.restSeconds,
           ].filter(Boolean).length;
+          const hasAdvancedIssue = Boolean(
+            exerciseErrors?.instruction ||
+            exerciseErrors?.setCount ||
+            exerciseErrors?.repMode ||
+            exerciseErrors?.targetReps ||
+            exerciseErrors?.targetRepsMin ||
+            exerciseErrors?.targetRepsMax ||
+            exerciseErrors?.restSeconds,
+          );
+          const isAdvancedOpen = (openAdvancedByExerciseId[exerciseField.id] ?? false) || hasAdvancedIssue;
+          const isSelectOpen = openSelectByExerciseId[exerciseField.id] ?? false;
 
           return (
             <div
@@ -421,7 +420,8 @@ export function ProgramWorkoutEditor({
                 exerciseCardRefs.current[exerciseField.id] = node;
               }}
               className={cn(
-                "overflow-hidden rounded-2xl border bg-[var(--surface)] shadow-[0_1px_0_0_var(--shadow-soft),0_8px_24px_-20px_var(--shadow)]",
+                "rounded-2xl border bg-[var(--surface)] shadow-[0_1px_0_0_var(--shadow-soft),0_8px_24px_-20px_var(--shadow)]",
+                isExpanded && isSelectOpen ? "overflow-visible" : "overflow-hidden",
                 isExpanded
                   ? "border-[var(--accent-strong)] bg-[color:color-mix(in_oklab,var(--accent)_8%,var(--surface))]"
                   : "border-[var(--border)]",
@@ -430,6 +430,7 @@ export function ProgramWorkoutEditor({
               <div
                 className={cn(
                   "relative flex items-start gap-3 px-3 pt-3",
+                  isExpanded && isSelectOpen ? "rounded-t-2xl" : "",
                   isExpanded ? "bg-[color:color-mix(in_oklab,var(--accent)_10%,var(--surface))]" : "bg-[var(--surface)]",
                 )}
               >
@@ -450,6 +451,11 @@ export function ProgramWorkoutEditor({
                   <div className="min-w-0 flex-1">
                     <p className="text-sm font-semibold text-[var(--text)]">Liike {exerciseIndex + 1}</p>
                     <p className="mt-1 text-sm text-[var(--text-muted)]">{resolvedExerciseLabel}</p>
+                    {exerciseIssueCount ? (
+                      <span className="mt-1 inline-flex items-center rounded-full border border-[color:color-mix(in_oklab,var(--danger)_35%,var(--border))] bg-[color:color-mix(in_oklab,var(--danger)_10%,var(--surface))] px-2 py-0.5 text-[11px] font-semibold text-[var(--danger)]">
+                        {exerciseIssueCount} puute{exerciseIssueCount > 1 ? "tta" : ""}
+                      </span>
+                    ) : null}
                   </div>
                 </div>
                 {allowExerciseRemoval ? (
@@ -492,23 +498,16 @@ export function ProgramWorkoutEditor({
               <div
                 className={cn(
                   "px-3 pb-3 pt-2",
+                  isExpanded && isSelectOpen ? "rounded-b-2xl" : "",
                   isExpanded ? "border-b border-[var(--border)] bg-[color:color-mix(in_oklab,var(--accent)_10%,var(--surface))]" : "bg-[var(--surface)]",
                 )}
               >
                 <div className="flex w-full flex-wrap gap-2">
-                  {exerciseIssueCount ? (
-                    <span className="rounded-full border border-[color:color-mix(in_oklab,var(--danger)_35%,var(--border))] bg-[color:color-mix(in_oklab,var(--danger)_10%,var(--surface))] px-2.5 py-1 text-xs font-semibold text-[var(--danger)]">
-                      Puuttuu {exerciseIssueCount} kohtaa
-                    </span>
-                  ) : null}
                   <span className="rounded-full border border-[var(--border)] bg-[var(--surface-2)] px-2.5 py-1 text-xs font-semibold text-[var(--text-subtle)]">
                     {setCount || "?"} sarjaa
                   </span>
                   <span className="rounded-full border border-[var(--border)] bg-[var(--surface-2)] px-2.5 py-1 text-xs font-semibold text-[var(--text-subtle)]">
-                    {repsLabel} toistoa
-                  </span>
-                  <span className="rounded-full border border-[var(--border)] bg-[var(--surface-2)] px-2.5 py-1 text-xs font-semibold text-[var(--text-subtle)]">
-                    {restSeconds || "?"} s lepo
+                    {repsLabel} toistoa · {restSeconds || "?"} s lepo
                   </span>
                   {supersetGroup ? (
                     <span className="rounded-full border border-[var(--border)] bg-[var(--surface-2)] px-2.5 py-1 text-xs font-semibold text-[var(--text-subtle)]">
@@ -535,6 +534,18 @@ export function ProgramWorkoutEditor({
                         id={`workout-${index}-exercise-${exerciseIndex}`}
                         selectedExerciseId={selectedExerciseId}
                         exerciseOptions={exerciseOptions}
+                        onOpenChange={(open) =>
+                          setOpenSelectByExerciseId((current) => {
+                            if ((current[exerciseField.id] ?? false) === open) {
+                              return current;
+                            }
+
+                            return {
+                              ...current,
+                              [exerciseField.id]: open,
+                            };
+                          })
+                        }
                         onSelect={(exerciseId) => {
                           const previousExercise = exerciseOptions.find((exercise) => exercise.id === selectedExerciseId);
                           const previousInstruction = previousExercise?.cue?.trim();
@@ -600,185 +611,173 @@ export function ProgramWorkoutEditor({
                           />
                         </div>
                       </div>
-                    ) : selectedExerciseId ? (
-                      <div>
-                        <RequiredLabel htmlFor={`workout-${index}-nickname-${exerciseIndex}`} optional>
-                          Liikkeen lempinimi
-                        </RequiredLabel>
-                        <Input
-                          id={`workout-${index}-nickname-${exerciseIndex}`}
-                          {...register(
-                            `workouts.${index}.exercises.${exerciseIndex}.exerciseNameOverride` as const,
-                          )}
-                          placeholder="Esim. Penkki kilpailuotteella"
-                        />
-                      </div>
                     ) : null}
                   </div>
 
-                  <div className="mt-3 px-3">
-                    <RequiredLabel htmlFor={`workout-${index}-instruction-${exerciseIndex}`}>Valmennusohje</RequiredLabel>
-                    <Textarea
-                      id={`workout-${index}-instruction-${exerciseIndex}`}
-                      aria-invalid={Boolean(exerciseErrors?.instruction)}
-                      aria-describedby={exerciseErrors?.instruction ? `workout-${index}-instruction-${exerciseIndex}-error` : undefined}
-                      {...register(`workouts.${index}.exercises.${exerciseIndex}.instruction` as const)}
-                      placeholder="Mitä treenaajan pitää muistaa tässä liikkeessä?"
-                    />
-                    <FieldError
-                      id={`workout-${index}-instruction-${exerciseIndex}-error`}
-                      message={exerciseErrors?.instruction?.message?.toString()}
-                    />
+                  <div className="px-3 pb-3">
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      className="h-9 w-full justify-between rounded-xl border border-[var(--border)] bg-[var(--surface-2)] px-3 text-sm"
+                      onClick={() =>
+                        setOpenAdvancedByExerciseId((current) => ({
+                          ...current,
+                          [exerciseField.id]: !isAdvancedOpen,
+                        }))
+                      }
+                    >
+                      <span>Lisäasetukset</span>
+                      <span className="text-xs text-[var(--text-subtle)]">{isAdvancedOpen ? "Piilota" : "Näytä"}</span>
+                    </Button>
                   </div>
 
-                  <div className="mt-3 grid gap-4 px-3 [grid-template-columns:repeat(auto-fit,minmax(13rem,1fr))]">
-                    <div>
-                      <RequiredLabel htmlFor={`workout-${index}-sets-${exerciseIndex}`}>Sarjat</RequiredLabel>
-                      <Input
-                        id={`workout-${index}-sets-${exerciseIndex}`}
-                        type="number"
-                        min={1}
-                        max={10}
-                        aria-invalid={Boolean(exerciseErrors?.setCount)}
-                        aria-describedby={exerciseErrors?.setCount ? `workout-${index}-sets-${exerciseIndex}-error` : undefined}
-                        {...register(`workouts.${index}.exercises.${exerciseIndex}.setCount` as const)}
-                      />
-                      <FieldError
-                        id={`workout-${index}-sets-${exerciseIndex}-error`}
-                        message={exerciseErrors?.setCount?.message?.toString()}
-                      />
-                    </div>
-                    <div>
-                      <div className="mb-1 flex items-center gap-1">
-                        <RequiredLabel className="mb-0" htmlFor={`workout-${index}-superset-${exerciseIndex}`} optional>Superset</RequiredLabel>
-                        <InfoTooltip text="Anna sama kirjain liikkeille, jotka tehdään putkeen ilman pitkää lepoa." />
-                      </div>
-                      <Select
-                        id={`workout-${index}-superset-${exerciseIndex}`}
-                        {...register(`workouts.${index}.exercises.${exerciseIndex}.supersetGroup` as const)}
-                      >
-                        <option value="">Ei supersettiä</option>
-                        {SUPERSET_GROUP_OPTIONS.map((group) => (
-                          <option key={group} value={group}>
-                            Superset {group}
-                          </option>
-                        ))}
-                      </Select>
-                    </div>
-                    <div>
-                      <div className="mb-1 flex items-center gap-1">
-                        <RequiredLabel className="mb-0" htmlFor={`workout-${index}-rep-mode-${exerciseIndex}`}>Toistotyyli</RequiredLabel>
-                        <InfoTooltip text="Tarkka määrä = esimerkiksi 8 toistoa. Toistoalue = esimerkiksi 6-8 toistoa." />
-                      </div>
-                      <Select
-                        id={`workout-${index}-rep-mode-${exerciseIndex}`}
-                        aria-invalid={Boolean(exerciseErrors?.repMode)}
-                        aria-describedby={exerciseErrors?.repMode ? `workout-${index}-rep-mode-${exerciseIndex}-error` : undefined}
-                        {...register(`workouts.${index}.exercises.${exerciseIndex}.repMode` as const)}
-                      >
-                        <option value="exact">Tarkka määrä</option>
-                        <option value="range">Toistoalue</option>
-                      </Select>
-                      <FieldError
-                        id={`workout-${index}-rep-mode-${exerciseIndex}-error`}
-                        message={exerciseErrors?.repMode?.message?.toString()}
-                      />
-                    </div>
-                    {repMode === "range" ? (
-                      <>
+                  {isAdvancedOpen ? (
+                    <div className="grid gap-4 border-t border-[var(--border)] px-3 pb-3 pt-3">
+                      <div className="grid gap-4 [grid-template-columns:repeat(auto-fit,minmax(13rem,1fr))]">
                         <div>
-                          <div className="mb-1 flex items-center gap-1">
-                            <RequiredLabel className="mb-0" htmlFor={`workout-${index}-reps-min-${exerciseIndex}`}>Min. toistot</RequiredLabel>
-                            <InfoTooltip text="Alaraja toistoalueelle. Esim. 6-8 tarkoittaa että minimi on 6." />
-                          </div>
+                          <RequiredLabel htmlFor={`workout-${index}-sets-${exerciseIndex}`}>Sarjat</RequiredLabel>
                           <Input
-                            id={`workout-${index}-reps-min-${exerciseIndex}`}
+                            id={`workout-${index}-sets-${exerciseIndex}`}
                             type="number"
                             min={1}
-                            max={50}
-                            aria-invalid={Boolean(exerciseErrors?.targetRepsMin)}
-                            aria-describedby={exerciseErrors?.targetRepsMin ? `workout-${index}-reps-min-${exerciseIndex}-error` : undefined}
-                            {...register(`workouts.${index}.exercises.${exerciseIndex}.targetRepsMin` as const)}
+                            max={10}
+                            aria-invalid={Boolean(exerciseErrors?.setCount)}
+                            aria-describedby={exerciseErrors?.setCount ? `workout-${index}-sets-${exerciseIndex}-error` : undefined}
+                            {...register(`workouts.${index}.exercises.${exerciseIndex}.setCount` as const)}
                           />
                           <FieldError
-                            id={`workout-${index}-reps-min-${exerciseIndex}-error`}
-                            message={exerciseErrors?.targetRepsMin?.message?.toString()}
+                            id={`workout-${index}-sets-${exerciseIndex}-error`}
+                            message={exerciseErrors?.setCount?.message?.toString()}
                           />
                         </div>
                         <div>
-                          <div className="mb-1 flex items-center gap-1">
-                            <RequiredLabel className="mb-0" htmlFor={`workout-${index}-reps-max-${exerciseIndex}`}>Max. toistot</RequiredLabel>
-                            <InfoTooltip text="Yläraja toistoalueelle. Kun kaikki sarjat osuvat maksimiin, kuormaa voidaan nostaa." />
-                          </div>
-                          <Input
-                            id={`workout-${index}-reps-max-${exerciseIndex}`}
-                            type="number"
-                            min={1}
-                            max={50}
-                            aria-invalid={Boolean(exerciseErrors?.targetRepsMax)}
-                            aria-describedby={exerciseErrors?.targetRepsMax ? `workout-${index}-reps-max-${exerciseIndex}-error` : undefined}
-                            {...register(`workouts.${index}.exercises.${exerciseIndex}.targetRepsMax` as const)}
-                          />
+                          <RequiredLabel htmlFor={`workout-${index}-rep-mode-${exerciseIndex}`}>Toistotyyli</RequiredLabel>
+                          <Select
+                            id={`workout-${index}-rep-mode-${exerciseIndex}`}
+                            aria-invalid={Boolean(exerciseErrors?.repMode)}
+                            aria-describedby={exerciseErrors?.repMode ? `workout-${index}-rep-mode-${exerciseIndex}-error` : undefined}
+                            {...register(`workouts.${index}.exercises.${exerciseIndex}.repMode` as const)}
+                          >
+                            <option value="exact">Tarkka määrä</option>
+                            <option value="range">Toistoalue</option>
+                          </Select>
                           <FieldError
-                            id={`workout-${index}-reps-max-${exerciseIndex}-error`}
-                            message={exerciseErrors?.targetRepsMax?.message?.toString()}
+                            id={`workout-${index}-rep-mode-${exerciseIndex}-error`}
+                            message={exerciseErrors?.repMode?.message?.toString()}
                           />
                         </div>
-                      </>
-                    ) : (
+                        {repMode === "range" ? (
+                          <>
+                            <div>
+                              <RequiredLabel htmlFor={`workout-${index}-reps-min-${exerciseIndex}`}>Min. toistot</RequiredLabel>
+                              <Input
+                                id={`workout-${index}-reps-min-${exerciseIndex}`}
+                                type="number"
+                                min={1}
+                                max={50}
+                                aria-invalid={Boolean(exerciseErrors?.targetRepsMin)}
+                                aria-describedby={exerciseErrors?.targetRepsMin ? `workout-${index}-reps-min-${exerciseIndex}-error` : undefined}
+                                {...register(`workouts.${index}.exercises.${exerciseIndex}.targetRepsMin` as const)}
+                              />
+                              <FieldError
+                                id={`workout-${index}-reps-min-${exerciseIndex}-error`}
+                                message={exerciseErrors?.targetRepsMin?.message?.toString()}
+                              />
+                            </div>
+                            <div>
+                              <RequiredLabel htmlFor={`workout-${index}-reps-max-${exerciseIndex}`}>Max. toistot</RequiredLabel>
+                              <Input
+                                id={`workout-${index}-reps-max-${exerciseIndex}`}
+                                type="number"
+                                min={1}
+                                max={50}
+                                aria-invalid={Boolean(exerciseErrors?.targetRepsMax)}
+                                aria-describedby={exerciseErrors?.targetRepsMax ? `workout-${index}-reps-max-${exerciseIndex}-error` : undefined}
+                                {...register(`workouts.${index}.exercises.${exerciseIndex}.targetRepsMax` as const)}
+                              />
+                              <FieldError
+                                id={`workout-${index}-reps-max-${exerciseIndex}-error`}
+                                message={exerciseErrors?.targetRepsMax?.message?.toString()}
+                              />
+                            </div>
+                          </>
+                        ) : (
+                          <div>
+                            <RequiredLabel htmlFor={`workout-${index}-reps-${exerciseIndex}`}>Toistot</RequiredLabel>
+                            <Input
+                              id={`workout-${index}-reps-${exerciseIndex}`}
+                              type="number"
+                              min={1}
+                              max={50}
+                              aria-invalid={Boolean(exerciseErrors?.targetReps)}
+                              aria-describedby={exerciseErrors?.targetReps ? `workout-${index}-reps-${exerciseIndex}-error` : undefined}
+                              {...register(`workouts.${index}.exercises.${exerciseIndex}.targetReps` as const)}
+                            />
+                            <FieldError
+                              id={`workout-${index}-reps-${exerciseIndex}-error`}
+                              message={exerciseErrors?.targetReps?.message?.toString()}
+                            />
+                          </div>
+                        )}
+                        <div>
+                          <RequiredLabel htmlFor={`workout-${index}-rest-${exerciseIndex}`}>Lepo (s)</RequiredLabel>
+                          <Input
+                            id={`workout-${index}-rest-${exerciseIndex}`}
+                            type="number"
+                            min={15}
+                            max={600}
+                            aria-invalid={Boolean(exerciseErrors?.restSeconds)}
+                            aria-describedby={exerciseErrors?.restSeconds ? `workout-${index}-rest-${exerciseIndex}-error` : undefined}
+                            {...register(`workouts.${index}.exercises.${exerciseIndex}.restSeconds` as const)}
+                          />
+                          <FieldError
+                            id={`workout-${index}-rest-${exerciseIndex}-error`}
+                            message={exerciseErrors?.restSeconds?.message?.toString()}
+                          />
+                        </div>
+                      </div>
                       <div>
-                        <RequiredLabel htmlFor={`workout-${index}-reps-${exerciseIndex}`}>Toistot</RequiredLabel>
-                        <Input
-                          id={`workout-${index}-reps-${exerciseIndex}`}
-                          type="number"
-                          min={1}
-                          max={50}
-                          aria-invalid={Boolean(exerciseErrors?.targetReps)}
-                          aria-describedby={exerciseErrors?.targetReps ? `workout-${index}-reps-${exerciseIndex}-error` : undefined}
-                          {...register(`workouts.${index}.exercises.${exerciseIndex}.targetReps` as const)}
+                        <RequiredLabel htmlFor={`workout-${index}-instruction-${exerciseIndex}`}>Valmennusohje</RequiredLabel>
+                        <Textarea
+                          id={`workout-${index}-instruction-${exerciseIndex}`}
+                          aria-invalid={Boolean(exerciseErrors?.instruction)}
+                          aria-describedby={exerciseErrors?.instruction ? `workout-${index}-instruction-${exerciseIndex}-error` : undefined}
+                          {...register(`workouts.${index}.exercises.${exerciseIndex}.instruction` as const)}
+                          placeholder="Mitä treenaajan pitää muistaa tässä liikkeessä?"
                         />
                         <FieldError
-                          id={`workout-${index}-reps-${exerciseIndex}-error`}
-                          message={exerciseErrors?.targetReps?.message?.toString()}
+                          id={`workout-${index}-instruction-${exerciseIndex}-error`}
+                          message={exerciseErrors?.instruction?.message?.toString()}
                         />
                       </div>
-                    )}
-                    <div>
-                      <div className="mb-1 flex items-center gap-1">
-                        <RequiredLabel className="mb-0" htmlFor={`workout-${index}-load-${exerciseIndex}`} optional>Kuorma (kg)</RequiredLabel>
-                        <InfoTooltip text="Valinnainen suosituslähtökuorma sarjalle. Tämä kenttä ei täyty automaattisesti tässä näkymässä. Kun treenaaja aloittaa treenin, toteutukseen voidaan ehdottaa kuormaa historiasta, jos aiempaa dataa löytyy." />
+                      <div className="grid gap-4 [grid-template-columns:repeat(auto-fit,minmax(13rem,1fr))]">
+                        <div>
+                          <RequiredLabel htmlFor={`workout-${index}-superset-${exerciseIndex}`} optional>Superset</RequiredLabel>
+                          <Select
+                            id={`workout-${index}-superset-${exerciseIndex}`}
+                            {...register(`workouts.${index}.exercises.${exerciseIndex}.supersetGroup` as const)}
+                          >
+                            <option value="">Ei supersettiä</option>
+                            {SUPERSET_GROUP_OPTIONS.map((group) => (
+                              <option key={group} value={group}>
+                                Superset {group}
+                              </option>
+                            ))}
+                          </Select>
+                        </div>
+                        <div>
+                          <RequiredLabel htmlFor={`workout-${index}-load-${exerciseIndex}`} optional>Kuorma (kg)</RequiredLabel>
+                          <Input
+                            id={`workout-${index}-load-${exerciseIndex}`}
+                            type="number"
+                            min={0}
+                            step="0.5"
+                            {...register(`workouts.${index}.exercises.${exerciseIndex}.targetLoad` as const)}
+                          />
+                        </div>
                       </div>
-                      <Input
-                        id={`workout-${index}-load-${exerciseIndex}`}
-                        type="number"
-                        min={0}
-                        step="0.5"
-                        {...register(`workouts.${index}.exercises.${exerciseIndex}.targetLoad` as const)}
-                      />
                     </div>
-                    <div>
-                      <div className="mb-1 flex items-center gap-1">
-                        <RequiredLabel className="mb-0" htmlFor={`workout-${index}-rest-${exerciseIndex}`}>Lepo (s)</RequiredLabel>
-                        <InfoTooltip text="Lepo sarjojen välissä sekunteina. Ajastin käynnistyy treenaajalla sarjan kuittauksen jälkeen." />
-                      </div>
-                      <Input
-                        id={`workout-${index}-rest-${exerciseIndex}`}
-                        type="number"
-                        min={15}
-                        max={600}
-                        aria-invalid={Boolean(exerciseErrors?.restSeconds)}
-                        aria-describedby={exerciseErrors?.restSeconds ? `workout-${index}-rest-${exerciseIndex}-error` : undefined}
-                        {...register(`workouts.${index}.exercises.${exerciseIndex}.restSeconds` as const)}
-                      />
-                      <FieldError
-                        id={`workout-${index}-rest-${exerciseIndex}-error`}
-                        message={exerciseErrors?.restSeconds?.message?.toString()}
-                      />
-                    </div>
-                  </div>
-                  <p className="mt-2 px-3 pb-3 text-xs text-[var(--text-subtle)]">
-                    Aseta sama superset-kirjain liikkeille, jotka tehdään parina.
-                  </p>
+                  ) : null}
                 </>
               ) : null}
             </div>
@@ -792,7 +791,7 @@ export function ProgramWorkoutEditor({
           variant="secondary"
           onClick={() =>
             exerciseFields.append(
-              emptyProgramWorkoutExercise(Number(defaultRestSeconds) || 120),
+              emptyProgramWorkoutExercise(120),
             )
           }
         >
