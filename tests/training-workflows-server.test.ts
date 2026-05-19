@@ -1469,10 +1469,10 @@ describe("training workflows server", () => {
   });
 
   it("auto-cancels orphaned in-progress workout when the backing program is missing", async () => {
-    const scheduledWorkoutUpdateSpy = vi.fn(() => ({
+    const scheduledWorkoutUpdateSpy = vi.fn((_values: Record<string, unknown>) => ({
       eq: vi.fn(async () => ({ data: null, error: null })),
     }));
-    const sessionUpdateSpy = vi.fn(() => ({
+    const sessionUpdateSpy = vi.fn((_values: Record<string, unknown>) => ({
       eq: vi.fn(async () => ({ data: null, error: null })),
     }));
 

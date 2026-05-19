@@ -751,7 +751,7 @@ export function AthleteDashboard({
     pendingWorkoutTransition?.type === "open" || pendingWorkoutTransition?.type === "start"
       ? `Avataan treeniä "${pendingWorkoutTransition.workoutName}"...`
       : null;
-  const activeScheduledByProgramWorkoutId = useMemo(() => {
+  const activeScheduledByProgramWorkoutKey = useMemo(() => {
     const activeById = new Map<string, (typeof workouts)[number]>();
     const getWorkoutPriority = (workout: (typeof workouts)[number]): WorkoutSelectionPriority => {
       const hasSession = scheduledWithSessionIds.has(workout.id);
@@ -766,20 +766,26 @@ export function AthleteDashboard({
     };
 
     workouts
-      .filter((workout) => workout.programWorkoutId && resolveWorkoutStatus(workout) !== "completed")
+      .filter(
+        (workout) =>
+          workout.programWorkoutId &&
+          workout.trainingPlanId &&
+          resolveWorkoutStatus(workout) !== "completed",
+      )
       .forEach((workout) => {
-        if (!workout.programWorkoutId) {
+        if (!workout.programWorkoutId || !workout.trainingPlanId) {
           return;
         }
 
-        const existing = activeById.get(workout.programWorkoutId);
+        const key = `${workout.trainingPlanId}::${workout.programWorkoutId}`;
+        const existing = activeById.get(key);
         const candidatePriority = getWorkoutPriority(workout);
         if (candidatePriority === 0) {
           return;
         }
 
         if (!existing) {
-          activeById.set(workout.programWorkoutId, workout);
+          activeById.set(key, workout);
           return;
         }
 
@@ -788,7 +794,7 @@ export function AthleteDashboard({
           candidatePriority > existingPriority ||
           (candidatePriority === existingPriority && compareWorkoutOrder(workout, existing) < 0)
         ) {
-          activeById.set(workout.programWorkoutId, workout);
+          activeById.set(key, workout);
         }
       });
 
@@ -1961,7 +1967,7 @@ export function AthleteDashboard({
                                   programWorkoutId: workout.id,
                                 })
                               : 0;
-                          const activeScheduled = activeScheduledByProgramWorkoutId.get(workout.id);
+                          const activeScheduled = activeScheduledByProgramWorkoutKey.get(`${program.id}::${workout.id}`);
                           const activeScheduledStatus =
                             activeScheduled ? resolveWorkoutStatus(activeScheduled) : undefined;
                           const activeScheduledId =
