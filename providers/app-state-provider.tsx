@@ -773,7 +773,7 @@ type LoginResult =
   | { ok: false; message: string };
 
 type ActionResult =
-  | { ok: true; scheduledWorkoutId?: string }
+  | { ok: true; scheduledWorkoutId?: string; autoCancelledWorkoutTitle?: string }
   | { ok: false; message: string };
 
 type CreateProgramResult =
@@ -5383,6 +5383,7 @@ function findResolvedUserIdInSnapshot(
             const payload = (await response.json().catch(() => null)) as {
               message?: string;
               scheduledWorkoutId?: string;
+              autoCancelledWorkoutTitle?: string;
               scheduledWorkout?: ScheduledWorkout;
               session?: WorkoutSession;
             } | null;
@@ -5415,7 +5416,7 @@ function findResolvedUserIdInSnapshot(
               }, 750);
             }
             warnIfOptimisticServerIdLeak("workout", scheduledWorkoutId);
-            return { ok: true, scheduledWorkoutId };
+            return { ok: true, scheduledWorkoutId, autoCancelledWorkoutTitle: payload?.autoCancelledWorkoutTitle };
           } catch {
             const response = await fetch("/api/workouts/start", {
               method: "POST",
@@ -5427,6 +5428,7 @@ function findResolvedUserIdInSnapshot(
             const payload = (await response.json().catch(() => null)) as {
               message?: string;
               scheduledWorkoutId?: string;
+              autoCancelledWorkoutTitle?: string;
               scheduledWorkout?: ScheduledWorkout;
               session?: WorkoutSession;
             } | null;
@@ -5445,7 +5447,11 @@ function findResolvedUserIdInSnapshot(
               }, 750);
             }
             warnIfOptimisticServerIdLeak("workout", payload?.scheduledWorkoutId);
-            return { ok: true, scheduledWorkoutId: payload?.scheduledWorkoutId };
+            return {
+              ok: true,
+              scheduledWorkoutId: payload?.scheduledWorkoutId,
+              autoCancelledWorkoutTitle: payload?.autoCancelledWorkoutTitle,
+            };
           }
         }
 

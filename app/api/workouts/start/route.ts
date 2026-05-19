@@ -75,6 +75,7 @@ export async function POST(request: Request) {
   return timer.json({
     ok: true,
     scheduledWorkoutId: result.scheduledWorkoutId,
+    autoCancelledWorkoutTitle: "autoCancelledWorkoutTitle" in result ? result.autoCancelledWorkoutTitle : undefined,
     scheduledWorkout: payload?.scheduledWorkout,
     session: payload?.session,
   });

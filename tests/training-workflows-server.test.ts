@@ -862,6 +862,134 @@ describe("training workflows server", () => {
     });
   });
 
+  it("auto-cancels a stale blocking in-progress workout after 6h and starts a new workout", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-04-03T16:00:00.000Z"));
+    try {
+      let scheduledWorkoutMaybeSingleCount = 0;
+      const scheduledWorkoutUpdates: Array<Record<string, unknown>> = [];
+      const workoutSessionUpdates: Array<Record<string, unknown>> = [];
+
+      const admin = {
+        from: vi.fn((table: string) => {
+          const builder = {
+            select: vi.fn(() => builder),
+            order: vi.fn(() => builder),
+            limit: vi.fn(() => builder),
+            eq: vi.fn(() => builder),
+            in: vi.fn(() => builder),
+            neq: vi.fn(() => builder),
+            not: vi.fn(() => builder),
+            update: vi.fn((values: Record<string, unknown>) => {
+              if (table === "scheduled_workouts") {
+                scheduledWorkoutUpdates.push(values);
+              }
+              if (table === "workout_sessions") {
+                workoutSessionUpdates.push(values);
+              }
+              return builder;
+            }),
+            maybeSingle: vi.fn(async () => {
+              if (table === "training_plans") {
+                return {
+                  data: {
+                    id: "plan-1",
+                    coach_id: "coach-1",
+                    athlete_id: "athlete-1",
+                    title: "Plan",
+                    description: null,
+                    status: "active",
+                    start_date: "2026-04-01",
+                    week_count: 4,
+                    workouts: [
+                      {
+                        id: "program-workout-1",
+                        name: "Penkki",
+                        splitType: "upper",
+                        defaultRestSeconds: 120,
+                        exercises: [],
+                      },
+                    ],
+                    created_at: "2026-04-01T08:00:00.000Z",
+                    updated_at: "2026-04-01T08:00:00.000Z",
+                  },
+                  error: null,
+                };
+              }
+
+              if (table === "scheduled_workouts") {
+                scheduledWorkoutMaybeSingleCount += 1;
+                if (scheduledWorkoutMaybeSingleCount === 1) {
+                  return { data: null, error: null };
+                }
+
+                return {
+                  data: {
+                    id: "old-blocking-workout",
+                    title: "Vanha treeni",
+                    status: "in_progress",
+                    updated_at: "2026-04-03T08:00:00.000Z",
+                  },
+                  error: null,
+                };
+              }
+
+              if (table === "workout_sessions") {
+                return {
+                  data: {
+                    completed_at: null,
+                  },
+                  error: null,
+                };
+              }
+
+              return { data: null, error: null };
+            }),
+            then: (resolve: (value: { data: unknown; error: null }) => unknown, reject?: (reason: unknown) => unknown) =>
+              Promise.resolve({ data: [], error: null }).then(resolve, reject),
+          };
+          return builder;
+        }),
+        rpc: vi.fn(async () => ({
+          data: {
+            ok: true,
+            scheduled_workout_id: "new-workout",
+            session_id: "new-session",
+            updated_at: "2026-04-03T16:00:01.000Z",
+          },
+          error: null,
+        })),
+      };
+
+      createSupabaseAdminClientMock.mockReturnValue(admin);
+
+      const result = await startProgramWorkoutOnServer({
+        requester: { id: "athlete-1", role: "athlete" },
+        programId: "plan-1",
+        programWorkoutId: "program-workout-1",
+      });
+
+      expect(result).toMatchObject({
+        ok: true,
+        scheduledWorkoutId: "new-workout",
+        autoCancelledWorkoutTitle: "Vanha treeni",
+      });
+      expect(workoutSessionUpdates.length).toBe(1);
+      expect(scheduledWorkoutUpdates.length).toBe(1);
+      expect(scheduledWorkoutUpdates[0]).toMatchObject({ status: "cancelled", completed_at: null });
+      expect(admin.rpc).toHaveBeenCalledWith("start_workout_atomic", {
+        p_requester_id: "athlete-1",
+        p_requester_role: "athlete",
+        p_set_logs: [],
+        p_scheduled_workout_id: null,
+        p_training_plan_id: "plan-1",
+        p_program_workout_id: "program-workout-1",
+      });
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it("falls back to legacy writes when the atomic workout start rpc fails", async () => {
     const admin = {
       from: vi.fn((table: string) => {

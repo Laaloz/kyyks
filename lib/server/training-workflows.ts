@@ -149,6 +149,47 @@ function nowIso() {
   return new Date().toISOString();
 }
 
+const AUTO_CANCEL_IN_PROGRESS_AFTER_MS = 6 * 60 * 60 * 1000;
+
+function isWorkoutStaleForAutoCancel(updatedAt: string | null | undefined, nowMs = Date.now()) {
+  if (!updatedAt) {
+    return false;
+  }
+
+  const updatedAtMs = new Date(updatedAt).getTime();
+  if (!Number.isFinite(updatedAtMs)) {
+    return false;
+  }
+
+  return nowMs - updatedAtMs >= AUTO_CANCEL_IN_PROGRESS_AFTER_MS;
+}
+
+async function autoCancelScheduledWorkout(
+  admin: NonNullable<ReturnType<typeof createSupabaseAdminClient>>,
+  scheduledWorkoutId: string,
+) {
+  const cancelledAt = nowIso();
+
+  await admin
+    .from("workout_sessions")
+    .update({
+      paused_at: cancelledAt,
+      updated_at: cancelledAt,
+    })
+    .eq("scheduled_workout_id", scheduledWorkoutId);
+
+  const { error } = await admin
+    .from("scheduled_workouts")
+    .update({
+      status: "cancelled",
+      completed_at: null,
+      updated_at: cancelledAt,
+    })
+    .eq("id", scheduledWorkoutId);
+
+  return !error;
+}
+
 const AUTOFILL_SESSION_SCAN_LIMIT = 12;
 
 function isExercisesExternalKeySchemaError(message: string | undefined) {
@@ -1275,27 +1316,29 @@ export async function startProgramWorkoutOnServer({
     return { ok: false as const, message: "Ohjelma on arkistoitu eikä siitä voi käynnistää uutta treeniä." };
   }
 
+  let autoCancelledWorkoutTitle: string | undefined;
+
   const [existingActive, blockingWorkout] = await Promise.all([
     admin
       .from("scheduled_workouts")
-      .select("id")
+      .select("id, status, updated_at")
       .eq("athlete_id", planRow.athlete_id)
       .eq("program_workout_id", programWorkoutId)
       .in("status", ["in_progress", "cancelled"])
       .order("updated_at", { ascending: false })
       .order("id", { ascending: false })
       .limit(1)
-      .maybeSingle<{ id: string }>(),
+      .maybeSingle<{ id: string; status: ScheduledWorkout["status"]; updated_at: string }>(),
     admin
       .from("scheduled_workouts")
-      .select("id, title")
+      .select("id, title, status, updated_at")
       .eq("athlete_id", planRow.athlete_id)
       .eq("status", "in_progress")
       .neq("program_workout_id", programWorkoutId)
       .order("updated_at", { ascending: false })
       .order("id", { ascending: false })
       .limit(1)
-      .maybeSingle<{ id: string; title: string }>(),
+      .maybeSingle<{ id: string; title: string; status: ScheduledWorkout["status"]; updated_at: string }>(),
   ]);
   timer.checkpoint("existing-active-query");
 
@@ -1317,15 +1360,35 @@ export async function startProgramWorkoutOnServer({
   ]);
 
   if (existingActive.data?.id && existingActiveSession.data && !existingActiveSession.data.completed_at) {
-    return { ok: true as const, scheduledWorkoutId: existingActive.data.id };
+    if (
+      existingActive.data.status === "in_progress" &&
+      isWorkoutStaleForAutoCancel(existingActive.data.updated_at)
+    ) {
+      const autoCancelled = await autoCancelScheduledWorkout(admin, existingActive.data.id);
+      if (autoCancelled) {
+        autoCancelledWorkoutTitle = "Aiempi treeni";
+      }
+    } else {
+      return { ok: true as const, scheduledWorkoutId: existingActive.data.id };
+    }
   }
   timer.checkpoint("blocking-query");
 
   if (blockingWorkout.data && !blockingWorkoutSession.data?.completed_at) {
-    return {
-      ok: false as const,
-      message: `Sinulla on kesken oleva treeni "${displayWorkoutTitle(blockingWorkout.data.title)}". Jatka se ensin.`,
-    };
+    if (
+      blockingWorkout.data.status === "in_progress" &&
+      isWorkoutStaleForAutoCancel(blockingWorkout.data.updated_at)
+    ) {
+      const autoCancelled = await autoCancelScheduledWorkout(admin, blockingWorkout.data.id);
+      if (autoCancelled) {
+        autoCancelledWorkoutTitle = displayWorkoutTitle(blockingWorkout.data.title);
+      }
+    } else {
+      return {
+        ok: false as const,
+        message: `Sinulla on kesken oleva treeni "${displayWorkoutTitle(blockingWorkout.data.title)}". Jatka se ensin.`,
+      };
+    }
   }
 
   const plan = mapPlanRow(planRow);
@@ -1361,7 +1424,11 @@ export async function startProgramWorkoutOnServer({
       });
       timer.checkpoint("legacy-start-fallback");
       if (fallbackResult.ok) {
-        return { ok: true as const, scheduledWorkoutId: fallbackResult.scheduledWorkoutId };
+        return {
+          ok: true as const,
+          scheduledWorkoutId: fallbackResult.scheduledWorkoutId,
+          autoCancelledWorkoutTitle,
+        };
       }
     }
 
@@ -1369,7 +1436,11 @@ export async function startProgramWorkoutOnServer({
   }
 
   timer.checkpoint("done");
-  return { ok: true as const, scheduledWorkoutId: startResult.scheduledWorkoutId };
+  return {
+    ok: true as const,
+    scheduledWorkoutId: startResult.scheduledWorkoutId,
+    autoCancelledWorkoutTitle,
+  };
 }
 
 export async function startScheduledWorkoutOnServer({

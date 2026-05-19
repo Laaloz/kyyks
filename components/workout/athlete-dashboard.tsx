@@ -683,6 +683,12 @@ export function AthleteDashboard({
       }
       setWorkoutMessage(`Treeni "${workoutName}" käynnistyi.`);
       notify({ tone: "success", message: `Treeni "${workoutName}" käynnistyi.` });
+      if (result.autoCancelledWorkoutTitle) {
+        notify({
+          tone: "info",
+          message: `Aiempi kesken jäänyt treeni "${result.autoCancelledWorkoutTitle}" keskeytettiin automaattisesti (6 h).`,
+        });
+      }
       setPendingWorkoutTransition(null);
       return;
     }

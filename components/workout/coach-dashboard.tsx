@@ -2083,7 +2083,7 @@ export function CoachDashboard({
                                   <div
                                     ref={programMenuRef}
                                     role="menu"
-                                    className="z-20 min-w-60 rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-2 shadow-[0_18px_45px_-24px_var(--shadow)]"
+                                    className="z-50 min-w-60 rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-2 shadow-[0_18px_45px_-24px_var(--shadow)]"
                                     style={
                                       programMenuStyle ??
                                       (programMenuAnchorRect
@@ -2330,7 +2330,7 @@ export function CoachDashboard({
                                   <div
                                     ref={programMenuRef}
                                     role="menu"
-                                    className="z-20 min-w-60 rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-2 shadow-[0_18px_45px_-24px_var(--shadow)]"
+                                    className="z-50 min-w-60 rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-2 shadow-[0_18px_45px_-24px_var(--shadow)]"
                                     style={
                                       programMenuStyle ??
                                       (programMenuAnchorRect

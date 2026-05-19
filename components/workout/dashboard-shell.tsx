@@ -176,7 +176,11 @@ export function DashboardShell() {
     (measurementReminder.isDue || isReminderPreviewMode);
   const weightReminderDue = measurementReminder.weightDue || isReminderPreviewMode;
   const waistReminderDue = measurementReminder.waistDue || isReminderPreviewMode;
-  const todayLabel = `Tänään ${new Intl.DateTimeFormat("fi-FI").format(new Date())}`;
+  const todayLabel = new Intl.DateTimeFormat("fi-FI", {
+    weekday: "long",
+    day: "numeric",
+    month: "numeric",
+  }).format(new Date());
   const profileImageSrc = currentUser.profileImageUrl
     ? `${currentUser.profileImageUrl}${currentUser.profileImageUrl.includes("?") ? "&" : "?"}v=${encodeURIComponent(currentUser.updatedAt)}`
     : null;
@@ -411,8 +415,8 @@ export function DashboardShell() {
     <div
       className={`mx-auto flex max-w-7xl flex-col overflow-x-hidden px-4 py-4 sm:px-6 lg:px-8 ${
         view === "conversation"
-          ? "h-[100svh] overflow-hidden gap-4 pb-28 lg:gap-4 lg:pb-4"
-          : "min-h-screen gap-4 pb-28 lg:gap-6 lg:pb-4"
+          ? "min-h-[100dvh] overflow-hidden gap-4 pb-28 lg:gap-4 lg:pb-4"
+          : "min-h-[100dvh] gap-4 pb-28 lg:gap-6 lg:pb-4"
       }`}
     >
       {shouldShowMeasurementReminder && isMeasurementReminderOpen ? (
