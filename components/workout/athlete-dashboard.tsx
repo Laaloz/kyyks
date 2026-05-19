@@ -700,6 +700,8 @@ export function AthleteDashboard({
   ) => {
     const workout = workouts.find((item) => item.id === scheduledWorkoutId);
     if (!workout) {
+      setWorkoutMessage("Kesken olevaa treeniä ei löytynyt. Päivitä näkymä ja yritä uudelleen.");
+      notify({ tone: "danger", message: "Kesken olevaa treeniä ei löytynyt. Päivitä näkymä ja yritä uudelleen." });
       return;
     }
 
@@ -1559,6 +1561,7 @@ export function AthleteDashboard({
 
       {view === "conversation" && currentUser ? (
         <ConversationPanel
+          className="w-full max-w-none"
           heading=""
           description=""
           entries={athleteConversationEntries}
@@ -1888,21 +1891,19 @@ export function AthleteDashboard({
                       </p>
                     </div>
                   </div>
-                  {blockingWorkout.status !== "cancelled" ? (
-                    <div className="mt-3">
-                      <Button
-                        type="button"
-                        variant="secondary"
-                        className="w-full sm:w-auto"
-                        disabled={isTransitionLoading(`blocking-${blockingWorkout.id}`)}
-                        onClick={() => {
-                          void openOrResumeWorkout(blockingWorkout.id, `blocking-${blockingWorkout.id}`);
-                        }}
-                      >
-                        Siirry treeniin
-                      </Button>
-                    </div>
-                  ) : null}
+                  <div className="mt-3">
+                    <Button
+                      type="button"
+                      variant="secondary"
+                      className="w-full sm:w-auto"
+                      disabled={isTransitionLoading(`blocking-${blockingWorkout.id}`)}
+                      onClick={() => {
+                        void openOrResumeWorkout(blockingWorkout.id, `blocking-${blockingWorkout.id}`);
+                      }}
+                    >
+                      {blockingWorkout.status === "cancelled" ? "Jatka treeniä" : "Siirry treeniin"}
+                    </Button>
+                  </div>
                 </div>
               ) : null}
               {selectionTransitionMessage ? (

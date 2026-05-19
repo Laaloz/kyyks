@@ -9,6 +9,7 @@ import { Card, CardDescription, CardTitle } from "@/components/ui/card";
 import { Label } from "@/components/ui/field";
 import { InlineFeedback } from "@/components/workout/inline-feedback";
 import { isConversationEntryNotifiable } from "@/lib/conversation";
+import { cn } from "@/lib/utils";
 import { withMinimumDelay } from "@/lib/min-delay";
 import type { AppState, ConversationEntry, Role } from "@/lib/types";
 import { formatDateWithWeekday, formatRelativeDate } from "@/lib/utils";
@@ -30,6 +31,7 @@ export function ConversationPanel({
   emptyMessage,
   onSend,
   headerSlot,
+  className,
 }: {
   heading: string;
   description: string;
@@ -40,6 +42,7 @@ export function ConversationPanel({
   emptyMessage: string;
   onSend: (body: string) => SendResult;
   headerSlot?: ReactNode;
+  className?: string;
 }) {
   const { notify } = useAppState();
   const [draft, setDraft] = useState("");
@@ -128,7 +131,7 @@ export function ConversationPanel({
   const hasHeader = Boolean(heading || description || headerSlot);
 
   return (
-    <Card className="flex h-full min-h-0 w-full flex-col overflow-hidden border-[var(--border-strong)]">
+    <Card className={cn("flex h-full min-h-0 w-full flex-col overflow-hidden border-[var(--border-strong)]", className)}>
       {hasHeader ? (
         <div className="mb-4 flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
           {heading || description ? (
