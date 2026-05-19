@@ -5752,7 +5752,11 @@ function findResolvedUserIdInSnapshot(
             session?: WorkoutSession;
           } | null;
           if (!response.ok) {
-            setState(previousState);
+            if (payload?.message === "Treeniä ei löytynyt.") {
+              setState((current) => clearOptimisticWorkoutArtifacts(current, scheduledWorkoutId));
+            } else {
+              setState(previousState);
+            }
             await refreshSupabaseVisibleState();
             return { ok: false, message: payload?.message ?? "Treeniä ei voitu käynnistää." };
           }
