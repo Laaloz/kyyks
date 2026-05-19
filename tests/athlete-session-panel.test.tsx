@@ -63,6 +63,8 @@ describe("AthleteSessionPanel", () => {
         exerciseInstructions={new Map([["exercise_group_1", "Pidä lapatuet tiukkana ja hallitse ala-asento."]])}
         exerciseOrder={new Map([["exercise_group_1", 0]])}
         loadIncrementKg={2.5}
+        availableExercises={[]}
+        onExerciseStructureUpdate={async () => ({ ok: true })}
         workoutMessage=""
         isCompleting={false}
       />,
@@ -258,6 +260,8 @@ describe("AthleteSessionPanel", () => {
         exerciseInstructions={new Map()}
         exerciseOrder={new Map([["exercise_group_1", 0]])}
         loadIncrementKg={2.5}
+        availableExercises={[]}
+        onExerciseStructureUpdate={async () => ({ ok: true })}
         workoutMessage=""
         isCompleting={false}
       />,
@@ -265,9 +269,14 @@ describe("AthleteSessionPanel", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "Merkitse tehdyksi" }));
 
+    const exerciseNameNodes = screen.getAllByText(/Erittäin pitkä polven koukistus/);
+    expect(exerciseNameNodes.some((node) => node.className.includes("[overflow-wrap:anywhere]"))).toBe(true);
+
     const timer = screen.getByRole("status", { name: "Lepoajastin" });
     const timerShell = timer.parentElement;
-    expect(timerShell?.className).toContain("w-[min(100%,calc(100dvw-1rem))]");
+    expect(timerShell?.className).toContain("fixed");
+    expect(timerShell?.className).not.toContain("sticky");
+    expect(timerShell?.className).toContain("w-[min(100%,calc(100dvw-2rem))]");
     expect(timerShell?.className).toContain("md:w-[min(18rem,calc(100dvw-1.5rem))]");
     expect(timer).toHaveClass("overflow-hidden");
     expect(screen.getByText("Käynnissä")).toBeInTheDocument();
@@ -302,6 +311,8 @@ describe("AthleteSessionPanel", () => {
         exerciseInstructions={new Map()}
         exerciseOrder={new Map([["exercise_group_1", 0]])}
         loadIncrementKg={2.5}
+        availableExercises={[]}
+        onExerciseStructureUpdate={async () => ({ ok: true })}
         workoutMessage=""
         isCompleting={false}
       />,

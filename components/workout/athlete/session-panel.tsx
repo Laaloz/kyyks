@@ -1419,9 +1419,9 @@ export function AthleteSessionPanel({
     return (
       <div
         key={exerciseKey}
-        className={`overflow-hidden rounded-[1.35rem] border p-3 md:p-3.5 ${cardToneClass}`}
+        className={`min-w-0 max-w-full overflow-hidden rounded-[1.35rem] border p-3 md:p-3.5 ${cardToneClass}`}
       >
-        <div className="flex items-start gap-2 px-1">
+        <div className="flex min-w-0 items-start gap-2 px-1">
           <button
             type="button"
             className="group min-w-0 flex-1 rounded-[1rem] py-0 text-left text-inherit transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--background)]"
@@ -1430,14 +1430,14 @@ export function AthleteSessionPanel({
             aria-controls={disclosurePanelId}
             onClick={() => setGroupExpansion(group)}
           >
-            <span className="min-w-0">
-              <span className="flex items-center gap-1.5">
+            <span className="block min-w-0">
+              <span className="flex min-w-0 items-center gap-1.5">
                 <span className={`size-2.5 rounded-full ${indicatorClass}`} aria-hidden="true" />
                 <span className="text-xs font-semibold tracking-[0.04em] text-[var(--text-subtle)]">
                   Liike
                 </span>
               </span>
-              <span className="mt-0.5 block font-[family-name:var(--font-display)] text-[0.97rem] font-semibold leading-tight text-[var(--text)] md:text-[1.02rem]">
+              <span className="mt-0.5 block min-w-0 [overflow-wrap:anywhere] font-[family-name:var(--font-display)] text-[0.97rem] font-semibold leading-tight text-[var(--text)] md:text-[1.02rem]">
                 {exerciseName}
               </span>
             </span>
@@ -1511,7 +1511,7 @@ export function AthleteSessionPanel({
             aria-labelledby={disclosureButtonId}
             className="mt-3 border-t border-[var(--border)] pt-3"
           >
-            <div className="overflow-hidden rounded-[1rem] bg-[color-mix(in_srgb,var(--surface-2)_68%,var(--surface))]">
+            <div className="min-w-0 max-w-full overflow-hidden rounded-[1rem] bg-[color-mix(in_srgb,var(--surface-2)_68%,var(--surface))]">
               <table className="w-full table-fixed border-collapse">
                 <thead>
                   <tr className="border-b border-[var(--border)] bg-[color-mix(in_srgb,var(--surface-3)_82%,var(--surface))] text-[10px] font-semibold uppercase tracking-[0.05em] text-[var(--text-subtle)]">
@@ -1734,8 +1734,8 @@ export function AthleteSessionPanel({
   }
 
   return (
-    <div className="mt-6 space-y-5">
-      <div className="flex flex-wrap items-center gap-3">
+    <div className="mt-6 min-w-0 max-w-full space-y-5 overflow-x-clip [contain:inline-size]">
+      <div className="flex min-w-0 flex-wrap items-center gap-3">
         <Badge className={workoutStatusBadgeClass(status)}>{workoutStatusLabel(status)}</Badge>
         <p className="text-sm text-[var(--text-muted)]">Käynnistetty {formatDate(selectedSession.startedAt)}</p>
         <Badge className="border-[var(--accent)] bg-[var(--surface-3)] text-[var(--accent)]">
@@ -1894,8 +1894,8 @@ export function AthleteSessionPanel({
       ) : (
         <>
       {!readOnly ? (
-        <div className="flex items-center justify-between gap-2 rounded-xl border border-[color-mix(in_srgb,var(--accent)_18%,var(--border))] bg-[color-mix(in_srgb,var(--accent)_6%,var(--surface))] px-3 py-2 text-xs text-[var(--text-subtle)]">
-          <span>Toisto- ja kuormakentissä voit painaa oikean reunan kahvaa ja vetää ylös tai alas muuttaaksesi arvoa.</span>
+        <div className="flex min-w-0 items-center justify-between gap-2 rounded-xl border border-[color-mix(in_srgb,var(--accent)_18%,var(--border))] bg-[color-mix(in_srgb,var(--accent)_6%,var(--surface))] px-3 py-2 text-xs text-[var(--text-subtle)]">
+          <span className="min-w-0 [overflow-wrap:anywhere]">Toisto- ja kuormakentissä voit painaa oikean reunan kahvaa ja vetää ylös tai alas muuttaaksesi arvoa.</span>
           <GripVertical className="size-3.5 shrink-0 text-[var(--accent)]" aria-hidden="true" />
         </div>
       ) : null}
@@ -1905,9 +1905,9 @@ export function AthleteSessionPanel({
             }
 
             return (
-              <div key={block.key} className="rounded-3xl border border-[var(--accent)] bg-[var(--surface-3)]/60 p-3">
-                <div className="mb-3 flex items-center justify-between gap-3">
-                  <div className="inline-flex items-center gap-1.5">
+              <div key={block.key} className="min-w-0 max-w-full overflow-x-clip rounded-3xl border border-[var(--accent)] bg-[var(--surface-3)]/60 p-3 [contain:inline-size]">
+                <div className="mb-3 flex min-w-0 items-center justify-between gap-3">
+                  <div className="inline-flex min-w-0 items-center gap-1.5">
                     <p className="text-sm font-semibold text-[var(--accent)]">
                       Superset {block.supersetGroup}
                     </p>
@@ -1917,7 +1917,7 @@ export function AthleteSessionPanel({
                     {block.groups.length} liikettä
                   </Badge>
                 </div>
-                <div className="grid gap-3">
+                <div className="grid min-w-0 gap-3">
                   {block.groups.map((group) => renderExerciseGroupCard(group))}
                 </div>
               </div>
@@ -2017,7 +2017,7 @@ export function AthleteSessionPanel({
       </div>
 
       {status !== "completed" && restTotalSeconds > 0 && restExerciseKey ? (
-        <div className="sticky bottom-[max(env(safe-area-inset-bottom),0.75rem)] z-30 mx-auto mt-4 box-border w-[min(100%,calc(100dvw-1rem))] min-w-0 max-w-[calc(100dvw-1rem)] md:fixed md:bottom-3 md:right-3 md:left-auto md:mt-0 md:w-[min(18rem,calc(100dvw-1.5rem))] md:max-w-[calc(100dvw-1.5rem)] lg:right-6 lg:w-[min(18rem,calc(100dvw-3rem))] lg:max-w-[calc(100dvw-3rem)]">
+        <div className="fixed bottom-[max(env(safe-area-inset-bottom),0.75rem)] left-1/2 z-30 mt-0 box-border w-[min(100%,calc(100dvw-2rem))] min-w-0 max-w-[calc(100dvw-2rem)] -translate-x-1/2 md:bottom-3 md:right-3 md:left-auto md:w-[min(18rem,calc(100dvw-1.5rem))] md:max-w-[calc(100dvw-1.5rem)] md:translate-x-0 lg:right-6 lg:w-[min(18rem,calc(100dvw-3rem))] lg:max-w-[calc(100dvw-3rem)]">
           <div
             role="status"
             aria-label="Lepoajastin"
