@@ -154,6 +154,10 @@ body {
 
 html {
   scroll-behavior: smooth;
+  background:
+    radial-gradient(circle at 0% 0%, var(--background-glow-1) 0%, transparent 44%),
+    radial-gradient(circle at 100% 0%, var(--background-glow-2) 0%, transparent 38%),
+    linear-gradient(180deg, var(--background) 0%, var(--background-accent) 100%);
 }
 
 body {
@@ -161,10 +165,7 @@ body {
   min-height: 100vh;
   color: var(--text);
   font-family: var(--font-body);
-  background:
-    radial-gradient(circle at 0% 0%, var(--background-glow-1) 0%, transparent 44%),
-    radial-gradient(circle at 100% 0%, var(--background-glow-2) 0%, transparent 38%),
-    linear-gradient(180deg, var(--background) 0%, var(--background-accent) 100%);
+  background: transparent;
 }
 
 a {
