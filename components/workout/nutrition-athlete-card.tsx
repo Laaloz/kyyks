@@ -75,6 +75,18 @@ function formatShareValue(value: number) {
   return `${Math.round(value)} %`;
 }
 
+function formatRoundedCalories(value: number) {
+  return new Intl.NumberFormat("fi-FI", {
+    maximumFractionDigits: 0,
+  }).format(Math.round(value / 50) * 50);
+}
+
+function formatRoundedGrams(value: number) {
+  return new Intl.NumberFormat("fi-FI", {
+    maximumFractionDigits: 0,
+  }).format(Math.round(value));
+}
+
 function mealSlotStatusLabel(status: "below" | "within" | "above") {
   switch (status) {
     case "below":
@@ -464,44 +476,31 @@ export function NutritionAthleteCard({
         <div>
           <p className="text-xs font-semibold tracking-[0.04em] text-[var(--text-subtle)]">Ruokalista</p>
           <CardTitle className="mt-2 text-balance text-2xl leading-tight">Päivän ateriat</CardTitle>
-          <CardDescription className="mt-2">
-            Valitse vaihtoryhmä ja avaa sen alta haluamasi resepti omaan näkymään ilman, että koko lista venyy mobiilissa pitkäksi.
-          </CardDescription>
         </div>
 
         {nutritionProfile ? (
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
             <div className="min-w-0 rounded-2xl border border-[var(--border)] bg-[var(--surface-2)] px-4 py-3">
               <p className="text-xs font-semibold tracking-[0.04em] text-[var(--text-subtle)]">Tavoite kcal</p>
-              <p className="mt-1 text-xl font-semibold text-[var(--text)]">{nutritionProfile.targetKcal}</p>
+              <p className="mt-1 text-xl font-semibold text-[var(--text)]">{formatRoundedCalories(nutritionProfile.targetKcal)}</p>
             </div>
             <div className="min-w-0 rounded-2xl border border-[var(--border)] bg-[var(--surface-2)] px-4 py-3">
               <p className="text-xs font-semibold tracking-[0.04em] text-[var(--text-subtle)]">Proteiini</p>
-              <p className="mt-1 text-xl font-semibold text-[var(--text)]">{nutritionProfile.proteinG} g</p>
+              <p className="mt-1 text-xl font-semibold text-[var(--text)]">{formatRoundedGrams(nutritionProfile.proteinG)} g</p>
             </div>
             <div className="min-w-0 rounded-2xl border border-[var(--border)] bg-[var(--surface-2)] px-4 py-3">
               <p className="text-xs font-semibold tracking-[0.04em] text-[var(--text-subtle)]">Hiilarit</p>
-              <p className="mt-1 text-xl font-semibold text-[var(--text)]">{nutritionProfile.carbsG} g</p>
+              <p className="mt-1 text-xl font-semibold text-[var(--text)]">{formatRoundedGrams(nutritionProfile.carbsG)} g</p>
             </div>
             <div className="min-w-0 rounded-2xl border border-[var(--border)] bg-[var(--surface-2)] px-4 py-3">
               <p className="text-xs font-semibold tracking-[0.04em] text-[var(--text-subtle)]">Rasva</p>
-              <p className="mt-1 text-xl font-semibold text-[var(--text)]">{nutritionProfile.fatG} g</p>
+              <p className="mt-1 text-xl font-semibold text-[var(--text)]">{formatRoundedGrams(nutritionProfile.fatG)} g</p>
             </div>
           </div>
         ) : null}
 
         {assignedPlan ? (
           <>
-            <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface-2)] p-4">
-              <p className="text-sm font-semibold text-[var(--text)]">{assignedPlan.name}</p>
-              {assignedTemplate?.description ? (
-                <p className="mt-1 text-sm text-[var(--text-muted)]">{assignedTemplate.description}</p>
-              ) : null}
-              <p className="mt-2 text-sm text-[var(--text-muted)]">
-                Valitse ensin vaihtoryhmä ja selaa sen alta sopivia vaihtoehtoja. Kun napautat reseptiä, se aukeaa omaan selkeään reseptinäkymään.
-              </p>
-            </div>
-
             {availableMealGroups.length > 0 ? (
               <div className="space-y-4">
                 <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
@@ -540,7 +539,7 @@ export function NutritionAthleteCard({
                     <div className="flex items-start justify-between gap-4 px-1">
                       <div>
                         <p className="text-xs font-semibold tracking-[0.04em] text-[var(--text-subtle)]">{selectedMealGroup.label}</p>
-                        <p className="mt-1 text-sm text-[var(--text-muted)]">Valitse resepti listasta avataksesi tarkemmat tiedot.</p>
+                        <p className="mt-1 text-sm text-[var(--text-muted)]">Valitse resepti.</p>
                       </div>
                       <p className="text-sm text-[var(--text-muted)]">{selectedMealItems.length} reseptiä</p>
                     </div>
@@ -555,7 +554,7 @@ export function NutritionAthleteCard({
                           <button
                             key={`${item.mealTag}-${item.recipe.id}`}
                             type="button"
-                            className={`w-full rounded-2xl border p-4 text-left transition ${
+                            className={`w-full rounded-2xl border p-3 text-left transition ${
                               isOpen
                                 ? "border-[color-mix(in_srgb,var(--accent)_35%,var(--border))] bg-[color-mix(in_srgb,var(--accent)_8%,var(--surface))]"
                                 : "border-[var(--border)] bg-[var(--surface-2)] hover:bg-[var(--surface)]"
@@ -567,33 +566,28 @@ export function NutritionAthleteCard({
                           >
                             <div className="min-w-0">
                               <div className="flex items-start justify-between gap-3">
-                                <p className="text-lg font-semibold text-[var(--text)]">{item.recipe.name}</p>
+                                <p className="text-base font-semibold text-[var(--text)]">{item.recipe.name}</p>
                                 <div className={`mt-0.5 grid size-8 shrink-0 place-items-center rounded-full border border-[var(--border)] bg-[var(--surface)] text-[var(--text-subtle)] transition ${isOpen ? "rotate-180 text-[var(--accent)]" : "-rotate-90"}`}>
                                   <ChevronDown className="size-3.5" aria-hidden="true" />
                                 </div>
                               </div>
-                              <p className="mt-1 text-sm text-[var(--text-muted)]">
-                                {item.recipe.description ?? "Valmis ateriasuositus tämän vaihtoryhmän sisälle."}
-                              </p>
-                              <div className="mt-3 flex flex-wrap gap-2">
+                              <div className="mt-2 flex flex-wrap gap-1.5">
                                 {macroPill("kcal", `${recipeNutrition.kcal}`)}
-                                {macroPill("P", `${Math.round(recipeNutrition.proteinG)} g`)}
-                                {macroPill("H", `${Math.round(recipeNutrition.carbsG)} g`)}
-                                {macroPill("R", `${Math.round(recipeNutrition.fatG)} g`)}
                               </div>
                               {goalComparison ? (
-                                <div className="mt-3 rounded-2xl border border-[var(--border)] bg-[var(--surface)] px-3 py-3 text-sm text-[var(--text-muted)]">
+                                <div className="mt-1.5 rounded-xl border border-[var(--border)] bg-[var(--surface)] px-2.5 py-2 text-xs text-[var(--text-muted)]">
                                   <p className="font-semibold text-[var(--text)]">
                                     {formatShareValue(goalComparison.dailyShare.kcal)} päivän energiasta
                                   </p>
-                                  <p className="mt-1">
-                                    P {formatShareValue(goalComparison.dailyShare.proteinG)} · H {formatShareValue(goalComparison.dailyShare.carbsG)} · R {formatShareValue(goalComparison.dailyShare.fatG)}
-                                  </p>
-                                  <p className="mt-1">
-                                    {mealTagPossessiveLabel(item.mealTag)} suositus {goalComparison.mealSlot.range[0]}-{goalComparison.mealSlot.range[1]} kcal, ja tämä annos {mealSlotStatusLabel(goalComparison.mealSlot.status)}.
+                                  <p className="mt-0.5">
+                                    P {Math.round(recipeNutrition.proteinG)} g · H {Math.round(recipeNutrition.carbsG)} g · R {Math.round(recipeNutrition.fatG)} g
                                   </p>
                                 </div>
-                              ) : null}
+                              ) : (
+                                <p className="mt-1.5 text-xs text-[var(--text-muted)]">
+                                  P {Math.round(recipeNutrition.proteinG)} g · H {Math.round(recipeNutrition.carbsG)} g · R {Math.round(recipeNutrition.fatG)} g
+                                </p>
+                              )}
                             </div>
                           </button>
                         );

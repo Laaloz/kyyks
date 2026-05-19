@@ -514,6 +514,37 @@ export function NutritionAdminPanel() {
     notify({ tone: result.ok ? "success" : "danger", message: result.ok ? "Ravintoprofiili tallennettiin." : result.message });
   };
 
+  const handleSelectOwnNutritionGoal = async (goal: NutritionGoal) => {
+    if (!currentUser) {
+      return false;
+    }
+
+    const ownProfile = state.nutritionProfiles.find((profile) => profile.userId === currentUser.id) ?? null;
+    const result = await saveNutritionProfile({
+      userId: currentUser.id,
+      goal,
+      activityLevel: ownProfile?.activityLevel ?? "high",
+      mealsPerDay: ownProfile?.mealsPerDay ?? 5,
+      calculationMode: ownProfile?.calculationMode ?? "auto",
+      targetKcal: ownProfile?.targetKcal,
+      proteinG: ownProfile?.proteinG,
+      carbsG: ownProfile?.carbsG,
+      fatG: ownProfile?.fatG,
+      coachNotes: ownProfile?.coachNotes ?? "",
+      dietaryFlags: ownProfile?.dietaryFlags ?? [],
+      allergies: ownProfile?.allergies ?? [],
+    });
+
+    if (result.ok) {
+      const label = goal === "lose" ? "Pudotus" : goal === "gain" ? "Kasvatus" : "Ylläpito";
+      notify({ tone: "success", message: `Profiilitavoite päivitetty: ${label}.` });
+      return true;
+    }
+
+    notify({ tone: "danger", message: result.message });
+    return false;
+  };
+
   const handleSaveIngredient = async () => {
     setIsSavingIngredient(true);
     const result = await saveIngredient({
@@ -1006,7 +1037,7 @@ export function NutritionAdminPanel() {
           <p className="text-xs font-semibold tracking-[0.04em] text-[var(--text-subtle)]">Ravinto</p>
           <CardTitle className="mt-2 text-2xl">Ateriapohjat ja reseptit</CardTitle>
           <CardDescription className="mt-2">
-            Rakenna reseptit ja ateriapohjat oikeista raaka-ainemääristä niin, että annossäätö, makrot ja rajoitteet pysyvät mukana. Oma ravinto löytyy tästä samasta näkymästä ilman, että kotisivu kuormittuu turhaan.
+            Muokkaa reseptejä ja ateriapohjia. Oma ravinto löytyy samasta näkymästä.
           </CardDescription>
         </div>
 
@@ -1032,7 +1063,7 @@ export function NutritionAdminPanel() {
             onClick={() => setWorkspaceTab("editor")}
           >
             <p className="text-sm font-semibold">Editori</p>
-            <p className="mt-1 text-xs text-[var(--text-subtle)]">Muokkaa profiileja, reseptejä ja ateriapohjia itselle tai käyttäjille.</p>
+            <p className="mt-1 text-xs text-[var(--text-subtle)]">Profiilit, reseptit ja ateriapohjat.</p>
           </button>
           <button
             type="button"
@@ -1049,7 +1080,7 @@ export function NutritionAdminPanel() {
             onClick={() => setWorkspaceTab("own")}
           >
             <p className="text-sm font-semibold">Oma ravinto</p>
-            <p className="mt-1 text-xs text-[var(--text-subtle)]">Näe oma energiasuositus ja käytössä oleva ateriapohja ilman editorin raskautta.</p>
+            <p className="mt-1 text-xs text-[var(--text-subtle)]">Oma energiasuositus ja päivän ateriat.</p>
           </button>
         </div>
 
@@ -1063,6 +1094,7 @@ export function NutritionAdminPanel() {
             <PersonalNutritionSummaryCard
               state={state}
               user={currentUser}
+              onSelectGoal={handleSelectOwnNutritionGoal}
               onOpenSettings={() => {
                 setWorkspaceTab("editor");
                 setActiveSection("profiles");

@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import { ChevronDown } from "lucide-react";
 
 import { Card, CardDescription, CardTitle } from "@/components/ui/card";
@@ -38,14 +39,17 @@ export function PersonalNutritionSummaryCard({
   state,
   user,
   onOpenSettings,
+  onSelectGoal,
 }: {
   state: AppState;
   user: UserProfile;
   onOpenSettings?: () => void;
+  onSelectGoal?: (goal: NutritionGoal) => Promise<boolean> | boolean;
 }) {
   const nutritionProfile = state.nutritionProfiles.find((profile) => profile.userId === user.id) ?? null;
   const comparison = buildPersonalNutritionGoalComparison(user, nutritionProfile);
   const missingFields = getMissingMacroProfileFields(user);
+  const [isUpdatingGoal, setIsUpdatingGoal] = useState(false);
 
   return (
     <Card className="border-[var(--border-strong)]">
@@ -55,7 +59,7 @@ export function PersonalNutritionSummaryCard({
             <p className="text-xs font-semibold tracking-[0.04em] text-[var(--text-subtle)]">Henkilökohtainen ravinto</p>
             <CardTitle className="mt-2 text-balance text-2xl leading-tight">Päivän energiasuositus</CardTitle>
             <CardDescription className="mt-2 max-w-3xl">
-              Näet profiiliin tallennetun tavoitteen sekä vertailun pudotus-, ylläpito- ja kasvatusvaiheisiin omien tietojesi perusteella.
+              Profiilitavoite ja vertailu eri tavoitteisiin.
             </CardDescription>
           </div>
           {comparison ? (
@@ -67,36 +71,29 @@ export function PersonalNutritionSummaryCard({
 
         {comparison ? (
           <>
-            <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface-2)] p-4">
+            <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface-2)] p-3">
               <p className="text-xs font-semibold tracking-[0.04em] text-[var(--text-subtle)]">Profiilitavoite</p>
-              <div className="mt-2 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+              <div className="mt-1.5 flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
                 <div>
-                  <p className="text-lg font-semibold text-[var(--text)]">{goalLabel[comparison.activeGoal]}</p>
-                  <p className="mt-1 font-[family-name:var(--font-display)] text-4xl font-semibold text-[var(--text)]">
+                  <p className="text-base font-semibold text-[var(--text)]">{goalLabel[comparison.activeGoal]}</p>
+                  <p className="mt-1 font-[family-name:var(--font-display)] text-3xl font-semibold leading-none text-[var(--text)]">
                     {formatRoundedCalories(comparison.activeTarget.kcal)}
                   </p>
-                  <p className="mt-1 text-sm text-[var(--text-muted)]">kcal / päivä</p>
+                  <p className="mt-1 text-xs text-[var(--text-muted)]">kcal / päivä</p>
                 </div>
               </div>
-              <p className="mt-3 text-sm text-[var(--text-muted)]">
+              <p className="mt-2 text-xs text-[var(--text-muted)]">
                 {comparison.activeTargetSource === "profile"
                   ? "Tämä on nykyinen tallennettu ravintotavoitteesi."
-                  : "Tämä on tällä hetkellä automaattisesti arvioitu ylläpitotavoite tietojesi perusteella."}
+                  : "Arvio profiilitietojen perusteella."}
               </p>
-              {comparison.isEstimate ? (
-                <p className="mt-2 text-sm text-[var(--text-subtle)]">
-                  Alla olevat vaihtoehdot ovat suuntaa-antavia arvioita, joita kannattaa tarkentaa seurannan ja omien tietojen perusteella.
-                </p>
-              ) : null}
             </div>
 
             <details className="group rounded-2xl border border-[var(--border)] bg-[var(--surface)]">
               <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-4 py-4 text-left">
                 <div>
                   <p className="text-sm font-semibold text-[var(--text)]">Näytä tarkemmat suositukset</p>
-                  <p className="mt-1 text-sm text-[var(--text-muted)]">
-                    Makrot, vaihevertailu ja lisätiedot löytyvät täältä tarvittaessa.
-                  </p>
+                  <p className="mt-1 text-sm text-[var(--text-muted)]">Makrot ja tavoitevertailu.</p>
                 </div>
                 <span className="grid size-10 shrink-0 place-items-center rounded-full border border-[var(--border)] bg-[var(--surface-2)] text-[var(--text-subtle)] transition group-open:rotate-180">
                   <ChevronDown className="size-4" aria-hidden="true" />
@@ -144,10 +141,7 @@ export function PersonalNutritionSummaryCard({
                 {comparison.comparisonTargets ? (
                   <div className="mt-4">
                     <p className="text-sm font-semibold text-[var(--text)]">Suositukset eri vaiheisiin</p>
-                    <p className="mt-1 text-sm text-[var(--text-muted)]">
-                      Vertaa helposti miten päivän energia ja makrot muuttuvat eri tavoitteissa.
-                    </p>
-                    <div className="mt-4 grid gap-3">
+                    <div className="mt-3 grid gap-2.5">
                       {(["lose", "maintain", "gain"] as NutritionGoal[]).map((goal) => {
                         const target = comparison.comparisonTargets![goal];
                         const isActive = comparison.activeGoal === goal;
@@ -155,41 +149,55 @@ export function PersonalNutritionSummaryCard({
                         return (
                           <div
                             key={goal}
-                            className={`rounded-2xl border p-4 ${
+                            className={`rounded-2xl border p-3 ${
                               isActive
                                 ? "border-[var(--accent)] bg-[color-mix(in_srgb,var(--accent)_8%,var(--surface))] shadow-[0_0_0_1px_var(--accent)]"
                                 : "border-[var(--border)] bg-[var(--surface)]"
                             }`}
                           >
-                            <div className="flex items-start justify-between gap-3">
-                              <div>
+                            <div className="flex items-start justify-between gap-2">
+                              <div className="min-w-0">
                                 <p className="text-sm font-semibold text-[var(--text)]">{goalLabel[goal]}</p>
-                                <p className="mt-2 font-[family-name:var(--font-display)] text-3xl font-semibold text-[var(--text)]">
+                                <p className="mt-1 font-[family-name:var(--font-display)] text-2xl font-semibold leading-none text-[var(--text)]">
                                   {formatRoundedCalories(target.kcal)}
                                 </p>
-                                <p className="mt-1 text-sm text-[var(--text-muted)]">kcal / päivä</p>
+                                <p className="mt-1 text-xs text-[var(--text-muted)]">kcal / päivä</p>
                               </div>
                               {isActive ? (
-                                <Badge className="border-[var(--accent)] bg-[var(--surface)] text-[var(--accent)]">Nykyinen</Badge>
+                                <Badge className="w-fit border-[var(--accent)] bg-[var(--surface)] text-[var(--accent)]">Nykyinen</Badge>
+                              ) : onSelectGoal ? (
+                                <Button
+                                  type="button"
+                                  variant="secondary"
+                                  className="h-7 shrink-0 px-2.5 text-xs"
+                                  disabled={isUpdatingGoal}
+                                  onClick={async () => {
+                                    setIsUpdatingGoal(true);
+                                    try {
+                                      await onSelectGoal(goal);
+                                    } finally {
+                                      setIsUpdatingGoal(false);
+                                    }
+                                  }}
+                                >
+                                  Aseta
+                                </Button>
                               ) : null}
                             </div>
-                            <div className="mt-3 grid grid-cols-3 gap-2 text-sm">
-                              <div className="rounded-xl border border-[var(--border)] bg-[var(--surface-2)] px-3 py-2">
-                                <p className="text-[11px] font-semibold tracking-[0.04em] text-[var(--text-subtle)]">P</p>
-                                <p className="mt-1 font-medium text-[var(--text)]">{formatMacroValue(target.proteinG)} g</p>
+                            <div className="mt-2 grid grid-cols-3 gap-1.5 text-xs">
+                              <div className="rounded-lg border border-[var(--border)] bg-[var(--surface-2)] px-2 py-1.5">
+                                <p className="font-semibold tracking-[0.04em] text-[var(--text-subtle)]">P</p>
+                                <p className="mt-0.5 font-medium text-[var(--text)]">{formatMacroValue(target.proteinG)} g</p>
                               </div>
-                              <div className="rounded-xl border border-[var(--border)] bg-[var(--surface-2)] px-3 py-2">
-                                <p className="text-[11px] font-semibold tracking-[0.04em] text-[var(--text-subtle)]">H</p>
-                                <p className="mt-1 font-medium text-[var(--text)]">{formatMacroValue(target.carbsG)} g</p>
+                              <div className="rounded-lg border border-[var(--border)] bg-[var(--surface-2)] px-2 py-1.5">
+                                <p className="font-semibold tracking-[0.04em] text-[var(--text-subtle)]">H</p>
+                                <p className="mt-0.5 font-medium text-[var(--text)]">{formatMacroValue(target.carbsG)} g</p>
                               </div>
-                              <div className="rounded-xl border border-[var(--border)] bg-[var(--surface-2)] px-3 py-2">
-                                <p className="text-[11px] font-semibold tracking-[0.04em] text-[var(--text-subtle)]">R</p>
-                                <p className="mt-1 font-medium text-[var(--text)]">{formatMacroValue(target.fatG)} g</p>
+                              <div className="rounded-lg border border-[var(--border)] bg-[var(--surface-2)] px-2 py-1.5">
+                                <p className="font-semibold tracking-[0.04em] text-[var(--text-subtle)]">R</p>
+                                <p className="mt-0.5 font-medium text-[var(--text)]">{formatMacroValue(target.fatG)} g</p>
                               </div>
                             </div>
-                            <p className="mt-3 text-sm leading-6 text-[var(--text-muted)]">
-                              {comparison.guidanceByGoal[goal]}
-                            </p>
                           </div>
                         );
                       })}
