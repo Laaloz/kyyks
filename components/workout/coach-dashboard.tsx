@@ -1204,7 +1204,7 @@ export function CoachDashboard({
   }, [view]);
 
   return (
-    <div className="grid gap-6">
+    <div className="grid w-full min-w-0 gap-6">
       {view === "overview" && currentUser ? (
         <OwnTrainingOverviewCard
           currentUser={currentUser}
@@ -4018,6 +4018,7 @@ function CoachConversationView({
 
   return (
     <ConversationPanel
+      className="w-full max-w-none"
       heading=""
       description=""
       entries={filteredEntries}

@@ -127,6 +127,7 @@ export function DashboardShell() {
   const [isReminderPreviewMode, setIsReminderPreviewMode] = useState(false);
   const [isMobileNavSheetOpen, setIsMobileNavSheetOpen] = useState(false);
   const [isMobileWorkoutDetailOpen, setIsMobileWorkoutDetailOpen] = useState(false);
+  const [isMobileKeyboardOpen, setIsMobileKeyboardOpen] = useState(false);
   const [athleteOverviewFocusTarget, setAthleteOverviewFocusTarget] = useState<AthleteOverviewFocusTarget | null>(null);
   const previousUserIdRef = useRef<string | null>(null);
   const navButtonRefs = useRef<Record<string, HTMLButtonElement | null>>({});
@@ -168,7 +169,7 @@ export function DashboardShell() {
     view === "settings" ? resolveInitialView(currentUser.role, currentUser.settings?.defaultDashboardView) : view;
   const activeTabId = `workspace-tab-${activePrimaryView}`;
   const activePanelId = `workspace-panel-${activePrimaryView}`;
-  const shouldHideMobileBottomNav = isMobileWorkoutDetailOpen;
+  const shouldHideMobileBottomNav = isMobileWorkoutDetailOpen || isMobileKeyboardOpen;
   const measurementReminder = getMeasurementReminderState(state, currentUser);
   const weeklyMeasurementRemindersEnabled = currentUser.settings?.weeklyMeasurementReminders ?? true;
   const shouldShowMeasurementReminder =
@@ -340,6 +341,42 @@ export function DashboardShell() {
       setIsMobileWorkoutDetailOpen(false);
     }
   }, [view]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") {
+      return;
+    }
+
+    const computeKeyboardState = () => {
+      const active = document.activeElement;
+      const focusOnTextInput =
+        active instanceof HTMLInputElement ||
+        active instanceof HTMLTextAreaElement ||
+        (active instanceof HTMLElement && active.isContentEditable);
+      const viewport = window.visualViewport;
+      const viewportReduced = viewport ? viewport.height < window.innerHeight * 0.8 : false;
+      setIsMobileKeyboardOpen(focusOnTextInput || viewportReduced);
+    };
+
+    const handleFocusIn = () => computeKeyboardState();
+    const handleFocusOut = () => window.setTimeout(computeKeyboardState, 60);
+    const handleViewportResize = () => computeKeyboardState();
+
+    window.addEventListener("focusin", handleFocusIn);
+    window.addEventListener("focusout", handleFocusOut);
+    window.visualViewport?.addEventListener("resize", handleViewportResize);
+    window.visualViewport?.addEventListener("scroll", handleViewportResize);
+    window.addEventListener("orientationchange", handleViewportResize);
+    computeKeyboardState();
+
+    return () => {
+      window.removeEventListener("focusin", handleFocusIn);
+      window.removeEventListener("focusout", handleFocusOut);
+      window.visualViewport?.removeEventListener("resize", handleViewportResize);
+      window.visualViewport?.removeEventListener("scroll", handleViewportResize);
+      window.removeEventListener("orientationchange", handleViewportResize);
+    };
+  }, []);
 
   useEffect(() => {
     if (typeof window === "undefined") {
