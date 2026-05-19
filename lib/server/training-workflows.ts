@@ -1495,6 +1495,14 @@ export async function startScheduledWorkoutOnServer({
     return { ok: true as const, scheduledWorkoutId, updatedAt: startResult.updatedAt, payload: payload ?? undefined };
   }
 
+  const cancelOrphanedInProgressWorkout = async () => {
+    if (workout.status !== "in_progress") {
+      return;
+    }
+
+    await autoCancelScheduledWorkout(admin, scheduledWorkoutId);
+  };
+
   let setLogs: Array<Record<string, unknown>> | null = null;
   if (workout.training_plan_id && workout.program_workout_id) {
     const { data: planRow } = await admin
@@ -1504,6 +1512,7 @@ export async function startScheduledWorkoutOnServer({
       .maybeSingle<PlanRow>();
 
     if (!planRow) {
+      await cancelOrphanedInProgressWorkout();
       return { ok: false as const, message: "Treeniä ei löytynyt." };
     }
 
@@ -1511,6 +1520,7 @@ export async function startScheduledWorkoutOnServer({
   }
 
   if (!setLogs) {
+    await cancelOrphanedInProgressWorkout();
     return { ok: false as const, message: "Treeniä ei voitu käynnistää." };
   }
 

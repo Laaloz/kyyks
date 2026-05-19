@@ -637,21 +637,79 @@ describe("shouldPreserveStoredSessionDuringSupabaseBootstrap", () => {
       },
     ];
 
-    const preserved = preserveActiveWorkoutShells(state, {
-      users: state.users,
-      bodyMeasurements: state.bodyMeasurements,
-      assignments: state.assignments,
-      exercises: state.exercises,
-      templates: state.templates,
-      plans: state.plans,
-      scheduledWorkouts: [],
-      sessions: [],
-      notes: state.notes,
-      conversationEntries: state.conversationEntries,
-    });
+    const now = new Date("2026-03-24T08:00:30.000Z").getTime();
+    const preserved = preserveActiveWorkoutShells(
+      state,
+      {
+        users: state.users,
+        bodyMeasurements: state.bodyMeasurements,
+        assignments: state.assignments,
+        exercises: state.exercises,
+        templates: state.templates,
+        plans: state.plans,
+        scheduledWorkouts: [],
+        sessions: [],
+        notes: state.notes,
+        conversationEntries: state.conversationEntries,
+      },
+      new Map([["workout_local_start", new Date("2026-03-24T08:00:00.000Z").getTime()]]),
+      now,
+    );
 
     expect(preserved.scheduledWorkouts.some((workout: { id: string }) => workout.id === "workout_local_start")).toBe(true);
     expect(preserved.sessions.some((session: { id: string }) => session.id === "session_local_start")).toBe(true);
+  });
+
+  it("drops stale optimistic workout shells that are no longer freshly started", () => {
+    const state = cloneDemoState();
+
+    state.scheduledWorkouts = [
+      {
+        id: "workout_stale_local",
+        athleteId: "user_athlete_1",
+        coachId: "user_admin",
+        trainingPlanId: "plan_1",
+        programWorkoutId: "day_1",
+        title: "Penkki",
+        scheduledDate: "2026-03-24T08:00:00.000Z",
+        status: "in_progress",
+        createdAt: "2026-03-24T08:00:00.000Z",
+        updatedAt: "2026-03-24T08:00:00.000Z",
+      },
+    ];
+    state.sessions = [
+      {
+        id: "session_stale_local",
+        scheduledWorkoutId: "workout_stale_local",
+        athleteId: "user_athlete_1",
+        startedAt: "2026-03-24T08:00:00.000Z",
+        updatedAt: "2026-03-24T08:00:00.000Z",
+        pausedDurationSeconds: 0,
+        setLogs: [],
+      },
+    ];
+
+    const now = new Date("2026-03-24T08:05:30.000Z").getTime();
+    const preserved = preserveActiveWorkoutShells(
+      state,
+      {
+        users: state.users,
+        bodyMeasurements: state.bodyMeasurements,
+        assignments: state.assignments,
+        exercises: state.exercises,
+        templates: state.templates,
+        plans: state.plans,
+        scheduledWorkouts: [],
+        sessions: [],
+        notes: state.notes,
+        conversationEntries: state.conversationEntries,
+      },
+      new Map([["workout_stale_local", new Date("2026-03-24T08:00:00.000Z").getTime()]]),
+      now,
+    );
+
+    expect(preserved.scheduledWorkouts.some((workout: { id: string }) => workout.id === "workout_stale_local")).toBe(false);
+    expect(preserved.sessions.some((session: { id: string }) => session.id === "session_stale_local")).toBe(false);
   });
 
   it("preserves a newly persisted active workout when a stale snapshot arrives", () => {

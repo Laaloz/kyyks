@@ -167,16 +167,29 @@ function warnIfOptimisticServerIdLeak(kind: "workout" | "program" | "template", 
   }
 }
 
-export function preserveActiveWorkoutShells(previous: AppState, snapshot: SupabaseVisibleAppStateSnapshot) {
+const OPTIMISTIC_WORKOUT_SHELL_GRACE_WINDOW_MS = 120000;
+
+export function preserveActiveWorkoutShells(
+  previous: AppState,
+  snapshot: SupabaseVisibleAppStateSnapshot,
+  recentlyStartedWorkoutIds?: ReadonlyMap<string, number>,
+  now = Date.now(),
+) {
   const snapshotScheduledWorkouts = snapshot.scheduledWorkouts ?? [];
   const snapshotSessions = snapshot.sessions ?? [];
   const snapshotWorkoutIds = new Set(snapshotScheduledWorkouts.map((workout) => workout.id));
   const snapshotSessionWorkoutIds = new Set(snapshotSessions.map((session) => session.scheduledWorkoutId));
+  const freshOptimisticWorkoutIds = new Set(
+    Array.from(recentlyStartedWorkoutIds?.entries() ?? [])
+      .filter(([, startedAt]) => now - startedAt < OPTIMISTIC_WORKOUT_SHELL_GRACE_WINDOW_MS)
+      .map(([workoutId]) => workoutId),
+  );
 
   const optimisticWorkouts = previous.scheduledWorkouts.filter(
     (workout) =>
       workout.id.startsWith("workout_") &&
       workout.status === "in_progress" &&
+      freshOptimisticWorkoutIds.has(workout.id) &&
       !snapshotWorkoutIds.has(workout.id) &&
       !snapshotScheduledWorkouts.some(
         (candidate) =>
@@ -1646,7 +1659,12 @@ export function reconcileSupabaseVisibleState(
   );
   const snapshotWorkoutIds = new Set((filteredSnapshot.scheduledWorkouts ?? []).map((workout) => workout.id));
   const snapshotSessionWorkoutIds = new Set((filteredSnapshot.sessions ?? []).map((session) => session.scheduledWorkoutId));
-  const optimisticWorkoutShells = preserveActiveWorkoutShells(previous, filteredSnapshot);
+  const optimisticWorkoutShells = preserveActiveWorkoutShells(
+    previous,
+    filteredSnapshot,
+    recentlyStartedWorkoutIds,
+    Date.now(),
+  );
   const optimisticWorkoutIds = new Set(optimisticWorkoutShells.scheduledWorkouts.map((workout) => workout.id));
   const optimisticSessionWorkoutIds = new Set(optimisticWorkoutShells.sessions.map((session) => session.scheduledWorkoutId));
   const recentlyStartedWorkouts = previous.scheduledWorkouts.filter(

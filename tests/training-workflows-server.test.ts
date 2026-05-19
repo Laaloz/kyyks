@@ -1467,4 +1467,82 @@ describe("training workflows server", () => {
       p_program_workout_id: null,
     });
   });
+
+  it("auto-cancels orphaned in-progress workout when the backing program is missing", async () => {
+    const scheduledWorkoutUpdateSpy = vi.fn(() => ({
+      eq: vi.fn(async () => ({ data: null, error: null })),
+    }));
+    const sessionUpdateSpy = vi.fn(() => ({
+      eq: vi.fn(async () => ({ data: null, error: null })),
+    }));
+
+    const admin = {
+      from: vi.fn((table: string) => {
+        const builder = {
+          select: vi.fn(() => builder),
+          order: vi.fn(() => builder),
+          limit: vi.fn(() => builder),
+          eq: vi.fn(() => builder),
+          update: vi.fn((values: Record<string, unknown>) => {
+            if (table === "scheduled_workouts") {
+              return scheduledWorkoutUpdateSpy(values);
+            }
+            if (table === "workout_sessions") {
+              return sessionUpdateSpy(values);
+            }
+            return { eq: vi.fn(async () => ({ data: null, error: null })) };
+          }),
+          maybeSingle: vi.fn(async () => {
+            if (table === "scheduled_workouts") {
+              return {
+                data: {
+                  id: "workout-ghost",
+                  training_plan_id: "plan-removed",
+                  template_id: null,
+                  program_workout_id: "program-workout-1",
+                  athlete_id: "athlete-1",
+                  coach_id: "coach-1",
+                  title: "Penkki",
+                  scheduled_date: "2026-04-02T09:00:00.000Z",
+                  status: "in_progress",
+                  completed_at: null,
+                  created_at: "2026-04-01T08:00:00.000Z",
+                  updated_at: "2026-04-02T09:00:00.000Z",
+                },
+                error: null,
+              };
+            }
+
+            if (table === "workout_sessions") {
+              return { data: null, error: null };
+            }
+
+            if (table === "training_plans") {
+              return { data: null, error: null };
+            }
+
+            return { data: null, error: null };
+          }),
+        };
+        return builder;
+      }),
+    };
+
+    createSupabaseAdminClientMock.mockReturnValue(admin);
+
+    const result = await startScheduledWorkoutOnServer({
+      requester: { id: "athlete-1", role: "athlete" },
+      scheduledWorkoutId: "workout-ghost",
+    });
+
+    expect(result).toEqual({ ok: false, message: "Treeniä ei löytynyt." });
+    expect(sessionUpdateSpy).toHaveBeenCalledTimes(1);
+    expect(scheduledWorkoutUpdateSpy).toHaveBeenCalledTimes(1);
+    expect(scheduledWorkoutUpdateSpy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        status: "cancelled",
+        completed_at: null,
+      }),
+    );
+  });
 });
