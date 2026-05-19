@@ -176,11 +176,14 @@ export function DashboardShell() {
     (measurementReminder.isDue || isReminderPreviewMode);
   const weightReminderDue = measurementReminder.weightDue || isReminderPreviewMode;
   const waistReminderDue = measurementReminder.waistDue || isReminderPreviewMode;
-  const todayLabel = new Intl.DateTimeFormat("fi-FI", {
-    weekday: "long",
+  const now = new Date();
+  const weekdayLabel = new Intl.DateTimeFormat("fi-FI", { weekday: "long" }).format(now);
+  const capitalizedWeekday = weekdayLabel.charAt(0).toUpperCase() + weekdayLabel.slice(1);
+  const dayMonthLabel = new Intl.DateTimeFormat("fi-FI", {
     day: "numeric",
     month: "numeric",
-  }).format(new Date());
+  }).format(now);
+  const todayLabel = `${capitalizedWeekday} ${dayMonthLabel}`;
   const profileImageSrc = currentUser.profileImageUrl
     ? `${currentUser.profileImageUrl}${currentUser.profileImageUrl.includes("?") ? "&" : "?"}v=${encodeURIComponent(currentUser.updatedAt)}`
     : null;
