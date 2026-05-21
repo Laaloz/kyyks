@@ -1,6 +1,6 @@
 "use client";
 
-import { ArrowLeft, BookOpen, ChevronDown, ChevronUp, MoreHorizontal } from "lucide-react";
+import { ArrowLeft, BookOpen, ChevronDown, ChevronUp, Info, MoreHorizontal } from "lucide-react";
 import {
   startTransition,
   useEffect,
@@ -39,6 +39,8 @@ import { resolveBlockingWorkoutStart, useAppState } from "@/providers/app-state-
 import { ProgressRing, workoutStatusBadgeClass, workoutStatusLabel, type WorkspaceView } from "@/components/workout/shared";
 
 type WorkoutSelectionPriority = 0 | 2 | 3;
+type ProgramWorkoutPreview = NonNullable<AppState["plans"][number]["workouts"]>[number];
+type ProgramWorkoutPreviewSet = ProgramWorkoutPreview["exercises"][number]["sets"][number];
 
 type WorkoutOrderMetadata = {
   primaryTimestamp: string;
@@ -92,6 +94,83 @@ function CoachInstructionDialog({
         >
           {instruction}
         </p>
+        <div className="mt-5 flex justify-end">
+          <Button type="button" variant="ghost" onClick={onClose}>
+            Sulje
+          </Button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function WorkoutPreviewDialog({
+  workout,
+  onClose,
+}: {
+  workout: ProgramWorkoutPreview;
+  onClose: () => void;
+}) {
+  useEffect(() => {
+    const handleKeyDown = (event: globalThis.KeyboardEvent) => {
+      if (event.key === "Escape") {
+        onClose();
+      }
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [onClose]);
+
+  const formatRepText = (set: ProgramWorkoutPreviewSet) => {
+    if (set.targetRepsMin && set.targetRepsMax) {
+      return `${set.targetRepsMin}-${set.targetRepsMax} toistoa`;
+    }
+    return `${set.targetReps} toistoa`;
+  };
+
+  return (
+    <div
+      className="fixed inset-0 z-40 flex items-end justify-center bg-[color:color-mix(in_srgb,var(--background)_54%,transparent)] p-4 sm:items-center"
+      role="presentation"
+      onClick={onClose}
+    >
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="workout-preview-title"
+        className="w-full max-w-lg rounded-3xl border border-[var(--border-strong)] bg-[var(--surface)] p-4 shadow-[0_24px_60px_-24px_var(--shadow)]"
+        onClick={(event) => event.stopPropagation()}
+      >
+        <p className="text-[11px] font-semibold tracking-[0.06em] text-[var(--accent)]">Treenin esikatselu</p>
+        <h3
+          id="workout-preview-title"
+          className="mt-2 font-[family-name:var(--font-display)] text-2xl font-semibold text-[var(--text)]"
+        >
+          {workout.name}
+        </h3>
+        <p className="mt-1 text-sm text-[var(--text-subtle)]">
+          {workout.exercises.length} liikettä
+        </p>
+        <div className="mt-4 max-h-[60vh] space-y-2 overflow-y-auto pr-1">
+          {workout.exercises.map((exercise, index) => {
+            const firstSet = exercise.sets[0];
+            const rest = firstSet?.restSeconds ?? workout.defaultRestSeconds;
+            return (
+              <div
+                key={exercise.id}
+                className="rounded-xl border border-[var(--border)] bg-[var(--surface-2)] px-3 py-2.5"
+              >
+                <p className="text-sm font-semibold text-[var(--text)]">
+                  {index + 1}. {exercise.exerciseName}
+                </p>
+                <p className="mt-1 text-xs text-[var(--text-subtle)]">
+                  {exercise.sets.length} sarjaa · {firstSet ? formatRepText(firstSet) : "Toistot puuttuvat"} · lepo {rest}s
+                </p>
+              </div>
+            );
+          })}
+        </div>
         <div className="mt-5 flex justify-end">
           <Button type="button" variant="ghost" onClick={onClose}>
             Sulje
@@ -261,6 +340,7 @@ export function AthleteDashboard({
   const [selectedWorkoutId, setSelectedWorkoutId] = useState<string | null>(null);
   const [workoutMessage, setWorkoutMessage] = useState<string>("");
   const [openWorkoutInstruction, setOpenWorkoutInstruction] = useState<{ exerciseName: string; instruction: string } | null>(null);
+  const [openWorkoutPreview, setOpenWorkoutPreview] = useState<ProgramWorkoutPreview | null>(null);
   const [athleteLogMode, setAthleteLogMode] = useState<AthleteLogMode>("overview");
   const [athleteLogTab, setAthleteLogTab] = useState<AthleteLogTab>("training");
   const [athleteLogReturnTab, setAthleteLogReturnTab] = useState<AthleteLogTab>("training");
@@ -2016,18 +2096,29 @@ export function AthleteDashboard({
                                 <div className="min-w-0">
                                   <p className="text-base font-semibold text-[var(--text)]">{workout.name}</p>
                                   <p className="mt-1 text-xs text-[var(--text-subtle)]">
-                                    {workout.exercises.length} liikettä · {setCount} sarjaa · oletuslepo {workout.defaultRestSeconds}s
+                                    {workout.exercises.length} liikettä · {setCount} sarjaa
                                   </p>
                                 </div>
-                                <button
-                                  type="button"
-                                  aria-label={`${workout.name} ohje`}
-                                  title="Ohje"
-                                  className="inline-flex size-8.5 shrink-0 items-center justify-center rounded-full border border-[color-mix(in_srgb,var(--accent)_22%,var(--border))] bg-[color-mix(in_srgb,var(--accent)_7%,var(--surface))] text-[var(--accent)] shadow-[0_4px_12px_-14px_var(--accent)] transition hover:border-[color-mix(in_srgb,var(--accent)_36%,var(--border))] hover:bg-[color-mix(in_srgb,var(--accent)_10%,var(--surface))] hover:opacity-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--background)]"
-                                  onClick={() => setOpenWorkoutInstruction({ exerciseName: workout.name, instruction: workoutGuidance })}
-                                >
-                                  <BookOpen className="size-3.5" aria-hidden="true" />
-                                </button>
+                                <div className="flex shrink-0 items-center gap-2">
+                                  <button
+                                    type="button"
+                                    aria-label={`${workout.name} esikatselu`}
+                                    title="Esikatselu"
+                                    className="inline-flex size-8.5 items-center justify-center rounded-full border border-[color-mix(in_srgb,var(--accent)_22%,var(--border))] bg-[color-mix(in_srgb,var(--accent)_7%,var(--surface))] text-[var(--accent)] shadow-[0_4px_12px_-14px_var(--accent)] transition hover:border-[color-mix(in_srgb,var(--accent)_36%,var(--border))] hover:bg-[color-mix(in_srgb,var(--accent)_10%,var(--surface))] hover:opacity-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--background)]"
+                                    onClick={() => setOpenWorkoutPreview(workout)}
+                                  >
+                                    <Info className="size-3.5" aria-hidden="true" />
+                                  </button>
+                                  <button
+                                    type="button"
+                                    aria-label={`${workout.name} ohje`}
+                                    title="Ohje"
+                                    className="inline-flex size-8.5 items-center justify-center rounded-full border border-[color-mix(in_srgb,var(--accent)_22%,var(--border))] bg-[color-mix(in_srgb,var(--accent)_7%,var(--surface))] text-[var(--accent)] shadow-[0_4px_12px_-14px_var(--accent)] transition hover:border-[color-mix(in_srgb,var(--accent)_36%,var(--border))] hover:bg-[color-mix(in_srgb,var(--accent)_10%,var(--surface))] hover:opacity-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--background)]"
+                                    onClick={() => setOpenWorkoutInstruction({ exerciseName: workout.name, instruction: workoutGuidance })}
+                                  >
+                                    <BookOpen className="size-3.5" aria-hidden="true" />
+                                  </button>
+                                </div>
                               </div>
                               <p className="mt-3 text-sm text-[var(--text-muted)]">{workoutSummary}</p>
                               <div className="mt-3 flex flex-wrap gap-2">
@@ -2498,6 +2589,12 @@ export function AthleteDashboard({
           exerciseName={openWorkoutInstruction.exerciseName}
           instruction={openWorkoutInstruction.instruction}
           onClose={() => setOpenWorkoutInstruction(null)}
+        />
+      ) : null}
+      {openWorkoutPreview ? (
+        <WorkoutPreviewDialog
+          workout={openWorkoutPreview}
+          onClose={() => setOpenWorkoutPreview(null)}
         />
       ) : null}
     </div>
