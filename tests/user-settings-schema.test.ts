@@ -16,6 +16,20 @@ describe("userSettingsSchema", () => {
 
     expect(parsed.success).toBe(true);
   });
+
+  it("accepts the Camel theme mode", () => {
+    const parsed = userSettingsSchema.safeParse({
+      fullName: "Camel Testaaja",
+      profileImageUrl: "https://example.com/avatar.jpg",
+      defaultDashboardView: "overview",
+      emailNotifications: true,
+      weeklyMeasurementReminders: true,
+      themeMode: "camel",
+      loadIncrementKg: 2.5,
+    });
+
+    expect(parsed.success).toBe(true);
+  });
 });
 
 describe("bodyMeasurementSchema", () => {

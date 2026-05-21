@@ -35,6 +35,7 @@ const themeModeLabel: Record<ThemeMode, string> = {
   light: "Vaalea",
   dark: "Tumma",
   mallu: "Mallu",
+  camel: "Camel",
 };
 
 const loadIncrementLabel: Record<1 | 2.5 | 5, string> = {

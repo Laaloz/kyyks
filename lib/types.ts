@@ -21,7 +21,7 @@ export type DashboardHomeView =
   | "athletes"
   | "users";
 export type MuscleGroupKey = "shoulders" | "arms" | "chest" | "abs" | "back" | "legs" | "other";
-export type ThemeMode = "light" | "dark" | "mallu";
+export type ThemeMode = "light" | "dark" | "mallu" | "camel";
 export type LoadIncrement = 1 | 2.5 | 5;
 export type ProfileSex = "female" | "male" | "other";
 export type NutritionGoal = "maintain" | "gain" | "lose";

@@ -14,9 +14,10 @@ const themeInitScript = `
     light: "#f3f7fc",
     dark: "#08111f",
     mallu: "#fff1ef",
+    camel: "#FFFFE2",
   };
   const applyTheme = (themeMode) => {
-    const theme = themeMode === "dark" || themeMode === "mallu" ? themeMode : "light";
+    const theme = themeMode === "dark" || themeMode === "mallu" || themeMode === "camel" ? themeMode : "light";
     const colorScheme = theme === "dark" ? "dark" : "light";
     document.documentElement.dataset.theme = theme;
     document.documentElement.style.colorScheme = colorScheme;

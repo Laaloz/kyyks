@@ -6,7 +6,7 @@ create type public.template_status as enum ('draft', 'published');
 create type public.scheduled_workout_status as enum ('in_progress', 'completed', 'cancelled');
 create type public.invite_status as enum ('pending', 'accepted');
 create type public.exercise_scope as enum ('global', 'coach_custom');
-create type public.theme_mode as enum ('light', 'dark', 'mallu');
+create type public.theme_mode as enum ('light', 'dark', 'mallu', 'camel');
 create type public.nutrition_goal as enum ('maintain', 'gain', 'lose');
 create type public.nutrition_activity_level as enum ('low', 'moderate', 'high');
 create type public.nutrition_owner_role as enum ('admin', 'coach');

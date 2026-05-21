@@ -9,9 +9,9 @@ const variantStyles: Record<Variant, string> = {
   primary:
     "border border-[var(--accent-strong)] bg-[var(--accent-strong)] text-[var(--accent-contrast)] shadow-[0_1px_0_0_var(--accent-strong),0_12px_24px_-16px_var(--accent)] hover:opacity-95 hover:brightness-105",
   secondary:
-    "border border-[var(--border-strong)] bg-[var(--surface)] text-[var(--text)] shadow-[0_1px_0_0_var(--shadow-soft),0_8px_20px_-16px_var(--shadow)] hover:bg-[var(--surface-2)] hover:opacity-95",
+    "border border-[var(--button-secondary-border)] bg-[var(--button-secondary-bg)] text-[var(--button-secondary-text)] shadow-[0_1px_0_0_var(--shadow-soft),0_8px_20px_-16px_var(--shadow)] hover:bg-[var(--button-secondary-hover-bg)] hover:opacity-95",
   ghost:
-    "border border-[var(--border)] bg-[var(--surface)] text-[var(--text-muted)] hover:border-[var(--border-strong)] hover:bg-[var(--surface-2)] hover:text-[var(--text)]",
+    "border border-[var(--button-ghost-border)] bg-[var(--button-ghost-bg)] text-[var(--button-ghost-text)] hover:border-[var(--button-ghost-hover-border)] hover:bg-[var(--button-ghost-hover-bg)] hover:text-[var(--button-ghost-hover-text)]",
   danger: "border border-[#9c2217] bg-[var(--danger)] text-white shadow-[0_1px_0_0_#861e14,0_10px_22px_-14px_#b42318] hover:opacity-95 hover:brightness-105",
 };
 
@@ -27,7 +27,7 @@ const loadingStyles: Record<Variant, string> = {
 };
 
 const disabledStyles =
-  "cursor-not-allowed opacity-45 shadow-none hover:opacity-45 hover:brightness-100 hover:bg-[var(--surface-3)]";
+  "cursor-not-allowed border-[var(--button-disabled-border)] bg-[var(--button-disabled-bg)] text-[var(--button-disabled-text)] opacity-100 shadow-none hover:border-[var(--button-disabled-border)] hover:bg-[var(--button-disabled-bg)] hover:text-[var(--button-disabled-text)] hover:opacity-100 hover:brightness-100";
 
 export interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
   variant?: Variant;

@@ -67,7 +67,7 @@ type ProfileRow = {
   default_dashboard_view: UserProfile["settings"] extends infer _ ? string | null : string | null;
   email_notifications: boolean;
   weekly_measurement_reminders: boolean;
-  theme_mode: "light" | "dark" | "mallu";
+  theme_mode: "light" | "dark" | "mallu" | "camel";
   load_increment_kg: 1 | 2.5 | 5 | null;
   age?: number | string | null;
   sex?: "female" | "male" | "other" | null;

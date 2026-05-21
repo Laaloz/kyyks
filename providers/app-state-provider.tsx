@@ -884,7 +884,7 @@ type UserSettingsInput = {
   defaultDashboardView: DashboardHomeView;
   emailNotifications: boolean;
   weeklyMeasurementReminders: boolean;
-  themeMode: "light" | "dark" | "mallu";
+  themeMode: "light" | "dark" | "mallu" | "camel";
   loadIncrementKg: 1 | 2.5 | 5;
   age?: number | null;
   sex?: "female" | "male" | "other" | null;
@@ -1149,7 +1149,7 @@ type SupabaseProfileRecord = {
   default_dashboard_view: DashboardHomeView | null;
   email_notifications: boolean;
   weekly_measurement_reminders: boolean;
-  theme_mode: "light" | "dark" | "mallu";
+  theme_mode: "light" | "dark" | "mallu" | "camel";
   load_increment_kg: 1 | 2.5 | 5 | null;
   age?: number | null;
   sex?: "female" | "male" | "other" | null;
@@ -3481,14 +3481,19 @@ function findResolvedUserIdInSnapshot(
     }
 
     const themeMode =
-      currentUser?.settings?.themeMode === "dark" || currentUser?.settings?.themeMode === "mallu"
+      currentUser?.settings?.themeMode === "dark" ||
+      currentUser?.settings?.themeMode === "mallu" ||
+      currentUser?.settings?.themeMode === "camel"
         ? currentUser.settings.themeMode
         : "light";
     document.documentElement.dataset.theme = themeMode;
     document.documentElement.style.colorScheme = themeMode === "dark" ? "dark" : "light";
     document
       .querySelector('meta[name="theme-color"]')
-      ?.setAttribute("content", themeMode === "dark" ? "#08111f" : themeMode === "mallu" ? "#fff1ef" : "#f3f7fc");
+      ?.setAttribute(
+        "content",
+        themeMode === "dark" ? "#08111f" : themeMode === "mallu" ? "#fff1ef" : themeMode === "camel" ? "#FFFFE2" : "#f3f7fc",
+      );
   }, [currentUser?.settings?.themeMode, isHydrated]);
 
   const value = useMemo<AppStateContextValue>(() => {
@@ -3787,8 +3792,19 @@ function findResolvedUserIdInSnapshot(
 
           if (!response.ok) {
             const payload = (await response.json().catch(() => null)) as { message?: string } | null;
+            const rawMessage = payload?.message ?? "Asetusten tallennus epäonnistui.";
+            const camelThemeLikelyMissing =
+              input.themeMode === "camel" &&
+              (rawMessage.toLowerCase().includes("theme_mode") ||
+                rawMessage.toLowerCase().includes("invalid input value for enum") ||
+                rawMessage.toLowerCase().includes("camel"));
             await refreshSupabaseVisibleState();
-            return { ok: false, message: payload?.message ?? "Asetusten tallennus epäonnistui." };
+            return {
+              ok: false,
+              message: camelThemeLikelyMissing
+                ? "Camel-teema ei ole vielä käytössä tässä tietokannassa. Aja migraatiot oikeaan Supabase-ympäristöön ja yritä uudelleen."
+                : rawMessage,
+            };
           }
 
           applySettingsUpdate();

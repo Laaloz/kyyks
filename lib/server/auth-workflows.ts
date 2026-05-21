@@ -72,7 +72,7 @@ function mapStoredProfileRecord(profile: {
   default_dashboard_view: string | null;
   email_notifications: boolean;
   weekly_measurement_reminders: boolean;
-  theme_mode: "light" | "dark" | "mallu";
+  theme_mode: "light" | "dark" | "mallu" | "camel";
   load_increment_kg: 1 | 2.5 | 5 | null;
   age?: number | null;
   sex?: "female" | "male" | "other" | null;

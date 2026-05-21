@@ -1337,7 +1337,7 @@ export function AthleteDashboard({
                   {highlightedWorkout ? (
                     <Button
                       type="button"
-                      variant="secondary"
+                      variant="primary"
                       className="w-full"
                       loading={isTransitionLoading("overview-highlight")}
                       loadingText="Avataan treeniä..."
@@ -1350,7 +1350,7 @@ export function AthleteDashboard({
                   ) : (
                     <Button
                       type="button"
-                      variant="ghost"
+                      variant="primary"
                       className="w-full"
                       disabled={!athletePrograms.length}
                       onClick={() => {
@@ -1994,7 +1994,7 @@ export function AthleteDashboard({
                   <div className="mt-3">
                     <Button
                       type="button"
-                      variant="secondary"
+                      variant="primary"
                       className="w-full sm:w-auto"
                       disabled={isTransitionLoading(`blocking-${blockingWorkout.id}`)}
                       onClick={() => {
@@ -2156,7 +2156,7 @@ export function AthleteDashboard({
                                 ) : (
                                   <Button
                                     type="button"
-                                    variant="secondary"
+                                    variant="primary"
                                     className="w-full justify-center sm:w-auto"
                                     disabled={
                                       isLockedByAnotherWorkout ||

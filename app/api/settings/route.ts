@@ -11,7 +11,7 @@ const settingsSchema = z.object({
   defaultDashboardView: z.enum(["overview", "nutrition", "templates", "invites", "athlete-log", "conversation", "athletes", "users"]),
   emailNotifications: z.boolean(),
   weeklyMeasurementReminders: z.boolean(),
-  themeMode: z.enum(["light", "dark", "mallu"]),
+  themeMode: z.enum(["light", "dark", "mallu", "camel"]),
   loadIncrementKg: z.union([z.literal(1), z.literal(2.5), z.literal(5)]),
   age: z.number().int().min(13).max(100).nullable().optional(),
   sex: z.enum(["female", "male", "other"]).nullable().optional(),
