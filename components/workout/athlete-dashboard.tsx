@@ -2979,8 +2979,8 @@ export function AthleteDashboard({
                           }
                         >
                           {hasActivity ? (
-                            <div className="flex h-full w-full flex-col">
-                              <div className="flex min-h-0 flex-1 items-center justify-center gap-1 rounded-full bg-[color:color-mix(in_srgb,var(--accent)_16%,var(--surface))] text-[var(--accent-strong)]">
+                            <div className="flex h-full w-full flex-col aspect-square items-center justify-center">
+                              <div className="flex min-h-0 w-full h-full flex-1 items-center justify-center gap-1 rounded-full bg-[color-mix(in_srgb,var(--accent)_16%,var(--surface))] text-[var(--accent-strong)]">
                                 {visibleIconKeys.map((iconKey) => (
                                   <span key={iconKey} className="grid size-8 place-items-center">
                                     {renderCalendarActivityIcon(iconKey)}
@@ -2989,7 +2989,7 @@ export function AthleteDashboard({
                               </div>
                             </div>
                           ) : (
-                            <div className="flex h-full w-full items-center justify-center">
+                            <div className="flex h-full w-full aspect-square items-center justify-center">
                               <span className="text-xs text-[var(--text-subtle)]">{cell.date.getDate()}</span>
                             </div>
                           )}
