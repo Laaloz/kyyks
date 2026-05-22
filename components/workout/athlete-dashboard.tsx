@@ -325,11 +325,11 @@ function ExtraActivityDialog({
               </div>
             </div>
           </div>
-          <div className="min-w-0">
+          <div className="min-w-0 overflow-hidden">
             <Label htmlFor="extra-activity-date-modal" className="text-xs">Päivä</Label>
             <Input
               id="extra-activity-date-modal"
-              className="mt-1 w-full min-w-0 text-sm"
+              className="mt-1 block w-full min-w-0 max-w-full overflow-hidden text-sm"
               type="date"
               value={occurredDate}
               onChange={(event) => onChangeOccurredDate(event.target.value)}
