@@ -274,11 +274,11 @@ function ExtraActivityDialog({
           Lisää extra-treeni historiaan
         </h3>
         <div className="mt-4 grid gap-2 sm:grid-cols-3">
-          <div>
+          <div className="min-w-0">
             <Label htmlFor="extra-activity-type-modal" className="text-xs">Laji</Label>
             <Select
               id="extra-activity-type-modal"
-              className="mt-1"
+              className="mt-1 w-full min-w-0"
               value={activityType}
               onChange={(event) => onChangeActivityType(event.target.value as ExtraActivityType)}
             >
@@ -287,14 +287,14 @@ function ExtraActivityDialog({
               ))}
             </Select>
           </div>
-          <div>
+          <div className="min-w-0">
             <Label className="text-xs">Kesto</Label>
             <div className="mt-1 grid grid-cols-2 gap-2">
-              <div>
+              <div className="min-w-0">
                 <Label htmlFor="extra-activity-duration-hours-modal" className="text-[11px] text-[var(--text-subtle)]">Tunnit</Label>
                 <Input
                   id="extra-activity-duration-hours-modal"
-                  className="mt-1"
+                  className="mt-1 w-full min-w-0"
                   type="number"
                   min={0}
                   step={1}
@@ -306,11 +306,11 @@ function ExtraActivityDialog({
                   }}
                 />
               </div>
-              <div>
+              <div className="min-w-0">
                 <Label htmlFor="extra-activity-duration-minutes-modal" className="text-[11px] text-[var(--text-subtle)]">Minuutit</Label>
                 <Input
                   id="extra-activity-duration-minutes-modal"
-                  className="mt-1"
+                  className="mt-1 w-full min-w-0"
                   type="number"
                   min={0}
                   max={59}
@@ -325,11 +325,11 @@ function ExtraActivityDialog({
               </div>
             </div>
           </div>
-          <div>
+          <div className="min-w-0">
             <Label htmlFor="extra-activity-date-modal" className="text-xs">Päivä</Label>
             <Input
               id="extra-activity-date-modal"
-              className="mt-1"
+              className="mt-1 w-full min-w-0 text-sm"
               type="date"
               value={occurredDate}
               onChange={(event) => onChangeOccurredDate(event.target.value)}
@@ -1587,6 +1587,7 @@ export function AthleteDashboard({
       return { key, date, activityByType, activityCount };
     });
   }, [historyActivityByDay]);
+  const todayCalendarKey = useMemo(() => toLocalDateKey(new Date()), []);
   const latestActivityDayKey = useMemo(() => {
     const activeKeys = Array.from(historyActivityByDay.entries())
       .filter(([, value]) => Object.values(value).reduce((sum, count) => sum + count, 0) > 0)
@@ -1888,13 +1889,15 @@ export function AthleteDashboard({
                   const firstIcon = iconKeys[0];
                   const extraTypeCount = Math.max(0, iconKeys.length - 1);
                   const hasActivity = cell.activityCount > 0;
+                  const isToday = cell.key === todayCalendarKey;
 
                   return (
                     <button
                       type="button"
                       key={`overview-week-cell-${cell.key}`}
                       className={cn(
-                        "relative aspect-square min-w-0 rounded-full border border-[var(--border)] bg-[var(--surface)] p-0",
+                        "relative aspect-square w-full min-w-0 appearance-none rounded-full border border-[var(--border)] bg-[var(--surface)] p-0",
+                        isToday ? "border-[var(--accent)]/60" : null,
                         hasActivity ? "cursor-pointer hover:border-[var(--accent)]" : "cursor-pointer hover:border-[var(--border-strong)]",
                       )}
                       aria-label={`${formatCalendarDate(cell.date)} avaa historian kalenteri`}
@@ -1921,6 +1924,9 @@ export function AthleteDashboard({
                         <span className="absolute -bottom-1 -right-1 grid min-h-4 min-w-4 place-items-center rounded-full border border-[color-mix(in_srgb,var(--accent)_35%,var(--border))] bg-[var(--surface)] px-1 text-[9px] font-semibold leading-4 text-[var(--accent)]">
                           +{extraTypeCount}
                         </span>
+                      ) : null}
+                      {isToday ? (
+                        <span className="absolute -top-0.5 left-1/2 h-1.5 w-1.5 -translate-x-1/2 rounded-full bg-[var(--accent)]" aria-hidden="true" />
                       ) : null}
                     </button>
                   );
@@ -2935,6 +2941,7 @@ export function AthleteDashboard({
                     {historyCalendarCells.map((cell) => {
                       const hasActivity = cell.activityCount > 0;
                       const isSelected = selectedCalendarDayKey === cell.key;
+                      const isToday = cell.key === todayCalendarKey;
                       const iconKeys = Object.keys(cell.activityByType).filter(
                         (key) => (cell.activityByType[key] ?? 0) > 0,
                       );
@@ -2947,10 +2954,11 @@ export function AthleteDashboard({
                           key={cell.key}
                           disabled={!hasActivity}
                           className={cn(
-                            "relative aspect-square min-w-0 overflow-visible rounded-full border p-0 text-left transition",
+                            "relative aspect-square w-full min-w-0 appearance-none overflow-visible rounded-full border p-0 text-left transition",
                             cell.isCurrentMonth
                               ? "border-[var(--border)] bg-[var(--surface)]"
                               : "border-[var(--border)] bg-[color:color-mix(in_srgb,var(--surface-2)_86%,var(--surface))] opacity-70",
+                            isToday ? "border-[var(--accent)]/60" : null,
                             hasActivity ? "cursor-pointer hover:border-[var(--accent)]" : "cursor-default",
                             isSelected
                               ? "border-[var(--accent)] bg-[color:color-mix(in_srgb,var(--accent)_10%,var(--surface))] shadow-[0_0_0_1px_var(--accent)]"
@@ -2989,6 +2997,9 @@ export function AthleteDashboard({
                             <span className="absolute -bottom-1 -right-1 grid min-h-4 min-w-4 place-items-center rounded-full border border-[color-mix(in_srgb,var(--accent)_35%,var(--border))] bg-[var(--surface)] px-1 text-[9px] font-semibold leading-4 text-[var(--accent)] shadow-[0_2px_8px_-6px_var(--shadow)]">
                               +{extraTypeCount}
                             </span>
+                          ) : null}
+                          {isToday ? (
+                            <span className="absolute -top-0.5 left-1/2 h-1.5 w-1.5 -translate-x-1/2 rounded-full bg-[var(--accent)]" aria-hidden="true" />
                           ) : null}
                         </button>
                       );
