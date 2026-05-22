@@ -326,10 +326,10 @@ function ExtraActivityDialog({
           </div>
           <div className="min-w-0">
             <Label htmlFor="extra-activity-date-modal" className="text-xs">Päivä</Label>
-            <div className="relative mt-1 min-w-0">
-              <Input
+            <div className="mt-1 min-w-0 overflow-hidden rounded-xl border border-[var(--border)] bg-[var(--surface)] transition focus-within:border-[var(--accent)] focus-within:shadow-[inset_0_0_0_1px_var(--accent)]">
+              <input
                 id="extra-activity-date-modal"
-                className="block w-full min-w-0 max-w-full text-sm [appearance:none] [-webkit-appearance:none] [box-sizing:border-box]"
+                className="block h-12 w-full min-w-0 max-w-full border-0 bg-transparent px-4 py-3 text-sm text-[var(--text)] outline-none ring-0 focus:outline-none focus:ring-0"
                 type="date"
                 inputMode="none"
                 value={occurredDate}
@@ -1959,8 +1959,8 @@ export function AthleteDashboard({
                       type="button"
                       key={`overview-week-cell-${cell.key}`}
                       className={cn(
-                        "relative aspect-square w-full max-w-11 min-h-0 min-w-0 justify-self-center appearance-none rounded-full border border-[var(--border)] bg-[var(--surface)] p-0",
-                        isToday ? "border-[var(--accent)] bg-[color:color-mix(in_srgb,var(--accent)_14%,var(--surface))]" : null,
+                        "relative z-0 aspect-square w-full max-w-11 min-h-0 min-w-0 justify-self-center appearance-none overflow-visible rounded-full border border-[var(--border)] bg-[var(--surface)] p-[1px]",
+                        isToday ? "border-[var(--accent)] bg-[var(--accent)]" : null,
                         hasActivity ? "cursor-pointer hover:border-[var(--accent)]" : "cursor-pointer hover:border-[var(--border-strong)]",
                       )}
                       aria-label={`${formatCalendarDate(cell.date)} avaa historian kalenteri`}
@@ -1987,7 +1987,9 @@ export function AthleteDashboard({
                         </div>
                       ) : (
                         <div className="flex h-full w-full items-center justify-center">
-                          <span className="text-xs text-[var(--text-subtle)]">{cell.date.getDate()}</span>
+                          <span className={cn("text-xs", isToday ? "text-[var(--accent-contrast)]" : "text-[var(--text-subtle)]")}>
+                            {cell.date.getDate()}
+                          </span>
                         </div>
                       )}
                       {extraTypeCount > 0 ? (
