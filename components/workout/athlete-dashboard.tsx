@@ -3056,16 +3056,16 @@ export function AthleteDashboard({
                           key={cell.key}
                           disabled={!hasActivity}
                           className={cn(
-                            "relative aspect-square w-full max-w-11 min-h-0 min-w-0 justify-self-center appearance-none overflow-visible rounded-full border p-0 text-left transition",
+                            "relative z-0 aspect-square w-full max-w-11 min-h-0 min-w-0 justify-self-center appearance-none overflow-visible rounded-full border p-0 text-left transition",
                             cell.isCurrentMonth
                               ? "border-[var(--border)] bg-[var(--surface)]"
                               : "border-[var(--border)] bg-[color:color-mix(in_srgb,var(--surface-2)_86%,var(--surface))] opacity-70",
-                            isToday ? "border-[var(--accent)] bg-[color:color-mix(in_srgb,var(--accent)_14%,var(--surface))]" : null,
+                            isToday ? "border-[var(--accent)] bg-[var(--accent)]" : null,
                             hasActivity ? "cursor-pointer hover:border-[var(--accent)]" : "cursor-default",
                             isSelected && isToday
-                              ? "border-[var(--accent-strong)] bg-[color:color-mix(in_srgb,var(--accent)_10%,var(--surface))] ring-2 ring-inset ring-[var(--accent-strong)]"
+                              ? "z-10 border-[var(--accent-contrast)] bg-[var(--accent)] shadow-[0_0_0_2px_var(--accent-contrast)]"
                               : isSelected
-                                ? "border-[var(--accent)] bg-[color:color-mix(in_srgb,var(--accent)_10%,var(--surface))] ring-1 ring-inset ring-[var(--accent)]"
+                                ? "z-10 border-[var(--accent)] bg-[color:color-mix(in_srgb,var(--accent)_10%,var(--surface))] shadow-[0_0_0_1.5px_var(--accent)]"
                                 : null,
                           )}
                           onClick={() => {
@@ -3086,10 +3086,10 @@ export function AthleteDashboard({
                             <div className="flex h-full w-full flex-col items-center justify-center">
                               <div
                                 className={cn(
-                                  "flex min-h-0 w-full h-full flex-1 items-center justify-center gap-1 rounded-full text-[var(--accent-strong)]",
-                                  isToday && !isSelected
+                                  "flex min-h-0 w-full h-full flex-1 items-center justify-center gap-1 rounded-full",
+                                  isToday
                                     ? "bg-[var(--accent)] text-[var(--accent-contrast)]"
-                                    : "bg-[color:color-mix(in_srgb,var(--accent)_16%,var(--surface))]",
+                                    : "bg-[color:color-mix(in_srgb,var(--accent)_16%,var(--surface))] text-[var(--accent-strong)]",
                                 )}
                               >
                                 {visibleIconKeys.map((iconKey) => (
@@ -3101,7 +3101,9 @@ export function AthleteDashboard({
                             </div>
                           ) : (
                             <div className="flex h-full w-full items-center justify-center">
-                              <span className="text-xs text-[var(--text-subtle)]">{cell.date.getDate()}</span>
+                              <span className={cn("text-xs", isToday ? "text-[var(--accent-contrast)]" : "text-[var(--text-subtle)]")}>
+                                {cell.date.getDate()}
+                              </span>
                             </div>
                           )}
                           {extraTypeCount > 0 ? (
