@@ -4,6 +4,7 @@ import {
   ArrowLeft,
   Bike,
   BookOpen,
+  CalendarDays,
   CircleDot,
   ChevronDown,
   ChevronLeft,
@@ -244,6 +245,29 @@ function ExtraActivityDialog({
   const totalMinutes = Math.max(0, Number(durationMinutes) || 0);
   const durationHours = Math.floor(totalMinutes / 60);
   const durationRemainderMinutes = totalMinutes % 60;
+  const dateInputRef = useRef<HTMLInputElement | null>(null);
+  const openDatePicker = () => {
+    const input = dateInputRef.current as (HTMLInputElement & { showPicker?: () => void }) | null;
+    if (!input) {
+      return;
+    }
+    if (typeof input.showPicker === "function") {
+      try {
+        input.showPicker();
+      } catch {
+        input.focus();
+      }
+      return;
+    }
+    input.focus();
+  };
+  const formattedOccurredDate = (() => {
+    const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(occurredDate);
+    if (!match) {
+      return occurredDate;
+    }
+    return `${match[3]}.${match[2]}.${match[1]}`;
+  })();
 
   useEffect(() => {
     const handleKeyDown = (event: globalThis.KeyboardEvent) => {
@@ -266,7 +290,7 @@ function ExtraActivityDialog({
         role="dialog"
         aria-modal="true"
         aria-labelledby="extra-activity-title"
-        className="w-full max-w-lg rounded-3xl border border-[var(--border-strong)] bg-[var(--surface)] p-4 shadow-[0_24px_60px_-24px_var(--shadow)]"
+        className="w-full max-w-lg overflow-x-hidden rounded-3xl border border-[var(--border-strong)] bg-[var(--surface)] p-4 shadow-[0_24px_60px_-24px_var(--shadow)]"
         onClick={(event) => event.stopPropagation()}
       >
         <p className="text-[11px] font-semibold tracking-[0.06em] text-[var(--accent)]">Extra-treeni</p>
@@ -325,11 +349,27 @@ function ExtraActivityDialog({
               </div>
             </div>
           </div>
-          <div className="min-w-0 overflow-hidden">
+          <div className="min-w-0">
             <Label htmlFor="extra-activity-date-modal" className="text-xs">Päivä</Label>
-            <Input
+            <button
+              type="button"
+              className="mt-1 flex w-full min-w-0 items-center justify-between rounded-xl border border-[var(--border)] bg-[var(--surface)] px-4 py-3 text-left text-[var(--text)] transition hover:border-[var(--accent)] focus:outline-none focus-visible:border-[var(--accent)] focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-[var(--accent)] focus-visible:ring-offset-0"
+              onClick={openDatePicker}
+              onKeyDown={(event) => {
+                if (event.key === "Enter" || event.key === " ") {
+                  event.preventDefault();
+                  openDatePicker();
+                }
+              }}
+              aria-label="Avaa päivämäärävalitsin"
+            >
+              <span className="text-sm">{formattedOccurredDate}</span>
+              <CalendarDays className="size-5 text-[var(--text-subtle)]" aria-hidden="true" />
+            </button>
+            <input
+              ref={dateInputRef}
               id="extra-activity-date-modal"
-              className="mt-1 block w-full min-w-0 max-w-full overflow-hidden text-sm"
+              className="sr-only"
               type="date"
               value={occurredDate}
               onChange={(event) => onChangeOccurredDate(event.target.value)}
