@@ -1,6 +1,32 @@
 "use client";
 
-import { ArrowLeft, BookOpen, ChevronDown, ChevronUp, Info, MoreHorizontal } from "lucide-react";
+import {
+  ArrowLeft,
+  Bike,
+  BookOpen,
+  CircleDot,
+  ChevronDown,
+  ChevronLeft,
+  ChevronRight,
+  ChevronUp,
+  Dumbbell,
+  Flame,
+  Footprints,
+  HeartPulse,
+  Info,
+  Mountain,
+  Music,
+  MoreHorizontal,
+  PersonStanding,
+  Snowflake,
+  Swords,
+  Trash2,
+  Waves,
+  Activity,
+  X,
+  Clock3,
+  Pencil,
+} from "lucide-react";
 import {
   startTransition,
   useEffect,
@@ -32,7 +58,8 @@ import { canTrackOwnTraining } from "@/lib/role-access";
 import { buildScheduledWorkoutExerciseOrder } from "@/lib/workout-exercise-order";
 import { buildWorkoutHistoryTitleMap, normalizeWorkoutHistoryTitle } from "@/lib/workout-history-title";
 import { cn } from "@/lib/utils";
-import type { AppState, ConversationEntry, WorkoutSession } from "@/lib/types";
+import { estimateExtraActivityKcal, extraActivityCatalog } from "@/lib/extra-activities";
+import type { AppState, ConversationEntry, ExtraActivityType, WorkoutSession } from "@/lib/types";
 import { formatDate, formatDateWithWeekday, formatRelativeDate } from "@/lib/utils";
 import { resolveBlockingWorkoutStart, useAppState } from "@/providers/app-state-provider";
 
@@ -181,6 +208,310 @@ function WorkoutPreviewDialog({
   );
 }
 
+function ExtraActivityDialog({
+  activityType,
+  durationMinutes,
+  occurredDate,
+  notes,
+  estimatedKcal,
+  isManualKcalEnabled,
+  manualKcal,
+  onChangeActivityType,
+  onChangeDurationMinutes,
+  onChangeOccurredDate,
+  onChangeNotes,
+  onToggleManualKcal,
+  onChangeManualKcal,
+  onClose,
+  onSave,
+}: {
+  activityType: ExtraActivityType;
+  durationMinutes: string;
+  occurredDate: string;
+  notes: string;
+  estimatedKcal: number;
+  isManualKcalEnabled: boolean;
+  manualKcal: string;
+  onChangeActivityType: (value: ExtraActivityType) => void;
+  onChangeDurationMinutes: (value: string) => void;
+  onChangeOccurredDate: (value: string) => void;
+  onChangeNotes: (value: string) => void;
+  onToggleManualKcal: (value: boolean) => void;
+  onChangeManualKcal: (value: string) => void;
+  onClose: () => void;
+  onSave: () => void;
+}) {
+  const totalMinutes = Math.max(0, Number(durationMinutes) || 0);
+  const durationHours = Math.floor(totalMinutes / 60);
+  const durationRemainderMinutes = totalMinutes % 60;
+
+  useEffect(() => {
+    const handleKeyDown = (event: globalThis.KeyboardEvent) => {
+      if (event.key === "Escape") {
+        onClose();
+      }
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [onClose]);
+
+  return (
+    <div
+      className="fixed inset-0 z-40 flex items-end justify-center bg-[color:color-mix(in_srgb,var(--background)_54%,transparent)] p-4 sm:items-center"
+      role="presentation"
+      onClick={onClose}
+    >
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="extra-activity-title"
+        className="w-full max-w-lg rounded-3xl border border-[var(--border-strong)] bg-[var(--surface)] p-4 shadow-[0_24px_60px_-24px_var(--shadow)]"
+        onClick={(event) => event.stopPropagation()}
+      >
+        <p className="text-[11px] font-semibold tracking-[0.06em] text-[var(--accent)]">Extra-treeni</p>
+        <h3 id="extra-activity-title" className="mt-2 text-xl font-semibold text-[var(--text)]">
+          Lisää extra-treeni historiaan
+        </h3>
+        <div className="mt-4 grid gap-2 sm:grid-cols-3">
+          <div>
+            <Label htmlFor="extra-activity-type-modal" className="text-xs">Laji</Label>
+            <Select
+              id="extra-activity-type-modal"
+              className="mt-1"
+              value={activityType}
+              onChange={(event) => onChangeActivityType(event.target.value as ExtraActivityType)}
+            >
+              {Object.entries(extraActivityCatalog).map(([key, value]) => (
+                <option key={key} value={key}>{value.label}</option>
+              ))}
+            </Select>
+          </div>
+          <div>
+            <Label className="text-xs">Kesto</Label>
+            <div className="mt-1 grid grid-cols-2 gap-2">
+              <div>
+                <Label htmlFor="extra-activity-duration-hours-modal" className="text-[11px] text-[var(--text-subtle)]">Tunnit</Label>
+                <Input
+                  id="extra-activity-duration-hours-modal"
+                  className="mt-1"
+                  type="number"
+                  min={0}
+                  step={1}
+                  inputMode="numeric"
+                  value={String(durationHours)}
+                  onChange={(event) => {
+                    const hours = Math.max(0, Number(event.target.value) || 0);
+                    onChangeDurationMinutes(String(hours * 60 + durationRemainderMinutes));
+                  }}
+                />
+              </div>
+              <div>
+                <Label htmlFor="extra-activity-duration-minutes-modal" className="text-[11px] text-[var(--text-subtle)]">Minuutit</Label>
+                <Input
+                  id="extra-activity-duration-minutes-modal"
+                  className="mt-1"
+                  type="number"
+                  min={0}
+                  max={59}
+                  step={1}
+                  inputMode="numeric"
+                  value={String(durationRemainderMinutes)}
+                  onChange={(event) => {
+                    const minutes = Math.min(59, Math.max(0, Number(event.target.value) || 0));
+                    onChangeDurationMinutes(String(durationHours * 60 + minutes));
+                  }}
+                />
+              </div>
+            </div>
+          </div>
+          <div>
+            <Label htmlFor="extra-activity-date-modal" className="text-xs">Päivä</Label>
+            <Input
+              id="extra-activity-date-modal"
+              className="mt-1"
+              type="date"
+              value={occurredDate}
+              onChange={(event) => onChangeOccurredDate(event.target.value)}
+            />
+          </div>
+        </div>
+        <p className="mt-2 text-xs text-[var(--text-subtle)]">
+          Arvio kcal lasketaan automaattisesti: {estimatedKcal} kcal
+        </p>
+        <label className="mt-2 flex items-center gap-2 text-xs text-[var(--text)]">
+          <input
+            type="checkbox"
+            checked={isManualKcalEnabled}
+            onChange={(event) => onToggleManualKcal(event.target.checked)}
+          />
+          Tarkenna kcal manuaalisesti
+        </label>
+        {isManualKcalEnabled ? (
+          <div className="mt-2">
+            <Label htmlFor="extra-activity-manual-kcal-modal" className="text-xs">Manuaalinen kcal</Label>
+            <Input
+              id="extra-activity-manual-kcal-modal"
+              className="mt-1"
+              type="number"
+              min={1}
+              step={1}
+              value={manualKcal}
+              onChange={(event) => onChangeManualKcal(event.target.value)}
+            />
+          </div>
+        ) : null}
+        <div className="mt-2">
+          <Label htmlFor="extra-activity-notes-modal" className="text-xs">Muistiinpano (valinnainen)</Label>
+          <Textarea
+            id="extra-activity-notes-modal"
+            className="mt-1"
+            value={notes}
+            onChange={(event) => onChangeNotes(event.target.value)}
+          />
+        </div>
+        <div className="mt-5 flex justify-end gap-2">
+          <Button type="button" variant="ghost" onClick={onClose}>
+            Peruuta
+          </Button>
+          <Button type="button" onClick={onSave}>
+            Tallenna
+          </Button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function CalendarWorkoutDetailDialog({
+  title,
+  occurredAt,
+  rows,
+  onClose,
+}: {
+  title: string;
+  occurredAt: string;
+  rows: Array<{
+    key: string;
+    exerciseName: string;
+    completedSets: number;
+    totalSets: number;
+    bestLoad?: number;
+    bestReps?: number;
+  }>;
+  onClose: () => void;
+}) {
+  useEffect(() => {
+    const handleKeyDown = (event: globalThis.KeyboardEvent) => {
+      if (event.key === "Escape") {
+        onClose();
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [onClose]);
+
+  return (
+    <div
+      className="fixed inset-0 z-40 flex items-end justify-center bg-[color:color-mix(in_srgb,var(--background)_54%,transparent)] p-4 sm:items-center"
+      role="presentation"
+      onClick={onClose}
+    >
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="calendar-workout-detail-title"
+        className="w-full max-w-lg rounded-3xl border border-[var(--border-strong)] bg-[var(--surface)] p-4 shadow-[0_24px_60px_-24px_var(--shadow)]"
+        onClick={(event) => event.stopPropagation()}
+      >
+        <p className="text-[11px] font-semibold tracking-[0.06em] text-[var(--accent)]">Treenin tiedot</p>
+        <h3 id="calendar-workout-detail-title" className="mt-2 text-xl font-semibold text-[var(--text)]">
+          {title}
+        </h3>
+        <p className="mt-1 text-xs text-[var(--text-subtle)]">{formatDateWithWeekday(occurredAt)}</p>
+        <div className="mt-4 max-h-[55vh] space-y-2 overflow-y-auto pr-1">
+          {rows.map((row) => (
+            <div key={row.key} className="rounded-xl border border-[var(--border)] bg-[var(--surface-2)] px-3 py-2.5">
+              <p className="text-sm font-medium text-[var(--text)]">{row.exerciseName}</p>
+              <p className="mt-1 text-xs text-[var(--text-subtle)]">
+                {row.completedSets}/{row.totalSets} sarjaa
+                {row.bestLoad !== undefined && row.bestReps !== undefined
+                  ? ` · paras ${formatLoadValue(row.bestLoad)} kg x ${row.bestReps}`
+                  : ""}
+              </p>
+            </div>
+          ))}
+        </div>
+        <div className="mt-5 flex justify-end">
+          <Button type="button" variant="ghost" onClick={onClose}>
+            Sulje
+          </Button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function CalendarExtraActivityDetailDialog({
+  title,
+  occurredAt,
+  durationMinutes,
+  estimatedKcal,
+  notes,
+  onClose,
+}: {
+  title: string;
+  occurredAt: string;
+  durationMinutes: number;
+  estimatedKcal: number;
+  notes?: string;
+  onClose: () => void;
+}) {
+  useEffect(() => {
+    const handleKeyDown = (event: globalThis.KeyboardEvent) => {
+      if (event.key === "Escape") {
+        onClose();
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [onClose]);
+
+  return (
+    <div
+      className="fixed inset-0 z-40 flex items-end justify-center bg-[color:color-mix(in_srgb,var(--background)_54%,transparent)] p-4 sm:items-center"
+      role="presentation"
+      onClick={onClose}
+    >
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="calendar-extra-detail-title"
+        className="w-full max-w-lg rounded-3xl border border-[var(--border-strong)] bg-[var(--surface)] p-4 shadow-[0_24px_60px_-24px_var(--shadow)]"
+        onClick={(event) => event.stopPropagation()}
+      >
+        <p className="text-[11px] font-semibold tracking-[0.06em] text-[var(--accent)]">Extra-treenin tiedot</p>
+        <h3 id="calendar-extra-detail-title" className="mt-2 text-xl font-semibold text-[var(--text)]">
+          {title}
+        </h3>
+        <p className="mt-1 text-xs text-[var(--text-subtle)]">{formatDateWithWeekday(occurredAt)}</p>
+        <p className="mt-3 text-sm text-[var(--text)]">{durationMinutes} min · {estimatedKcal} kcal</p>
+        {notes ? (
+          <div className="mt-3 rounded-xl border border-[var(--border)] bg-[var(--surface-2)] px-3 py-2.5">
+            <p className="text-[11px] font-semibold tracking-[0.04em] text-[var(--text-subtle)]">Muistiinpano</p>
+            <p className="mt-1 whitespace-pre-line text-sm text-[var(--text)]">{notes}</p>
+          </div>
+        ) : null}
+        <div className="mt-5 flex justify-end">
+          <Button type="button" variant="ghost" onClick={onClose}>
+            Sulje
+          </Button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function getWorkoutOrderTimestamps(
   workout: AppState["scheduledWorkouts"][number],
   session?: WorkoutSession,
@@ -233,6 +564,36 @@ type AthleteLogMode = "overview" | "workout";
 type AthleteLogTab = "training" | "history";
 type AthleteOverviewFocusTarget = "measurements";
 type MeasurementMessageTone = "info" | "success" | "error";
+type HistoryCalendarCell = {
+  key: string;
+  date: Date;
+  isCurrentMonth: boolean;
+  activityCount: number;
+  activityByType: Record<string, number>;
+};
+type CalendarDayActivityItem =
+  | {
+      kind: "strength";
+      id: string;
+      workoutId: string;
+      title: string;
+      occurredAt: string;
+      durationSeconds: number;
+      completedSets: number;
+      totalSets: number;
+      liftedKg: number;
+    }
+  | {
+      kind: "extra";
+      id: string;
+      activityId: string;
+      activityType: ExtraActivityType;
+      label: string;
+      occurredAt: string;
+      durationMinutes: number;
+      estimatedKcal: number;
+      notes?: string;
+    };
 
 type HistoryMuscleGroupKey = "shoulders" | "arms" | "chest" | "abs" | "back" | "legs" | "other";
 
@@ -329,6 +690,9 @@ export function AthleteDashboard({
     updateCurrentUserMeasurements,
     updateWorkoutDate,
     updateWorkoutDuration,
+    addExtraActivity,
+    updateExtraActivity,
+    deleteExtraActivity,
     updateWorkoutSet,
     updateWorkoutExerciseStructure,
     saveWorkoutNote,
@@ -367,6 +731,20 @@ export function AthleteDashboard({
   const [isMeasurementFormExpanded, setIsMeasurementFormExpanded] = useState(false);
   const [activeMeasurementTrend, setActiveMeasurementTrend] = useState<"weight" | "waist" | "volume">("weight");
   const [selectedExerciseProgressKey, setSelectedExerciseProgressKey] = useState("");
+  const [isExerciseProgressExpanded, setIsExerciseProgressExpanded] = useState(false);
+  const [historyCalendarMonth, setHistoryCalendarMonth] = useState(() => startOfCalendarMonth(new Date()));
+  const [extraActivityType, setExtraActivityType] = useState<ExtraActivityType>("run");
+  const [extraActivityDurationMinutes, setExtraActivityDurationMinutes] = useState("30");
+  const [extraActivityDate, setExtraActivityDate] = useState(() => new Date().toISOString().slice(0, 10));
+  const [extraActivityNotes, setExtraActivityNotes] = useState("");
+  const [isManualExtraActivityKcalEnabled, setIsManualExtraActivityKcalEnabled] = useState(false);
+  const [manualExtraActivityKcal, setManualExtraActivityKcal] = useState("");
+  const [isExtraActivityDialogOpen, setIsExtraActivityDialogOpen] = useState(false);
+  const [editingExtraActivityId, setEditingExtraActivityId] = useState<string | null>(null);
+  const [showAllExtraActivities, setShowAllExtraActivities] = useState(false);
+  const [selectedCalendarDayKey, setSelectedCalendarDayKey] = useState<string | null>(null);
+  const [selectedCalendarWorkoutId, setSelectedCalendarWorkoutId] = useState<string | null>(null);
+  const [selectedCalendarExtraActivityId, setSelectedCalendarExtraActivityId] = useState<string | null>(null);
   const [isCompletingWorkout, setIsCompletingWorkout] = useState(false);
   const [pendingWorkoutTransition, setPendingWorkoutTransition] = useState<
     | { type: "open"; scheduledWorkoutId: string; workoutName: string; sourceKey: string }
@@ -400,6 +778,18 @@ export function AthleteDashboard({
   }, [currentUser?.id]);
   useEffect(() => {
     setSelectedExerciseProgressKey("");
+    setIsExerciseProgressExpanded(false);
+  }, [currentUser?.id]);
+  useEffect(() => {
+    setHistoryCalendarMonth(startOfCalendarMonth(new Date()));
+  }, [currentUser?.id]);
+  useEffect(() => {
+    setExtraActivityType("run");
+    setExtraActivityDurationMinutes("30");
+    setExtraActivityDate(new Date().toISOString().slice(0, 10));
+    setExtraActivityNotes("");
+    setIsManualExtraActivityKcalEnabled(false);
+    setManualExtraActivityKcal("");
   }, [currentUser?.id]);
   useEffect(() => {
     const latestWaistValue =
@@ -917,6 +1307,9 @@ export function AthleteDashboard({
       setSelectedExerciseProgressKey(exerciseProgressOptions[0]?.key ?? "");
     }
   }, [exerciseProgressOptions, selectedExerciseProgressKey]);
+  useEffect(() => {
+    setIsExerciseProgressExpanded(false);
+  }, [selectedExerciseProgressKey]);
   const selectedExerciseProgress =
     exerciseProgressCatalog.summaries.get(selectedExerciseProgressKey) ??
     (exerciseProgressOptions[0] ? exerciseProgressCatalog.summaries.get(exerciseProgressOptions[0].key) : undefined);
@@ -1122,6 +1515,227 @@ export function AthleteDashboard({
     getWorkoutOrderMetadata,
     workoutInsights,
   ]);
+  const historyActivityByDay = useMemo(() => {
+    const activityByDay = new Map<string, Record<string, number>>();
+
+    workoutHistory.forEach((workout) => {
+      if (resolveWorkoutStatus(workout) !== "completed") {
+        return;
+      }
+
+      const completedAt =
+        workout.completedAt ??
+        sessionByWorkoutId.get(workout.id)?.completedAt ??
+        getWorkoutOrderMetadata(workout).primaryTimestamp ??
+        workout.scheduledDate;
+      const dayKey = toLocalDateKey(completedAt);
+      const current = activityByDay.get(dayKey) ?? {};
+      activityByDay.set(dayKey, { ...current, strength: (current.strength ?? 0) + 1 });
+    });
+
+    (state.extraActivities ?? [])
+      .filter((activity) => activity.athleteId === currentUser?.id)
+      .forEach((activity) => {
+        const dayKey = toLocalDateKey(activity.occurredAt);
+        const current = activityByDay.get(dayKey) ?? {};
+        activityByDay.set(dayKey, {
+          ...current,
+          [activity.activityType]: (current[activity.activityType] ?? 0) + 1,
+        });
+      });
+
+    return activityByDay;
+  }, [currentUser?.id, getWorkoutOrderMetadata, resolveWorkoutStatus, sessionByWorkoutId, state.extraActivities, workoutHistory]);
+  const historyCalendarCells = useMemo(
+    () => buildHistoryCalendarCells(historyCalendarMonth, historyActivityByDay),
+    [historyActivityByDay, historyCalendarMonth],
+  );
+  const historyCalendarMonthLabel = useMemo(
+    () =>
+      new Intl.DateTimeFormat("fi-FI", {
+        month: "long",
+        year: "numeric",
+      }).format(historyCalendarMonth),
+    [historyCalendarMonth],
+  );
+  const historyCalendarStats = useMemo(() => {
+    const monthYear = `${historyCalendarMonth.getFullYear()}-${historyCalendarMonth.getMonth()}`;
+    const monthActiveDays = historyCalendarCells
+      .filter(
+        (cell) =>
+          `${cell.date.getFullYear()}-${cell.date.getMonth()}` === monthYear && cell.activityCount > 0,
+      )
+      .length;
+
+    return {
+      monthActiveDays,
+    };
+  }, [historyCalendarCells, historyCalendarMonth]);
+  const overviewWeekCells = useMemo(() => {
+    const start = new Date();
+    start.setHours(0, 0, 0, 0);
+    const day = start.getDay();
+    const daysSinceMonday = (day + 6) % 7;
+    start.setDate(start.getDate() - daysSinceMonday);
+
+    return Array.from({ length: 7 }, (_, index) => {
+      const date = new Date(start);
+      date.setDate(start.getDate() + index);
+      const key = toLocalDateKey(date);
+      const activityByType = historyActivityByDay.get(key) ?? {};
+      const activityCount = Object.values(activityByType).reduce((sum, count) => sum + count, 0);
+      return { key, date, activityByType, activityCount };
+    });
+  }, [historyActivityByDay]);
+  const latestActivityDayKey = useMemo(() => {
+    const activeKeys = Array.from(historyActivityByDay.entries())
+      .filter(([, value]) => Object.values(value).reduce((sum, count) => sum + count, 0) > 0)
+      .map(([key]) => key)
+      .sort((a, b) => b.localeCompare(a));
+
+    return activeKeys[0] ?? null;
+  }, [historyActivityByDay]);
+  const extraActivities = useMemo(
+    () =>
+      (state.extraActivities ?? [])
+        .filter((activity) => activity.athleteId === currentUser?.id)
+        .sort((a, b) => b.occurredAt.localeCompare(a.occurredAt)),
+    [currentUser?.id, state.extraActivities],
+  );
+  const visibleExtraActivities = showAllExtraActivities ? extraActivities : extraActivities.slice(0, 5);
+  const calendarDayDetails = useMemo(() => {
+    const details = new Map<string, CalendarDayActivityItem[]>();
+
+    workoutHistory.forEach((workout) => {
+      if (resolveWorkoutStatus(workout) !== "completed") {
+        return;
+      }
+      const session = sessionByWorkoutId.get(workout.id);
+      const completedAt =
+        workout.completedAt ??
+        session?.completedAt ??
+        getWorkoutOrderMetadata(workout).primaryTimestamp ??
+        workout.scheduledDate;
+      const dayKey = toLocalDateKey(completedAt);
+      const insight = workoutInsights.get(workout.id);
+      const row: CalendarDayActivityItem = {
+        kind: "strength",
+        id: `strength-${workout.id}`,
+        workoutId: workout.id,
+        title: workout.title,
+        occurredAt: completedAt,
+        durationSeconds: insight?.durationSeconds ?? 0,
+        completedSets: insight?.completedSetCount ?? 0,
+        totalSets: insight?.setCount ?? 0,
+        liftedKg: insight?.liftedKg ?? 0,
+      };
+      const current = details.get(dayKey) ?? [];
+      current.push(row);
+      details.set(dayKey, current);
+    });
+
+    extraActivities.forEach((activity) => {
+      const dayKey = toLocalDateKey(activity.occurredAt);
+      const row: CalendarDayActivityItem = {
+        kind: "extra",
+        id: `extra-${activity.id}`,
+        activityId: activity.id,
+        activityType: activity.activityType,
+        label: extraActivityCatalog[activity.activityType].label,
+        occurredAt: activity.occurredAt,
+        durationMinutes: activity.durationMinutes,
+        estimatedKcal: activity.estimatedKcal,
+        notes: activity.notes,
+      };
+      const current = details.get(dayKey) ?? [];
+      current.push(row);
+      details.set(dayKey, current);
+    });
+
+    details.forEach((items, key) => {
+      details.set(
+        key,
+        [...items].sort((a, b) => b.occurredAt.localeCompare(a.occurredAt)),
+      );
+    });
+
+    return details;
+  }, [
+    extraActivities,
+    getWorkoutOrderMetadata,
+    resolveWorkoutStatus,
+    sessionByWorkoutId,
+    workoutHistory,
+    workoutInsights,
+  ]);
+  const extraActivityDurationValue = Number(extraActivityDurationMinutes);
+  const extraActivityEstimatedKcalPreview = Number.isFinite(extraActivityDurationValue) && extraActivityDurationValue > 0
+    ? estimateExtraActivityKcal({
+        activityType: extraActivityType,
+        durationMinutes: extraActivityDurationValue,
+        weightKg: currentUser?.weightKg,
+      })
+    : 0;
+  const selectedCalendarExtraActivity = useMemo(
+    () => (state.extraActivities ?? []).find((activity) => activity.id === selectedCalendarExtraActivityId) ?? null,
+    [selectedCalendarExtraActivityId, state.extraActivities],
+  );
+  const selectedCalendarWorkoutDetails = useMemo(() => {
+    if (!selectedCalendarWorkoutId) {
+      return null;
+    }
+
+    const workout = workouts.find((item) => item.id === selectedCalendarWorkoutId);
+    if (!workout) {
+      return null;
+    }
+
+    const session = sessionByWorkoutId.get(workout.id);
+    const setLogs = session?.setLogs ?? [];
+    const grouped = new Map<
+      string,
+      {
+        exerciseName: string;
+        completedSets: number;
+        totalSets: number;
+        bestLoad?: number;
+        bestReps?: number;
+      }
+    >();
+    setLogs.forEach((log) => {
+      const key = log.templateExerciseId;
+      const current = grouped.get(key) ?? {
+        exerciseName: log.exerciseName,
+        completedSets: 0,
+        totalSets: 0,
+      };
+      current.totalSets += 1;
+      if (log.done) {
+        current.completedSets += 1;
+        const load = log.actualLoad ?? log.targetLoad;
+        const reps = log.actualReps ?? log.targetReps;
+        if (
+          load !== undefined &&
+          reps !== undefined &&
+          (current.bestLoad === undefined || load > current.bestLoad || (load === current.bestLoad && reps > (current.bestReps ?? 0)))
+        ) {
+          current.bestLoad = load;
+          current.bestReps = reps;
+        }
+      }
+      grouped.set(key, current);
+    });
+
+    return {
+      title: workout.title,
+      occurredAt:
+        workout.completedAt ??
+        session?.completedAt ??
+        getWorkoutOrderMetadata(workout).primaryTimestamp ??
+        workout.scheduledDate,
+      rows: Array.from(grouped.entries()).map(([key, value]) => ({ key, ...value })),
+    };
+  }, [getWorkoutOrderMetadata, selectedCalendarWorkoutId, sessionByWorkoutId, workouts]);
   const historyGroupByWorkoutId = useMemo(() => {
     const groupByWorkoutId = new Map<string, string>();
 
@@ -1253,25 +1867,74 @@ export function AthleteDashboard({
 
       {view === "overview" && (
         <Card className="max-w-full overflow-x-clip border-[var(--border-strong)] [contain:inline-size]">
-          <div className="space-y-4">
+          <div className="space-y-3">
             <div>
               <p className="text-xs font-semibold tracking-[0.04em] text-[var(--text-subtle)]">Yhteenveto</p>
-              <CardTitle className="mt-2 text-2xl">Tämä viikko</CardTitle>
-              <CardDescription className="mt-2 max-w-3xl leading-6">
-                Näet viikon etenemisen, viimeisimmän treenin ja seuraavan askeleen yhdellä silmäyksellä.
-              </CardDescription>
+              <CardTitle className="mt-1.5 text-xl sm:text-2xl">Tämä viikko</CardTitle>
             </div>
-            <div className="grid min-w-0 gap-3 lg:grid-cols-[1.2fr_0.8fr]">
-              <div className="min-w-0 overflow-hidden rounded-3xl border border-[var(--border)] bg-[var(--surface-2)] p-4">
-                <div className="grid min-w-0 gap-4 md:grid-cols-[auto_1fr] md:items-center">
+            <div className="rounded-xl border border-[var(--border)] bg-[var(--surface-2)] p-2.5 sm:p-3">
+              <div className="flex items-center justify-between gap-2">
+                <p className="text-sm font-semibold text-[var(--text)]">Viikkonäkymä</p>
+                <p className="text-xs text-[var(--text-subtle)]">Ma–Su</p>
+              </div>
+              <div className="mt-2 grid grid-cols-7 gap-1 text-center text-[10px] text-[var(--text-subtle)] sm:text-[11px]">
+                {["Ma", "Ti", "Ke", "To", "Pe", "La", "Su"].map((label) => (
+                  <p key={`overview-week-${label}`}>{label}</p>
+                ))}
+              </div>
+              <div className="mt-1 grid grid-cols-7 gap-1">
+                {overviewWeekCells.map((cell) => {
+                  const iconKeys = Object.keys(cell.activityByType).filter((key) => (cell.activityByType[key] ?? 0) > 0);
+                  const firstIcon = iconKeys[0];
+                  const extraTypeCount = Math.max(0, iconKeys.length - 1);
+                  const hasActivity = cell.activityCount > 0;
+
+                  return (
+                    <button
+                      type="button"
+                      key={`overview-week-cell-${cell.key}`}
+                      className={cn(
+                        "relative aspect-square min-w-0 rounded-full border border-[var(--border)] bg-[var(--surface)] p-0",
+                        hasActivity ? "cursor-pointer hover:border-[var(--accent)]" : "cursor-pointer hover:border-[var(--border-strong)]",
+                      )}
+                      aria-label={`${formatCalendarDate(cell.date)} avaa historian kalenteri`}
+                      onClick={() => {
+                        setSelectedCalendarDayKey(hasActivity ? cell.key : latestActivityDayKey ?? null);
+                        setAthleteLogMode("overview");
+                        setAthleteLogTab("history");
+                        setAthleteLogReturnTab("history");
+                        onOpenWorkoutLog?.();
+                      }}
+                    >
+                      {hasActivity ? (
+                        <div className="flex h-full w-full items-center justify-center rounded-full bg-[color:color-mix(in_srgb,var(--accent)_12%,var(--surface))] text-[var(--accent)]">
+                          <span className="grid size-8 place-items-center">
+                            {firstIcon ? renderCalendarActivityIcon(firstIcon) : null}
+                          </span>
+                        </div>
+                      ) : (
+                        <div className="flex h-full w-full items-center justify-center">
+                          <span className="text-xs text-[var(--text-subtle)]">{cell.date.getDate()}</span>
+                        </div>
+                      )}
+                      {extraTypeCount > 0 ? (
+                        <span className="absolute -bottom-1 -right-1 grid min-h-4 min-w-4 place-items-center rounded-full border border-[color-mix(in_srgb,var(--accent)_35%,var(--border))] bg-[var(--surface)] px-1 text-[9px] font-semibold leading-4 text-[var(--accent)]">
+                          +{extraTypeCount}
+                        </span>
+                      ) : null}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+            <div className="grid min-w-0 gap-2.5 lg:grid-cols-[1.2fr_0.8fr]">
+              <div className="min-w-0 overflow-hidden rounded-2xl border border-[var(--border)] bg-[var(--surface-2)] p-3">
+                <div className="grid min-w-0 gap-3 md:grid-cols-[auto_1fr] md:items-center">
                   <ProgressRing label="Viikon eteneminen" percent={weeklyInsights.completionRate} showLabel={false} />
-                  <div className="min-w-0 space-y-4">
+                  <div className="min-w-0 space-y-3">
                     <div className="text-center">
-                      <div className="flex items-center justify-center gap-1">
-                        <p className="text-xs font-semibold tracking-[0.04em] text-[var(--text-subtle)]">Viikon eteneminen</p>
-                        <InfoTooltip text="Kuinka monta tämän viikon valmista treeniä on tehty suhteessa ohjelman viikkotavoitteeseen." />
-                      </div>
-                      <p className="mt-2 text-2xl font-semibold text-[var(--text)]">
+                      <p className="text-xs font-semibold tracking-[0.04em] text-[var(--text-subtle)]">Viikon eteneminen</p>
+                      <p className="mt-1.5 text-xl font-semibold text-[var(--text)] sm:text-2xl">
                         {weeklyInsights.completedCount}{" "}
                         {weeklyInsights.completedCount === 1 ? "treeni" : "treeniä"} valmiina
                       </p>
@@ -1281,18 +1944,14 @@ export function AthleteDashboard({
                           : "Viikkotavoitetta ei ole vielä määritetty."}
                       </p>
                     </div>
-                    <div className="grid gap-3 sm:grid-cols-2">
-                      <div className="min-w-0 rounded-2xl border border-[var(--border)] bg-[var(--surface)] px-4 py-3">
-                        <div className="flex items-center gap-1">
-                          <p className="text-xs font-semibold tracking-[0.04em] text-[var(--text-subtle)]">Volyymi tällä viikolla</p>
-                          <InfoTooltip text="Luku lasketaan valmiista sarjoista kaavalla kuorma x toistot." />
-                        </div>
+                    <div className="grid gap-2 sm:grid-cols-2">
+                      <div className="min-w-0 rounded-xl border border-[var(--border)] bg-[var(--surface)] px-3 py-2.5">
+                        <p className="text-xs font-semibold tracking-[0.04em] text-[var(--text-subtle)]">Volyymi tällä viikolla</p>
                         <p className="mt-1 text-base font-semibold text-[var(--text)]">
                           {formatLiftedKgValue(weeklyInsights.weeklyVolume)}
                         </p>
-                        <p className="mt-1 text-xs text-[var(--text-subtle)]">Valmiit sarjat yhteensä</p>
                       </div>
-                      <div className="min-w-0 rounded-2xl border border-[var(--border)] bg-[var(--surface)] px-4 py-3">
+                      <div className="min-w-0 rounded-xl border border-[var(--border)] bg-[var(--surface)] px-3 py-2.5">
                         <p className="text-xs font-semibold tracking-[0.04em] text-[var(--text-subtle)]">Viimeisin valmis treeni</p>
                         <p className="mt-1 break-words text-base font-semibold text-[var(--text)]">
                           {weeklyInsights.latestCompleted
@@ -1309,7 +1968,7 @@ export function AthleteDashboard({
                   </div>
                 </div>
               </div>
-              <div className="min-w-0 overflow-hidden rounded-3xl border border-[var(--border)] bg-[var(--surface-2)] p-4">
+              <div className="min-w-0 overflow-hidden rounded-2xl border border-[var(--border)] bg-[var(--surface-2)] p-3">
                 <p className="text-xs font-semibold tracking-[0.04em] text-[var(--text-subtle)]">
                   {highlightedWorkoutState === "active"
                     ? "Aktiivinen treeni"
@@ -1333,7 +1992,7 @@ export function AthleteDashboard({
                         ? "Valitse seuraava treeni treenilistasta."
                         : "Pyydä valmentajaa rakentamaan ensimmäinen ohjelma."}
                 </p>
-                <div className="mt-4">
+                <div className="mt-3">
                   {highlightedWorkout ? (
                     <Button
                       type="button"
@@ -1364,7 +2023,7 @@ export function AthleteDashboard({
                   )}
                 </div>
                 {weeklyInsights.latestCompleted ? (
-                  <p className="mt-3 text-xs text-[var(--text-subtle)]">
+                  <p className="mt-2 text-xs text-[var(--text-subtle)]">
                     Viimeisin valmis: {formatLiftedKgValue(weeklyInsights.latestCompletedVolume)}
                   </p>
                 ) : null}
@@ -1383,13 +2042,13 @@ export function AthleteDashboard({
             <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
               <div>
                 <p className="text-xs font-semibold tracking-[0.04em] text-[var(--text-subtle)]">Kehon seuranta</p>
-                <CardTitle className="mt-2 text-2xl">Omat mitat ja kehitys</CardTitle>
-                <CardDescription className="mt-2 max-w-3xl">
+                <CardTitle className="mt-1.5 text-xl sm:text-2xl">Omat mitat ja kehitys</CardTitle>
+                <CardDescription className="mt-1.5 max-w-3xl">
                   Näet viimeisimmät mittasi ja niiden kehityksen.
                 </CardDescription>
             </div>
             <div className="grid w-full gap-2 sm:grid-cols-2 lg:grid-cols-4">
-              <div className="rounded-2xl border border-dashed border-[var(--border)] bg-[color-mix(in_srgb,var(--surface-2)_74%,var(--surface))] px-3 py-2.5">
+              <div className="rounded-xl border border-dashed border-[var(--border)] bg-[color-mix(in_srgb,var(--surface-2)_74%,var(--surface))] px-2.5 py-2">
                 <div className="flex items-center justify-between gap-2">
                   <p className="text-[11px] font-semibold tracking-[0.04em] text-[var(--text-subtle)]">Pituus</p>
                   <Badge className="border-[var(--border)] bg-[var(--surface)] px-2 py-0.5 text-[9px] text-[var(--text-subtle)]">
@@ -1400,19 +2059,19 @@ export function AthleteDashboard({
                   {currentUser.heightCm !== undefined ? `${currentUser.heightCm} cm` : "Ei asetettu"}
                 </p>
               </div>
-              <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface-2)] px-3 py-2.5">
+              <div className="rounded-xl border border-[var(--border)] bg-[var(--surface-2)] px-2.5 py-2">
                 <p className="text-[11px] font-semibold tracking-[0.04em] text-[var(--text-subtle)]">Paino</p>
                 <p className="mt-1 text-base font-semibold text-[var(--text)]">
                   {currentUser.weightKg !== undefined ? `${currentUser.weightKg} kg` : "Ei asetettu"}
                 </p>
               </div>
-              <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface-2)] px-3 py-2.5">
+              <div className="rounded-xl border border-[var(--border)] bg-[var(--surface-2)] px-2.5 py-2">
                 <p className="text-[11px] font-semibold tracking-[0.04em] text-[var(--text-subtle)]">Vyötärö</p>
                 <p className="mt-1 text-base font-semibold text-[var(--text)]">
                   {latestWaistCm !== undefined ? `${latestWaistCm} cm` : "Ei asetettu"}
                 </p>
               </div>
-              <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface-2)] px-3 py-2.5">
+              <div className="rounded-xl border border-[var(--border)] bg-[var(--surface-2)] px-2.5 py-2">
                 <p className="text-[11px] font-semibold tracking-[0.04em] text-[var(--text-subtle)]">Viimeisin mittaus</p>
                 <p className="mt-1 text-base font-semibold text-[var(--text)]">
                   {latestBodyMeasurement ? formatDate(latestBodyMeasurement.measuredAt) : "Ei vielä"}
@@ -1420,24 +2079,24 @@ export function AthleteDashboard({
               </div>
             </div>
           </div>
-          <div className="mt-5 overflow-hidden rounded-2xl border border-[var(--border)] bg-[var(--surface-2)]">
-            <div className="flex items-start gap-2 p-4">
+          <div className="mt-4 overflow-hidden rounded-xl border border-[var(--border)] bg-[var(--surface-2)]">
+            <div className="flex items-start gap-2 p-3">
               <button
                 type="button"
                 id={measurementDisclosureButtonId}
                 aria-expanded={isMeasurementFormExpanded}
                 aria-controls={measurementDisclosurePanelId}
-                className="group min-w-0 flex-1 rounded-[1rem] py-0 text-left text-inherit transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--background)]"
+                className="group min-w-0 flex-1 rounded-xl py-0 text-left text-inherit transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--background)]"
                 onClick={() => setIsMeasurementFormExpanded((current) => !current)}
               >
                 <span className="block text-sm font-semibold text-[var(--text)]">Kirjaa uusi mittaus</span>
-                <span className="mt-1 block text-sm text-[var(--text-muted)]">
+                  <span className="mt-0.5 block text-xs text-[var(--text-muted)]">
                   Päivitä paino tai vyötärö. Voit täyttää vain muuttuneet kentät.
                 </span>
               </button>
               <button
                 type="button"
-                className="grid size-8.5 shrink-0 place-items-center rounded-full border border-[var(--border)] bg-[var(--surface)] text-[var(--text-subtle)] transition hover:border-[var(--border-strong)] hover:bg-[var(--surface-3)] hover:text-[var(--text)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--background)]"
+                className="grid size-8 shrink-0 place-items-center rounded-full border border-[var(--border)] bg-[var(--surface)] text-[var(--text-subtle)] transition hover:border-[var(--border-strong)] hover:bg-[var(--surface-3)] hover:text-[var(--text)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--background)]"
                 aria-label={isMeasurementFormExpanded ? "Sulje uusi mittaus" : "Avaa uusi mittaus"}
                 aria-expanded={isMeasurementFormExpanded}
                 aria-controls={measurementDisclosurePanelId}
@@ -1455,7 +2114,7 @@ export function AthleteDashboard({
                 id={measurementDisclosurePanelId}
                 role="region"
                 aria-labelledby={measurementDisclosureButtonId}
-                className="border-t border-[var(--border)] px-4 pb-4 pt-4"
+                className="border-t border-[var(--border)] px-3 pb-3 pt-3"
               >
                 <div className="grid gap-3 md:grid-cols-2">
                   <div>
@@ -1495,7 +2154,7 @@ export function AthleteDashboard({
                     />
                   </div>
                 </div>
-                <div className="mt-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                <div className="mt-3 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                   <p
                     aria-live="polite"
                     className={`min-h-5 text-sm ${
@@ -1559,11 +2218,11 @@ export function AthleteDashboard({
               </div>
             ) : null}
           </div>
-          <div className="mt-5 rounded-2xl border border-[var(--border)] bg-[var(--surface-2)] p-4">
+          <div className="mt-4 rounded-xl border border-[var(--border)] bg-[var(--surface-2)] p-3">
             <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
               <div>
                 <p className="text-sm font-semibold text-[var(--text)]">Kehitystrendi</p>
-                <p className="mt-1 text-sm text-[var(--text-muted)]">Valitse paino, vyötärö tai volyymi.</p>
+                <p className="mt-0.5 text-xs text-[var(--text-muted)]">Valitse paino, vyötärö tai volyymi.</p>
               </div>
               <div className="grid w-full grid-cols-3 rounded-xl border border-[var(--border)] bg-[var(--surface)] p-1 sm:w-auto">
                 <button
@@ -1604,7 +2263,7 @@ export function AthleteDashboard({
                 </button>
               </div>
             </div>
-            <div className="mt-4">
+            <div className="mt-3">
               {activeMeasurementTrend === "weight" ? (
                 <>
                   <p className="text-xs font-semibold tracking-[0.04em] text-[var(--text-subtle)]">Painotrendi</p>
@@ -2193,6 +2852,31 @@ export function AthleteDashboard({
                   Sinulle ei ole vielä luotu ohjelmia. Pyydä valmentajaa lisäämään ensimmäinen ohjelma.
                 </p>
               )}
+              <div className="mt-5 rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-4 shadow-[0_1px_0_0_var(--shadow-soft),0_10px_24px_-20px_var(--shadow)]">
+                <div>
+                  <p className="text-base font-semibold text-[var(--text)]">Extra-treeni</p>
+                  <p className="mt-1 text-sm text-[var(--text-muted)]">
+                    Lisää esimerkiksi juoksu, kävely tai muu harjoitus historiaan.
+                  </p>
+                  <p className="mt-2 text-xs text-[var(--text-subtle)]">
+                    {extraActivities.length > 0
+                      ? `${extraActivities.length} extra-treeniä historiassa`
+                      : "Ei extra-treenejä vielä"}
+                  </p>
+                  <div className="mt-3">
+                    <Button
+                      type="button"
+                      className="w-full sm:w-auto"
+                      onClick={() => {
+                        setEditingExtraActivityId(null);
+                        setIsExtraActivityDialogOpen(true);
+                      }}
+                    >
+                      Lisää extra-treeni
+                    </Button>
+                  </div>
+                </div>
+              </div>
             </Card>
             </div>
             ) : null}
@@ -2203,14 +2887,203 @@ export function AthleteDashboard({
                 <p className="text-xs font-semibold tracking-[0.04em] text-[var(--text-subtle)]">Treenihistoria</p>
                 <CardTitle className="text-2xl">Historia</CardTitle>
                 <CardDescription className="mt-2">
-                  Historia on ryhmitelty treeneittäin. Valitse toteutus päivämäärän mukaan tai avaa treeni tarkasteluun ja korjaukseen.
+                  Valitse päivä nähdäksesi tehdyt treenit.
                 </CardDescription>
+                <div className="mt-5 max-w-full overflow-hidden rounded-2xl border border-[var(--border)] bg-[var(--surface-2)] p-3 sm:p-4">
+                  <p className="text-sm font-semibold text-[var(--text)]">Treenikalenteri</p>
+                  <div className="mt-2 flex items-center gap-1.5 text-[11px]">
+                    <span className="inline-flex items-center gap-1 rounded-full border border-[var(--border)] bg-[var(--surface)] px-2 py-1 text-[var(--text-subtle)]">
+                      <span>Viikko</span>
+                      <span className="font-semibold text-[var(--text)]">
+                        {weeklyInsights.completedCount}/{weeklyInsights.targetCount || 0}
+                      </span>
+                    </span>
+                    <span className="inline-flex items-center gap-1 rounded-full border border-[var(--border)] bg-[var(--surface)] px-2 py-1 text-[var(--text-subtle)]">
+                      <span>Aktiiviset (kk)</span>
+                      <span className="font-semibold text-[var(--text)]">{historyCalendarStats.monthActiveDays}</span>
+                    </span>
+                  </div>
+                  <div className="mt-3 grid w-full grid-cols-[1.75rem_minmax(0,1fr)_1.75rem] items-center gap-1 sm:w-auto sm:grid-cols-[2rem_auto_2rem] sm:gap-2">
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      className="size-7 rounded-full p-0 sm:size-8"
+                      aria-label="Edellinen kuukausi"
+                      onClick={() => setHistoryCalendarMonth((current) => addMonthsToCalendarMonth(current, -1))}
+                    >
+                      <ChevronLeft className="size-4" aria-hidden="true" />
+                    </Button>
+                    <p className="truncate text-center text-sm text-[var(--text-muted)] sm:max-w-none">
+                      {historyCalendarMonthLabel}
+                    </p>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      className="size-7 rounded-full p-0 sm:size-8"
+                      aria-label="Seuraava kuukausi"
+                      onClick={() => setHistoryCalendarMonth((current) => addMonthsToCalendarMonth(current, 1))}
+                    >
+                      <ChevronRight className="size-4" aria-hidden="true" />
+                    </Button>
+                  </div>
+                  <div className="mt-3 grid grid-cols-7 gap-1 text-center text-[10px] text-[var(--text-subtle)] sm:text-[11px]">
+                    {["Ma", "Ti", "Ke", "To", "Pe", "La", "Su"].map((label) => (
+                      <p key={label}>{label}</p>
+                    ))}
+                  </div>
+                  <div className="mt-1 grid grid-cols-7 gap-1">
+                    {historyCalendarCells.map((cell) => {
+                      const hasActivity = cell.activityCount > 0;
+                      const isSelected = selectedCalendarDayKey === cell.key;
+                      const iconKeys = Object.keys(cell.activityByType).filter(
+                        (key) => (cell.activityByType[key] ?? 0) > 0,
+                      );
+                      const visibleIconKeys = iconKeys.slice(0, 1);
+                      const extraTypeCount = Math.max(0, iconKeys.length - visibleIconKeys.length);
+
+                      return (
+                        <button
+                          type="button"
+                          key={cell.key}
+                          disabled={!hasActivity}
+                          className={cn(
+                            "relative aspect-square min-w-0 overflow-visible rounded-full border p-0 text-left transition",
+                            cell.isCurrentMonth
+                              ? "border-[var(--border)] bg-[var(--surface)]"
+                              : "border-[var(--border)] bg-[color:color-mix(in_srgb,var(--surface-2)_86%,var(--surface))] opacity-70",
+                            hasActivity ? "cursor-pointer hover:border-[var(--accent)]" : "cursor-default",
+                            isSelected
+                              ? "border-[var(--accent)] bg-[color:color-mix(in_srgb,var(--accent)_10%,var(--surface))] shadow-[0_0_0_1px_var(--accent)]"
+                              : null,
+                          )}
+                          onClick={() => {
+                            if (!hasActivity) {
+                              return;
+                            }
+                            setSelectedCalendarDayKey(cell.key);
+                            setSelectedCalendarWorkoutId(null);
+                            setSelectedCalendarExtraActivityId(null);
+                          }}
+                          aria-label={
+                            hasActivity
+                              ? `${formatCalendarDate(cell.date)}: ${cell.activityCount} treeni${cell.activityCount > 1 ? "ä" : ""}`
+                              : `${formatCalendarDate(cell.date)}: ei treenejä`
+                          }
+                        >
+                          {hasActivity ? (
+                            <div className="flex h-full w-full flex-col">
+                              <div className="flex min-h-0 flex-1 items-center justify-center gap-1 rounded-full bg-[color:color-mix(in_srgb,var(--accent)_16%,var(--surface))] text-[var(--accent-strong)]">
+                                {visibleIconKeys.map((iconKey) => (
+                                  <span key={iconKey} className="grid size-8 place-items-center">
+                                    {renderCalendarActivityIcon(iconKey)}
+                                  </span>
+                                ))}
+                              </div>
+                            </div>
+                          ) : (
+                            <div className="flex h-full w-full items-center justify-center">
+                              <span className="text-xs text-[var(--text-subtle)]">{cell.date.getDate()}</span>
+                            </div>
+                          )}
+                          {extraTypeCount > 0 ? (
+                            <span className="absolute -bottom-1 -right-1 grid min-h-4 min-w-4 place-items-center rounded-full border border-[color-mix(in_srgb,var(--accent)_35%,var(--border))] bg-[var(--surface)] px-1 text-[9px] font-semibold leading-4 text-[var(--accent)] shadow-[0_2px_8px_-6px_var(--shadow)]">
+                              +{extraTypeCount}
+                            </span>
+                          ) : null}
+                        </button>
+                      );
+                    })}
+                  </div>
+                  {selectedCalendarDayKey ? (
+                    <div className="mt-3 rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-2 shadow-[0_12px_28px_-24px_var(--shadow)]">
+                      <div className="flex items-center justify-between gap-2">
+                        <p className="text-sm font-semibold text-[var(--text)]">
+                          {formatCalendarDate(parseLocalDateKey(selectedCalendarDayKey))}
+                        </p>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          className="grid size-8 place-items-center rounded-full border border-[var(--border)] bg-[var(--surface-2)] p-0 text-[var(--text-subtle)] hover:text-[var(--text)]"
+                          onClick={() => {
+                            setSelectedCalendarDayKey(null);
+                            setSelectedCalendarWorkoutId(null);
+                            setSelectedCalendarExtraActivityId(null);
+                          }}
+                          aria-label="Sulje päivän tiedot"
+                        >
+                          <X className="size-4" aria-hidden="true" />
+                        </Button>
+                      </div>
+                      <div className="mt-2 space-y-2">
+                        {(calendarDayDetails.get(selectedCalendarDayKey) ?? []).map((item) => (
+                          <div key={item.id} className="rounded-xl border border-[var(--border)] bg-[var(--surface-2)] px-3 py-2.5">
+                            {item.kind === "strength" ? (
+                              <>
+                                <div className="grid grid-cols-[auto_minmax(0,1fr)_auto] items-start gap-2">
+                                  <span className="mt-0.5 grid size-7 shrink-0 place-items-center rounded-full bg-[color:color-mix(in_srgb,var(--accent)_13%,var(--surface))] text-[var(--accent)]">
+                                    <Dumbbell className="size-3.5" aria-hidden="true" />
+                                  </span>
+                                  <div className="min-w-0 flex-1">
+                                    <p className="text-sm font-medium text-[var(--text)]">{item.title}</p>
+                                    <p className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-[var(--text-subtle)]">
+                                      <span className="inline-flex items-center gap-1"><Clock3 className="size-3" aria-hidden="true" />{formatWorkoutDuration(item.durationSeconds)}</span>
+                                      <span>·</span>
+                                      <span>{item.completedSets}/{item.totalSets} sarjaa</span>
+                                      <span>·</span>
+                                      <span>{formatLiftedKgValue(item.liftedKg)}</span>
+                                    </p>
+                                  </div>
+                                  <Button
+                                    type="button"
+                                    variant="ghost"
+                                    className="size-8 shrink-0 self-center rounded-full p-0"
+                                    aria-label="Avaa treenin tiedot"
+                                    onClick={() => setSelectedCalendarWorkoutId(item.workoutId)}
+                                  >
+                                    <Info className="size-4" aria-hidden="true" />
+                                  </Button>
+                                </div>
+                              </>
+                            ) : (
+                              <>
+                                <div className="grid grid-cols-[auto_minmax(0,1fr)_auto] items-start gap-2">
+                                  <span className="mt-0.5 grid size-7 shrink-0 place-items-center rounded-full bg-[color:color-mix(in_srgb,var(--accent)_13%,var(--surface))] text-[var(--accent)]">
+                                    {renderCalendarActivityIcon(item.activityType)}
+                                  </span>
+                                  <div className="min-w-0 flex-1">
+                                    <p className="text-sm font-medium text-[var(--text)]">{item.label}</p>
+                                    <p className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-[var(--text-subtle)]">
+                                      <span className="inline-flex items-center gap-1"><Clock3 className="size-3" aria-hidden="true" />{item.durationMinutes} min</span>
+                                      <span>·</span>
+                                      <span>{item.estimatedKcal} kcal</span>
+                                    </p>
+                                  </div>
+                                  {item.notes ? (
+                                    <Button
+                                      type="button"
+                                      variant="ghost"
+                                      className="size-8 shrink-0 self-center rounded-full p-0"
+                                      aria-label="Avaa extra-treenin tiedot"
+                                      onClick={() => setSelectedCalendarExtraActivityId(item.activityId)}
+                                    >
+                                      <Info className="size-4" aria-hidden="true" />
+                                    </Button>
+                                  ) : null}
+                                </div>
+                              </>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  ) : null}
+                </div>
                 <div className="mt-5 rounded-2xl border border-[var(--border)] bg-[var(--surface-2)] p-4">
                   <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                     <div>
                       <p className="text-sm font-semibold text-[var(--text)]">Liikekohtainen kehitys</p>
-                      <p className="mt-1 text-sm text-[var(--text-muted)]">
-                        Seuraa valitun liikkeen arvioidun yhden toiston maksimin (e1RM) kehitystä, parasta työsarjaa ja viimeisintä kuormallista toteumaa.
+                      <p className="mt-1 text-xs text-[var(--text-muted)]">
+                        Nopea yhteenveto valitusta liikkeestä. Avaa trendi tarvittaessa.
                       </p>
                     </div>
                     {exerciseProgressOptions.length > 0 ? (
@@ -2240,46 +3113,62 @@ export function AthleteDashboard({
                     </p>
                   ) : selectedExerciseProgress ? (
                     <>
-                      <div className="mt-4 grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
-                        <ExerciseProgressMetric
-                          label="Nykyinen e1RM"
-                          value={
-                            selectedExerciseProgress.currentEstimatedOneRepMax !== undefined
-                              ? `${formatLoadValue(selectedExerciseProgress.currentEstimatedOneRepMax)} kg`
-                              : "Ei dataa"
-                          }
-                          helper={
-                            selectedExerciseProgress.currentEstimatedOneRepMax !== undefined
-                              ? `Arvioitu yhden toiston maksimi. Viimeisin kuormallinen toteuma ${formatDate(selectedExerciseProgress.lastCompletedAt)}`
-                              : "Tarvitsee valmiista treenistä toteutuneen painon ja toistot, jotta yhden toiston maksimi voidaan arvioida."
-                          }
-                        />
-                        <ExerciseProgressMetric
-                          label="Paras työsarja"
-                          value={formatExerciseSetValue(selectedExerciseProgress.bestSet)}
-                          helper={formatExerciseSetHelper(selectedExerciseProgress.bestSet)}
-                        />
-                        <ExerciseProgressMetric
-                          label="Viimeisin toteuma"
-                          value={formatExerciseSetValue(selectedExerciseProgress.latestSet)}
-                          helper={formatExerciseSetHelper(selectedExerciseProgress.latestSet)}
-                        />
+                      <div className="mt-3 rounded-xl border border-[var(--border)] bg-[var(--surface)] px-3 py-3">
+                        <p className="text-[11px] font-semibold tracking-[0.04em] text-[var(--text-subtle)]">Valittu liike</p>
+                        <p className="mt-1 text-sm font-medium text-[var(--text)]">{selectedExerciseProgress.exerciseName}</p>
+                        <p className="mt-3 text-[11px] font-semibold tracking-[0.04em] text-[var(--text-subtle)]">Nykyinen e1RM</p>
+                        <p className="mt-1 text-base font-semibold text-[var(--text)]">
+                          {selectedExerciseProgress.currentEstimatedOneRepMax !== undefined
+                            ? `${formatLoadValue(selectedExerciseProgress.currentEstimatedOneRepMax)} kg`
+                            : "Ei dataa"}
+                        </p>
                       </div>
 
-                      <div className="mt-4">
-                        <p className="text-xs font-semibold tracking-[0.04em] text-[var(--text-subtle)]">
-                          e1RM-trendi · {selectedExerciseProgress.exerciseName}
-                        </p>
-                        <MetricTrendChart
-                          points={selectedExerciseProgress.trendPoints}
-                          ariaLabel={`${selectedExerciseProgress.exerciseName} e1RM kehitystrendi`}
-                          emptyMessage="Valitulla liikkeellä ei ole vielä kuormallista toteumaa, josta e1RM voitaisiin arvioida."
-                          helperText="Kaavio näyttää kunkin treenikerran korkeimman e1RM-arvion valitulle liikkeelle."
-                          compactHelperText="Paina pistettä nähdäksesi treenikerran e1RM-arvion."
-                          valueLabel="e1RM"
-                          unit="kg"
-                        />
+                      <div className="mt-3">
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          className="h-10 w-full justify-between rounded-xl border border-[var(--border)] bg-[var(--surface)] px-3 text-sm"
+                          aria-expanded={isExerciseProgressExpanded}
+                          onClick={() => setIsExerciseProgressExpanded((current) => !current)}
+                        >
+                          <span>{isExerciseProgressExpanded ? "Piilota tarkemmat tiedot" : "Avaa tarkemmat tiedot"}</span>
+                          {isExerciseProgressExpanded ? (
+                            <ChevronUp className="size-4" aria-hidden="true" />
+                          ) : (
+                            <ChevronDown className="size-4" aria-hidden="true" />
+                          )}
+                        </Button>
                       </div>
+
+                      {isExerciseProgressExpanded ? (
+                        <div className="mt-3 space-y-3">
+                          <div className="grid gap-2 sm:grid-cols-2">
+                            <ExerciseProgressMetric
+                              label="Paras työsarja"
+                              value={formatExerciseSetValue(selectedExerciseProgress.bestSet)}
+                              helper={formatExerciseSetHelper(selectedExerciseProgress.bestSet)}
+                            />
+                            <ExerciseProgressMetric
+                              label="Viimeisin toteuma"
+                              value={formatExerciseSetValue(selectedExerciseProgress.latestSet)}
+                              helper={formatExerciseSetHelper(selectedExerciseProgress.latestSet)}
+                            />
+                          </div>
+                          <p className="text-xs font-semibold tracking-[0.04em] text-[var(--text-subtle)]">
+                            e1RM-trendi · {selectedExerciseProgress.exerciseName}
+                          </p>
+                          <MetricTrendChart
+                            points={selectedExerciseProgress.trendPoints}
+                            ariaLabel={`${selectedExerciseProgress.exerciseName} e1RM kehitystrendi`}
+                            emptyMessage="Valitulla liikkeellä ei ole vielä kuormallista toteumaa, josta e1RM voitaisiin arvioida."
+                            helperText="Kaavio näyttää kunkin treenikerran korkeimman e1RM-arvion valitulle liikkeelle."
+                            compactHelperText="Paina pistettä nähdäksesi treenikerran e1RM-arvion."
+                            valueLabel="e1RM"
+                            unit="kg"
+                          />
+                        </div>
+                      ) : null}
                     </>
                   ) : null}
                 </div>
@@ -2578,6 +3467,95 @@ export function AthleteDashboard({
                     </div>
                   </>
                 )}
+                <div className="mt-5 rounded-2xl border border-[var(--border)] bg-[var(--surface-2)] p-4">
+                  <p className="text-sm font-semibold text-[var(--text)]">Extra-treenien historia</p>
+                  {extraActivities.length === 0 ? (
+                    <p className="mt-3 text-xs text-[var(--text-subtle)]">Ei extra-treenejä vielä.</p>
+                  ) : (
+                    <div className="mt-3 space-y-2">
+                      {visibleExtraActivities.map((activity) => (
+                        <div key={activity.id} className="flex items-center justify-between gap-2 rounded-xl border border-[var(--border)] bg-[var(--surface)] px-3 py-2.5">
+                          <div className="flex min-w-0 items-start gap-2">
+                            <span className="mt-0.5 grid size-7 shrink-0 place-items-center rounded-full bg-[color:color-mix(in_srgb,var(--accent)_13%,var(--surface))] text-[var(--accent)]">
+                              {renderCalendarActivityIcon(activity.activityType)}
+                            </span>
+                            <div className="min-w-0">
+                              <p className="truncate text-sm font-medium text-[var(--text)]">
+                                {extraActivityCatalog[activity.activityType].label}
+                              </p>
+                              <div className="mt-1 flex flex-wrap items-center gap-1.5 text-[11px] text-[var(--text-subtle)]">
+                                <span className="rounded-full border border-[var(--border)] bg-[var(--surface-2)] px-1.5 py-0.5">
+                                  {activity.durationMinutes} min
+                                </span>
+                                <span className="rounded-full border border-[var(--border)] bg-[var(--surface-2)] px-1.5 py-0.5">
+                                  {activity.estimatedKcal} kcal
+                                </span>
+                                <span>{formatDateWithWeekday(activity.occurredAt)}</span>
+                              </div>
+                            </div>
+                          </div>
+                          <div className="flex shrink-0 items-center gap-1">
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              className="size-8 rounded-full p-0"
+                              aria-label="Muokkaa extra-treeniä"
+                              onClick={() => {
+                                const minutes = activity.durationMinutes;
+                                const hours = Math.floor(minutes / 60);
+                                const remainder = minutes % 60;
+                                setExtraActivityType(activity.activityType);
+                                setExtraActivityDurationMinutes(String(hours * 60 + remainder));
+                                setExtraActivityDate(activity.occurredAt.slice(0, 10));
+                                setExtraActivityNotes(activity.notes ?? "");
+                                setManualExtraActivityKcal(String(activity.estimatedKcal));
+                                setIsManualExtraActivityKcalEnabled(true);
+                                setEditingExtraActivityId(activity.id);
+                                setIsExtraActivityDialogOpen(true);
+                              }}
+                            >
+                              <Pencil className="size-4" aria-hidden="true" />
+                            </Button>
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              className="size-8 rounded-full p-0 text-[var(--danger)]"
+                              aria-label="Poista extra-treeni"
+                              onClick={async () => {
+                                const confirmed = window.confirm(
+                                  `Poistetaanko extra-treeni "${extraActivityCatalog[activity.activityType].label}" päivältä ${formatDateWithWeekday(activity.occurredAt)}? Toimintoa ei voi kumota.`,
+                                );
+                                if (!confirmed) {
+                                  return;
+                                }
+                                const result = await deleteExtraActivity(activity.id);
+                                if (result.ok) {
+                                  notify({ tone: "success", message: "Extra-treeni poistettu." });
+                                } else {
+                                  notify({ tone: "danger", message: result.message });
+                                }
+                              }}
+                            >
+                              <Trash2 className="size-4" aria-hidden="true" />
+                            </Button>
+                          </div>
+                        </div>
+                      ))}
+                      {extraActivities.length > 5 ? (
+                        <div className="pt-1">
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            className="h-8 px-2 text-xs"
+                            onClick={() => setShowAllExtraActivities((current) => !current)}
+                          >
+                            {showAllExtraActivities ? "Näytä vähemmän" : `Näytä lisää (${extraActivities.length - 5})`}
+                          </Button>
+                        </div>
+                      ) : null}
+                    </div>
+                  )}
+                </div>
               </Card>
             </div>
             ) : null}
@@ -2595,6 +3573,75 @@ export function AthleteDashboard({
         <WorkoutPreviewDialog
           workout={openWorkoutPreview}
           onClose={() => setOpenWorkoutPreview(null)}
+        />
+      ) : null}
+      {isExtraActivityDialogOpen ? (
+        <ExtraActivityDialog
+          activityType={extraActivityType}
+          durationMinutes={extraActivityDurationMinutes}
+          occurredDate={extraActivityDate}
+          notes={extraActivityNotes}
+          estimatedKcal={extraActivityEstimatedKcalPreview}
+          isManualKcalEnabled={isManualExtraActivityKcalEnabled}
+          manualKcal={manualExtraActivityKcal}
+          onChangeActivityType={setExtraActivityType}
+          onChangeDurationMinutes={setExtraActivityDurationMinutes}
+          onChangeOccurredDate={setExtraActivityDate}
+          onChangeNotes={setExtraActivityNotes}
+          onToggleManualKcal={setIsManualExtraActivityKcalEnabled}
+          onChangeManualKcal={setManualExtraActivityKcal}
+          onClose={() => {
+            setIsExtraActivityDialogOpen(false);
+            setEditingExtraActivityId(null);
+          }}
+          onSave={() => {
+            void (async () => {
+              const payload = {
+                activityType: extraActivityType,
+                durationMinutes: Number(extraActivityDurationMinutes),
+                manualKcal: isManualExtraActivityKcalEnabled ? Number(manualExtraActivityKcal) : undefined,
+                occurredAt: new Date(`${extraActivityDate}T12:00:00`).toISOString(),
+                notes: extraActivityNotes,
+              };
+              const result = editingExtraActivityId
+                ? await updateExtraActivity(editingExtraActivityId, payload)
+                : await addExtraActivity(payload);
+              if (result.ok) {
+                notify({
+                  tone: "success",
+                  message: editingExtraActivityId ? "Extra-treeni päivitetty." : "Extra-treeni lisätty historiaan.",
+                });
+              } else {
+                notify({ tone: "danger", message: result.message });
+              }
+              if (result.ok) {
+                setExtraActivityDurationMinutes("30");
+                setExtraActivityNotes("");
+                setIsManualExtraActivityKcalEnabled(false);
+                setManualExtraActivityKcal("");
+                setIsExtraActivityDialogOpen(false);
+                setEditingExtraActivityId(null);
+              }
+            })();
+          }}
+        />
+      ) : null}
+      {selectedCalendarWorkoutDetails ? (
+        <CalendarWorkoutDetailDialog
+          title={selectedCalendarWorkoutDetails.title}
+          occurredAt={selectedCalendarWorkoutDetails.occurredAt}
+          rows={selectedCalendarWorkoutDetails.rows}
+          onClose={() => setSelectedCalendarWorkoutId(null)}
+        />
+      ) : null}
+      {selectedCalendarExtraActivity ? (
+        <CalendarExtraActivityDetailDialog
+          title={extraActivityCatalog[selectedCalendarExtraActivity.activityType].label}
+          occurredAt={selectedCalendarExtraActivity.occurredAt}
+          durationMinutes={selectedCalendarExtraActivity.durationMinutes}
+          estimatedKcal={selectedCalendarExtraActivity.estimatedKcal}
+          notes={selectedCalendarExtraActivity.notes}
+          onClose={() => setSelectedCalendarExtraActivityId(null)}
         />
       ) : null}
     </div>
@@ -3125,4 +4172,84 @@ function WorkoutMiniProgress({ workoutId }: { workoutId: string }) {
       </p>
     </div>
   );
+}
+
+function startOfCalendarMonth(value: Date) {
+  return new Date(value.getFullYear(), value.getMonth(), 1);
+}
+
+function addMonthsToCalendarMonth(value: Date, amount: number) {
+  return new Date(value.getFullYear(), value.getMonth() + amount, 1);
+}
+
+function toLocalDateKey(value: string | Date) {
+  const parsed = value instanceof Date ? value : new Date(value);
+  const year = parsed.getFullYear();
+  const month = String(parsed.getMonth() + 1).padStart(2, "0");
+  const day = String(parsed.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
+function formatCalendarDate(value: Date) {
+  return new Intl.DateTimeFormat("fi-FI", {
+    day: "numeric",
+    month: "numeric",
+    year: "numeric",
+  }).format(value);
+}
+
+function parseLocalDateKey(value: string) {
+  const [yearText, monthText, dayText] = value.split("-");
+  const year = Number(yearText);
+  const month = Number(monthText);
+  const day = Number(dayText);
+
+  if (!Number.isFinite(year) || !Number.isFinite(month) || !Number.isFinite(day)) {
+    return new Date(value);
+  }
+
+  return new Date(year, month - 1, day);
+}
+
+function buildHistoryCalendarCells(
+  month: Date,
+  activityByDay: Map<string, Record<string, number>>,
+) {
+  const firstOfMonth = startOfCalendarMonth(month);
+  const firstDayWeekIndex = (firstOfMonth.getDay() + 6) % 7;
+  const gridStartDate = new Date(firstOfMonth);
+  gridStartDate.setDate(firstOfMonth.getDate() - firstDayWeekIndex);
+
+  const cells: HistoryCalendarCell[] = [];
+  for (let offset = 0; offset < 42; offset += 1) {
+    const cellDate = new Date(gridStartDate);
+    cellDate.setDate(gridStartDate.getDate() + offset);
+    const dayKey = toLocalDateKey(cellDate);
+    const dayActivity = activityByDay.get(dayKey) ?? {};
+    cells.push({
+      key: dayKey,
+      date: cellDate,
+      isCurrentMonth: cellDate.getMonth() === firstOfMonth.getMonth(),
+      activityCount: Object.values(dayActivity).reduce((sum, count) => sum + count, 0),
+      activityByType: dayActivity,
+    });
+  }
+
+  return cells;
+}
+
+function renderCalendarActivityIcon(activityType: string) {
+  if (activityType === "strength") return <Dumbbell className="size-3.5" aria-hidden="true" />;
+  if (activityType === "run") return <Footprints className="size-3.5" aria-hidden="true" />;
+  if (activityType === "walk") return <PersonStanding className="size-3.5" aria-hidden="true" />;
+  if (activityType === "cycle") return <Bike className="size-3.5" aria-hidden="true" />;
+  if (activityType === "swim") return <Waves className="size-3.5" aria-hidden="true" />;
+  if (activityType === "climb" || activityType === "hike") return <Mountain className="size-3.5" aria-hidden="true" />;
+  if (activityType === "row") return <Activity className="size-3.5" aria-hidden="true" />;
+  if (activityType === "ski") return <Snowflake className="size-3.5" aria-hidden="true" />;
+  if (activityType === "yoga" || activityType === "mobility") return <HeartPulse className="size-3.5" aria-hidden="true" />;
+  if (activityType === "hiit") return <Flame className="size-3.5" aria-hidden="true" />;
+  if (activityType === "combat") return <Swords className="size-3.5" aria-hidden="true" />;
+  if (activityType === "dance") return <Music className="size-3.5" aria-hidden="true" />;
+  return <CircleDot className="size-3.5" aria-hidden="true" />;
 }

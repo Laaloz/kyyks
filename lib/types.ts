@@ -4,6 +4,21 @@ export type UserStatus = "active" | "invited";
 export type TemplateStatus = "draft" | "published";
 export type ProgramStatus = "active" | "archived" | "removed";
 export type ScheduledWorkoutStatus = "in_progress" | "completed" | "cancelled";
+export type ExtraActivityType =
+  | "run"
+  | "walk"
+  | "cycle"
+  | "swim"
+  | "climb"
+  | "hike"
+  | "row"
+  | "ski"
+  | "yoga"
+  | "hiit"
+  | "combat"
+  | "dance"
+  | "mobility"
+  | "other";
 export type InviteStatus = "pending" | "accepted";
 export type SplitType = "upper" | "lower" | "full_body" | "custom";
 export type ExerciseScope = "global" | "coach_custom";
@@ -370,6 +385,18 @@ export interface ConversationEntry {
   readByUserIds: string[];
 }
 
+export interface ExtraActivity {
+  id: string;
+  athleteId: string;
+  activityType: ExtraActivityType;
+  durationMinutes: number;
+  estimatedKcal: number;
+  occurredAt: string;
+  notes?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
 export interface Invite {
   id: string;
   token: string;
@@ -409,6 +436,7 @@ export interface AppState {
   scheduledWorkouts: ScheduledWorkout[];
   sessions: WorkoutSession[];
   notes: WorkoutNote[];
+  extraActivities?: ExtraActivity[];
   conversationEntries: ConversationEntry[];
   invites: Invite[];
   passwordResetRequests: PasswordResetRequest[];

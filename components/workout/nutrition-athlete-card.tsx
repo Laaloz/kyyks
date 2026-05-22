@@ -230,14 +230,14 @@ function RecipeDetailDialog({
         className="flex max-h-[92vh] w-full max-w-2xl flex-col overflow-hidden rounded-3xl border border-[var(--border-strong)] bg-[var(--surface)] shadow-[0_24px_60px_-24px_var(--shadow)]"
         onClick={(event) => event.stopPropagation()}
       >
-        <div className="border-b border-[var(--border)] px-4 py-4 sm:px-5">
+        <div className="border-b border-[var(--border)] px-4 py-3 sm:px-5">
           <div className="flex items-start justify-between gap-4">
             <div>
               <p className="text-[11px] font-semibold tracking-[0.06em] text-[var(--accent)]">{mealTagLabel(mealTag)}</p>
-              <h3 id="nutrition-recipe-title" className="mt-2 text-2xl font-semibold text-[var(--text)]">
+              <h3 id="nutrition-recipe-title" className="mt-1.5 text-xl font-semibold text-[var(--text)] sm:text-2xl">
                 {recipe.name}
               </h3>
-              <p id="nutrition-recipe-description" className="mt-2 text-sm leading-6 text-[var(--text-muted)]">
+              <p id="nutrition-recipe-description" className="mt-1.5 text-sm leading-5 text-[var(--text-muted)]">
                 {recipe.description ?? "Selkeä reseptinäkymä, jossa näet annosmäärän, raaka-aineet ja valmistusvaiheet yhdellä kertaa."}
               </p>
             </div>
@@ -247,40 +247,40 @@ function RecipeDetailDialog({
           </div>
         </div>
 
-        <div className="flex-1 overflow-y-auto px-4 py-4 sm:px-5">
-          <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-            <div className="min-w-0 rounded-2xl border border-[var(--border)] bg-[var(--surface-2)] px-4 py-3">
+        <div className="flex-1 overflow-y-auto px-4 py-3 sm:px-5">
+          <div className="grid grid-cols-2 gap-1.5 sm:grid-cols-4">
+            <div className="min-w-0 rounded-lg border border-[var(--border)] bg-[var(--surface-2)] px-2.5 py-2">
               <p className="text-xs font-semibold tracking-[0.04em] text-[var(--text-subtle)]">Per annos</p>
-              <p className="mt-1 text-lg font-semibold text-[var(--text)]">{nutrition.kcal} kcal</p>
+              <p className="mt-0.5 text-base font-semibold text-[var(--text)]">{nutrition.kcal} kcal</p>
             </div>
-            <div className="min-w-0 rounded-2xl border border-[var(--border)] bg-[var(--surface-2)] px-4 py-3">
+            <div className="min-w-0 rounded-lg border border-[var(--border)] bg-[var(--surface-2)] px-2.5 py-2">
               <p className="text-xs font-semibold tracking-[0.04em] text-[var(--text-subtle)]">Proteiini</p>
-              <p className="mt-1 text-lg font-semibold text-[var(--text)]">{Math.round(nutrition.proteinG)} g</p>
+              <p className="mt-0.5 text-base font-semibold text-[var(--text)]">{Math.round(nutrition.proteinG)} g</p>
             </div>
-            <div className="min-w-0 rounded-2xl border border-[var(--border)] bg-[var(--surface-2)] px-4 py-3">
+            <div className="min-w-0 rounded-lg border border-[var(--border)] bg-[var(--surface-2)] px-2.5 py-2">
               <p className="text-xs font-semibold tracking-[0.04em] text-[var(--text-subtle)]">Hiilarit</p>
-              <p className="mt-1 text-lg font-semibold text-[var(--text)]">{Math.round(nutrition.carbsG)} g</p>
+              <p className="mt-0.5 text-base font-semibold text-[var(--text)]">{Math.round(nutrition.carbsG)} g</p>
             </div>
-            <div className="min-w-0 rounded-2xl border border-[var(--border)] bg-[var(--surface-2)] px-4 py-3">
+            <div className="min-w-0 rounded-lg border border-[var(--border)] bg-[var(--surface-2)] px-2.5 py-2">
               <p className="text-xs font-semibold tracking-[0.04em] text-[var(--text-subtle)]">Rasva</p>
-              <p className="mt-1 text-lg font-semibold text-[var(--text)]">{Math.round(nutrition.fatG)} g</p>
+              <p className="mt-0.5 text-base font-semibold text-[var(--text)]">{Math.round(nutrition.fatG)} g</p>
             </div>
           </div>
 
-          <div className="mt-4 rounded-2xl border border-[var(--border)] bg-[var(--surface-2)] p-4">
-            <div className="flex flex-col gap-4 sm:flex-row sm:flex-wrap sm:items-end sm:justify-between">
+          <div className="mt-3 rounded-xl border border-[var(--border)] bg-[var(--surface-2)] p-3">
+            <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-end sm:justify-between">
               <div>
                 <p className="text-xs font-semibold tracking-[0.04em] text-[var(--text-subtle)]">Annosmäärä</p>
-                <p className="mt-1 text-sm text-[var(--text-muted)]">
+                <p className="mt-1 text-xs text-[var(--text-muted)]">
                   Lisää tai vähennä annoksia sen mukaan paljonko haluat valmistaa kerralla.
                 </p>
               </div>
-              <div className="w-full rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-3 sm:w-auto sm:min-w-[15rem]">
-                <div className="flex items-center justify-between gap-3 rounded-xl border border-[var(--border)] bg-[var(--surface-2)] px-2 py-2">
+              <div className="w-full rounded-xl border border-[var(--border)] bg-[var(--surface)] p-2 sm:w-auto sm:min-w-[14rem]">
+                <div className="flex items-center justify-between gap-2 rounded-lg border border-[var(--border)] bg-[var(--surface-2)] px-2 py-2">
                   <Button
                     type="button"
                     variant="secondary"
-                    className="size-11 shrink-0 rounded-xl border border-[var(--border)] bg-[var(--surface)] px-0 text-lg"
+                    className="size-10 shrink-0 rounded-lg border border-[var(--border)] bg-[var(--surface)] px-0 text-base"
                     onClick={onDecreaseServings}
                     aria-label="Vähennä annoksia"
                   >
@@ -288,12 +288,12 @@ function RecipeDetailDialog({
                   </Button>
                   <div className="flex min-w-0 flex-1 flex-col items-center justify-center text-center">
                     <p className="text-[11px] font-semibold tracking-[0.06em] text-[var(--text-subtle)]">ANNOKSIA</p>
-                    <p className="mt-1 text-2xl font-semibold text-[var(--text)]">{selectedServings}</p>
+                    <p className="mt-0.5 text-xl font-semibold text-[var(--text)]">{selectedServings}</p>
                   </div>
                   <Button
                     type="button"
                     variant="secondary"
-                    className="size-11 shrink-0 rounded-xl border border-[var(--border)] bg-[var(--surface)] px-0 text-lg"
+                    className="size-10 shrink-0 rounded-lg border border-[var(--border)] bg-[var(--surface)] px-0 text-base"
                     onClick={onIncreaseServings}
                     aria-label="Lisää annoksia"
                   >
@@ -303,22 +303,22 @@ function RecipeDetailDialog({
               </div>
             </div>
 
-            <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-4">
-              <div className="rounded-xl border border-[var(--border)] bg-[var(--surface)] px-3 py-3">
+            <div className="mt-3 grid grid-cols-2 gap-1.5 sm:grid-cols-4">
+              <div className="rounded-lg border border-[var(--border)] bg-[var(--surface)] px-2.5 py-2">
                 <p className="text-xs font-semibold tracking-[0.04em] text-[var(--text-subtle)]">Koko satsi</p>
-                <p className="mt-1 text-lg font-semibold text-[var(--text)]">{batchNutrition.kcal} kcal</p>
+                <p className="mt-0.5 text-base font-semibold text-[var(--text)]">{batchNutrition.kcal} kcal</p>
               </div>
-              <div className="rounded-xl border border-[var(--border)] bg-[var(--surface)] px-3 py-3">
+              <div className="rounded-lg border border-[var(--border)] bg-[var(--surface)] px-2.5 py-2">
                 <p className="text-xs font-semibold tracking-[0.04em] text-[var(--text-subtle)]">Proteiini</p>
-                <p className="mt-1 text-lg font-semibold text-[var(--text)]">{Math.round(batchNutrition.proteinG)} g</p>
+                <p className="mt-0.5 text-base font-semibold text-[var(--text)]">{Math.round(batchNutrition.proteinG)} g</p>
               </div>
-              <div className="rounded-xl border border-[var(--border)] bg-[var(--surface)] px-3 py-3">
+              <div className="rounded-lg border border-[var(--border)] bg-[var(--surface)] px-2.5 py-2">
                 <p className="text-xs font-semibold tracking-[0.04em] text-[var(--text-subtle)]">Hiilarit</p>
-                <p className="mt-1 text-lg font-semibold text-[var(--text)]">{Math.round(batchNutrition.carbsG)} g</p>
+                <p className="mt-0.5 text-base font-semibold text-[var(--text)]">{Math.round(batchNutrition.carbsG)} g</p>
               </div>
-              <div className="rounded-xl border border-[var(--border)] bg-[var(--surface)] px-3 py-3">
+              <div className="rounded-lg border border-[var(--border)] bg-[var(--surface)] px-2.5 py-2">
                 <p className="text-xs font-semibold tracking-[0.04em] text-[var(--text-subtle)]">Rasva</p>
-                <p className="mt-1 text-lg font-semibold text-[var(--text)]">{Math.round(batchNutrition.fatG)} g</p>
+                <p className="mt-0.5 text-base font-semibold text-[var(--text)]">{Math.round(batchNutrition.fatG)} g</p>
               </div>
             </div>
           </div>
@@ -339,22 +339,22 @@ function RecipeDetailDialog({
             </div>
           ) : null}
 
-          <div className="mt-4 space-y-4">
-            <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface-2)] p-4">
+          <div className="mt-3 space-y-3">
+            <div className="rounded-xl border border-[var(--border)] bg-[var(--surface-2)] p-3">
               <div>
                 <p className="text-xs font-semibold tracking-[0.04em] text-[var(--text-subtle)]">Mitä tarvitset</p>
                 <p className="mt-1 text-sm text-[var(--text-muted)]">Raaka-aineet {selectedServings} annokselle.</p>
               </div>
-              <div className="mt-4 space-y-4">
+              <div className="mt-3 space-y-3">
                 {groupedIngredients.map((group) => (
-                  <div key={`${recipe.id}-${group.label}`} className="rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-3">
+                  <div key={`${recipe.id}-${group.label}`} className="rounded-xl border border-[var(--border)] bg-[var(--surface)] p-2.5">
                     <div className="flex items-center justify-between gap-3">
                       <p className="text-xs font-semibold tracking-[0.06em] text-[var(--accent)]">{group.label}</p>
                       <p className="text-[11px] font-medium text-[var(--text-subtle)]">{group.rows.length} riviä</p>
                     </div>
-                    <ul className="space-y-2 text-sm text-[var(--text-muted)]">
+                    <ul className="space-y-1.5 text-sm text-[var(--text-muted)]">
                       {group.rows.map((ingredient) => (
-                        <li key={`${recipe.id}-${ingredient.id}`} className="rounded-xl bg-[var(--surface-2)] px-3 py-3 leading-6">
+                        <li key={`${recipe.id}-${ingredient.id}`} className="rounded-lg bg-[var(--surface-2)] px-2.5 py-2 leading-6">
                           <p className="text-[var(--text-muted)]">
                             {formatRecipeIngredientLine(
                               ingredient,
@@ -374,14 +374,14 @@ function RecipeDetailDialog({
               </div>
             </div>
 
-            <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface-2)] p-4">
+            <div className="rounded-xl border border-[var(--border)] bg-[var(--surface-2)] p-3">
               <div>
                 <p className="text-xs font-semibold tracking-[0.04em] text-[var(--text-subtle)]">Valmistus</p>
-                <p className="mt-1 text-sm text-[var(--text-muted)]">Seuraa vaiheet järjestyksessä. Ryhmät ainesosissa auttavat näkemään nopeasti mikä kuuluu kastikkeeseen, lisukkeeseen tai päälle.</p>
+                <p className="mt-1 text-sm text-[var(--text-muted)]">Seuraa vaiheet järjestyksessä.</p>
               </div>
-              <ol className="mt-4 space-y-3 pl-0 text-sm text-[var(--text-muted)]">
+              <ol className="mt-3 space-y-2 pl-0 text-sm text-[var(--text-muted)]">
                 {splitRecipeInstructions(recipe.instructions).map((step, index) => (
-                  <li key={`${recipe.id}-step-${index}`} className="flex gap-3 rounded-xl border border-[var(--border)] bg-[var(--surface)] px-3 py-3">
+                  <li key={`${recipe.id}-step-${index}`} className="flex gap-2.5 rounded-lg border border-[var(--border)] bg-[var(--surface)] px-2.5 py-2.5">
                     <span className="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full border border-[var(--border)] text-xs font-semibold text-[var(--text)]">
                       {index + 1}
                     </span>
@@ -472,29 +472,29 @@ export function NutritionAthleteCard({
 
   return (
     <Card className="max-w-full overflow-x-clip border-[var(--border-strong)] [contain:inline-size]">
-      <div className="space-y-5">
+      <div className="space-y-4">
         <div>
           <p className="text-xs font-semibold tracking-[0.04em] text-[var(--text-subtle)]">Ruokalista</p>
-          <CardTitle className="mt-2 text-balance text-2xl leading-tight">Päivän ateriat</CardTitle>
+          <CardTitle className="mt-1.5 text-balance text-xl leading-tight sm:text-2xl">Päivän ateriat</CardTitle>
         </div>
 
         {nutritionProfile ? (
-          <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-            <div className="min-w-0 rounded-2xl border border-[var(--border)] bg-[var(--surface-2)] px-4 py-3">
-              <p className="text-xs font-semibold tracking-[0.04em] text-[var(--text-subtle)]">Tavoite kcal</p>
-              <p className="mt-1 text-xl font-semibold text-[var(--text)]">{formatRoundedCalories(nutritionProfile.targetKcal)}</p>
+          <div className="grid grid-cols-2 gap-1.5 sm:grid-cols-4">
+            <div className="min-w-0 rounded-lg border border-[var(--border)] bg-[var(--surface-2)] px-2.5 py-2">
+              <p className="text-[11px] font-semibold tracking-[0.03em] text-[var(--text-subtle)]">Tavoite kcal</p>
+              <p className="mt-0.5 text-base font-semibold text-[var(--text)]">{formatRoundedCalories(nutritionProfile.targetKcal)}</p>
             </div>
-            <div className="min-w-0 rounded-2xl border border-[var(--border)] bg-[var(--surface-2)] px-4 py-3">
-              <p className="text-xs font-semibold tracking-[0.04em] text-[var(--text-subtle)]">Proteiini</p>
-              <p className="mt-1 text-xl font-semibold text-[var(--text)]">{formatRoundedGrams(nutritionProfile.proteinG)} g</p>
+            <div className="min-w-0 rounded-lg border border-[var(--border)] bg-[var(--surface-2)] px-2.5 py-2">
+              <p className="text-[11px] font-semibold tracking-[0.03em] text-[var(--text-subtle)]">Proteiini</p>
+              <p className="mt-0.5 text-base font-semibold text-[var(--text)]">{formatRoundedGrams(nutritionProfile.proteinG)} g</p>
             </div>
-            <div className="min-w-0 rounded-2xl border border-[var(--border)] bg-[var(--surface-2)] px-4 py-3">
-              <p className="text-xs font-semibold tracking-[0.04em] text-[var(--text-subtle)]">Hiilarit</p>
-              <p className="mt-1 text-xl font-semibold text-[var(--text)]">{formatRoundedGrams(nutritionProfile.carbsG)} g</p>
+            <div className="min-w-0 rounded-lg border border-[var(--border)] bg-[var(--surface-2)] px-2.5 py-2">
+              <p className="text-[11px] font-semibold tracking-[0.03em] text-[var(--text-subtle)]">Hiilarit</p>
+              <p className="mt-0.5 text-base font-semibold text-[var(--text)]">{formatRoundedGrams(nutritionProfile.carbsG)} g</p>
             </div>
-            <div className="min-w-0 rounded-2xl border border-[var(--border)] bg-[var(--surface-2)] px-4 py-3">
-              <p className="text-xs font-semibold tracking-[0.04em] text-[var(--text-subtle)]">Rasva</p>
-              <p className="mt-1 text-xl font-semibold text-[var(--text)]">{formatRoundedGrams(nutritionProfile.fatG)} g</p>
+            <div className="min-w-0 rounded-lg border border-[var(--border)] bg-[var(--surface-2)] px-2.5 py-2">
+              <p className="text-[11px] font-semibold tracking-[0.03em] text-[var(--text-subtle)]">Rasva</p>
+              <p className="mt-0.5 text-base font-semibold text-[var(--text)]">{formatRoundedGrams(nutritionProfile.fatG)} g</p>
             </div>
           </div>
         ) : null}
@@ -502,7 +502,7 @@ export function NutritionAthleteCard({
         {assignedPlan ? (
           <>
             {availableMealGroups.length > 0 ? (
-              <div className="space-y-4">
+              <div className="space-y-3">
                 <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
                   {availableMealGroups.map((group) => {
                     const items = groupedMealPlanRecipes[group.id] ?? [];
@@ -514,7 +514,7 @@ export function NutritionAthleteCard({
                       <button
                         key={group.id}
                         type="button"
-                        className={`min-w-0 rounded-2xl border px-4 py-4 text-left transition ${
+                        className={`min-w-0 rounded-xl border px-3 py-3 text-left transition ${
                           selected
                             ? "border-[color-mix(in_srgb,var(--accent)_35%,var(--border))] bg-[color-mix(in_srgb,var(--accent)_10%,var(--surface))]"
                             : "border-[var(--border)] bg-[var(--surface)] hover:bg-[var(--surface-2)]"
@@ -525,8 +525,8 @@ export function NutritionAthleteCard({
                         }}
                       >
                         <p className="text-xs font-semibold tracking-[0.04em] text-[var(--text-subtle)]">{group.label}</p>
-                        <p className="mt-2 text-base font-semibold text-[var(--text)]">{items.length} vaihtoehtoa</p>
-                        <p className="mt-1 text-sm text-[var(--text-muted)]">
+                        <p className="mt-1.5 text-sm font-semibold text-[var(--text)]">{items.length} vaihtoehtoa</p>
+                        <p className="mt-0.5 text-xs text-[var(--text-muted)]">
                           {slotGuidance ?? group.description}
                         </p>
                       </button>
@@ -535,7 +535,7 @@ export function NutritionAthleteCard({
                 </div>
 
                 {selectedMealGroup ? (
-                  <div className="space-y-4">
+                  <div className="space-y-3">
                     <div className="flex items-start justify-between gap-4 px-1">
                       <div>
                         <p className="text-xs font-semibold tracking-[0.04em] text-[var(--text-subtle)]">{selectedMealGroup.label}</p>
@@ -544,7 +544,7 @@ export function NutritionAthleteCard({
                       <p className="text-sm text-[var(--text-muted)]">{selectedMealItems.length} reseptiä</p>
                     </div>
 
-                    <div className="grid gap-3">
+                    <div className="grid gap-2.5">
                       {selectedMealItems.map((item) => {
                         const recipeNutrition = resolveRecipeNutritionPreview(item.recipe, state.ingredientsCatalog).nutritionPerServing;
                         const goalComparison = buildRecipeGoalComparison(item.mealTag, recipeNutrition, nutritionProfile);
@@ -554,7 +554,7 @@ export function NutritionAthleteCard({
                           <button
                             key={`${item.mealTag}-${item.recipe.id}`}
                             type="button"
-                            className={`w-full rounded-2xl border p-3 text-left transition ${
+                            className={`w-full rounded-xl border p-3 text-left transition ${
                               isOpen
                                 ? "border-[color-mix(in_srgb,var(--accent)_35%,var(--border))] bg-[color-mix(in_srgb,var(--accent)_8%,var(--surface))]"
                                 : "border-[var(--border)] bg-[var(--surface-2)] hover:bg-[var(--surface)]"

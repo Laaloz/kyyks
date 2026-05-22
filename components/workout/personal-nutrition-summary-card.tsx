@@ -53,12 +53,12 @@ export function PersonalNutritionSummaryCard({
 
   return (
     <Card className="border-[var(--border-strong)]">
-      <div className="space-y-5">
+      <div className="space-y-4">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
           <div>
             <p className="text-xs font-semibold tracking-[0.04em] text-[var(--text-subtle)]">Henkilökohtainen ravinto</p>
-            <CardTitle className="mt-2 text-balance text-2xl leading-tight">Päivän energiasuositus</CardTitle>
-            <CardDescription className="mt-2 max-w-3xl">
+            <CardTitle className="mt-1.5 text-balance text-xl leading-tight sm:text-2xl">Päivän energiasuositus</CardTitle>
+            <CardDescription className="mt-1.5 max-w-3xl">
               Profiilitavoite ja vertailu eri tavoitteisiin.
             </CardDescription>
           </div>
@@ -71,12 +71,12 @@ export function PersonalNutritionSummaryCard({
 
         {comparison ? (
           <>
-            <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface-2)] p-3">
+            <div className="rounded-xl border border-[var(--border)] bg-[var(--surface-2)] p-2.5">
               <p className="text-xs font-semibold tracking-[0.04em] text-[var(--text-subtle)]">Profiilitavoite</p>
               <div className="mt-1.5 flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
                 <div>
                   <p className="text-base font-semibold text-[var(--text)]">{goalLabel[comparison.activeGoal]}</p>
-                  <p className="mt-1 font-[family-name:var(--font-display)] text-3xl font-semibold leading-none text-[var(--text)]">
+                  <p className="mt-1 font-[family-name:var(--font-display)] text-2xl font-semibold leading-none text-[var(--text)] sm:text-3xl">
                     {formatRoundedCalories(comparison.activeTarget.kcal)}
                   </p>
                   <p className="mt-1 text-xs text-[var(--text-muted)]">kcal / päivä</p>
@@ -89,32 +89,32 @@ export function PersonalNutritionSummaryCard({
               </p>
             </div>
 
-            <details className="group rounded-2xl border border-[var(--border)] bg-[var(--surface)]">
-              <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-4 py-4 text-left">
+            <details className="group rounded-xl border border-[var(--border)] bg-[var(--surface)]">
+              <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-3 py-3 text-left">
                 <div>
                   <p className="text-sm font-semibold text-[var(--text)]">Näytä tarkemmat suositukset</p>
-                  <p className="mt-1 text-sm text-[var(--text-muted)]">Makrot ja tavoitevertailu.</p>
+                  <p className="mt-0.5 text-xs text-[var(--text-muted)]">Makrot ja tavoitevertailu.</p>
                 </div>
-                <span className="grid size-10 shrink-0 place-items-center rounded-full border border-[var(--border)] bg-[var(--surface-2)] text-[var(--text-subtle)] transition group-open:rotate-180">
+                <span className="grid size-8 shrink-0 place-items-center rounded-full border border-[var(--border)] bg-[var(--surface-2)] text-[var(--text-subtle)] transition group-open:rotate-180">
                   <ChevronDown className="size-4" aria-hidden="true" />
                 </span>
               </summary>
 
-              <div className="border-t border-[var(--border)] px-4 py-4">
+              <div className="border-t border-[var(--border)] px-3 py-3">
                 <div>
                   <p className="text-sm font-semibold text-[var(--text)]">Makrot nykyiselle tavoitteelle</p>
-                  <div className="mt-3 grid grid-cols-3 gap-2 text-sm">
-                    <div className="rounded-xl border border-[var(--border)] bg-[var(--surface-2)] px-3 py-3">
+                  <div className="mt-2 grid grid-cols-3 gap-1.5 text-sm">
+                    <div className="rounded-lg border border-[var(--border)] bg-[var(--surface-2)] px-2.5 py-2">
                       <p className="text-[11px] font-semibold tracking-[0.04em] text-[var(--text-subtle)]">P</p>
-                      <p className="mt-1 font-medium text-[var(--text)]">{formatMacroValue(comparison.activeTarget.proteinG)} g</p>
+                      <p className="mt-0.5 font-medium text-[var(--text)]">{formatMacroValue(comparison.activeTarget.proteinG)} g</p>
                     </div>
-                    <div className="rounded-xl border border-[var(--border)] bg-[var(--surface-2)] px-3 py-3">
+                    <div className="rounded-lg border border-[var(--border)] bg-[var(--surface-2)] px-2.5 py-2">
                       <p className="text-[11px] font-semibold tracking-[0.04em] text-[var(--text-subtle)]">H</p>
-                      <p className="mt-1 font-medium text-[var(--text)]">{formatMacroValue(comparison.activeTarget.carbsG)} g</p>
+                      <p className="mt-0.5 font-medium text-[var(--text)]">{formatMacroValue(comparison.activeTarget.carbsG)} g</p>
                     </div>
-                    <div className="rounded-xl border border-[var(--border)] bg-[var(--surface-2)] px-3 py-3">
+                    <div className="rounded-lg border border-[var(--border)] bg-[var(--surface-2)] px-2.5 py-2">
                       <p className="text-[11px] font-semibold tracking-[0.04em] text-[var(--text-subtle)]">R</p>
-                      <p className="mt-1 font-medium text-[var(--text)]">{formatMacroValue(comparison.activeTarget.fatG)} g</p>
+                      <p className="mt-0.5 font-medium text-[var(--text)]">{formatMacroValue(comparison.activeTarget.fatG)} g</p>
                     </div>
                   </div>
                 </div>
@@ -139,9 +139,9 @@ export function PersonalNutritionSummaryCard({
                 ) : null}
 
                 {comparison.comparisonTargets ? (
-                  <div className="mt-4">
+                  <div className="mt-3">
                     <p className="text-sm font-semibold text-[var(--text)]">Suositukset eri vaiheisiin</p>
-                    <div className="mt-3 grid gap-2.5">
+                    <div className="mt-2 grid gap-2">
                       {(["lose", "maintain", "gain"] as NutritionGoal[]).map((goal) => {
                         const target = comparison.comparisonTargets![goal];
                         const isActive = comparison.activeGoal === goal;
@@ -149,7 +149,7 @@ export function PersonalNutritionSummaryCard({
                         return (
                           <div
                             key={goal}
-                            className={`rounded-2xl border p-3 ${
+                            className={`rounded-xl border p-2.5 ${
                               isActive
                                 ? "border-[var(--accent)] bg-[color-mix(in_srgb,var(--accent)_8%,var(--surface))] shadow-[0_0_0_1px_var(--accent)]"
                                 : "border-[var(--border)] bg-[var(--surface)]"
@@ -158,7 +158,7 @@ export function PersonalNutritionSummaryCard({
                             <div className="flex items-start justify-between gap-2">
                               <div className="min-w-0">
                                 <p className="text-sm font-semibold text-[var(--text)]">{goalLabel[goal]}</p>
-                                <p className="mt-1 font-[family-name:var(--font-display)] text-2xl font-semibold leading-none text-[var(--text)]">
+                                <p className="mt-1 font-[family-name:var(--font-display)] text-xl font-semibold leading-none text-[var(--text)] sm:text-2xl">
                                   {formatRoundedCalories(target.kcal)}
                                 </p>
                                 <p className="mt-1 text-xs text-[var(--text-muted)]">kcal / päivä</p>
@@ -184,7 +184,7 @@ export function PersonalNutritionSummaryCard({
                                 </Button>
                               ) : null}
                             </div>
-                            <div className="mt-2 grid grid-cols-3 gap-1.5 text-xs">
+                            <div className="mt-2 grid grid-cols-3 gap-1 text-xs">
                               <div className="rounded-lg border border-[var(--border)] bg-[var(--surface-2)] px-2 py-1.5">
                                 <p className="font-semibold tracking-[0.04em] text-[var(--text-subtle)]">P</p>
                                 <p className="mt-0.5 font-medium text-[var(--text)]">{formatMacroValue(target.proteinG)} g</p>

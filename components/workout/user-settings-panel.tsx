@@ -420,12 +420,12 @@ export function UserSettingsPanel({ adminOnly = false }: { adminOnly?: boolean }
       <div role="tabpanel" id="settings-section-panel-profile" aria-labelledby="settings-section-tab-profile">
       <Card className="border-[var(--border-strong)]">
         <p className="text-xs font-semibold tracking-[0.04em] text-[var(--text-subtle)]">Tili</p>
-        <CardTitle className="text-2xl">Profiili</CardTitle>
-        <CardDescription className="mt-2">
+        <CardTitle className="text-xl sm:text-2xl">Profiili</CardTitle>
+        <CardDescription className="mt-1.5">
           Hallitse pysyviä profiilitietojasi erillään sovelluksen asetuksista.
         </CardDescription>
 
-        <div className="mt-6 space-y-4">
+        <div className="mt-4 space-y-3.5">
           <div>
             <Label htmlFor="account-full-name">Koko nimi</Label>
             <Input
@@ -473,8 +473,8 @@ export function UserSettingsPanel({ adminOnly = false }: { adminOnly?: boolean }
                   });
               }}
             />
-            <div className="flex flex-wrap items-center gap-3 rounded-xl border-2 border-[var(--border)] bg-[var(--surface-2)] p-3">
-              <div className="flex size-14 shrink-0 items-center justify-center overflow-hidden rounded-full border border-[var(--border-strong)] bg-[var(--surface)]">
+            <div className="flex flex-wrap items-center gap-2.5 rounded-xl border-2 border-[var(--border)] bg-[var(--surface-2)] p-2.5">
+              <div className="flex size-12 shrink-0 items-center justify-center overflow-hidden rounded-full border border-[var(--border-strong)] bg-[var(--surface)]">
                 {profileImageSrc ? (
                   <img
                     src={profileImageSrc}
@@ -591,11 +591,11 @@ export function UserSettingsPanel({ adminOnly = false }: { adminOnly?: boolean }
             </p>
           </div>
 
-          <div className="sm:col-span-2">
-            <Label>Nykyiset mittatiedot</Label>
-            <div className="grid gap-3 sm:grid-cols-2">
-              <div className="flex items-center gap-3 rounded-xl border border-[var(--border)] bg-[var(--surface)] px-4 py-3">
-                <div className="flex h-10 w-10 items-center justify-center rounded-full bg-[color-mix(in_srgb,var(--accent)_14%,transparent)] text-[var(--accent)]">
+            <div className="sm:col-span-2">
+              <Label>Nykyiset mittatiedot</Label>
+            <div className="grid gap-2 sm:grid-cols-2">
+              <div className="flex items-center gap-2.5 rounded-xl border border-[var(--border)] bg-[var(--surface)] px-3 py-2.5">
+                <div className="flex h-9 w-9 items-center justify-center rounded-full bg-[color-mix(in_srgb,var(--accent)_14%,transparent)] text-[var(--accent)]">
                   <Scale className="h-4 w-4" aria-hidden="true" />
                 </div>
                 <div className="min-w-0">
@@ -605,8 +605,8 @@ export function UserSettingsPanel({ adminOnly = false }: { adminOnly?: boolean }
                   </p>
                 </div>
               </div>
-              <div className="flex items-center gap-3 rounded-xl border border-[var(--border)] bg-[var(--surface)] px-4 py-3">
-                <div className="flex h-10 w-10 items-center justify-center rounded-full bg-[color-mix(in_srgb,var(--accent)_14%,transparent)] text-[var(--accent)]">
+              <div className="flex items-center gap-2.5 rounded-xl border border-[var(--border)] bg-[var(--surface)] px-3 py-2.5">
+                <div className="flex h-9 w-9 items-center justify-center rounded-full bg-[color-mix(in_srgb,var(--accent)_14%,transparent)] text-[var(--accent)]">
                   <Ruler className="h-4 w-4" aria-hidden="true" />
                 </div>
                 <div className="min-w-0">
@@ -644,9 +644,9 @@ export function UserSettingsPanel({ adminOnly = false }: { adminOnly?: boolean }
           </Button>
         </div>
 
-        <div className="mt-5 rounded-xl border border-[var(--border)] bg-[var(--surface-2)] px-4 py-3">
+        <div className="mt-4 rounded-xl border border-[var(--border)] bg-[var(--surface-2)] px-3 py-2.5">
           <p className="text-[11px] font-semibold tracking-[0.04em] text-[var(--text-subtle)]">Turvallisuus</p>
-          <div className="mt-2 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <div className="mt-1.5 flex flex-col gap-2.5 sm:flex-row sm:items-center sm:justify-between">
             <div className="min-w-0">
               <p className="text-sm font-semibold text-[var(--text)]">Salasanan nollaus</p>
               <p className="mt-1 text-xs leading-5 text-[var(--text-muted)]">
@@ -684,14 +684,14 @@ export function UserSettingsPanel({ adminOnly = false }: { adminOnly?: boolean }
       ) : null}
 
       {activeSection === "preferences" ? (
-      <div role="tabpanel" id="settings-section-panel-preferences" aria-labelledby="settings-section-tab-preferences" className="grid gap-6">
+      <div role="tabpanel" id="settings-section-panel-preferences" aria-labelledby="settings-section-tab-preferences" className="grid gap-4">
         <Card>
           <p className="text-xs font-semibold tracking-[0.04em] text-[var(--text-subtle)]">Asetukset</p>
-          <CardTitle className="text-2xl">Sovelluksen asetukset</CardTitle>
-          <CardDescription className="mt-2">
+          <CardTitle className="text-xl sm:text-2xl">Sovelluksen asetukset</CardTitle>
+          <CardDescription className="mt-1.5">
             Muokkaa sitä, miten sovellus käyttäytyy sinulle päivittäisessä käytössä.
           </CardDescription>
-          <form className="mt-6 space-y-4" noValidate onSubmit={submitSettings}>
+          <form className="mt-4 space-y-3.5" noValidate onSubmit={submitSettings}>
             <div>
               <Label htmlFor="settings-default-view">Aloitussivu</Label>
               <Select id="settings-default-view" disabled={isSavingSettings} {...form.register("defaultDashboardView")}>
@@ -736,8 +736,8 @@ export function UserSettingsPanel({ adminOnly = false }: { adminOnly?: boolean }
               </p>
             </div>
 
-            <div className="space-y-2 rounded-xl border-2 border-[var(--border)] bg-[var(--surface-2)] p-3">
-              <label className="flex items-start justify-between gap-3 rounded-lg px-1 py-1.5">
+            <div className="space-y-1.5 rounded-xl border-2 border-[var(--border)] bg-[var(--surface-2)] p-2.5">
+              <label className="flex items-start justify-between gap-3 rounded-lg px-1 py-1">
                 <span className="min-w-0">
                   <span
                     id="settings-weekly-measurements-label"
@@ -760,7 +760,7 @@ export function UserSettingsPanel({ adminOnly = false }: { adminOnly?: boolean }
 
               <div className="border-t border-[var(--border)]" />
 
-              <label className="flex items-start justify-between gap-3 rounded-lg px-1 py-1.5">
+              <label className="flex items-start justify-between gap-3 rounded-lg px-1 py-1">
                 <span className="min-w-0">
                   <span
                     id="settings-email-notifications-label"
@@ -807,13 +807,13 @@ export function UserSettingsPanel({ adminOnly = false }: { adminOnly?: boolean }
 
         <Card className="lg:hidden">
           <p className="text-xs font-semibold tracking-[0.04em] text-[var(--text-subtle)]">Kotivalikko</p>
-          <CardTitle className="text-2xl">Lisää kotivalikkoon</CardTitle>
-          <CardDescription className="mt-2">
+          <CardTitle className="text-xl sm:text-2xl">Lisää kotivalikkoon</CardTitle>
+          <CardDescription className="mt-1.5">
             Lisää Rookiapp kotivalikkoon, niin saat sen auki yhdellä napautuksella.
           </CardDescription>
 
-          <div className="mt-6 space-y-4">
-            <div className="flex items-center justify-between rounded-xl border-2 border-[var(--border)] bg-[var(--surface-2)] px-4 py-3">
+          <div className="mt-4 space-y-3">
+            <div className="flex items-center justify-between rounded-xl border-2 border-[var(--border)] bg-[var(--surface-2)] px-3 py-2.5">
               <span className="inline-flex items-center gap-2 text-sm text-[var(--text-muted)]">
                 <HousePlus className="size-4 text-[var(--accent)]" />
                 Tila
@@ -822,7 +822,7 @@ export function UserSettingsPanel({ adminOnly = false }: { adminOnly?: boolean }
             </div>
 
             {!isInstalledToHomeScreen ? (
-              <div className="rounded-xl border border-[var(--border)] bg-[var(--surface-2)] px-4 py-3 text-sm text-[var(--text-muted)]">
+              <div className="rounded-xl border border-[var(--border)] bg-[var(--surface-2)] px-3 py-2.5 text-sm text-[var(--text-muted)]">
                 {installHelp.showBadge ? (
                   <div className="flex items-start gap-3">
                     <span className="inline-flex shrink-0 items-center gap-2 rounded-full border border-[var(--border)] bg-[var(--surface)] px-2.5 py-1 text-[var(--text)]">

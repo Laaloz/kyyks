@@ -52,6 +52,7 @@ import {
   isAdminRole,
 } from "@/lib/role-access";
 import { createSupabaseBrowserClient } from "@/lib/supabase/client";
+import { estimateExtraActivityKcal } from "@/lib/extra-activities";
 import type {
   AppState,
   AssignedMealPlanInput,
@@ -59,6 +60,7 @@ import type {
   ConversationEntryType,
   DashboardHomeView,
   Exercise,
+  ExtraActivityType,
   IngredientInput,
   InviteInput,
   MealPlanTemplateInput,
@@ -741,6 +743,7 @@ function normalizeState(raw: AppState): AppState {
     recipes: raw.recipes ?? [],
     mealPlanTemplates: raw.mealPlanTemplates ?? [],
     assignedMealPlans: raw.assignedMealPlans ?? [],
+    extraActivities: raw.extraActivities ?? [],
     users: normalizedUsers,
     exercises: Array.from(mergedExerciseById.values()),
     passwordResetRequests: (raw.passwordResetRequests ?? []).filter(
@@ -1190,6 +1193,7 @@ function createEmptyAppState(): AppState {
     scheduledWorkouts: [],
     sessions: [],
     notes: [],
+    extraActivities: [],
     conversationEntries: [],
     invites: [],
     passwordResetRequests: [],
@@ -1570,6 +1574,7 @@ type SupabaseVisibleAppStateSnapshot = Partial<Pick<
   | "scheduledWorkouts"
   | "sessions"
   | "notes"
+  | "extraActivities"
   | "conversationEntries"
 >>;
 
@@ -1863,6 +1868,7 @@ export function reconcileSupabaseVisibleState(
 
       return mergedNotes;
     })(),
+    extraActivities: filteredSnapshot.extraActivities ?? previous.extraActivities ?? [],
     conversationEntries: filteredSnapshot.conversationEntries ?? previous.conversationEntries,
   });
 }
@@ -2303,6 +2309,21 @@ interface AppStateContextValue {
   startWorkout: (scheduledWorkoutId: string) => Promise<ActionResult>;
   updateWorkoutDate: (scheduledWorkoutId: string, scheduledDate: string) => Promise<ActionResult>;
   updateWorkoutDuration: (scheduledWorkoutId: string, durationSeconds: number) => Promise<ActionResult>;
+  addExtraActivity: (input: {
+    activityType: ExtraActivityType;
+    durationMinutes: number;
+    manualKcal?: number;
+    occurredAt: string;
+    notes?: string;
+  }) => Promise<ActionResult>;
+  updateExtraActivity: (activityId: string, input: {
+    activityType: ExtraActivityType;
+    durationMinutes: number;
+    manualKcal?: number;
+    occurredAt: string;
+    notes?: string;
+  }) => Promise<ActionResult>;
+  deleteExtraActivity: (activityId: string) => Promise<ActionResult>;
   updateWorkoutSet: (scheduledWorkoutId: string, logId: string, patch: WorkoutUpdateInput) => Promise<void>;
   updateWorkoutExerciseStructure: (
     scheduledWorkoutId: string,
@@ -5935,6 +5956,201 @@ function findResolvedUserIdInSnapshot(
           });
         }
 
+        return { ok: true };
+      },
+      async addExtraActivity(input) {
+        if (!currentUser) {
+          return { ok: false, message: "Kirjaudu sisään ennen extra-treenin lisäystä." };
+        }
+
+        if (!canTrackOwnTraining(currentUser.role)) {
+          return { ok: false, message: "Sinulla ei ole oikeutta lisätä extra-treenejä." };
+        }
+
+        const durationMinutes = Math.round(input.durationMinutes);
+        if (!Number.isFinite(durationMinutes) || durationMinutes <= 0) {
+          return { ok: false, message: "Anna kestolle vähintään 1 minuutti." };
+        }
+
+        const occurredAtDate = new Date(input.occurredAt);
+        if (!Number.isFinite(occurredAtDate.getTime())) {
+          return { ok: false, message: "Anna extra-treenille kelvollinen päivämäärä." };
+        }
+
+        const now = new Date().toISOString();
+        const estimatedKcal = estimateExtraActivityKcal({
+          activityType: input.activityType,
+          durationMinutes,
+          weightKg: currentUser.weightKg,
+        });
+        const resolvedKcal =
+          input.manualKcal && Number.isFinite(input.manualKcal) && input.manualKcal > 0
+            ? Math.round(input.manualKcal)
+            : estimatedKcal;
+
+        const optimisticId = makeId("extra_activity");
+        const optimisticActivity = {
+          id: optimisticId,
+          athleteId: currentUser.id,
+          activityType: input.activityType,
+          durationMinutes,
+          estimatedKcal: resolvedKcal,
+          occurredAt: occurredAtDate.toISOString(),
+          notes: input.notes?.trim() || undefined,
+          createdAt: now,
+          updatedAt: now,
+        };
+
+        setState((previous) => ({
+          ...previous,
+          extraActivities: [optimisticActivity, ...(previous.extraActivities ?? [])],
+        }));
+
+        if (!supabase) {
+          return { ok: true };
+        }
+
+        const response = await fetch("/api/extra-activities", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            activityType: input.activityType,
+            durationMinutes,
+            manualKcal: input.manualKcal,
+            occurredAt: occurredAtDate.toISOString(),
+            notes: input.notes?.trim() || "",
+          }),
+        }).catch(() => null);
+        const payload = (response ? await response.json().catch(() => null) : null) as { message?: string } | null;
+
+        if (!response?.ok) {
+          setState((previous) => ({
+            ...previous,
+            extraActivities: (previous.extraActivities ?? []).filter((activity) => activity.id !== optimisticId),
+          }));
+          return { ok: false, message: payload?.message ?? "Extra-treenin tallennus epäonnistui." };
+        }
+
+        await refreshSupabaseVisibleState({ mode: "workouts" });
+        return { ok: true };
+      },
+      async deleteExtraActivity(activityId) {
+        if (!currentUser) {
+          return { ok: false, message: "Kirjaudu sisään ennen extra-treenin poistoa." };
+        }
+
+        const targetActivity = (stateRef.current.extraActivities ?? []).find((activity) => activity.id === activityId);
+        if (!targetActivity) {
+          return { ok: false, message: "Extra-treeniä ei löytynyt." };
+        }
+
+        if (!isAdminRole(currentUser.role) && targetActivity.athleteId !== currentUser.id) {
+          return { ok: false, message: "Sinulla ei ole oikeutta poistaa tätä extra-treeniä." };
+        }
+
+        const previousState = stateRef.current;
+        setState((previous) => ({
+          ...previous,
+          extraActivities: (previous.extraActivities ?? []).filter((activity) => activity.id !== activityId),
+        }));
+
+        if (!supabase) {
+          return { ok: true };
+        }
+
+        const response = await fetch(`/api/extra-activities/${encodeURIComponent(activityId)}`, {
+          method: "DELETE",
+        }).catch(() => null);
+        const payload = (response ? await response.json().catch(() => null) : null) as { message?: string } | null;
+
+        if (!response?.ok) {
+          setState(previousState);
+          return { ok: false, message: payload?.message ?? "Extra-treenin poisto epäonnistui." };
+        }
+
+        await refreshSupabaseVisibleState({ mode: "workouts" });
+        return { ok: true };
+      },
+      async updateExtraActivity(activityId, input) {
+        if (!currentUser) {
+          return { ok: false, message: "Kirjaudu sisään ennen extra-treenin muokkausta." };
+        }
+
+        const existingActivity = (stateRef.current.extraActivities ?? []).find((activity) => activity.id === activityId);
+        if (!existingActivity) {
+          return { ok: false, message: "Extra-treeniä ei löytynyt." };
+        }
+
+        if (!isAdminRole(currentUser.role) && existingActivity.athleteId !== currentUser.id) {
+          return { ok: false, message: "Sinulla ei ole oikeutta muokata tätä extra-treeniä." };
+        }
+
+        const durationMinutes = Math.round(input.durationMinutes);
+        if (!Number.isFinite(durationMinutes) || durationMinutes <= 0) {
+          return { ok: false, message: "Anna kestolle vähintään 1 minuutti." };
+        }
+
+        const occurredAtDate = new Date(input.occurredAt);
+        if (!Number.isFinite(occurredAtDate.getTime())) {
+          return { ok: false, message: "Anna extra-treenille kelvollinen päivämäärä." };
+        }
+
+        const estimatedKcal = estimateExtraActivityKcal({
+          activityType: input.activityType,
+          durationMinutes,
+          weightKg: currentUser.weightKg,
+        });
+        const resolvedKcal =
+          input.manualKcal && Number.isFinite(input.manualKcal) && input.manualKcal > 0
+            ? Math.round(input.manualKcal)
+            : estimatedKcal;
+
+        const updatedAt = new Date().toISOString();
+        const previousState = stateRef.current;
+        setState((previous) => ({
+          ...previous,
+          extraActivities: (previous.extraActivities ?? []).map((activity) =>
+            activity.id === activityId
+              ? {
+                  ...activity,
+                  activityType: input.activityType,
+                  durationMinutes,
+                  estimatedKcal: resolvedKcal,
+                  occurredAt: occurredAtDate.toISOString(),
+                  notes: input.notes?.trim() || undefined,
+                  updatedAt,
+                }
+              : activity,
+          ),
+        }));
+
+        if (!supabase) {
+          return { ok: true };
+        }
+
+        const response = await fetch(`/api/extra-activities/${encodeURIComponent(activityId)}`, {
+          method: "PATCH",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            activityType: input.activityType,
+            durationMinutes,
+            manualKcal: input.manualKcal,
+            occurredAt: occurredAtDate.toISOString(),
+            notes: input.notes?.trim() || "",
+          }),
+        }).catch(() => null);
+        const payload = (response ? await response.json().catch(() => null) : null) as { message?: string } | null;
+
+        if (!response?.ok) {
+          setState(previousState);
+          return { ok: false, message: payload?.message ?? "Extra-treenin muokkaus epäonnistui." };
+        }
+
+        await refreshSupabaseVisibleState({ mode: "workouts" });
         return { ok: true };
       },
       async updateWorkoutSet(scheduledWorkoutId, logId, patch) {

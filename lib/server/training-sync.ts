@@ -12,6 +12,7 @@ import {
   type CoachAthleteAssignment,
   type ConversationEntry,
   type Exercise,
+  type ExtraActivity,
   type Ingredient,
   type MealPlanTemplate,
   type NutritionProfile,
@@ -175,6 +176,18 @@ type WorkoutNoteRow = {
   athlete_id: string;
   coach_id: string;
   body: string;
+  created_at: string;
+  updated_at: string;
+};
+
+type ExtraActivityRow = {
+  id: string;
+  athlete_id: string;
+  activity_type: ExtraActivity["activityType"];
+  duration_minutes: number;
+  estimated_kcal: number;
+  occurred_at: string;
+  notes: string | null;
   created_at: string;
   updated_at: string;
 };
@@ -349,6 +362,7 @@ export type SupabaseVisibleAppStateSnapshot = Partial<Pick<
   | "scheduledWorkouts"
   | "sessions"
   | "notes"
+  | "extraActivities"
   | "conversationEntries"
 >> & { mode?: "full" | "workouts" };
 
@@ -517,6 +531,20 @@ function mapWorkoutNoteRow(entry: WorkoutNoteRow): WorkoutNote {
   };
 }
 
+function mapExtraActivityRow(entry: ExtraActivityRow): ExtraActivity {
+  return {
+    id: entry.id,
+    athleteId: entry.athlete_id,
+    activityType: entry.activity_type,
+    durationMinutes: entry.duration_minutes,
+    estimatedKcal: entry.estimated_kcal,
+    occurredAt: entry.occurred_at,
+    notes: entry.notes ?? undefined,
+    createdAt: entry.created_at,
+    updatedAt: entry.updated_at,
+  };
+}
+
 function throwIfQueryFailed(
   label: string,
   result: {
@@ -571,6 +599,7 @@ export async function loadVisibleSupabaseAppState(
     scheduledWorkoutsResult,
     sessionsResult,
     notesResult,
+    extraActivitiesResult,
     conversationEntriesResult,
   ] = await Promise.all([
     mode === "full" || mode === "workouts"
@@ -667,6 +696,11 @@ export async function loadVisibleSupabaseAppState(
       .select("id, session_id, athlete_id, coach_id, body, created_at, updated_at")
       .limit(lite ? 40 : isAdminViewer ? 300 : 150)
       .order("updated_at", { ascending: false }),
+    supabase
+      .from("extra_activities")
+      .select("id, athlete_id, activity_type, duration_minutes, estimated_kcal, occurred_at, notes, created_at, updated_at")
+      .limit(lite ? 80 : isAdminViewer ? 500 : 250)
+      .order("occurred_at", { ascending: false }),
     mode === "full"
       ? supabase
           .from("conversation_entries")
@@ -693,6 +727,7 @@ export async function loadVisibleSupabaseAppState(
   throwIfQueryFailed("Scheduled workouts", scheduledWorkoutsResult);
   throwIfQueryFailed("Workout sessions", sessionsResult);
   throwIfQueryFailed("Workout notes", notesResult);
+  throwIfQueryFailed("Extra activities", extraActivitiesResult);
   throwIfQueryFailed("Conversation entries", conversationEntriesResult);
 
   const visibleSessionIds = ((sessionsResult.data ?? []) as WorkoutSessionRow[]).map((entry) => entry.id);
@@ -890,6 +925,9 @@ export async function loadVisibleSupabaseAppState(
   });
 
   const notes = ((notesResult.data ?? []) as WorkoutNoteRow[]).map((entry) => mapWorkoutNoteRow(entry));
+  const extraActivities = ((extraActivitiesResult.data ?? []) as ExtraActivityRow[]).map((entry) =>
+    mapExtraActivityRow(entry),
+  );
   const conversationEntries = ((conversationEntriesResult.data ?? []) as ConversationEntryRow[]).map((entry) => ({
     id: entry.id,
     athleteId: entry.athlete_id,
@@ -923,6 +961,7 @@ export async function loadVisibleSupabaseAppState(
     scheduledWorkouts,
     sessions,
     notes,
+    extraActivities,
     conversationEntries,
   };
 }
