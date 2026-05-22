@@ -1959,7 +1959,7 @@ export function AthleteDashboard({
                       type="button"
                       key={`overview-week-cell-${cell.key}`}
                       className={cn(
-                        "relative z-0 aspect-square w-full max-w-11 min-h-0 min-w-0 justify-self-center appearance-none overflow-visible rounded-full border border-[var(--border)] bg-[var(--surface)] p-[1px]",
+                        "relative z-0 aspect-square w-full max-w-11 min-h-0 min-w-0 justify-self-center appearance-none overflow-hidden rounded-full border border-[var(--border)] bg-[var(--surface)] p-0",
                         isToday ? "border-[var(--accent)] bg-[var(--accent)]" : null,
                         hasActivity ? "cursor-pointer hover:border-[var(--accent)]" : "cursor-pointer hover:border-[var(--border-strong)]",
                       )}
@@ -1973,17 +1973,19 @@ export function AthleteDashboard({
                       }}
                     >
                       {hasActivity ? (
-                        <div
-                          className={cn(
-                            "flex h-full w-full items-center justify-center rounded-full text-[var(--accent)]",
-                            isToday
-                              ? "bg-[var(--accent)] text-[var(--accent-contrast)]"
-                              : "bg-[color:color-mix(in_srgb,var(--accent)_12%,var(--surface))]",
-                          )}
-                        >
-                          <span className="grid size-8 place-items-center">
-                            {firstIcon ? renderCalendarActivityIcon(firstIcon) : null}
-                          </span>
+                        <div className="flex h-full w-full items-center justify-center">
+                          <div
+                            className={cn(
+                              "flex h-full w-full items-center justify-center rounded-[50%]",
+                              isToday
+                                ? "bg-[var(--accent)] text-[var(--accent-contrast)]"
+                                : "bg-[color:color-mix(in_srgb,var(--accent)_12%,var(--surface))] text-[var(--accent)]",
+                            )}
+                          >
+                            <span className="grid size-8 place-items-center">
+                              {firstIcon ? renderCalendarActivityIcon(firstIcon) : null}
+                            </span>
+                          </div>
                         </div>
                       ) : (
                         <div className="flex h-full w-full items-center justify-center">
@@ -3058,7 +3060,7 @@ export function AthleteDashboard({
                           key={cell.key}
                           disabled={!hasActivity}
                           className={cn(
-                            "relative z-0 aspect-square w-full max-w-11 min-h-0 min-w-0 justify-self-center appearance-none overflow-visible rounded-full border p-0 text-left transition",
+                            "relative z-0 aspect-square w-full max-w-11 min-h-0 min-w-0 justify-self-center appearance-none overflow-hidden rounded-full border p-0 text-left transition",
                             cell.isCurrentMonth
                               ? "border-[var(--border)] bg-[var(--surface)]"
                               : "border-[var(--border)] bg-[color:color-mix(in_srgb,var(--surface-2)_86%,var(--surface))] opacity-70",
@@ -3088,7 +3090,7 @@ export function AthleteDashboard({
                             <div className="flex h-full w-full flex-col items-center justify-center">
                               <div
                                 className={cn(
-                                  "flex min-h-0 w-full h-full flex-1 items-center justify-center gap-1 rounded-full",
+                                  "flex h-full w-full min-h-0 flex-1 items-center justify-center gap-1 rounded-[50%]",
                                   isToday
                                     ? "bg-[var(--accent)] text-[var(--accent-contrast)]"
                                     : "bg-[color:color-mix(in_srgb,var(--accent)_16%,var(--surface))] text-[var(--accent-strong)]",
