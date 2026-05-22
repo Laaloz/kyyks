@@ -1,4 +1,4 @@
-import { Flame } from "lucide-react";
+import { Activity, Bike, CircleDot, Dumbbell, Flame, Footprints, HeartPulse, Mountain, Music, PersonStanding, Snowflake, Swords, Waves } from "lucide-react";
 import type { ComponentType } from "react";
 
 import { Badge } from "@/components/ui/badge";
@@ -183,6 +183,28 @@ export function OwnTrainingOverviewCard({
   state: AppState;
   onOpenWorkoutLog?: () => void;
 }) {
+  const toLocalDateKey = (value: string | Date) => {
+    const date = value instanceof Date ? value : new Date(value);
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, "0");
+    const day = String(date.getDate()).padStart(2, "0");
+    return `${year}-${month}-${day}`;
+  };
+  const renderCalendarActivityIcon = (activityType: string) => {
+    if (activityType === "strength") return <Dumbbell className="size-3.5" aria-hidden="true" />;
+    if (activityType === "run" || activityType === "treadmill") return <Footprints className="size-3.5" aria-hidden="true" />;
+    if (activityType === "walk") return <PersonStanding className="size-3.5" aria-hidden="true" />;
+    if (activityType === "cycle" || activityType === "indoor_cycle" || activityType === "mtb") return <Bike className="size-3.5" aria-hidden="true" />;
+    if (activityType === "swim" || activityType === "paddle") return <Waves className="size-3.5" aria-hidden="true" />;
+    if (activityType === "climb" || activityType === "hike" || activityType === "stair_climber") return <Mountain className="size-3.5" aria-hidden="true" />;
+    if (activityType === "row" || activityType === "elliptical") return <Activity className="size-3.5" aria-hidden="true" />;
+    if (activityType === "ski" || activityType === "downhill_ski" || activityType === "skate") return <Snowflake className="size-3.5" aria-hidden="true" />;
+    if (activityType === "yoga" || activityType === "mobility") return <HeartPulse className="size-3.5" aria-hidden="true" />;
+    if (activityType === "hiit") return <Flame className="size-3.5" aria-hidden="true" />;
+    if (activityType === "combat") return <Swords className="size-3.5" aria-hidden="true" />;
+    if (activityType === "dance") return <Music className="size-3.5" aria-hidden="true" />;
+    return <CircleDot className="size-3.5" aria-hidden="true" />;
+  };
   const ownPrograms = state.plans.filter(
     (plan) => plan.athleteId === currentUser.id && Boolean(plan.workouts?.length) && isProgramActive(plan),
   );
@@ -207,6 +229,35 @@ export function OwnTrainingOverviewCard({
     )[0];
   const highlightedWorkout = ownWorkouts.find((workout) => workout.status === "in_progress");
   const highlightedState = highlightedWorkout ? "active" : ownPrograms.length > 0 ? "ready" : "empty";
+  const historyActivityByDay = new Map<string, Record<string, number>>();
+  ownWorkouts.forEach((workout) => {
+    if (workout.status !== "completed") {
+      return;
+    }
+    const completedAt = workout.completedAt ?? workout.updatedAt;
+    const key = toLocalDateKey(completedAt);
+    const current = historyActivityByDay.get(key) ?? {};
+    historyActivityByDay.set(key, { ...current, strength: (current.strength ?? 0) + 1 });
+  });
+  (state.extraActivities ?? [])
+    .filter((activity) => activity.athleteId === currentUser.id)
+    .forEach((activity) => {
+      const key = toLocalDateKey(activity.occurredAt);
+      const current = historyActivityByDay.get(key) ?? {};
+      historyActivityByDay.set(key, { ...current, [activity.activityType]: (current[activity.activityType] ?? 0) + 1 });
+    });
+  const todayCalendarKey = toLocalDateKey(new Date());
+  const weekStart = new Date();
+  weekStart.setHours(0, 0, 0, 0);
+  weekStart.setDate(weekStart.getDate() - ((weekStart.getDay() + 6) % 7));
+  const overviewWeekCells = Array.from({ length: 7 }, (_, index) => {
+    const date = new Date(weekStart);
+    date.setDate(weekStart.getDate() + index);
+    const key = toLocalDateKey(date);
+    const activityByType = historyActivityByDay.get(key) ?? {};
+    const activityCount = Object.values(activityByType).reduce((sum, count) => sum + count, 0);
+    return { key, date, activityByType, activityCount };
+  });
 
   return (
     <Card className="border-[var(--border-strong)]">
@@ -217,6 +268,57 @@ export function OwnTrainingOverviewCard({
           <CardDescription className="mt-2 max-w-3xl leading-7">
             Näet oman treeniseurannan, viimeisimmän toteutuksen ja seuraavan askeleen yhdellä silmäyksellä.
           </CardDescription>
+        </div>
+        <div className="rounded-xl border border-[var(--border)] bg-[var(--surface-2)] p-2.5 sm:p-3">
+          <div className="flex items-center justify-between gap-2">
+            <p className="text-sm font-semibold text-[var(--text)]">Viikkonäkymä</p>
+            <p className="text-xs text-[var(--text-subtle)]">Ma–Su</p>
+          </div>
+          <div className="mt-2 grid grid-cols-7 gap-1 text-center text-[10px] text-[var(--text-subtle)] sm:text-[11px]">
+            {["Ma", "Ti", "Ke", "To", "Pe", "La", "Su"].map((label) => (
+              <p key={`shared-overview-week-${label}`}>{label}</p>
+            ))}
+          </div>
+          <div className="mt-1 grid grid-cols-7 gap-1.5">
+            {overviewWeekCells.map((cell) => {
+              const iconKeys = Object.keys(cell.activityByType).filter((key) => (cell.activityByType[key] ?? 0) > 0);
+              const firstIcon = iconKeys[0];
+              const extraTypeCount = Math.max(0, iconKeys.length - 1);
+              const hasActivity = cell.activityCount > 0;
+              const isToday = cell.key === todayCalendarKey;
+
+              return (
+                <button
+                  type="button"
+                  key={`shared-overview-week-cell-${cell.key}`}
+                  className={`relative aspect-square w-full max-w-11 min-h-0 min-w-0 justify-self-center appearance-none rounded-full border p-0 ${
+                    isToday
+                      ? "border-[var(--accent)] bg-[color:color-mix(in_srgb,var(--accent)_14%,var(--surface))]"
+                      : "border-[var(--border)] bg-[var(--surface)]"
+                  } ${hasActivity ? "cursor-pointer hover:border-[var(--accent)]" : "cursor-pointer hover:border-[var(--border-strong)]"}`}
+                  aria-label={`${formatDateWithWeekday(cell.date.toISOString())} avaa treenit`}
+                  onClick={() => onOpenWorkoutLog?.()}
+                >
+                  {hasActivity ? (
+                    <div className={`flex h-full w-full items-center justify-center rounded-full ${isToday ? "bg-[var(--accent)] text-[var(--accent-contrast)]" : "bg-[color:color-mix(in_srgb,var(--accent)_12%,var(--surface))] text-[var(--accent)]"}`}>
+                      <span className="grid size-8 place-items-center">
+                        {firstIcon ? renderCalendarActivityIcon(firstIcon) : null}
+                      </span>
+                    </div>
+                  ) : (
+                    <div className="flex h-full w-full items-center justify-center">
+                      <span className="text-xs text-[var(--text-subtle)]">{cell.date.getDate()}</span>
+                    </div>
+                  )}
+                  {extraTypeCount > 0 ? (
+                    <span className="absolute -bottom-1 -right-1 grid min-h-4 min-w-4 place-items-center rounded-full border border-[color-mix(in_srgb,var(--accent)_35%,var(--border))] bg-[var(--surface)] px-1 text-[9px] font-semibold leading-4 text-[var(--accent)]">
+                      +{extraTypeCount}
+                    </span>
+                  ) : null}
+                </button>
+              );
+            })}
+          </div>
         </div>
         <div className="grid gap-3 lg:grid-cols-[1.2fr_0.8fr]">
           <div className="rounded-3xl border border-[var(--border)] bg-[var(--surface-2)] p-4">

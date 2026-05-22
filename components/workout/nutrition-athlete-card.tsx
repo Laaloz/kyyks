@@ -159,6 +159,11 @@ function RecipeDetailDialog({
   onIncreaseServings: () => void;
   onClose: () => void;
 }) {
+  const [keepScreenOn, setKeepScreenOn] = useState(false);
+  const [wakeLockSupported, setWakeLockSupported] = useState(false);
+  const [wakeLockError, setWakeLockError] = useState("");
+  const [wakeLockSentinel, setWakeLockSentinel] = useState<{ release: () => Promise<void> } | null>(null);
+
   useEffect(() => {
     const { body, documentElement } = document;
     const previousBodyOverflow = body.style.overflow;
@@ -189,6 +194,72 @@ function RecipeDetailDialog({
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [onClose]);
+
+  useEffect(() => {
+    setWakeLockSupported(typeof navigator !== "undefined" && "wakeLock" in navigator);
+  }, []);
+
+  useEffect(() => {
+    if (!wakeLockSupported || !keepScreenOn) {
+      if (wakeLockSentinel) {
+        void wakeLockSentinel.release().catch(() => undefined);
+        setWakeLockSentinel(null);
+      }
+      return;
+    }
+    if (wakeLockSentinel) {
+      return;
+    }
+
+    let cancelled = false;
+    const requestWakeLock = async () => {
+      try {
+        const lock = await (navigator as Navigator & {
+          wakeLock: { request: (type: "screen") => Promise<{ release: () => Promise<void> }> };
+        }).wakeLock.request("screen");
+        if (cancelled) {
+          await lock.release().catch(() => undefined);
+          return;
+        }
+        setWakeLockError("");
+        setWakeLockSentinel(lock);
+      } catch {
+        if (!cancelled) {
+          setWakeLockError("Näytön päälläpito ei onnistunut tällä laitteella.");
+          setKeepScreenOn(false);
+        }
+      }
+    };
+
+    void requestWakeLock();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [keepScreenOn, wakeLockSentinel, wakeLockSupported]);
+
+  useEffect(() => {
+    if (!keepScreenOn || !wakeLockSupported) {
+      return;
+    }
+
+    const onVisibilityChange = () => {
+      if (document.visibilityState === "visible" && !wakeLockSentinel) {
+        setKeepScreenOn(true);
+      }
+    };
+
+    document.addEventListener("visibilitychange", onVisibilityChange);
+    return () => document.removeEventListener("visibilitychange", onVisibilityChange);
+  }, [keepScreenOn, wakeLockSentinel, wakeLockSupported]);
+
+  useEffect(() => {
+    return () => {
+      if (wakeLockSentinel) {
+        void wakeLockSentinel.release().catch(() => undefined);
+      }
+    };
+  }, [wakeLockSentinel]);
 
   const compatibilityAlerts = getRecipeCompatibilityAlerts(recipe, nutritionProfile);
   const batchNutrition = {
@@ -240,6 +311,39 @@ function RecipeDetailDialog({
               <p id="nutrition-recipe-description" className="mt-1.5 text-sm leading-5 text-[var(--text-muted)]">
                 {recipe.description ?? "Selkeä reseptinäkymä, jossa näet annosmäärän, raaka-aineet ja valmistusvaiheet yhdellä kertaa."}
               </p>
+              <div className="mt-2 flex items-center justify-between gap-3 rounded-xl border border-[var(--border)] bg-[var(--surface)] px-2.5 py-1.5">
+                <p className="text-xs font-medium text-[var(--text-muted)]">Pidä näyttö päällä</p>
+                <button
+                  type="button"
+                  role="switch"
+                  aria-checked={keepScreenOn}
+                  disabled={!wakeLockSupported}
+                  className={`relative inline-flex h-6 w-11 shrink-0 items-center rounded-full border transition ${
+                    keepScreenOn
+                      ? "border-[var(--accent)] bg-[var(--accent)]"
+                      : "border-[var(--border)] bg-[var(--surface-3)]"
+                  } ${!wakeLockSupported ? "cursor-not-allowed opacity-60" : "cursor-pointer"}`}
+                  onClick={() => {
+                    if (!wakeLockSupported) {
+                      return;
+                    }
+                    setWakeLockError("");
+                    setKeepScreenOn((current) => !current);
+                  }}
+                >
+                  <span
+                    className={`pointer-events-none inline-block size-5 rounded-full bg-[var(--surface)] shadow-[0_1px_4px_-2px_var(--shadow)] transition-transform ${
+                      keepScreenOn ? "translate-x-5" : "translate-x-0.5 bg-[var(--surface)]"
+                    }`}
+                  />
+                </button>
+              </div>
+              {!wakeLockSupported ? (
+                <p className="mt-1 text-xs text-[var(--text-subtle)]">Ei tuettu tällä selaimella/laitteella.</p>
+              ) : null}
+              {wakeLockError ? (
+                <p className="mt-1 text-xs text-[var(--danger)]">{wakeLockError}</p>
+              ) : null}
             </div>
             <Button type="button" variant="ghost" className="shrink-0" onClick={onClose}>
               Sulje

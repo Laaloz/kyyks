@@ -387,6 +387,7 @@ function CalendarWorkoutDetailDialog({
   title,
   occurredAt,
   rows,
+  note,
   onClose,
 }: {
   title: string;
@@ -399,6 +400,7 @@ function CalendarWorkoutDetailDialog({
     bestLoad?: number;
     bestReps?: number;
   }>;
+  note?: string | null;
   onClose: () => void;
 }) {
   useEffect(() => {
@@ -430,6 +432,12 @@ function CalendarWorkoutDetailDialog({
         </h3>
         <p className="mt-1 text-xs text-[var(--text-subtle)]">{formatDateWithWeekday(occurredAt)}</p>
         <div className="mt-4 max-h-[55vh] space-y-2 overflow-y-auto pr-1">
+          {note ? (
+            <div className="rounded-xl border border-[var(--border)] bg-[var(--surface-2)] px-3 py-2.5">
+              <p className="text-xs font-semibold tracking-[0.04em] text-[var(--text-subtle)]">Muistiinpano</p>
+              <p className="mt-1 whitespace-pre-line text-sm text-[var(--text)]">{note}</p>
+            </div>
+          ) : null}
           {rows.map((row) => (
             <div key={row.key} className="rounded-xl border border-[var(--border)] bg-[var(--surface-2)] px-3 py-2.5">
               <p className="text-sm font-medium text-[var(--text)]">{row.exerciseName}</p>
@@ -746,6 +754,10 @@ export function AthleteDashboard({
   const [selectedCalendarWorkoutId, setSelectedCalendarWorkoutId] = useState<string | null>(null);
   const [selectedCalendarExtraActivityId, setSelectedCalendarExtraActivityId] = useState<string | null>(null);
   const [isCompletingWorkout, setIsCompletingWorkout] = useState(false);
+  const [keepWorkoutScreenOn, setKeepWorkoutScreenOn] = useState(false);
+  const [workoutWakeLockSupported, setWorkoutWakeLockSupported] = useState(false);
+  const [workoutWakeLockError, setWorkoutWakeLockError] = useState("");
+  const [workoutWakeLockSentinel, setWorkoutWakeLockSentinel] = useState<{ release: () => Promise<void> } | null>(null);
   const [pendingWorkoutTransition, setPendingWorkoutTransition] = useState<
     | { type: "open"; scheduledWorkoutId: string; workoutName: string; sourceKey: string }
     | { type: "start"; workoutId: string; workoutName: string; sourceKey: string }
@@ -810,6 +822,54 @@ export function AthleteDashboard({
     setIsMeasurementFormExpanded(false);
     setActiveMeasurementTrend("weight");
   }, [currentUser?.id]);
+  useEffect(() => {
+    setWorkoutWakeLockSupported(typeof navigator !== "undefined" && "wakeLock" in navigator);
+  }, []);
+  useEffect(() => {
+    const shouldKeepAwake = keepWorkoutScreenOn && athleteLogMode === "workout" && Boolean(selectedWorkoutId);
+    if (!workoutWakeLockSupported || !shouldKeepAwake) {
+      if (workoutWakeLockSentinel) {
+        void workoutWakeLockSentinel.release().catch(() => undefined);
+        setWorkoutWakeLockSentinel(null);
+      }
+      return;
+    }
+    if (workoutWakeLockSentinel) {
+      return;
+    }
+
+    let cancelled = false;
+    const requestWakeLock = async () => {
+      try {
+        const lock = await (navigator as Navigator & {
+          wakeLock: { request: (type: "screen") => Promise<{ release: () => Promise<void> }> };
+        }).wakeLock.request("screen");
+        if (cancelled) {
+          await lock.release().catch(() => undefined);
+          return;
+        }
+        setWorkoutWakeLockError("");
+        setWorkoutWakeLockSentinel(lock);
+      } catch {
+        if (!cancelled) {
+          setWorkoutWakeLockError("Näytön päälläpito ei onnistunut tällä laitteella.");
+          setKeepWorkoutScreenOn(false);
+        }
+      }
+    };
+    void requestWakeLock();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [athleteLogMode, keepWorkoutScreenOn, selectedWorkoutId, workoutWakeLockSentinel, workoutWakeLockSupported]);
+  useEffect(() => {
+    return () => {
+      if (workoutWakeLockSentinel) {
+        void workoutWakeLockSentinel.release().catch(() => undefined);
+      }
+    };
+  }, [workoutWakeLockSentinel]);
   useEffect(() => {
     onWorkoutDetailModeChange?.(view === "athlete-log" && athleteLogMode === "workout");
   }, [athleteLogMode, onWorkoutDetailModeChange, view]);
@@ -1734,9 +1794,10 @@ export function AthleteDashboard({
         session?.completedAt ??
         getWorkoutOrderMetadata(workout).primaryTimestamp ??
         workout.scheduledDate,
+      note: latestNoteByWorkoutId.get(workout.id)?.body ?? null,
       rows: Array.from(grouped.entries()).map(([key, value]) => ({ key, ...value })),
     };
-  }, [getWorkoutOrderMetadata, selectedCalendarWorkoutId, sessionByWorkoutId, workouts]);
+  }, [getWorkoutOrderMetadata, latestNoteByWorkoutId, selectedCalendarWorkoutId, sessionByWorkoutId, workouts]);
   const historyGroupByWorkoutId = useMemo(() => {
     const groupByWorkoutId = new Map<string, string>();
 
@@ -1883,7 +1944,7 @@ export function AthleteDashboard({
                   <p key={`overview-week-${label}`}>{label}</p>
                 ))}
               </div>
-              <div className="mt-1 grid grid-cols-7 gap-1">
+              <div className="mt-1 grid grid-cols-7 gap-1.5">
                 {overviewWeekCells.map((cell) => {
                   const iconKeys = Object.keys(cell.activityByType).filter((key) => (cell.activityByType[key] ?? 0) > 0);
                   const firstIcon = iconKeys[0];
@@ -1896,8 +1957,8 @@ export function AthleteDashboard({
                       type="button"
                       key={`overview-week-cell-${cell.key}`}
                       className={cn(
-                        "relative aspect-square w-full min-w-0 appearance-none rounded-full border border-[var(--border)] bg-[var(--surface)] p-0",
-                        isToday ? "border-[var(--accent)]/60" : null,
+                        "relative aspect-square w-full max-w-11 min-h-0 min-w-0 justify-self-center appearance-none rounded-full border border-[var(--border)] bg-[var(--surface)] p-0",
+                        isToday ? "border-[var(--accent)] bg-[color:color-mix(in_srgb,var(--accent)_14%,var(--surface))]" : null,
                         hasActivity ? "cursor-pointer hover:border-[var(--accent)]" : "cursor-pointer hover:border-[var(--border-strong)]",
                       )}
                       aria-label={`${formatCalendarDate(cell.date)} avaa historian kalenteri`}
@@ -1910,7 +1971,14 @@ export function AthleteDashboard({
                       }}
                     >
                       {hasActivity ? (
-                        <div className="flex h-full w-full items-center justify-center rounded-full bg-[color:color-mix(in_srgb,var(--accent)_12%,var(--surface))] text-[var(--accent)]">
+                        <div
+                          className={cn(
+                            "flex h-full w-full items-center justify-center rounded-full text-[var(--accent)]",
+                            isToday
+                              ? "bg-[var(--accent)] text-[var(--accent-contrast)]"
+                              : "bg-[color:color-mix(in_srgb,var(--accent)_12%,var(--surface))]",
+                          )}
+                        >
                           <span className="grid size-8 place-items-center">
                             {firstIcon ? renderCalendarActivityIcon(firstIcon) : null}
                           </span>
@@ -1924,9 +1992,6 @@ export function AthleteDashboard({
                         <span className="absolute -bottom-1 -right-1 grid min-h-4 min-w-4 place-items-center rounded-full border border-[color-mix(in_srgb,var(--accent)_35%,var(--border))] bg-[var(--surface)] px-1 text-[9px] font-semibold leading-4 text-[var(--accent)]">
                           +{extraTypeCount}
                         </span>
-                      ) : null}
-                      {isToday ? (
-                        <span className="absolute -top-0.5 left-1/2 h-1.5 w-1.5 -translate-x-1/2 rounded-full bg-[var(--accent)]" aria-hidden="true" />
                       ) : null}
                     </button>
                   );
@@ -2367,6 +2432,41 @@ export function AthleteDashboard({
                 <ArrowLeft className="size-4" aria-hidden="true" />
               </Button>
             </div>
+            {selectedWorkout ? (
+              <div className="mt-3 flex items-center justify-between gap-3 rounded-xl border border-[var(--border)] bg-[var(--surface-2)] px-2.5 py-1.5">
+                <p className="text-xs font-medium text-[var(--text-muted)]">Pidä näyttö päällä</p>
+                <button
+                  type="button"
+                  role="switch"
+                  aria-checked={keepWorkoutScreenOn}
+                  disabled={!workoutWakeLockSupported}
+                  className={`relative inline-flex h-6 w-11 shrink-0 items-center rounded-full border transition ${
+                    keepWorkoutScreenOn
+                      ? "border-[var(--accent)] bg-[var(--accent)]"
+                      : "border-[var(--border)] bg-[var(--surface-3)]"
+                  } ${!workoutWakeLockSupported ? "cursor-not-allowed opacity-60" : "cursor-pointer"}`}
+                  onClick={() => {
+                    if (!workoutWakeLockSupported) {
+                      return;
+                    }
+                    setWorkoutWakeLockError("");
+                    setKeepWorkoutScreenOn((current) => !current);
+                  }}
+                >
+                  <span
+                    className={`pointer-events-none inline-block size-5 rounded-full bg-[var(--surface)] shadow-[0_1px_4px_-2px_var(--shadow)] transition-transform ${
+                      keepWorkoutScreenOn ? "translate-x-5" : "translate-x-0.5"
+                    }`}
+                  />
+                </button>
+              </div>
+            ) : null}
+            {selectedWorkout && !workoutWakeLockSupported ? (
+              <p className="mt-1 text-xs text-[var(--text-subtle)]">Ei tuettu tällä selaimella/laitteella.</p>
+            ) : null}
+            {selectedWorkout && workoutWakeLockError ? (
+              <p className="mt-1 text-xs text-[var(--danger)]">{workoutWakeLockError}</p>
+            ) : null}
             {progress ? (
               <div className="mt-4 rounded-2xl border border-[var(--border-strong)] bg-[var(--surface-2)] p-3">
                 <div className="flex items-center justify-between gap-3">
@@ -2937,7 +3037,7 @@ export function AthleteDashboard({
                       <p key={label}>{label}</p>
                     ))}
                   </div>
-                  <div className="mt-1 grid grid-cols-7 gap-1">
+                  <div className="mt-1 grid grid-cols-7 gap-1.5">
                     {historyCalendarCells.map((cell) => {
                       const hasActivity = cell.activityCount > 0;
                       const isSelected = selectedCalendarDayKey === cell.key;
@@ -2954,15 +3054,17 @@ export function AthleteDashboard({
                           key={cell.key}
                           disabled={!hasActivity}
                           className={cn(
-                            "relative aspect-square w-full min-w-0 appearance-none overflow-visible rounded-full border p-0 text-left transition",
+                            "relative aspect-square w-full max-w-11 min-h-0 min-w-0 justify-self-center appearance-none overflow-visible rounded-full border p-0 text-left transition",
                             cell.isCurrentMonth
                               ? "border-[var(--border)] bg-[var(--surface)]"
                               : "border-[var(--border)] bg-[color:color-mix(in_srgb,var(--surface-2)_86%,var(--surface))] opacity-70",
-                            isToday ? "border-[var(--accent)]/60" : null,
+                            isToday ? "border-[var(--accent)] bg-[color:color-mix(in_srgb,var(--accent)_14%,var(--surface))]" : null,
                             hasActivity ? "cursor-pointer hover:border-[var(--accent)]" : "cursor-default",
-                            isSelected
-                              ? "border-[var(--accent)] bg-[color:color-mix(in_srgb,var(--accent)_10%,var(--surface))] shadow-[0_0_0_1px_var(--accent)]"
-                              : null,
+                            isSelected && isToday
+                              ? "border-[var(--accent-strong)] bg-[color:color-mix(in_srgb,var(--accent)_10%,var(--surface))] ring-2 ring-inset ring-[var(--accent-strong)]"
+                              : isSelected
+                                ? "border-[var(--accent)] bg-[color:color-mix(in_srgb,var(--accent)_10%,var(--surface))] ring-1 ring-inset ring-[var(--accent)]"
+                                : null,
                           )}
                           onClick={() => {
                             if (!hasActivity) {
@@ -2979,8 +3081,15 @@ export function AthleteDashboard({
                           }
                         >
                           {hasActivity ? (
-                            <div className="flex h-full w-full flex-col aspect-square items-center justify-center">
-                              <div className="flex min-h-0 w-full h-full flex-1 items-center justify-center gap-1 rounded-full bg-[color-mix(in_srgb,var(--accent)_16%,var(--surface))] text-[var(--accent-strong)]">
+                            <div className="flex h-full w-full flex-col items-center justify-center">
+                              <div
+                                className={cn(
+                                  "flex min-h-0 w-full h-full flex-1 items-center justify-center gap-1 rounded-full text-[var(--accent-strong)]",
+                                  isToday && !isSelected
+                                    ? "bg-[var(--accent)] text-[var(--accent-contrast)]"
+                                    : "bg-[color:color-mix(in_srgb,var(--accent)_16%,var(--surface))]",
+                                )}
+                              >
                                 {visibleIconKeys.map((iconKey) => (
                                   <span key={iconKey} className="grid size-8 place-items-center">
                                     {renderCalendarActivityIcon(iconKey)}
@@ -2989,7 +3098,7 @@ export function AthleteDashboard({
                               </div>
                             </div>
                           ) : (
-                            <div className="flex h-full w-full aspect-square items-center justify-center">
+                            <div className="flex h-full w-full items-center justify-center">
                               <span className="text-xs text-[var(--text-subtle)]">{cell.date.getDate()}</span>
                             </div>
                           )}
@@ -2997,9 +3106,6 @@ export function AthleteDashboard({
                             <span className="absolute -bottom-1 -right-1 grid min-h-4 min-w-4 place-items-center rounded-full border border-[color-mix(in_srgb,var(--accent)_35%,var(--border))] bg-[var(--surface)] px-1 text-[9px] font-semibold leading-4 text-[var(--accent)] shadow-[0_2px_8px_-6px_var(--shadow)]">
                               +{extraTypeCount}
                             </span>
-                          ) : null}
-                          {isToday ? (
-                            <span className="absolute -top-0.5 left-1/2 h-1.5 w-1.5 -translate-x-1/2 rounded-full bg-[var(--accent)]" aria-hidden="true" />
                           ) : null}
                         </button>
                       );
@@ -3641,6 +3747,7 @@ export function AthleteDashboard({
         <CalendarWorkoutDetailDialog
           title={selectedCalendarWorkoutDetails.title}
           occurredAt={selectedCalendarWorkoutDetails.occurredAt}
+          note={selectedCalendarWorkoutDetails.note}
           rows={selectedCalendarWorkoutDetails.rows}
           onClose={() => setSelectedCalendarWorkoutId(null)}
         />
@@ -4254,10 +4361,17 @@ function renderCalendarActivityIcon(activityType: string) {
   if (activityType === "run") return <Footprints className="size-3.5" aria-hidden="true" />;
   if (activityType === "walk") return <PersonStanding className="size-3.5" aria-hidden="true" />;
   if (activityType === "cycle") return <Bike className="size-3.5" aria-hidden="true" />;
+  if (activityType === "indoor_cycle") return <Bike className="size-3.5" aria-hidden="true" />;
+  if (activityType === "mtb") return <Bike className="size-3.5" aria-hidden="true" />;
+  if (activityType === "treadmill") return <Footprints className="size-3.5" aria-hidden="true" />;
+  if (activityType === "stair_climber") return <Mountain className="size-3.5" aria-hidden="true" />;
+  if (activityType === "elliptical") return <Activity className="size-3.5" aria-hidden="true" />;
   if (activityType === "swim") return <Waves className="size-3.5" aria-hidden="true" />;
+  if (activityType === "paddle") return <Waves className="size-3.5" aria-hidden="true" />;
   if (activityType === "climb" || activityType === "hike") return <Mountain className="size-3.5" aria-hidden="true" />;
   if (activityType === "row") return <Activity className="size-3.5" aria-hidden="true" />;
-  if (activityType === "ski") return <Snowflake className="size-3.5" aria-hidden="true" />;
+  if (activityType === "ski" || activityType === "downhill_ski" || activityType === "skate") return <Snowflake className="size-3.5" aria-hidden="true" />;
+  if (activityType === "disc_golf") return <CircleDot className="size-3.5" aria-hidden="true" />;
   if (activityType === "yoga" || activityType === "mobility") return <HeartPulse className="size-3.5" aria-hidden="true" />;
   if (activityType === "hiit") return <Flame className="size-3.5" aria-hidden="true" />;
   if (activityType === "combat") return <Swords className="size-3.5" aria-hidden="true" />;
