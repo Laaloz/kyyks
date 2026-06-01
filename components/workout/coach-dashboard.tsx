@@ -2566,7 +2566,7 @@ function CoachAthleteInsights({
   const [isArchiveExpanded, setIsArchiveExpanded] = useState(false);
   const [selectedExerciseProgressKey, setSelectedExerciseProgressKey] = useState("");
   const [isExerciseProgressExpanded, setIsExerciseProgressExpanded] = useState(false);
-  const [activeMeasurementTrend, setActiveMeasurementTrend] = useState<"weight" | "waist" | "volume">("weight");
+  const [activeMeasurementTrend, setActiveMeasurementTrend] = useState<"weight" | "waist">("weight");
   const selectedAthlete = athletes.find((athlete) => athlete.id === selectedAthleteId) ?? null;
   const selectedAthleteProfile = useMemo(
     () => state.users.find((user) => user.id === selectedAthleteId) ?? null,
@@ -2978,9 +2978,9 @@ function CoachAthleteInsights({
               <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                 <div>
                   <p className="text-sm font-semibold text-[var(--text)]">Kehitystrendi</p>
-                  <p className="mt-1 text-sm text-[var(--text-muted)]">Valitse paino, vyötärö tai volyymi.</p>
+                  <p className="mt-1 text-sm text-[var(--text-muted)]">Valitse paino tai vyötärö.</p>
                 </div>
-                <div className="grid w-full grid-cols-3 rounded-xl border border-[var(--border)] bg-[var(--surface)] p-1 sm:w-auto">
+                <div className="grid w-full grid-cols-2 rounded-xl border border-[var(--border)] bg-[var(--surface)] p-1 sm:w-auto">
                   <button
                     type="button"
                     className={`w-full rounded-lg px-3 py-2 text-sm font-medium transition ${
@@ -3004,18 +3004,6 @@ function CoachAthleteInsights({
                     onClick={() => setActiveMeasurementTrend("waist")}
                   >
                     Vyötärö
-                  </button>
-                  <button
-                    type="button"
-                    className={`w-full rounded-lg px-3 py-2 text-sm font-medium transition ${
-                      activeMeasurementTrend === "volume"
-                        ? "bg-[color-mix(in_srgb,var(--accent)_10%,var(--surface))] text-[var(--accent)]"
-                        : "text-[var(--text-muted)]"
-                    }`}
-                    aria-pressed={activeMeasurementTrend === "volume"}
-                    onClick={() => setActiveMeasurementTrend("volume")}
-                  >
-                    Volyymi
                   </button>
                 </div>
               </div>
@@ -3048,21 +3036,39 @@ function CoachAthleteInsights({
                   </>
                 ) : (
                   <>
-                    <p className="text-xs font-semibold tracking-[0.04em] text-[var(--text-subtle)]">Volyymitrendi</p>
+                    <p className="text-xs font-semibold tracking-[0.04em] text-[var(--text-subtle)]">Vyötärötrendi</p>
                     <MetricTrendChart
-                      points={volumeTrendPoints}
-                      ariaLabel="Volyymin kehitystrendi"
-                      emptyMessage="Ei valmiita treenejä graafiin vielä."
-                      helperText="Alarivillä näkyy kuukausi ja vuosi, oikealla volyymin asteikko."
+                      points={waistTrendPoints}
+                      ariaLabel="Vyötärön kehitystrendi"
+                      emptyMessage="Vyötärömittauksia ei ole vielä kirjattu."
+                      helperText="Alarivillä näkyy kuukausi ja vuosi, oikealla vyötärön asteikko."
                       compactHelperText="Alarivillä näkyy kuukausi ja vuosi. Tarkka arvo näkyy pisteen kohdalla."
-                      valueLabel="Volyymi"
-                      unit="kg"
-                      decimals={0}
-                      useZeroBaseline
+                      valueLabel="Vyötärö"
+                      unit="cm"
                     />
                   </>
                 )}
               </div>
+            </div>
+          </div>
+          <div className="mt-4 rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-4">
+            <div>
+              <p className="text-sm font-semibold text-[var(--text)]">Treenisuoritus</p>
+              <p className="mt-1 text-sm text-[var(--text-muted)]">Volyymitrendi erillään kehomittareista.</p>
+            </div>
+            <div className="mt-4">
+              <p className="text-xs font-semibold tracking-[0.04em] text-[var(--text-subtle)]">Volyymitrendi</p>
+              <MetricTrendChart
+                points={volumeTrendPoints}
+                ariaLabel="Volyymin kehitystrendi"
+                emptyMessage="Ei valmiita treenejä graafiin vielä."
+                helperText="Alarivillä näkyy kuukausi ja vuosi, oikealla volyymin asteikko."
+                compactHelperText="Alarivillä näkyy kuukausi ja vuosi. Tarkka arvo näkyy pisteen kohdalla."
+                valueLabel="Volyymi"
+                unit="kg"
+                decimals={0}
+                useZeroBaseline
+              />
             </div>
           </div>
 

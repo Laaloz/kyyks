@@ -51,7 +51,7 @@ export function OwnMeasurementsCard({ sectionId = "overview-measurements" }: { s
   const [measurementMessageTone, setMeasurementMessageTone] = useState<MeasurementMessageTone>("info");
   const [isSavingMeasurements, setIsSavingMeasurements] = useState(false);
   const [isMeasurementFormExpanded, setIsMeasurementFormExpanded] = useState(false);
-  const [activeMeasurementTrend, setActiveMeasurementTrend] = useState<"weight" | "waist" | "volume">("weight");
+  const [activeMeasurementTrend, setActiveMeasurementTrend] = useState<"weight" | "waist">("weight");
 
   useEffect(() => {
     const latestWaistValue =
@@ -343,9 +343,9 @@ export function OwnMeasurementsCard({ sectionId = "overview-measurements" }: { s
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
               <div>
                 <p className="text-sm font-semibold text-[var(--text)]">Kehitystrendi</p>
-                <p className="mt-1 text-sm text-[var(--text-muted)]">Valitse paino, vyötärö tai volyymi.</p>
+                <p className="mt-1 text-sm text-[var(--text-muted)]">Valitse paino tai vyötärö.</p>
               </div>
-          <div className="grid w-full grid-cols-3 rounded-xl border border-[var(--border)] bg-[var(--surface)] p-1 sm:w-auto">
+          <div className="grid w-full grid-cols-2 rounded-xl border border-[var(--border)] bg-[var(--surface)] p-1 sm:w-auto">
             <button
               type="button"
               className={`w-full rounded-lg px-3 py-2 text-sm font-medium transition ${
@@ -369,18 +369,6 @@ export function OwnMeasurementsCard({ sectionId = "overview-measurements" }: { s
               onClick={() => setActiveMeasurementTrend("waist")}
             >
               Vyötärö
-            </button>
-            <button
-              type="button"
-              className={`w-full rounded-lg px-3 py-2 text-sm font-medium transition ${
-                activeMeasurementTrend === "volume"
-                  ? "bg-[color-mix(in_srgb,var(--accent)_10%,var(--surface))] text-[var(--accent)]"
-                  : "text-[var(--text-muted)]"
-              }`}
-              aria-pressed={activeMeasurementTrend === "volume"}
-              onClick={() => setActiveMeasurementTrend("volume")}
-            >
-              Volyymi
             </button>
           </div>
         </div>
@@ -413,20 +401,38 @@ export function OwnMeasurementsCard({ sectionId = "overview-measurements" }: { s
             </>
           ) : (
             <>
-              <p className="text-xs font-semibold tracking-[0.04em] text-[var(--text-subtle)]">Volyymitrendi</p>
+              <p className="text-xs font-semibold tracking-[0.04em] text-[var(--text-subtle)]">Vyötärötrendi</p>
               <MetricTrendChart
-                points={volumeTrendPoints}
-                ariaLabel="Volyymin kehitystrendi"
-                emptyMessage="Kun saat treenejä valmiiksi, volyymitrendi näkyy tässä."
-                helperText="Alarivillä näkyy kuukausi ja vuosi, oikealla volyymin asteikko."
+                points={waistTrendPoints}
+                ariaLabel="Vyötärön kehitystrendi"
+                emptyMessage="Lisää vyötärö viimeisimpään mittaukseen, niin kehitystrendi alkaa piirtyä tähän."
+                helperText="Alarivillä näkyy kuukausi ja vuosi, oikealla vyötärön asteikko."
                 compactHelperText="Alarivillä näkyy kuukausi ja vuosi. Tarkka arvo näkyy pisteen kohdalla."
-                valueLabel="Volyymi"
-                unit="kg"
-                decimals={0}
-                useZeroBaseline
+                valueLabel="Vyötärö"
+                unit="cm"
               />
             </>
           )}
+        </div>
+      </div>
+      <div className="mt-4 rounded-2xl border border-[var(--border)] bg-[var(--surface-2)] p-4">
+        <div>
+          <p className="text-sm font-semibold text-[var(--text)]">Treenisuoritus</p>
+          <p className="mt-1 text-sm text-[var(--text-muted)]">Volyymitrendi erillään kehomittareista.</p>
+        </div>
+        <div className="mt-4">
+          <p className="text-xs font-semibold tracking-[0.04em] text-[var(--text-subtle)]">Volyymitrendi</p>
+          <MetricTrendChart
+            points={volumeTrendPoints}
+            ariaLabel="Volyymin kehitystrendi"
+            emptyMessage="Kun saat treenejä valmiiksi, volyymitrendi näkyy tässä."
+            helperText="Alarivillä näkyy kuukausi ja vuosi, oikealla volyymin asteikko."
+            compactHelperText="Alarivillä näkyy kuukausi ja vuosi. Tarkka arvo näkyy pisteen kohdalla."
+            valueLabel="Volyymi"
+            unit="kg"
+            decimals={0}
+            useZeroBaseline
+          />
         </div>
       </div>
     </Card>
