@@ -418,7 +418,6 @@ export function OwnMeasurementsCard({ sectionId = "overview-measurements" }: { s
       <div className="mt-4 rounded-2xl border border-[var(--border)] bg-[var(--surface-2)] p-4">
         <div>
           <p className="text-sm font-semibold text-[var(--text)]">Treenisuoritus</p>
-          <p className="mt-1 text-sm text-[var(--text-muted)]">Volyymitrendi erillään kehomittareista.</p>
         </div>
         <div className="mt-4">
           <p className="text-xs font-semibold tracking-[0.04em] text-[var(--text-subtle)]">Volyymitrendi</p>
