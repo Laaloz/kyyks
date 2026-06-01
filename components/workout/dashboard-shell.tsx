@@ -661,8 +661,19 @@ export function DashboardShell() {
                 overviewFocusTarget={athleteOverviewFocusTarget}
                 onOverviewFocusHandled={() => setAthleteOverviewFocusTarget(null)}
               />
-            ) : view === "nutrition" && canActAsCoach(currentUser.role) ? (
-              <NutritionAdminPanel />
+            ) : view === "nutrition" ? (
+              currentUser.role === "admin" ? (
+                <NutritionAdminPanel />
+              ) : (
+                <AthleteDashboard
+                  view={view}
+                  onOpenWorkoutLog={() => setView("athlete-log")}
+                  onOpenSettings={() => setView("settings")}
+                  onWorkoutDetailModeChange={setIsMobileWorkoutDetailOpen}
+                  overviewFocusTarget={athleteOverviewFocusTarget}
+                  onOverviewFocusHandled={() => setAthleteOverviewFocusTarget(null)}
+                />
+              )
             ) : view === PROGRAMS_WORKSPACE_VIEW ||
               currentUser.role === "coach" ||
               (currentUser.role === "admin" && (view === "athletes" || view === "conversation")) ? (

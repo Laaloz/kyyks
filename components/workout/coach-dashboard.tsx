@@ -37,6 +37,7 @@ import {
 import { estimateStrengthCalories, getLatestMeasurement, getMeasurementsForUser, getWeightAtMoment } from "@/lib/body-metrics";
 import { isConversationEntryNotifiable } from "@/lib/conversation";
 import { calculateSessionDurationSeconds, getCoachConversationAthletes, splitLabel } from "@/lib/domain";
+import { buildExerciseProgressCatalog } from "@/lib/exercise-progress";
 import { withMinimumDelay } from "@/lib/min-delay";
 import { deriveProgramWorkoutGuidance } from "@/lib/program-workout-guidance";
 import { buildScheduledWorkoutExerciseOrder } from "@/lib/workout-exercise-order";
@@ -2563,6 +2564,8 @@ function CoachAthleteInsights({
   const [expandedWorkoutDetailsId, setExpandedWorkoutDetailsId] = useState<string | null>(null);
   const [selectedWorkoutByGroup, setSelectedWorkoutByGroup] = useState<Record<string, string>>({});
   const [isArchiveExpanded, setIsArchiveExpanded] = useState(false);
+  const [selectedExerciseProgressKey, setSelectedExerciseProgressKey] = useState("");
+  const [isExerciseProgressExpanded, setIsExerciseProgressExpanded] = useState(false);
   const [activeMeasurementTrend, setActiveMeasurementTrend] = useState<"weight" | "waist" | "volume">("weight");
   const selectedAthlete = athletes.find((athlete) => athlete.id === selectedAthleteId) ?? null;
   const selectedAthleteProfile = useMemo(
@@ -2577,6 +2580,8 @@ function CoachAthleteInsights({
     setExpandedWorkoutDetailsId(null);
     setSelectedWorkoutByGroup({});
     setIsArchiveExpanded(false);
+    setSelectedExerciseProgressKey("");
+    setIsExerciseProgressExpanded(false);
     setActiveMeasurementTrend("weight");
   }, [selectedAthleteId]);
 
@@ -2832,6 +2837,32 @@ function CoachAthleteInsights({
   );
 
   const phaseBars = buildPhaseBars(athleteWorkoutHistory, 8);
+  const exerciseProgressCatalog = useMemo(
+    () => (selectedAthleteId ? buildExerciseProgressCatalog(state, selectedAthleteId) : { exercises: [], summaries: new Map() }),
+    [selectedAthleteId, state],
+  );
+  const exerciseProgressOptions = exerciseProgressCatalog.exercises;
+
+  useEffect(() => {
+    if (!exerciseProgressOptions.length) {
+      if (selectedExerciseProgressKey) {
+        setSelectedExerciseProgressKey("");
+      }
+      return;
+    }
+    const selectionExists = exerciseProgressOptions.some((exercise) => exercise.key === selectedExerciseProgressKey);
+    if (!selectionExists) {
+      setSelectedExerciseProgressKey(exerciseProgressOptions[0]?.key ?? "");
+    }
+  }, [exerciseProgressOptions, selectedExerciseProgressKey]);
+
+  useEffect(() => {
+    setIsExerciseProgressExpanded(false);
+  }, [selectedExerciseProgressKey]);
+
+  const selectedExerciseProgress =
+    exerciseProgressCatalog.summaries.get(selectedExerciseProgressKey) ??
+    (exerciseProgressOptions[0] ? exerciseProgressCatalog.summaries.get(exerciseProgressOptions[0].key) : undefined);
 
   if (!athletes.length) {
     return (
@@ -3033,6 +3064,99 @@ function CoachAthleteInsights({
                 )}
               </div>
             </div>
+          </div>
+
+          <div className="mt-5 rounded-2xl border border-[var(--border)] bg-[var(--surface-2)] p-4">
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+              <div>
+                <p className="text-sm font-semibold text-[var(--text)]">Liikekohtainen kehitys</p>
+                <p className="mt-1 text-xs text-[var(--text-muted)]">
+                  Sama nopea yhteenveto kuin treenaajalla: e1RM, paras sarja ja viimeisin toteuma.
+                </p>
+              </div>
+              {exerciseProgressOptions.length > 0 ? (
+                <div className="w-full sm:w-[18rem]">
+                  <Label htmlFor="coach-history-exercise-progress" className="text-xs">
+                    Valitse liike
+                  </Label>
+                  <Select
+                    id="coach-history-exercise-progress"
+                    className="mt-2"
+                    value={selectedExerciseProgress?.exerciseKey ?? ""}
+                    onChange={(event) => setSelectedExerciseProgressKey(event.target.value)}
+                  >
+                    {exerciseProgressOptions.map((exercise) => (
+                      <option key={exercise.key} value={exercise.key}>
+                        {exercise.exerciseName}
+                      </option>
+                    ))}
+                  </Select>
+                </div>
+              ) : null}
+            </div>
+
+            {exerciseProgressOptions.length === 0 ? (
+              <p className="mt-4 rounded-2xl border border-[var(--border)] bg-[var(--surface)] px-4 py-3 text-sm text-[var(--text-muted)]">
+                Kun treeneistä tallentuu toteutuneet sarjat, tähän tulee automaattisesti liikekohtainen kehitys.
+              </p>
+            ) : selectedExerciseProgress ? (
+              <>
+                <div className="mt-3 rounded-xl border border-[var(--border)] bg-[var(--surface)] px-3 py-3">
+                  <p className="text-[11px] font-semibold tracking-[0.04em] text-[var(--text-subtle)]">Valittu liike</p>
+                  <p className="mt-1 text-sm font-medium text-[var(--text)]">{selectedExerciseProgress.exerciseName}</p>
+                  <p className="mt-3 text-[11px] font-semibold tracking-[0.04em] text-[var(--text-subtle)]">Nykyinen e1RM</p>
+                  <p className="mt-1 text-base font-semibold text-[var(--text)]">
+                    {selectedExerciseProgress.currentEstimatedOneRepMax !== undefined
+                      ? `${formatCoachLoadValue(selectedExerciseProgress.currentEstimatedOneRepMax)} kg`
+                      : "Ei dataa"}
+                  </p>
+                </div>
+
+                <div className="mt-3">
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    className="h-10 w-full justify-between rounded-xl border border-[var(--border)] bg-[var(--surface)] px-3 text-sm"
+                    aria-expanded={isExerciseProgressExpanded}
+                    onClick={() => setIsExerciseProgressExpanded((current) => !current)}
+                  >
+                    <span>{isExerciseProgressExpanded ? "Piilota tarkemmat tiedot" : "Avaa tarkemmat tiedot"}</span>
+                    {isExerciseProgressExpanded ? (
+                      <ChevronUp className="size-4" aria-hidden="true" />
+                    ) : (
+                      <ChevronDown className="size-4" aria-hidden="true" />
+                    )}
+                  </Button>
+                </div>
+
+                {isExerciseProgressExpanded ? (
+                  <div className="mt-3 space-y-3">
+                    <div className="grid gap-2 sm:grid-cols-2">
+                      <CoachOverviewStat
+                        label="Paras työsarja"
+                        value={formatCoachExerciseSetValue(selectedExerciseProgress.bestSet)}
+                      />
+                      <CoachOverviewStat
+                        label="Viimeisin toteuma"
+                        value={formatCoachExerciseSetValue(selectedExerciseProgress.latestSet)}
+                      />
+                    </div>
+                    <p className="text-xs font-semibold tracking-[0.04em] text-[var(--text-subtle)]">
+                      e1RM-trendi · {selectedExerciseProgress.exerciseName}
+                    </p>
+                    <MetricTrendChart
+                      points={selectedExerciseProgress.trendPoints}
+                      ariaLabel={`${selectedExerciseProgress.exerciseName} e1RM kehitystrendi`}
+                      emptyMessage="Valitulla liikkeellä ei ole vielä kuormallista toteumaa, josta e1RM voitaisiin arvioida."
+                      helperText="Kaavio näyttää kunkin treenikerran korkeimman e1RM-arvion valitulle liikkeelle."
+                      compactHelperText="Paina pistettä nähdäksesi treenikerran e1RM-arvion."
+                      valueLabel="e1RM"
+                      unit="kg"
+                    />
+                  </div>
+                ) : null}
+              </>
+            ) : null}
           </div>
 
           <div className="mt-5 overflow-hidden rounded-3xl border border-[var(--border)] bg-[var(--surface-2)]">
@@ -3530,6 +3654,29 @@ function formatCoachTargetReps(log: WorkoutSession["setLogs"][number]) {
 
 function formatTrendNumber(value: number) {
   return Number.isInteger(value) ? String(value) : value.toFixed(1);
+}
+
+function formatCoachLoadValue(value: number) {
+  if (!Number.isFinite(value)) {
+    return "0";
+  }
+  const rounded = Math.round(value * 10) / 10;
+  return Number.isInteger(rounded) ? String(rounded) : rounded.toFixed(1);
+}
+
+function formatCoachExerciseSetValue(
+  setSummary:
+    | {
+      actualLoad: number;
+      actualReps: number;
+    }
+    | undefined,
+) {
+  if (!setSummary) {
+    return "Ei dataa";
+  }
+
+  return `${formatCoachLoadValue(setSummary.actualLoad)} kg × ${setSummary.actualReps}`;
 }
 
 function PhaseBars({

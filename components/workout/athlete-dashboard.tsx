@@ -1375,6 +1375,26 @@ export function AthleteDashboard({
   const selectedExerciseProgress =
     exerciseProgressCatalog.summaries.get(selectedExerciseProgressKey) ??
     (exerciseProgressOptions[0] ? exerciseProgressCatalog.summaries.get(exerciseProgressOptions[0].key) : undefined);
+  const isNewExerciseProgressRecord = useMemo(() => {
+    if (!selectedExerciseProgress?.trendPoints.length) {
+      return false;
+    }
+
+    const latestPoint = selectedExerciseProgress.trendPoints.at(-1);
+    if (!latestPoint) {
+      return false;
+    }
+
+    const previousBest = selectedExerciseProgress.trendPoints
+      .slice(0, -1)
+      .reduce((best, point) => Math.max(best, point.value), Number.NEGATIVE_INFINITY);
+
+    if (!Number.isFinite(previousBest)) {
+      return false;
+    }
+
+    return latestPoint.value > previousBest;
+  }, [selectedExerciseProgress]);
   const latestNoteByWorkoutId = useMemo(() => {
     const sessionById = new Map(state.sessions.map((session) => [session.id, session]));
     const notesByWorkoutId = new Map<string, { body: string; updatedAt: string }>();
@@ -3242,11 +3262,19 @@ export function AthleteDashboard({
                         <p className="text-[11px] font-semibold tracking-[0.04em] text-[var(--text-subtle)]">Valittu liike</p>
                         <p className="mt-1 text-sm font-medium text-[var(--text)]">{selectedExerciseProgress.exerciseName}</p>
                         <p className="mt-3 text-[11px] font-semibold tracking-[0.04em] text-[var(--text-subtle)]">Nykyinen e1RM</p>
-                        <p className="mt-1 text-base font-semibold text-[var(--text)]">
-                          {selectedExerciseProgress.currentEstimatedOneRepMax !== undefined
-                            ? `${formatLoadValue(selectedExerciseProgress.currentEstimatedOneRepMax)} kg`
-                            : "Ei dataa"}
-                        </p>
+                        <div className="mt-1 flex flex-wrap items-center gap-2">
+                          <p className="text-base font-semibold text-[var(--text)]">
+                            {selectedExerciseProgress.currentEstimatedOneRepMax !== undefined
+                              ? `${formatLoadValue(selectedExerciseProgress.currentEstimatedOneRepMax)} kg`
+                              : "Ei dataa"}
+                          </p>
+                          {isNewExerciseProgressRecord ? (
+                            <Badge className="border-[color:color-mix(in_srgb,var(--success)_44%,var(--border))] bg-[color:color-mix(in_srgb,var(--success)_14%,var(--surface))] text-[var(--success)]">
+                              Uusi ennätys
+                            </Badge>
+                          ) : null}
+                        </div>
+                        <p className="mt-1 text-xs text-[var(--text-subtle)]">Arvioitu 1 toiston maksimi.</p>
                       </div>
 
                       <div className="mt-3">
