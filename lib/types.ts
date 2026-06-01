@@ -33,7 +33,7 @@ export type SplitType = "upper" | "lower" | "full_body" | "custom";
 export type ExerciseScope = "global" | "coach_custom";
 export type RepTargetMode = "exact" | "range";
 export const PROGRAMS_DASHBOARD_VIEW = "templates";
-// "templates" is kept as a legacy persisted settings key.
+// "templates" is kept as a compatibility persisted settings key.
 // The current coach workspace uses it as the programs/program builder view.
 export type DashboardHomeView =
   | "overview"

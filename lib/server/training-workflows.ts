@@ -864,7 +864,7 @@ async function startWorkoutAtomic(params: {
   };
 }
 
-async function createProgramWorkoutWithLegacyWrites(params: {
+async function createProgramWorkoutWithCompatibilityWrites(params: {
   admin: NonNullable<ReturnType<typeof createSupabaseAdminClient>>;
   requester: RequesterProfile;
   plan: TrainingPlan;
@@ -1415,14 +1415,14 @@ export async function startProgramWorkoutOnServer({
 
   if (!startResult.ok) {
     if (startResult.code === "rpc_error") {
-      const fallbackResult = await createProgramWorkoutWithLegacyWrites({
+      const fallbackResult = await createProgramWorkoutWithCompatibilityWrites({
         admin,
         requester,
         plan,
         programWorkout,
         setLogs,
       });
-      timer.checkpoint("legacy-start-fallback");
+      timer.checkpoint("compat-start-fallback");
       if (fallbackResult.ok) {
         return {
           ok: true as const,

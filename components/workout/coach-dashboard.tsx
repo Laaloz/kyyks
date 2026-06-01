@@ -2591,14 +2591,12 @@ function CoachAthleteInsights({
     }
 
     return state.scheduledWorkouts
-      .filter(
-        (workout) => workout.athleteId === selectedAthleteId && (!coachId || workout.coachId === coachId),
-      )
+      .filter((workout) => workout.athleteId === selectedAthleteId)
       .sort(
         (a, b) =>
           new Date(b.scheduledDate).getTime() - new Date(a.scheduledDate).getTime(),
       );
-  }, [coachId, selectedAthleteId, state.scheduledWorkouts]);
+  }, [selectedAthleteId, state.scheduledWorkouts]);
 
   const sessionByWorkoutId = useMemo(() => {
     const map = new Map<string, WorkoutSession>();

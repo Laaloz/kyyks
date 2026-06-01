@@ -12,7 +12,7 @@ import { PROGRAMS_DASHBOARD_VIEW, type AppState, type DashboardHomeView, type Ro
 
 export const PROGRAMS_WORKSPACE_VIEW = PROGRAMS_DASHBOARD_VIEW;
 
-// The legacy "templates" route key now renders the programs workspace.
+// The compatibility "templates" route key now renders the programs workspace.
 export type WorkspaceView = DashboardHomeView | "settings";
 
 export function metricTone(role: Role | null) {
