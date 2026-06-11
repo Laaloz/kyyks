@@ -197,12 +197,14 @@ describe("NutritionAthleteCard", () => {
     expect(screen.getByRole("button", { name: /Aamu \/ iltapala/i })).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: /Lounas \/ illallinen/i }));
     expect(screen.getByText("20 % päivän energiasta")).toBeInTheDocument();
-    expect(screen.getByText("P 25 % · H 20 % · R 25 %")).toBeInTheDocument();
-    expect(screen.getByText("Lounaan suositus 625-750 kcal, ja tämä annos hieman alle haarukan.")).toBeInTheDocument();
+    expect(screen.getByText("P 50 g · H 60 g · R 20 g")).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: /Kana ja riisi/i }));
 
     expect(screen.getAllByText("20 % päivän energiasta").length).toBeGreaterThan(1);
+    expect(screen.getByText("Tavoitevertailu")).toBeInTheDocument();
+    // Macro share pills in the goal comparison: protein 50/200 g and fat 20/80 g are both 25 %.
+    expect(screen.getAllByText("25 %").length).toBeGreaterThanOrEqual(2);
     expect(screen.getByText("Lounaan suositus 625-750 kcal. Tämä annos hieman alle haarukan.")).toBeInTheDocument();
   });
 

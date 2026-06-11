@@ -568,6 +568,7 @@ type WorkoutInsight = {
   estimatedCalories: number;
   muscleGroupSetCounts: Record<HistoryMuscleGroupKey, number>;
   muscleGroupLiftedKg: Record<HistoryMuscleGroupKey, number>;
+  bestSet: { exerciseName: string; load: number; reps: number } | null;
 };
 
 type AthleteLogMode = "overview" | "workout";
@@ -1523,6 +1524,7 @@ export function AthleteDashboard({
         estimatedCalories: 0,
         muscleGroupSetCounts: createEmptyMuscleGroupSetCounts(),
         muscleGroupLiftedKg: createEmptyMuscleGroupLiftedKg(),
+        bestSet: null,
       };
       const noteBody = latestNoteByWorkoutId.get(workout.id)?.body ?? null;
       const canDeleteHistoryWorkout = Boolean(workout.programWorkoutId);
@@ -3529,6 +3531,16 @@ export function AthleteDashboard({
                                   <span className="rounded-full border border-[var(--border)] bg-[var(--surface)] px-2 py-1">
                                     {formatLiftedKgValue(insight.liftedKg)}
                                   </span>
+                                  {insight.durationSeconds > 0 ? (
+                                    <span className="rounded-full border border-[var(--border)] bg-[var(--surface)] px-2 py-1">
+                                      {formatWorkoutDuration(insight.durationSeconds)}
+                                    </span>
+                                  ) : null}
+                                  {insight.bestSet ? (
+                                    <span className="rounded-full border border-[color-mix(in_srgb,var(--accent)_30%,var(--border))] bg-[color-mix(in_srgb,var(--accent)_8%,var(--surface))] px-2 py-1 font-semibold text-[var(--accent)]">
+                                      Paras: {insight.bestSet.exerciseName} {formatLoadValue(insight.bestSet.load)} kg × {insight.bestSet.reps}
+                                    </span>
+                                  ) : null}
                                 </div>
                               </div>
                             </div>
@@ -3580,6 +3592,46 @@ export function AthleteDashboard({
                                         </option>
                                       ))}
                                     </Select>
+                                    {(() => {
+                                      const occurrenceIndex = group.workouts.findIndex(
+                                        (item) => item.workout.id === workout.id,
+                                      );
+                                      const newerWorkout = occurrenceIndex > 0 ? group.workouts[occurrenceIndex - 1] : undefined;
+                                      const olderWorkout =
+                                        occurrenceIndex >= 0 && occurrenceIndex < group.workouts.length - 1
+                                          ? group.workouts[occurrenceIndex + 1]
+                                          : undefined;
+                                      const selectOccurrence = (workoutId: string) =>
+                                        setSelectedHistoryWorkoutByGroup((current) => ({
+                                          ...current,
+                                          [group.key]: workoutId,
+                                        }));
+
+                                      return (
+                                        <div className="mt-2 flex items-center justify-between gap-2">
+                                          <Button
+                                            type="button"
+                                            variant="ghost"
+                                            className="h-9 flex-1 justify-center gap-1 rounded-xl px-2 text-xs"
+                                            disabled={!olderWorkout}
+                                            onClick={() => olderWorkout && selectOccurrence(olderWorkout.workout.id)}
+                                          >
+                                            <ChevronLeft className="size-3.5" aria-hidden="true" />
+                                            Vanhempi
+                                          </Button>
+                                          <Button
+                                            type="button"
+                                            variant="ghost"
+                                            className="h-9 flex-1 justify-center gap-1 rounded-xl px-2 text-xs"
+                                            disabled={!newerWorkout}
+                                            onClick={() => newerWorkout && selectOccurrence(newerWorkout.workout.id)}
+                                          >
+                                            Uudempi
+                                            <ChevronRight className="size-3.5" aria-hidden="true" />
+                                          </Button>
+                                        </div>
+                                      );
+                                    })()}
                                   </div>
                                 )}
 
@@ -3830,10 +3882,27 @@ function buildWorkoutInsights(state: AppState) {
     let liftedKg = 0;
     let durationSeconds = 0;
     let estimatedCalories = 0;
+    let bestSet: WorkoutInsight["bestSet"] = null;
     const muscleGroupSetCounts = createEmptyMuscleGroupSetCounts();
     const muscleGroupLiftedKg = createEmptyMuscleGroupLiftedKg();
 
     if (session) {
+      session.setLogs.forEach((log) => {
+        if (!log.done) {
+          return;
+        }
+
+        const load = log.actualLoad ?? log.targetLoad ?? 0;
+        const reps = log.actualReps ?? log.targetReps;
+        if (load <= 0 || reps <= 0) {
+          return;
+        }
+
+        if (!bestSet || load > bestSet.load || (load === bestSet.load && reps > bestSet.reps)) {
+          bestSet = { exerciseName: log.exerciseName, load, reps };
+        }
+      });
+
       exerciseCount = new Set(session.setLogs.map((log) => log.templateExerciseId)).size;
       setCount = session.setLogs.length;
       completedSetCount = session.setLogs.filter((log) => log.done).length;
@@ -3913,6 +3982,7 @@ function buildWorkoutInsights(state: AppState) {
       estimatedCalories,
       muscleGroupSetCounts,
       muscleGroupLiftedKg,
+      bestSet,
     });
   });
 

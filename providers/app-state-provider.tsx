@@ -855,6 +855,7 @@ type WorkoutSetDraftState = {
   syncing: boolean;
   debounceUntil?: number;
   confirmedSessionUpdatedAt?: string;
+  retryCount?: number;
 };
 
 type RecentlyConfirmedWorkoutSetLogs = Map<string, string>;
@@ -880,6 +881,9 @@ const PUBLIC_PASSWORD_RESET_RESPONSE =
   "Jos sähköpostiosoite löytyy järjestelmästä, lähetämme salasanan nollauslinkin hetken kuluttua.";
 
 const WORKOUT_SET_SYNC_DEBOUNCE_MS = 500;
+const WORKOUT_SET_SYNC_RETRY_BASE_MS = 1000;
+const WORKOUT_SET_SYNC_RETRY_MAX_MS = 30_000;
+const FULL_SNAPSHOT_FOCUS_REFRESH_INTERVAL_MS = 5 * 60_000;
 
 type UserSettingsInput = {
   fullName: string;
@@ -1490,14 +1494,20 @@ export function resolveSupabaseUserForState(
   };
 }
 
-export async function fetchSupabaseVisibleStateSnapshotWithClient(
-  supabase: NonNullable<ReturnType<typeof createSupabaseBrowserClient>> | null,
-  options?: { lite?: boolean; mode?: "full" | "workouts"; accessToken?: string; throwOnError?: boolean },
-) {
-  if (!supabase) {
-    return null;
-  }
+type SnapshotFetchOutcome = {
+  snapshot: SupabaseVisibleAppStateSnapshot | null;
+  errorMessage: string | null;
+};
 
+// Login fires the same lite/workouts snapshot request from both the sign-in
+// flow and the SIGNED_IN auth event; sharing the in-flight request halves the
+// /api/app-state load on the critical login path.
+const inFlightSnapshotFetches = new Map<string, Promise<SnapshotFetchOutcome>>();
+
+async function performSnapshotFetch(
+  supabase: NonNullable<ReturnType<typeof createSupabaseBrowserClient>>,
+  options?: { lite?: boolean; mode?: "full" | "workouts"; accessToken?: string },
+): Promise<SnapshotFetchOutcome> {
   try {
     const accessToken = options?.accessToken ? options.accessToken : (await supabase.auth.getSession()).data.session?.access_token;
     const searchParams = new URLSearchParams();
@@ -1520,26 +1530,48 @@ export async function fetchSupabaseVisibleStateSnapshotWithClient(
       null as Response | null,
     );
     if (!response) {
-      return null;
+      return { snapshot: null, errorMessage: null };
     }
     const payload = (await response.json().catch(() => null)) as SupabaseVisibleAppStateSnapshot | { message?: string } | null;
     if (!response.ok || !payload || !("users" in payload)) {
       if (payload && "message" in payload && typeof payload.message === "string") {
-        if (options?.throwOnError) {
-          throw new Error(payload.message);
-        }
-        return null;
+        return { snapshot: null, errorMessage: payload.message };
       }
-      return null;
+      return { snapshot: null, errorMessage: null };
     }
 
-    return payload;
+    return { snapshot: payload, errorMessage: null };
   } catch (error) {
-    if (options?.throwOnError) {
-      throw error;
-    }
+    return {
+      snapshot: null,
+      errorMessage: error instanceof Error && error.message ? error.message : null,
+    };
+  }
+}
+
+export async function fetchSupabaseVisibleStateSnapshotWithClient(
+  supabase: NonNullable<ReturnType<typeof createSupabaseBrowserClient>> | null,
+  options?: { lite?: boolean; mode?: "full" | "workouts"; accessToken?: string; throwOnError?: boolean },
+) {
+  if (!supabase) {
     return null;
   }
+
+  const dedupeKey = `${options?.lite ? "lite" : "std"}|${options?.mode ?? "full"}`;
+  let outcomePromise = inFlightSnapshotFetches.get(dedupeKey);
+  if (!outcomePromise) {
+    outcomePromise = performSnapshotFetch(supabase, options).finally(() => {
+      inFlightSnapshotFetches.delete(dedupeKey);
+    });
+    inFlightSnapshotFetches.set(dedupeKey, outcomePromise);
+  }
+
+  const { snapshot, errorMessage } = await outcomePromise;
+  if (!snapshot && errorMessage && options?.throwOnError) {
+    throw new Error(errorMessage);
+  }
+
+  return snapshot;
 }
 
 type SupabaseInviteDirectorySnapshot = {
@@ -2376,6 +2408,7 @@ export function AppStateProvider({ children }: PropsWithChildren) {
   const lastResolvedAuthenticatedUserRef = useRef<UserProfile | null>(null);
   const lastResolvedCurrentUserRef = useRef<UserProfile | null>(null);
   const refreshSupabaseVisibleStatePromiseRef = useRef<Promise<boolean> | null>(null);
+  const lastFullSnapshotSyncAtRef = useRef(0);
   const workoutMutationQueueRef = useRef<Map<string, WorkoutMutationQueueState>>(new Map());
   const workoutMutationRunnerRef = useRef<Map<string, Promise<void>>>(new Map());
   const workoutMutationWakeTimeoutRef = useRef<Map<string, number>>(new Map());
@@ -2853,6 +2886,7 @@ function findResolvedUserIdInSnapshot(
           ),
         );
         if (options?.mode !== "workouts") {
+          lastFullSnapshotSyncAtRef.current = Date.now();
           const authUser = await withTimeout(confirmCurrentSupabaseAuthUser(supabase), 4000, null);
           const resolvedSession = resolveSessionIdsFromSnapshot(
             state,
@@ -2934,17 +2968,25 @@ function findResolvedUserIdInSnapshot(
       return;
     }
 
+    // A full snapshot re-downloads the whole ingredient catalog and recipe
+    // graph; on tab focus that cost is rarely justified. Refresh workouts only,
+    // unless the full data has gone stale.
+    const resolveFocusRefreshMode = (): { mode?: "full" | "workouts" } =>
+      Date.now() - lastFullSnapshotSyncAtRef.current > FULL_SNAPSHOT_FOCUS_REFRESH_INTERVAL_MS
+        ? {}
+        : { mode: "workouts" };
+
     const refreshIfVisible = () => {
       if (document.visibilityState !== "visible" || hasActiveWorkoutOpen) {
         return;
       }
 
-      void refreshSupabaseVisibleState();
+      void refreshSupabaseVisibleState(resolveFocusRefreshMode());
     };
 
     const handleVisibilityChange = () => {
       if (document.visibilityState === "visible" && !hasActiveWorkoutOpen) {
-        void refreshSupabaseVisibleState();
+        void refreshSupabaseVisibleState(resolveFocusRefreshMode());
       }
     };
 
@@ -2956,6 +2998,54 @@ function findResolvedUserIdInSnapshot(
       document.removeEventListener("visibilitychange", handleVisibilityChange);
     };
   }, [authenticatedUserId, hasActiveWorkoutOpen, isHydrated, supabase]);
+
+  useEffect(() => {
+    if (!supabase) {
+      return;
+    }
+
+    // Set drafts live only in memory; if the user logs a set and immediately
+    // backgrounds or closes the app (the normal way to end a workout), the
+    // debounced sync never fires and those sets vanish from history. Send the
+    // pending patches with keepalive so the request survives page teardown.
+    // The server upserts by set id, so a duplicate send after resume is safe.
+    const flushDraftsWithKeepalive = () => {
+      workoutSetDraftsRef.current.forEach((draftState, scheduledWorkoutId) => {
+        const pendingPatches = new Map(draftState.inFlightPatches ?? []);
+        draftState.patches.forEach((patch, key) => {
+          pendingPatches.set(key, patch);
+        });
+        if (pendingPatches.size === 0) {
+          return;
+        }
+
+        void fetch(`/api/workouts/${encodeURIComponent(scheduledWorkoutId)}/sets`, {
+          method: "PATCH",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({ sets: Array.from(pendingPatches.values()) }),
+          keepalive: true,
+        }).catch(() => {
+          // Page is going away; the regular retry loop handles it on resume.
+        });
+      });
+    };
+
+    const handleVisibilityHidden = () => {
+      if (document.visibilityState === "hidden") {
+        flushDraftsWithKeepalive();
+      }
+    };
+
+    window.addEventListener("pagehide", flushDraftsWithKeepalive);
+    document.addEventListener("visibilitychange", handleVisibilityHidden);
+
+    return () => {
+      window.removeEventListener("pagehide", flushDraftsWithKeepalive);
+      document.removeEventListener("visibilitychange", handleVisibilityHidden);
+    };
+  }, [supabase]);
 
   const ensureWorkoutSetDraftState = useCallback((scheduledWorkoutId: string) => {
     const existing = workoutSetDraftsRef.current.get(scheduledWorkoutId);
@@ -3034,14 +3124,26 @@ function findResolvedUserIdInSnapshot(
         restoredPatches.set(key, patch);
       });
       latestDraftState.patches = restoredPatches;
+      // Back off before the flush loop retries, so the restored patches are
+      // re-sent automatically instead of waiting for the next user edit —
+      // and so a persistent failure can't spin a zero-delay retry loop.
+      latestDraftState.retryCount = (latestDraftState.retryCount ?? 0) + 1;
+      const backoffMs = Math.min(
+        WORKOUT_SET_SYNC_RETRY_MAX_MS,
+        WORKOUT_SET_SYNC_RETRY_BASE_MS * 2 ** Math.min(latestDraftState.retryCount - 1, 5),
+      );
+      latestDraftState.debounceUntil = Date.now() + backoffMs;
       console.warn("[workout-ui] set-batch-sync-failed", {
         scheduledWorkoutId,
         status: response?.status,
         message: payload?.message,
+        retryCount: latestDraftState.retryCount,
+        retryInMs: backoffMs,
       });
       return;
     }
 
+    latestDraftState.retryCount = 0;
     latestDraftState.confirmedSessionUpdatedAt = payload.updatedAt;
     workoutConfirmedSessionUpdatedAtRef.current.set(scheduledWorkoutId, payload.updatedAt);
     recentlyConfirmedSetLogsRef.current.set(scheduledWorkoutId, payload.updatedAt);

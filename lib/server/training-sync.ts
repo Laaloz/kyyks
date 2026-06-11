@@ -318,29 +318,47 @@ type AssignedMealPlanRow = {
 
 async function fetchAllIngredientRows(supabase: ServerClient) {
   const pageSize = 1000;
-  const allRows: IngredientRow[] = [];
-  let from = 0;
+  const selectColumns =
+    "id, name, display_name, source, source_external_id, owner_role, created_by, default_purchase_unit, grams_per_unit, kcal_per_100, protein_per_100, carbs_per_100, fat_per_100, created_at, updated_at";
 
-  while (true) {
-    const to = from + pageSize - 1;
-    const { data, error } = await supabase
-      .from("ingredient_catalog")
-      .select("id, name, display_name, source, source_external_id, owner_role, created_by, default_purchase_unit, grams_per_unit, kcal_per_100, protein_per_100, carbs_per_100, fat_per_100, created_at, updated_at")
-      .order("name", { ascending: true })
-      .range(from, to);
+  // The catalog can hold thousands of rows; fetching pages sequentially adds a
+  // round trip per 1000 rows to every full sync. Get the count with the first
+  // page, then pull the remaining pages in parallel.
+  const firstPage = await supabase
+    .from("ingredient_catalog")
+    .select(selectColumns, { count: "exact" })
+    .order("name", { ascending: true })
+    .range(0, pageSize - 1);
 
-    if (error) {
-      throw new Error(error.message || "Ingredients haku epäonnistui.");
+  if (firstPage.error) {
+    throw new Error(firstPage.error.message || "Ingredients haku epäonnistui.");
+  }
+
+  const allRows: IngredientRow[] = [...((firstPage.data ?? []) as IngredientRow[])];
+  const totalCount = firstPage.count ?? allRows.length;
+
+  if (totalCount > pageSize) {
+    const remainingPageStarts: number[] = [];
+    for (let from = pageSize; from < totalCount; from += pageSize) {
+      remainingPageStarts.push(from);
     }
 
-    const rows = (data ?? []) as IngredientRow[];
-    allRows.push(...rows);
+    const remainingPages = await Promise.all(
+      remainingPageStarts.map((from) =>
+        supabase
+          .from("ingredient_catalog")
+          .select(selectColumns)
+          .order("name", { ascending: true })
+          .range(from, from + pageSize - 1),
+      ),
+    );
 
-    if (rows.length < pageSize) {
-      break;
+    for (const page of remainingPages) {
+      if (page.error) {
+        throw new Error(page.error.message || "Ingredients haku epäonnistui.");
+      }
+      allRows.push(...((page.data ?? []) as IngredientRow[]));
     }
-
-    from += pageSize;
   }
 
   return allRows;

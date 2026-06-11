@@ -244,6 +244,7 @@ describe("AthleteDashboard history exercise progress", () => {
     renderDashboard(state);
 
     expect(screen.getByText("Liikekohtainen kehitys")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Avaa tarkemmat tiedot" }));
     expect(screen.getByText("e1RM-trendi · Takakyykky")).toBeInTheDocument();
     expect(screen.getByText("158,7 kg")).toBeInTheDocument();
     expect(screen.getByTestId("metric-trend-chart")).toHaveTextContent("Takakyykky e1RM kehitystrendi:1");
@@ -252,6 +253,8 @@ describe("AthleteDashboard history exercise progress", () => {
       target: { value: "id:exercise_bench" },
     });
 
+    // Switching exercise intentionally collapses the detail section again.
+    fireEvent.click(screen.getByRole("button", { name: "Avaa tarkemmat tiedot" }));
     expect(screen.getByText("e1RM-trendi · Penkkipunnerrus")).toBeInTheDocument();
     expect(screen.getByText("116,7 kg")).toBeInTheDocument();
     expect(screen.getAllByText("100 kg x 5").length).toBeGreaterThan(0);
@@ -302,6 +305,7 @@ describe("AthleteDashboard history exercise progress", () => {
     renderDashboard(state);
 
     expect(screen.getByText("Liikekohtainen kehitys")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Avaa tarkemmat tiedot" }));
     expect(screen.getAllByText("Ei dataa")).toHaveLength(3);
     expect(
       screen.getByText("Valitulla liikkeellä ei ole vielä kuormallista toteumaa, josta e1RM voitaisiin arvioida."),

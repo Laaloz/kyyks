@@ -213,6 +213,19 @@
   --nav-workout-bg: var(--nav-workout-bg-energetic);
   --nav-workout-icon-bg: var(--nav-workout-icon-bg-energetic);
   --nav-workout-hover-bg: var(--nav-workout-hover-bg-energetic);
+  --button-secondary-border: color-mix(in srgb, var(--accent) 42%, var(--border));
+  --button-secondary-bg: color-mix(in srgb, var(--accent) 10%, var(--surface));
+  --button-secondary-text: var(--accent-strong);
+  --button-secondary-hover-bg: color-mix(in srgb, var(--accent) 16%, var(--surface));
+  --button-ghost-border: color-mix(in srgb, var(--accent) 30%, var(--border));
+  --button-ghost-bg: color-mix(in srgb, var(--accent) 6%, var(--surface));
+  --button-ghost-text: var(--accent-strong);
+  --button-ghost-hover-border: color-mix(in srgb, var(--accent) 46%, var(--border-strong));
+  --button-ghost-hover-bg: color-mix(in srgb, var(--accent) 14%, var(--surface));
+  --button-ghost-hover-text: #46211a;
+  --button-disabled-border: color-mix(in srgb, var(--accent) 28%, var(--border));
+  --button-disabled-bg: color-mix(in srgb, var(--accent) 12%, var(--surface));
+  --button-disabled-text: color-mix(in srgb, var(--accent-strong) 55%, white);
   color-scheme: light;
 }
 

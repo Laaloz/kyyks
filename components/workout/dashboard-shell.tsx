@@ -3,12 +3,32 @@
 import { BellRing, Dumbbell, Home, LogOut, MessageSquare, MoreHorizontal, ScrollText, UserPlus, UserRound, UserRoundCog, Users, UtensilsCrossed, type LucideIcon } from "lucide-react";
 import { useEffect, useRef, useState, type KeyboardEvent } from "react";
 
-import { AdminDashboard } from "@/components/workout/admin-dashboard";
+import dynamic from "next/dynamic";
+
 import { MeasurementReminderDialog } from "@/components/workout/athlete/measurement-reminder-dialog";
 import { AthleteDashboard } from "@/components/workout/athlete-dashboard";
 import { CoachDashboard } from "@/components/workout/coach-dashboard";
-import { NutritionAdminPanel } from "@/components/workout/nutrition-admin-panel";
+import { PanelErrorBoundary } from "@/components/workout/panel-error-boundary";
 import { UserSettingsPanel } from "@/components/workout/user-settings-panel";
+
+function PanelSkeleton() {
+  return (
+    <div className="w-full space-y-4" aria-hidden="true">
+      <div className="h-32 animate-pulse rounded-3xl border border-[var(--border)] bg-[var(--surface-2)]" />
+      <div className="h-64 animate-pulse rounded-3xl border border-[var(--border)] bg-[var(--surface-2)]" />
+    </div>
+  );
+}
+
+// Admin-only panels are heavy and irrelevant to most sessions; load them on demand.
+const AdminDashboard = dynamic(
+  () => import("@/components/workout/admin-dashboard").then((module) => module.AdminDashboard),
+  { ssr: false, loading: () => <PanelSkeleton /> },
+);
+const NutritionAdminPanel = dynamic(
+  () => import("@/components/workout/nutrition-admin-panel").then((module) => module.NutritionAdminPanel),
+  { ssr: false, loading: () => <PanelSkeleton /> },
+);
 import { Button } from "@/components/ui/button";
 import { isConversationEntryNotifiable } from "@/lib/conversation";
 import { getCoachConversationAthletes } from "@/lib/domain";
@@ -642,6 +662,7 @@ export function DashboardShell() {
       </header>
 
       <main id="main-content" className={view === "conversation" ? "flex min-h-0 min-w-0 flex-1 overflow-x-hidden" : "min-w-0 overflow-x-hidden"}>
+        <PanelErrorBoundary key={view}>
         {view === "settings" ? (
           <UserSettingsPanel />
         ) : (
@@ -703,6 +724,7 @@ export function DashboardShell() {
             )}
           </div>
         )}
+        </PanelErrorBoundary>
       </main>
 
       <div className={`${shouldHideMobileBottomNav ? "hidden" : "fixed"} inset-x-0 bottom-0 z-30 border-t border-[color-mix(in_srgb,var(--border)_90%,var(--surface))] bg-[var(--surface)] px-1 py-1 pb-[calc(0.75rem+env(safe-area-inset-bottom))] shadow-[0_-8px_18px_-24px_var(--shadow)] backdrop-blur lg:hidden`}>

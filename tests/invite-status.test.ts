@@ -15,6 +15,9 @@ describe("getInviteLifecycleLabel", () => {
 
 describe("getVisiblePendingInvites", () => {
   it("hides stale pending invites when the same email already has an active account", () => {
+    // Expiry must stay in the future relative to the test run, otherwise the
+    // expiry filter hides every invite and the assertion stops testing emails.
+    const futureExpiry = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString();
     const invites: Invite[] = [
       {
         id: "invite_stale",
@@ -25,7 +28,7 @@ describe("getVisiblePendingInvites", () => {
         coachId: "coach_1",
         status: "pending",
         createdAt: "2026-03-24T08:00:00.000Z",
-        expiresAt: "2026-05-31T08:00:00.000Z",
+        expiresAt: futureExpiry,
       },
       {
         id: "invite_real",
@@ -36,7 +39,7 @@ describe("getVisiblePendingInvites", () => {
         coachId: "coach_1",
         status: "pending",
         createdAt: "2026-03-24T08:00:00.000Z",
-        expiresAt: "2026-05-31T08:00:00.000Z",
+        expiresAt: futureExpiry,
       },
     ];
     const users: UserProfile[] = [

@@ -224,6 +224,10 @@ function createSupabaseMock(options?: { omitFirstExerciseFromPlan?: boolean }) {
       return { data: [], error: null };
     }
 
+    if (state.table === "extra_activities") {
+      return { data: [], error: null };
+    }
+
     throw new Error(`Unhandled table in test mock: ${state.table}`);
   };
 
