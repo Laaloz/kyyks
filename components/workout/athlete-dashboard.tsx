@@ -3,12 +3,9 @@
 import {
   ArrowLeft,
   Bike,
-  BookOpen,
   Check,
   CircleDot,
   ChevronDown,
-  ChevronLeft,
-  ChevronRight,
   ChevronUp,
   Dumbbell,
   Flame,
@@ -17,7 +14,6 @@ import {
   Info,
   Mountain,
   Music,
-  MoreHorizontal,
   PersonStanding,
   Plus,
   Snowflake,
@@ -31,11 +27,9 @@ import {
 import {
   startTransition,
   useEffect,
-  useLayoutEffect,
   useMemo,
   useRef,
   useState,
-  type CSSProperties,
 } from "react";
 
 import { Badge } from "@/components/ui/badge";
@@ -69,8 +63,6 @@ import { resolveBlockingWorkoutStart, useAppState } from "@/providers/app-state-
 import { workoutStatusBadgeClass, workoutStatusLabel, type WorkspaceView } from "@/components/workout/shared";
 
 type WorkoutSelectionPriority = 0 | 2 | 3;
-type ProgramWorkoutPreview = NonNullable<AppState["plans"][number]["workouts"]>[number];
-type ProgramWorkoutPreviewSet = ProgramWorkoutPreview["exercises"][number]["sets"][number];
 
 type WorkoutOrderMetadata = {
   primaryTimestamp: string;
@@ -124,83 +116,6 @@ function CoachInstructionDialog({
         >
           {instruction}
         </p>
-        <div className="mt-5 flex justify-end">
-          <Button type="button" variant="ghost" onClick={onClose}>
-            Sulje
-          </Button>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function WorkoutPreviewDialog({
-  workout,
-  onClose,
-}: {
-  workout: ProgramWorkoutPreview;
-  onClose: () => void;
-}) {
-  useEffect(() => {
-    const handleKeyDown = (event: globalThis.KeyboardEvent) => {
-      if (event.key === "Escape") {
-        onClose();
-      }
-    };
-
-    window.addEventListener("keydown", handleKeyDown);
-    return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [onClose]);
-
-  const formatRepText = (set: ProgramWorkoutPreviewSet) => {
-    if (set.targetRepsMin && set.targetRepsMax) {
-      return `${set.targetRepsMin}-${set.targetRepsMax} toistoa`;
-    }
-    return `${set.targetReps} toistoa`;
-  };
-
-  return (
-    <div
-      className="fixed inset-0 z-40 flex items-end justify-center bg-[color:color-mix(in_srgb,var(--background)_54%,transparent)] p-4 sm:items-center"
-      role="presentation"
-      onClick={onClose}
-    >
-      <div
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="workout-preview-title"
-        className="w-full max-w-lg rounded-3xl border border-[var(--border-strong)] bg-[var(--surface)] p-4 shadow-[0_24px_60px_-24px_var(--shadow)]"
-        onClick={(event) => event.stopPropagation()}
-      >
-        <p className="text-[11px] font-semibold tracking-[0.06em] text-[var(--accent)]">Treenin esikatselu</p>
-        <h3
-          id="workout-preview-title"
-          className="mt-2 font-[family-name:var(--font-display)] text-2xl font-semibold text-[var(--text)]"
-        >
-          {workout.name}
-        </h3>
-        <p className="mt-1 text-sm text-[var(--text-subtle)]">
-          {workout.exercises.length} liikettä
-        </p>
-        <div className="mt-4 max-h-[60vh] space-y-2 overflow-y-auto pr-1">
-          {workout.exercises.map((exercise, index) => {
-            const firstSet = exercise.sets[0];
-            const rest = firstSet?.restSeconds ?? workout.defaultRestSeconds;
-            return (
-              <div
-                key={exercise.id}
-                className="rounded-xl border border-[var(--border)] bg-[var(--surface-2)] px-3 py-2.5"
-              >
-                <p className="text-sm font-semibold text-[var(--text)]">
-                  {index + 1}. {exercise.exerciseName}
-                </p>
-                <p className="mt-1 text-xs text-[var(--text-subtle)]">
-                  {exercise.sets.length} sarjaa · {firstSet ? formatRepText(firstSet) : "Toistot puuttuvat"} · lepo {rest}s
-                </p>
-              </div>
-            );
-          })}
-        </div>
         <div className="mt-5 flex justify-end">
           <Button type="button" variant="ghost" onClick={onClose}>
             Sulje
@@ -388,143 +303,6 @@ function ExtraActivityDialog({
   );
 }
 
-function CalendarWorkoutDetailDialog({
-  title,
-  occurredAt,
-  rows,
-  note,
-  onClose,
-}: {
-  title: string;
-  occurredAt: string;
-  rows: Array<{
-    key: string;
-    exerciseName: string;
-    completedSets: number;
-    totalSets: number;
-    bestLoad?: number;
-    bestReps?: number;
-  }>;
-  note?: string | null;
-  onClose: () => void;
-}) {
-  useEffect(() => {
-    const handleKeyDown = (event: globalThis.KeyboardEvent) => {
-      if (event.key === "Escape") {
-        onClose();
-      }
-    };
-    window.addEventListener("keydown", handleKeyDown);
-    return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [onClose]);
-
-  return (
-    <div
-      className="fixed inset-0 z-40 flex items-end justify-center bg-[color:color-mix(in_srgb,var(--background)_54%,transparent)] p-4 sm:items-center"
-      role="presentation"
-      onClick={onClose}
-    >
-      <div
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="calendar-workout-detail-title"
-        className="w-full max-w-lg rounded-3xl border border-[var(--border-strong)] bg-[var(--surface)] p-4 shadow-[0_24px_60px_-24px_var(--shadow)]"
-        onClick={(event) => event.stopPropagation()}
-      >
-        <p className="text-[11px] font-semibold tracking-[0.06em] text-[var(--accent)]">Treenin tiedot</p>
-        <h3 id="calendar-workout-detail-title" className="mt-2 text-xl font-semibold text-[var(--text)]">
-          {title}
-        </h3>
-        <p className="mt-1 text-xs text-[var(--text-subtle)]">{formatDateWithWeekday(occurredAt)}</p>
-        <div className="mt-4 max-h-[55vh] space-y-2 overflow-y-auto pr-1">
-          {note ? (
-            <div className="rounded-xl border border-[var(--border)] bg-[var(--surface-2)] px-3 py-2.5">
-              <p className="text-xs font-semibold tracking-[0.04em] text-[var(--text-subtle)]">Muistiinpano</p>
-              <p className="mt-1 whitespace-pre-line text-sm text-[var(--text)]">{note}</p>
-            </div>
-          ) : null}
-          {rows.map((row) => (
-            <div key={row.key} className="rounded-xl border border-[var(--border)] bg-[var(--surface-2)] px-3 py-2.5">
-              <p className="text-sm font-medium text-[var(--text)]">{row.exerciseName}</p>
-              <p className="mt-1 text-xs text-[var(--text-subtle)]">
-                {row.completedSets}/{row.totalSets} sarjaa
-                {row.bestLoad !== undefined && row.bestReps !== undefined
-                  ? ` · paras ${formatLoadValue(row.bestLoad)} kg x ${row.bestReps}`
-                  : ""}
-              </p>
-            </div>
-          ))}
-        </div>
-        <div className="mt-5 flex justify-end">
-          <Button type="button" variant="ghost" onClick={onClose}>
-            Sulje
-          </Button>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function CalendarExtraActivityDetailDialog({
-  title,
-  occurredAt,
-  durationMinutes,
-  estimatedKcal,
-  notes,
-  onClose,
-}: {
-  title: string;
-  occurredAt: string;
-  durationMinutes: number;
-  estimatedKcal: number;
-  notes?: string;
-  onClose: () => void;
-}) {
-  useEffect(() => {
-    const handleKeyDown = (event: globalThis.KeyboardEvent) => {
-      if (event.key === "Escape") {
-        onClose();
-      }
-    };
-    window.addEventListener("keydown", handleKeyDown);
-    return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [onClose]);
-
-  return (
-    <div
-      className="fixed inset-0 z-40 flex items-end justify-center bg-[color:color-mix(in_srgb,var(--background)_54%,transparent)] p-4 sm:items-center"
-      role="presentation"
-      onClick={onClose}
-    >
-      <div
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="calendar-extra-detail-title"
-        className="w-full max-w-lg rounded-3xl border border-[var(--border-strong)] bg-[var(--surface)] p-4 shadow-[0_24px_60px_-24px_var(--shadow)]"
-        onClick={(event) => event.stopPropagation()}
-      >
-        <p className="text-[11px] font-semibold tracking-[0.06em] text-[var(--accent)]">Extra-treenin tiedot</p>
-        <h3 id="calendar-extra-detail-title" className="mt-2 text-xl font-semibold text-[var(--text)]">
-          {title}
-        </h3>
-        <p className="mt-1 text-xs text-[var(--text-subtle)]">{formatDateWithWeekday(occurredAt)}</p>
-        <p className="mt-3 text-sm text-[var(--text)]">{durationMinutes} min · {estimatedKcal} kcal</p>
-        {notes ? (
-          <div className="mt-3 rounded-xl border border-[var(--border)] bg-[var(--surface-2)] px-3 py-2.5">
-            <p className="text-[11px] font-semibold tracking-[0.04em] text-[var(--text-subtle)]">Muistiinpano</p>
-            <p className="mt-1 whitespace-pre-line text-sm text-[var(--text)]">{notes}</p>
-          </div>
-        ) : null}
-        <div className="mt-5 flex justify-end">
-          <Button type="button" variant="ghost" onClick={onClose}>
-            Sulje
-          </Button>
-        </div>
-      </div>
-    </div>
-  );
-}
-
 function getWorkoutOrderTimestamps(
   workout: AppState["scheduledWorkouts"][number],
   session?: WorkoutSession,
@@ -578,106 +356,7 @@ type AthleteLogMode = "overview" | "workout";
 type AthleteLogTab = "training" | "history" | "exercises";
 type AthleteOverviewFocusTarget = "measurements";
 type MeasurementMessageTone = "info" | "success" | "error";
-type HistoryCalendarCell = {
-  key: string;
-  date: Date;
-  isCurrentMonth: boolean;
-  activityCount: number;
-  activityByType: Record<string, number>;
-};
-type CalendarDayActivityItem =
-  | {
-      kind: "strength";
-      id: string;
-      workoutId: string;
-      title: string;
-      occurredAt: string;
-      durationSeconds: number;
-      completedSets: number;
-      totalSets: number;
-      liftedKg: number;
-    }
-  | {
-      kind: "extra";
-      id: string;
-      activityId: string;
-      activityType: ExtraActivityType;
-      label: string;
-      occurredAt: string;
-      durationMinutes: number;
-      estimatedKcal: number;
-      notes?: string;
-    };
-
 type HistoryMuscleGroupKey = "shoulders" | "arms" | "chest" | "abs" | "back" | "legs" | "other";
-
-const historyMuscleGroups: Array<{ key: HistoryMuscleGroupKey; label: string }> = [
-  { key: "shoulders", label: "Olkapää" },
-  { key: "arms", label: "Kädet" },
-  { key: "chest", label: "Rinta" },
-  { key: "abs", label: "Vatsalihakset" },
-  { key: "back", label: "Selkä" },
-  { key: "legs", label: "Jalat" },
-  { key: "other", label: "Muu" },
-];
-
-type AnchorRect = {
-  top: number;
-  right: number;
-  bottom: number;
-  left: number;
-};
-
-const floatingMenuPadding = 8;
-const floatingMenuOffset = 6;
-
-function toAnchorRect(rect: DOMRect): AnchorRect {
-  return {
-    top: rect.top,
-    right: rect.right,
-    bottom: rect.bottom,
-    left: rect.left,
-  };
-}
-
-function getHiddenFloatingMenuStyle(anchor: AnchorRect): CSSProperties {
-  return {
-    position: "fixed",
-    top: anchor.bottom + floatingMenuOffset,
-    left: Math.max(floatingMenuPadding, anchor.right - 180),
-    maxWidth: `calc(100vw - ${floatingMenuPadding * 2}px)`,
-    visibility: "hidden",
-  };
-}
-
-function getFloatingMenuStyle(anchor: AnchorRect, menuElement: HTMLElement): CSSProperties {
-  const menuRect = menuElement.getBoundingClientRect();
-  const viewportWidth = window.innerWidth;
-  const viewportHeight = window.innerHeight;
-
-  const preferredLeft = anchor.right - menuRect.width;
-  const maxLeft = viewportWidth - menuRect.width - floatingMenuPadding;
-  const left = Math.max(floatingMenuPadding, Math.min(preferredLeft, maxLeft));
-
-  const spaceBelow = viewportHeight - anchor.bottom - floatingMenuPadding;
-  const spaceAbove = anchor.top - floatingMenuPadding;
-  const placeAbove = spaceBelow < menuRect.height && spaceAbove > spaceBelow;
-  const preferredTop = placeAbove
-    ? anchor.top - menuRect.height - floatingMenuOffset
-    : anchor.bottom + floatingMenuOffset;
-  const maxTop = viewportHeight - menuRect.height - floatingMenuPadding;
-  const top = Math.max(floatingMenuPadding, Math.min(preferredTop, maxTop));
-
-  return {
-    position: "fixed",
-    top,
-    left,
-    maxWidth: viewportWidth - floatingMenuPadding * 2,
-    maxHeight: viewportHeight - floatingMenuPadding * 2,
-    overflowX: "hidden",
-    overflowY: "auto",
-  };
-}
 
 export function AthleteDashboard({
   view,
@@ -724,7 +403,6 @@ export function AthleteDashboard({
   const [selectedWorkoutId, setSelectedWorkoutId] = useState<string | null>(null);
   const [workoutMessage, setWorkoutMessage] = useState<string>("");
   const [openWorkoutInstruction, setOpenWorkoutInstruction] = useState<{ exerciseName: string; instruction: string } | null>(null);
-  const [openWorkoutPreview, setOpenWorkoutPreview] = useState<ProgramWorkoutPreview | null>(null);
   const [athleteLogMode, setAthleteLogMode] = useState<AthleteLogMode>("overview");
   const [athleteLogTab, setAthleteLogTab] = useState<AthleteLogTab>("training");
   const [athleteLogReturnTab, setAthleteLogReturnTab] = useState<AthleteLogTab>("training");
@@ -732,9 +410,6 @@ export function AthleteDashboard({
   const [historyFocusWorkoutId, setHistoryFocusWorkoutId] = useState<string | null>(null);
   const [pendingStartWorkoutId, setPendingStartWorkoutId] = useState<string | null>(null);
   const [correctionModeWorkoutId, setCorrectionModeWorkoutId] = useState<string | null>(null);
-  const [openHistoryMenuWorkoutId, setOpenHistoryMenuWorkoutId] = useState<string | null>(null);
-  const [historyMenuAnchorRect, setHistoryMenuAnchorRect] = useState<AnchorRect | null>(null);
-  const [historyMenuStyle, setHistoryMenuStyle] = useState<CSSProperties | null>(null);
   const [expandedHistoryGroups, setExpandedHistoryGroups] = useState<Record<string, boolean>>({});
   // Historian inline-muokkaus (kuvat 1+3): luonnos valitusta toteutuksesta.
   const [historyEditDraft, setHistoryEditDraft] = useState<{
@@ -757,7 +432,6 @@ export function AthleteDashboard({
     () => new Map(state.sessions.map((session) => [session.scheduledWorkoutId, session])),
     [state.sessions],
   );
-  const [selectedHistoryWorkoutByGroup, setSelectedHistoryWorkoutByGroup] = useState<Record<string, string>>({});
   const [measurementDraft, setMeasurementDraft] = useState({
     weightKg: "",
     waistCm: "",
@@ -767,9 +441,6 @@ export function AthleteDashboard({
   const [isSavingMeasurements, setIsSavingMeasurements] = useState(false);
   const [isMeasurementFormExpanded, setIsMeasurementFormExpanded] = useState(false);
   const [activeMeasurementTrend, setActiveMeasurementTrend] = useState<"weight" | "waist">("weight");
-  const [selectedExerciseProgressKey, setSelectedExerciseProgressKey] = useState("");
-  const [isExerciseProgressExpanded, setIsExerciseProgressExpanded] = useState(false);
-  const [historyCalendarMonth, setHistoryCalendarMonth] = useState(() => startOfCalendarMonth(new Date()));
   const [extraActivityType, setExtraActivityType] = useState<ExtraActivityType>("run");
   const [extraActivityDurationMinutes, setExtraActivityDurationMinutes] = useState("30");
   const [extraActivityDate, setExtraActivityDate] = useState(() => new Date().toISOString().slice(0, 10));
@@ -779,9 +450,6 @@ export function AthleteDashboard({
   const [isExtraActivityDialogOpen, setIsExtraActivityDialogOpen] = useState(false);
   const [editingExtraActivityId, setEditingExtraActivityId] = useState<string | null>(null);
   const [showAllExtraActivities, setShowAllExtraActivities] = useState(false);
-  const [selectedCalendarDayKey, setSelectedCalendarDayKey] = useState<string | null>(null);
-  const [selectedCalendarWorkoutId, setSelectedCalendarWorkoutId] = useState<string | null>(null);
-  const [selectedCalendarExtraActivityId, setSelectedCalendarExtraActivityId] = useState<string | null>(null);
   const [isCompletingWorkout, setIsCompletingWorkout] = useState(false);
   const [keepWorkoutScreenOn, setKeepWorkoutScreenOn] = useState(false);
   const [workoutWakeLockSupported, setWorkoutWakeLockSupported] = useState(false);
@@ -799,30 +467,16 @@ export function AthleteDashboard({
     typeof window !== "undefined" &&
     new URLSearchParams(window.location.search).get("debug_state") === "1";
   const historySectionRef = useRef<HTMLDivElement | null>(null);
-  const historyMenuRef = useRef<HTMLDivElement | null>(null);
   const measurementsSectionRef = useRef<HTMLDivElement | null>(null);
   const closeWorkoutView = () => {
     setSelectedWorkoutId(null);
     setHistoryFocusWorkoutId(null);
     setCorrectionModeWorkoutId(null);
-    setOpenHistoryMenuWorkoutId(null);
-    setHistoryMenuAnchorRect(null);
-    setHistoryMenuStyle(null);
     setAthleteLogMode("overview");
     setAthleteLogTab(athleteLogReturnTab);
   };
   useEffect(() => {
-    setSelectedHistoryWorkoutByGroup({});
-  }, [currentUser?.id]);
-  useEffect(() => {
     setExpandedHistoryGroups({});
-  }, [currentUser?.id]);
-  useEffect(() => {
-    setSelectedExerciseProgressKey("");
-    setIsExerciseProgressExpanded(false);
-  }, [currentUser?.id]);
-  useEffect(() => {
-    setHistoryCalendarMonth(startOfCalendarMonth(new Date()));
   }, [currentUser?.id]);
   useEffect(() => {
     setExtraActivityType("run");
@@ -1038,9 +692,6 @@ export function AthleteDashboard({
     }
 
     setCorrectionModeWorkoutId((current) => (current === selectedWorkoutId ? null : current));
-    setOpenHistoryMenuWorkoutId((current) => (current === selectedWorkoutId ? null : current));
-    setHistoryMenuAnchorRect(null);
-    setHistoryMenuStyle(null);
 
     if (athleteLogMode === "workout" && highlightedWorkout) {
       setSelectedWorkoutId(highlightedWorkout.id);
@@ -1226,9 +877,6 @@ export function AthleteDashboard({
     setHistoryFocusWorkoutId(null);
     setSelectedWorkoutId(scheduledWorkoutId);
     setCorrectionModeWorkoutId(options?.correctionMode ? scheduledWorkoutId : null);
-    setOpenHistoryMenuWorkoutId(null);
-    setHistoryMenuAnchorRect(null);
-    setHistoryMenuStyle(null);
     setAthleteLogReturnTab(options?.returnTab ?? "training");
     setAthleteLogMode("workout");
   };
@@ -1323,9 +971,6 @@ export function AthleteDashboard({
     setHistoryFocusWorkoutId(null);
     setSelectedWorkoutId(null);
     setCorrectionModeWorkoutId(null);
-    setOpenHistoryMenuWorkoutId(null);
-    setHistoryMenuAnchorRect(null);
-    setHistoryMenuStyle(null);
     setAthleteLogReturnTab("training");
     setAthleteLogMode("workout");
     onOpenWorkoutLog?.();
@@ -1477,46 +1122,6 @@ export function AthleteDashboard({
     () => (currentUser ? buildExerciseProgressCatalog(state, currentUser.id) : { exercises: [], summaries: new Map() }),
     [currentUser?.id, state],
   );
-  const exerciseProgressOptions = exerciseProgressCatalog.exercises;
-  useEffect(() => {
-    if (exerciseProgressOptions.length === 0) {
-      if (selectedExerciseProgressKey) {
-        setSelectedExerciseProgressKey("");
-      }
-      return;
-    }
-
-    const selectionExists = exerciseProgressOptions.some((exercise) => exercise.key === selectedExerciseProgressKey);
-    if (!selectionExists) {
-      setSelectedExerciseProgressKey(exerciseProgressOptions[0]?.key ?? "");
-    }
-  }, [exerciseProgressOptions, selectedExerciseProgressKey]);
-  useEffect(() => {
-    setIsExerciseProgressExpanded(false);
-  }, [selectedExerciseProgressKey]);
-  const selectedExerciseProgress =
-    exerciseProgressCatalog.summaries.get(selectedExerciseProgressKey) ??
-    (exerciseProgressOptions[0] ? exerciseProgressCatalog.summaries.get(exerciseProgressOptions[0].key) : undefined);
-  const isNewExerciseProgressRecord = useMemo(() => {
-    if (!selectedExerciseProgress?.trendPoints.length) {
-      return false;
-    }
-
-    const latestPoint = selectedExerciseProgress.trendPoints.at(-1);
-    if (!latestPoint) {
-      return false;
-    }
-
-    const previousBest = selectedExerciseProgress.trendPoints
-      .slice(0, -1)
-      .reduce((best, point) => Math.max(best, point.value), Number.NEGATIVE_INFINITY);
-
-    if (!Number.isFinite(previousBest)) {
-      return false;
-    }
-
-    return latestPoint.value > previousBest;
-  }, [selectedExerciseProgress]);
   const latestNoteByWorkoutId = useMemo(() => {
     const sessionById = new Map(state.sessions.map((session) => [session.id, session]));
     const notesByWorkoutId = new Map<string, { body: string; updatedAt: string }>();
@@ -1609,117 +1214,6 @@ export function AthleteDashboard({
       latestCompletedVolume,
     };
   }, [athletePrograms, getWorkoutOrderMetadata, state.sessions, workoutInsights, workouts]);
-  const groupedWorkoutHistory = useMemo(() => {
-    const planTitleById = new Map(state.plans.map((plan) => [plan.id, plan.title.trim()]));
-    const grouped = new Map<
-      string,
-      {
-        key: string;
-        title: string;
-        programTitle?: string;
-        workouts: Array<{
-          workout: (typeof workoutHistory)[number];
-          occurrenceLabel: string;
-          insight: WorkoutInsight;
-          noteBody: string | null;
-          workoutStatus: string;
-          completedAt: string;
-          historyDateLabel: string;
-          canResumeHistoryWorkout: boolean;
-          canDeleteHistoryWorkout: boolean;
-          programTitle?: string;
-        }>;
-      }
-    >();
-
-    workoutHistory.forEach((workout) => {
-      const historyTitle = workoutHistoryTitles.get(workout.id);
-      const insight = workoutInsights.get(workout.id) ?? {
-        exerciseCount: 0,
-        setCount: 0,
-        completedSetCount: 0,
-        completionPercent: 0,
-        totalLoadKg: 0,
-        liftedKg: 0,
-        durationSeconds: 0,
-        estimatedCalories: 0,
-        muscleGroupSetCounts: createEmptyMuscleGroupSetCounts(),
-        muscleGroupLiftedKg: createEmptyMuscleGroupLiftedKg(),
-        bestSet: null,
-      };
-      const noteBody = latestNoteByWorkoutId.get(workout.id)?.body ?? null;
-      const canDeleteHistoryWorkout = Boolean(workout.programWorkoutId);
-      const workoutStatus = resolveWorkoutStatus(workout);
-      const completedAt =
-        workout.completedAt ??
-        sessionByWorkoutId.get(workout.id)?.completedAt ??
-        getWorkoutOrderMetadata(workout).primaryTimestamp ??
-        workout.scheduledDate;
-      const historyDateLabel =
-        workoutStatus === "completed"
-          ? formatDateWithWeekday(completedAt)
-          : formatRelativeDate(workout.scheduledDate);
-      const canResumeHistoryWorkout =
-        workoutStatus === "cancelled" && scheduledWithSessionIds.has(workout.id);
-      const title = historyTitle?.title ?? normalizeWorkoutHistoryTitle(workout.title);
-      const programTitle =
-        workout.trainingPlanId && workout.programWorkoutId
-          ? planTitleById.get(workout.trainingPlanId) || undefined
-          : undefined;
-      const groupKey = workout.programWorkoutId
-        ? `program:${workout.programWorkoutId}`
-        : workout.templateId
-          ? `template:${workout.templateId}`
-          : `title:${title.toLowerCase()}`;
-      const current = grouped.get(groupKey);
-      const row = {
-        workout,
-        occurrenceLabel: historyTitle?.occurrenceLabel ?? "Treeni 1",
-        insight,
-        noteBody,
-        workoutStatus,
-        completedAt,
-        historyDateLabel,
-        canResumeHistoryWorkout,
-        canDeleteHistoryWorkout,
-        programTitle,
-      };
-
-      if (current) {
-        current.workouts.push(row);
-        return;
-      }
-
-      grouped.set(groupKey, {
-        key: groupKey,
-        title,
-        programTitle,
-        workouts: [row],
-      });
-    });
-
-    return Array.from(grouped.values())
-      .map((group) => ({
-        ...group,
-        workouts: [...group.workouts].sort(
-          (a, b) => new Date(b.completedAt).getTime() - new Date(a.completedAt).getTime(),
-        ),
-      }))
-      .sort(
-        (a, b) =>
-          new Date(b.workouts[0]?.completedAt ?? 0).getTime() - new Date(a.workouts[0]?.completedAt ?? 0).getTime(),
-      );
-  }, [
-    latestNoteByWorkoutId,
-    resolveWorkoutStatus,
-    scheduledWithSessionIds,
-    sessionByWorkoutId,
-    state.plans,
-    workoutHistory,
-    workoutHistoryTitles,
-    getWorkoutOrderMetadata,
-    workoutInsights,
-  ]);
   const historyActivityByDay = useMemo(() => {
     const activityByDay = new Map<string, Record<string, number>>();
 
@@ -1751,31 +1245,6 @@ export function AthleteDashboard({
 
     return activityByDay;
   }, [currentUser?.id, getWorkoutOrderMetadata, resolveWorkoutStatus, sessionByWorkoutId, state.extraActivities, workoutHistory]);
-  const historyCalendarCells = useMemo(
-    () => buildHistoryCalendarCells(historyCalendarMonth, historyActivityByDay),
-    [historyActivityByDay, historyCalendarMonth],
-  );
-  const historyCalendarMonthLabel = useMemo(
-    () =>
-      new Intl.DateTimeFormat("fi-FI", {
-        month: "long",
-        year: "numeric",
-      }).format(historyCalendarMonth),
-    [historyCalendarMonth],
-  );
-  const historyCalendarStats = useMemo(() => {
-    const monthYear = `${historyCalendarMonth.getFullYear()}-${historyCalendarMonth.getMonth()}`;
-    const monthActiveDays = historyCalendarCells
-      .filter(
-        (cell) =>
-          `${cell.date.getFullYear()}-${cell.date.getMonth()}` === monthYear && cell.activityCount > 0,
-      )
-      .length;
-
-    return {
-      monthActiveDays,
-    };
-  }, [historyCalendarCells, historyCalendarMonth]);
   // Päiväkohtainen ravintotila viikkorytmin ravintosegmenttiä varten:
   // "ok" = kaikki päivän ateriat syöty, "part" = osa syöty, "none" = ei rivejä/ei syötyä.
   const nutritionStatusByDay = useMemo(() => {
@@ -1816,14 +1285,6 @@ export function AthleteDashboard({
     });
   }, [historyActivityByDay, nutritionStatusByDay]);
   const todayCalendarKey = useMemo(() => toLocalDateKey(new Date()), []);
-  const latestActivityDayKey = useMemo(() => {
-    const activeKeys = Array.from(historyActivityByDay.entries())
-      .filter(([, value]) => Object.values(value).reduce((sum, count) => sum + count, 0) > 0)
-      .map(([key]) => key)
-      .sort((a, b) => b.localeCompare(a));
-
-    return activeKeys[0] ?? null;
-  }, [historyActivityByDay]);
   const extraActivities = useMemo(
     () =>
       (state.extraActivities ?? [])
@@ -1832,71 +1293,6 @@ export function AthleteDashboard({
     [currentUser?.id, state.extraActivities],
   );
   const visibleExtraActivities = showAllExtraActivities ? extraActivities : extraActivities.slice(0, 5);
-  const calendarDayDetails = useMemo(() => {
-    const details = new Map<string, CalendarDayActivityItem[]>();
-
-    workoutHistory.forEach((workout) => {
-      if (resolveWorkoutStatus(workout) !== "completed") {
-        return;
-      }
-      const session = sessionByWorkoutId.get(workout.id);
-      const completedAt =
-        workout.completedAt ??
-        session?.completedAt ??
-        getWorkoutOrderMetadata(workout).primaryTimestamp ??
-        workout.scheduledDate;
-      const dayKey = toLocalDateKey(completedAt);
-      const insight = workoutInsights.get(workout.id);
-      const row: CalendarDayActivityItem = {
-        kind: "strength",
-        id: `strength-${workout.id}`,
-        workoutId: workout.id,
-        title: workout.title,
-        occurredAt: completedAt,
-        durationSeconds: insight?.durationSeconds ?? 0,
-        completedSets: insight?.completedSetCount ?? 0,
-        totalSets: insight?.setCount ?? 0,
-        liftedKg: insight?.liftedKg ?? 0,
-      };
-      const current = details.get(dayKey) ?? [];
-      current.push(row);
-      details.set(dayKey, current);
-    });
-
-    extraActivities.forEach((activity) => {
-      const dayKey = toLocalDateKey(activity.occurredAt);
-      const row: CalendarDayActivityItem = {
-        kind: "extra",
-        id: `extra-${activity.id}`,
-        activityId: activity.id,
-        activityType: activity.activityType,
-        label: extraActivityCatalog[activity.activityType].label,
-        occurredAt: activity.occurredAt,
-        durationMinutes: activity.durationMinutes,
-        estimatedKcal: activity.estimatedKcal,
-        notes: activity.notes,
-      };
-      const current = details.get(dayKey) ?? [];
-      current.push(row);
-      details.set(dayKey, current);
-    });
-
-    details.forEach((items, key) => {
-      details.set(
-        key,
-        [...items].sort((a, b) => b.occurredAt.localeCompare(a.occurredAt)),
-      );
-    });
-
-    return details;
-  }, [
-    extraActivities,
-    getWorkoutOrderMetadata,
-    resolveWorkoutStatus,
-    sessionByWorkoutId,
-    workoutHistory,
-    workoutInsights,
-  ]);
   const extraActivityDurationValue = Number(extraActivityDurationMinutes);
   const extraActivityEstimatedKcalPreview = Number.isFinite(extraActivityDurationValue) && extraActivityDurationValue > 0
     ? estimateExtraActivityKcal({
@@ -1905,78 +1301,6 @@ export function AthleteDashboard({
         weightKg: currentUser?.weightKg,
       })
     : 0;
-  const selectedCalendarExtraActivity = useMemo(
-    () => (state.extraActivities ?? []).find((activity) => activity.id === selectedCalendarExtraActivityId) ?? null,
-    [selectedCalendarExtraActivityId, state.extraActivities],
-  );
-  const selectedCalendarWorkoutDetails = useMemo(() => {
-    if (!selectedCalendarWorkoutId) {
-      return null;
-    }
-
-    const workout = workouts.find((item) => item.id === selectedCalendarWorkoutId);
-    if (!workout) {
-      return null;
-    }
-
-    const session = sessionByWorkoutId.get(workout.id);
-    const setLogs = session?.setLogs ?? [];
-    const grouped = new Map<
-      string,
-      {
-        exerciseName: string;
-        completedSets: number;
-        totalSets: number;
-        bestLoad?: number;
-        bestReps?: number;
-      }
-    >();
-    setLogs.forEach((log) => {
-      const key = log.templateExerciseId;
-      const current = grouped.get(key) ?? {
-        exerciseName: log.exerciseName,
-        completedSets: 0,
-        totalSets: 0,
-      };
-      current.totalSets += 1;
-      if (log.done) {
-        current.completedSets += 1;
-        const load = log.actualLoad ?? log.targetLoad;
-        const reps = log.actualReps ?? log.targetReps;
-        if (
-          load !== undefined &&
-          reps !== undefined &&
-          (current.bestLoad === undefined || load > current.bestLoad || (load === current.bestLoad && reps > (current.bestReps ?? 0)))
-        ) {
-          current.bestLoad = load;
-          current.bestReps = reps;
-        }
-      }
-      grouped.set(key, current);
-    });
-
-    return {
-      title: workout.title,
-      occurredAt:
-        workout.completedAt ??
-        session?.completedAt ??
-        getWorkoutOrderMetadata(workout).primaryTimestamp ??
-        workout.scheduledDate,
-      note: latestNoteByWorkoutId.get(workout.id)?.body ?? null,
-      rows: Array.from(grouped.entries()).map(([key, value]) => ({ key, ...value })),
-    };
-  }, [getWorkoutOrderMetadata, latestNoteByWorkoutId, selectedCalendarWorkoutId, sessionByWorkoutId, workouts]);
-  const historyGroupByWorkoutId = useMemo(() => {
-    const groupByWorkoutId = new Map<string, string>();
-
-    groupedWorkoutHistory.forEach((group) => {
-      group.workouts.forEach((item) => {
-        groupByWorkoutId.set(item.workout.id, group.key);
-      });
-    });
-
-    return groupByWorkoutId;
-  }, [groupedWorkoutHistory]);
   useEffect(() => {
     if (view !== "athlete-log" || athleteLogMode !== "overview" || athleteLogTab !== "history" || !historyFocusWorkoutId) {
       return;
@@ -1994,81 +1318,23 @@ export function AthleteDashboard({
       return;
     }
 
-    const focusedGroupKey = historyGroupByWorkoutId.get(historyFocusWorkoutId);
-    if (focusedGroupKey) {
-      setExpandedHistoryGroups((current) => {
-        if (current[focusedGroupKey] !== undefined) {
-          return current;
-        }
+    setExpandedHistoryGroups((current) => {
+      if (current[historyFocusWorkoutId] !== undefined) {
+        return current;
+      }
 
-        return {
-          ...current,
-          [focusedGroupKey]: true,
-        };
-      });
-    }
+      return {
+        ...current,
+        [historyFocusWorkoutId]: true,
+      };
+    });
 
     const resetTimer = window.setTimeout(() => {
       setHistoryFocusWorkoutId(null);
     }, 5000);
 
     return () => window.clearTimeout(resetTimer);
-  }, [historyFocusWorkoutId, historyGroupByWorkoutId]);
-
-  useEffect(() => {
-    if (!openHistoryMenuWorkoutId) {
-      return;
-    }
-
-    const handlePointerDown = (event: MouseEvent) => {
-      const target = event.target as HTMLElement | null;
-      if (target?.closest("[data-history-menu-root='true']")) {
-        return;
-      }
-
-      setOpenHistoryMenuWorkoutId(null);
-      setHistoryMenuAnchorRect(null);
-      setHistoryMenuStyle(null);
-    };
-
-    window.addEventListener("mousedown", handlePointerDown);
-    return () => window.removeEventListener("mousedown", handlePointerDown);
-  }, [openHistoryMenuWorkoutId]);
-
-  useLayoutEffect(() => {
-    if (!openHistoryMenuWorkoutId || !historyMenuAnchorRect || !historyMenuRef.current) {
-      return;
-    }
-
-    setHistoryMenuStyle(getFloatingMenuStyle(historyMenuAnchorRect, historyMenuRef.current));
-  }, [historyMenuAnchorRect, openHistoryMenuWorkoutId]);
-
-  useEffect(() => {
-    if (!openHistoryMenuWorkoutId) {
-      return;
-    }
-
-    const syncHistoryMenuPosition = () => {
-      const trigger = document.querySelector<HTMLElement>(
-        `[data-history-menu-trigger-id="${openHistoryMenuWorkoutId}"]`,
-      );
-      if (!trigger) {
-        setOpenHistoryMenuWorkoutId(null);
-        setHistoryMenuAnchorRect(null);
-        setHistoryMenuStyle(null);
-        return;
-      }
-
-      setHistoryMenuAnchorRect(toAnchorRect(trigger.getBoundingClientRect()));
-    };
-
-    window.addEventListener("resize", syncHistoryMenuPosition);
-    window.addEventListener("scroll", syncHistoryMenuPosition, true);
-    return () => {
-      window.removeEventListener("resize", syncHistoryMenuPosition);
-      window.removeEventListener("scroll", syncHistoryMenuPosition, true);
-    };
-  }, [openHistoryMenuWorkoutId]);
+  }, [historyFocusWorkoutId]);
 
   return (
     <div className="grid min-w-0 max-w-full gap-6 overflow-x-clip [contain:inline-size]">
@@ -2177,7 +1443,6 @@ export function AthleteDashboard({
                   className="flex min-w-0 flex-col items-center gap-1.5 appearance-none bg-transparent p-0"
                   aria-label={`${formatCalendarDate(cell.date)} avaa historian kalenteri`}
                   onClick={() => {
-                    setSelectedCalendarDayKey(hasActivity ? cell.key : latestActivityDayKey ?? null);
                     setAthleteLogMode("overview");
                     setAthleteLogTab("history");
                     setAthleteLogReturnTab("history");
@@ -3546,12 +2811,6 @@ export function AthleteDashboard({
           onClose={() => setOpenWorkoutInstruction(null)}
         />
       ) : null}
-      {openWorkoutPreview ? (
-        <WorkoutPreviewDialog
-          workout={openWorkoutPreview}
-          onClose={() => setOpenWorkoutPreview(null)}
-        />
-      ) : null}
       {isExtraActivityDialogOpen ? (
         <ExtraActivityDialog
           activityType={extraActivityType}
@@ -3601,25 +2860,6 @@ export function AthleteDashboard({
               }
             })();
           }}
-        />
-      ) : null}
-      {selectedCalendarWorkoutDetails ? (
-        <CalendarWorkoutDetailDialog
-          title={selectedCalendarWorkoutDetails.title}
-          occurredAt={selectedCalendarWorkoutDetails.occurredAt}
-          note={selectedCalendarWorkoutDetails.note}
-          rows={selectedCalendarWorkoutDetails.rows}
-          onClose={() => setSelectedCalendarWorkoutId(null)}
-        />
-      ) : null}
-      {selectedCalendarExtraActivity ? (
-        <CalendarExtraActivityDetailDialog
-          title={extraActivityCatalog[selectedCalendarExtraActivity.activityType].label}
-          occurredAt={selectedCalendarExtraActivity.occurredAt}
-          durationMinutes={selectedCalendarExtraActivity.durationMinutes}
-          estimatedKcal={selectedCalendarExtraActivity.estimatedKcal}
-          notes={selectedCalendarExtraActivity.notes}
-          onClose={() => setSelectedCalendarExtraActivityId(null)}
         />
       ) : null}
     </div>
@@ -4099,76 +3339,6 @@ function statusTone(status: string) {
   return workoutStatusBadgeClass(status);
 }
 
-function ExerciseProgressMetric({ label, value, helper }: { label: string; value: string; helper: string }) {
-  return (
-    <div className="min-w-0 rounded-xl border border-[var(--border)] bg-[var(--surface)] px-3 py-3">
-      <p className="text-[11px] font-semibold tracking-[0.04em] text-[var(--text-subtle)]">{label}</p>
-      <p className="mt-1 text-sm font-medium text-[var(--text)]">{value}</p>
-      <p className="mt-1 text-xs leading-5 text-[var(--text-subtle)]">{helper}</p>
-    </div>
-  );
-}
-
-function formatExerciseSetValue(
-  summary?:
-    | {
-        actualLoad: number;
-        actualReps: number;
-      }
-    | undefined,
-) {
-  if (!summary) {
-    return "Ei dataa";
-  }
-
-  return `${formatLoadValue(summary.actualLoad)} kg x ${summary.actualReps}`;
-}
-
-function formatExerciseSetHelper(
-  summary?:
-    | {
-        estimatedOneRepMax: number;
-        completedAt: string;
-      }
-    | undefined,
-) {
-  if (!summary) {
-    return "Tarvitsee toteutuneen painon ja toistot valmiista treenistä.";
-  }
-
-  return `e1RM ${formatLoadValue(summary.estimatedOneRepMax)} kg · ${formatDate(summary.completedAt)}`;
-}
-
-function WorkoutMiniProgress({ workoutId }: { workoutId: string }) {
-  const { state } = useAppState();
-  const progress = getSessionProgress(state, workoutId);
-
-  if (!progress || progress.totalSets === 0) {
-    return (
-      <p className="mt-3 text-xs text-[var(--text-subtle)]">Sessiota ei vielä käynnistetty.</p>
-    );
-  }
-
-  return (
-    <div className="mt-3">
-      <div className="h-2 overflow-hidden rounded-full border border-[var(--border)] bg-[var(--surface)]">
-        <div className="h-full rounded-full bg-[var(--accent)]" style={{ width: `${progress.percent}%` }} />
-      </div>
-      <p className="mt-1 text-xs leading-5 text-[var(--text-subtle)]">
-        {progress.completedSets}/{progress.totalSets} sarjaa tehty - eteneminen {progress.percent}%
-      </p>
-    </div>
-  );
-}
-
-function startOfCalendarMonth(value: Date) {
-  return new Date(value.getFullYear(), value.getMonth(), 1);
-}
-
-function addMonthsToCalendarMonth(value: Date, amount: number) {
-  return new Date(value.getFullYear(), value.getMonth() + amount, 1);
-}
-
 function toLocalDateKey(value: string | Date) {
   const parsed = value instanceof Date ? value : new Date(value);
   const year = parsed.getFullYear();
@@ -4183,46 +3353,6 @@ function formatCalendarDate(value: Date) {
     month: "numeric",
     year: "numeric",
   }).format(value);
-}
-
-function parseLocalDateKey(value: string) {
-  const [yearText, monthText, dayText] = value.split("-");
-  const year = Number(yearText);
-  const month = Number(monthText);
-  const day = Number(dayText);
-
-  if (!Number.isFinite(year) || !Number.isFinite(month) || !Number.isFinite(day)) {
-    return new Date(value);
-  }
-
-  return new Date(year, month - 1, day);
-}
-
-function buildHistoryCalendarCells(
-  month: Date,
-  activityByDay: Map<string, Record<string, number>>,
-) {
-  const firstOfMonth = startOfCalendarMonth(month);
-  const firstDayWeekIndex = (firstOfMonth.getDay() + 6) % 7;
-  const gridStartDate = new Date(firstOfMonth);
-  gridStartDate.setDate(firstOfMonth.getDate() - firstDayWeekIndex);
-
-  const cells: HistoryCalendarCell[] = [];
-  for (let offset = 0; offset < 42; offset += 1) {
-    const cellDate = new Date(gridStartDate);
-    cellDate.setDate(gridStartDate.getDate() + offset);
-    const dayKey = toLocalDateKey(cellDate);
-    const dayActivity = activityByDay.get(dayKey) ?? {};
-    cells.push({
-      key: dayKey,
-      date: cellDate,
-      isCurrentMonth: cellDate.getMonth() === firstOfMonth.getMonth(),
-      activityCount: Object.values(dayActivity).reduce((sum, count) => sum + count, 0),
-      activityByType: dayActivity,
-    });
-  }
-
-  return cells;
 }
 
 function renderCalendarActivityIcon(activityType: string) {
