@@ -73,7 +73,7 @@ function createBaseState(): AppState {
   };
 }
 
-function renderDashboard(state: AppState, options: { tab?: "training" | "history" } = {}) {
+function renderDashboard(state: AppState, options: { tab?: "training" | "history" | "exercises" } = {}) {
   mockUseAppState.mockReturnValue({
     authenticatedUser: { id: "athlete_1", email: "athlete@example.com" },
     currentUser: state.users[0],
@@ -93,7 +93,9 @@ function renderDashboard(state: AppState, options: { tab?: "training" | "history
   });
 
   render(<AthleteDashboard view="athlete-log" />);
-  if (options.tab !== "training") {
+  if (options.tab === "exercises") {
+    fireEvent.click(screen.getByRole("tab", { name: "Liikkeet" }));
+  } else if (options.tab !== "training") {
     fireEvent.click(screen.getByRole("tab", { name: "Historia" }));
   }
 }
@@ -164,7 +166,7 @@ describe("AthleteDashboard history exercise progress", () => {
     expect(second.compareDocumentPosition(third) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   });
 
-  it("shows the new exercise progress card and updates metrics when exercise changes", () => {
+  it("lists tracked exercises in the Liikkeet tab and opens an exercise detail with its e1RM trend", () => {
     const state = createBaseState();
     state.scheduledWorkouts = [
       {
@@ -241,27 +243,19 @@ describe("AthleteDashboard history exercise progress", () => {
       },
     ];
 
-    renderDashboard(state);
+    renderDashboard(state, { tab: "exercises" });
 
-    expect(screen.getByText("Liikekohtainen kehitys")).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: "Avaa tarkemmat tiedot" }));
-    expect(screen.getByText("e1RM-trendi · Takakyykky")).toBeInTheDocument();
-    expect(screen.getByText("158,7 kg")).toBeInTheDocument();
+    // Liikelista näyttää molemmat kuormalliset liikkeet + niiden e1RM:n.
+    expect(screen.getByText("Takakyykky")).toBeInTheDocument();
+    expect(screen.getByText("Penkkipunnerrus")).toBeInTheDocument();
+
+    // Liikkeen napautus avaa kehityssivun e1RM-trendillä.
+    fireEvent.click(screen.getByText("Takakyykky"));
+    expect(screen.getByText("Liikkeen kehitys")).toBeInTheDocument();
     expect(screen.getByTestId("metric-trend-chart")).toHaveTextContent("Takakyykky e1RM kehitystrendi:1");
-
-    fireEvent.change(screen.getByLabelText("Valitse liike"), {
-      target: { value: "id:exercise_bench" },
-    });
-
-    // Switching exercise intentionally collapses the detail section again.
-    fireEvent.click(screen.getByRole("button", { name: "Avaa tarkemmat tiedot" }));
-    expect(screen.getByText("e1RM-trendi · Penkkipunnerrus")).toBeInTheDocument();
-    expect(screen.getByText("116,7 kg")).toBeInTheDocument();
-    expect(screen.getAllByText("100 kg x 5").length).toBeGreaterThan(0);
-    expect(screen.getByTestId("metric-trend-chart")).toHaveTextContent("Penkkipunnerrus e1RM kehitystrendi:1");
   });
 
-  it("shows an empty weighted-data state when the selected exercise has only non-weighted history", () => {
+  it("omits exercises with only non-weighted history from the Liikkeet tab", () => {
     const state = createBaseState();
     state.scheduledWorkouts = [
       {
@@ -302,13 +296,10 @@ describe("AthleteDashboard history exercise progress", () => {
       },
     ];
 
-    renderDashboard(state);
+    renderDashboard(state, { tab: "exercises" });
 
-    expect(screen.getByText("Liikekohtainen kehitys")).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: "Avaa tarkemmat tiedot" }));
-    expect(screen.getAllByText("Ei dataa")).toHaveLength(3);
-    expect(
-      screen.getByText("Valitulla liikkeellä ei ole vielä kuormallista toteumaa, josta e1RM voitaisiin arvioida."),
-    ).toBeInTheDocument();
+    // Vain kuormalliset liikkeet näkyvät kehityslistassa; Leuanveto (ei kuormaa) suodattuu pois.
+    expect(screen.queryByText("Leuanveto")).not.toBeInTheDocument();
+    expect(screen.getByText("Ei liikkeitä tällä haulla.")).toBeInTheDocument();
   });
 });
