@@ -521,16 +521,16 @@ export function ProgramEditorOverlay({
               />
             </div>
 
-            {/* Luo oma liike — ylimmäksi: jos pankista ei löydy, kirjoita nimi ja luo. */}
-            <div className="mt-2 rounded-xl border border-dashed border-[var(--border-strong)] bg-[var(--surface-2)] p-2.5">
-              <div className="flex items-center gap-2">
+            {/* Luo oma liike — kompakti rivi ilmestyy heti kun hakukenttään on kirjoitettu nimi. */}
+            {pickerQuery.trim() ? (
+              <div className="mt-2 flex items-center gap-2">
                 <Select
                   aria-label="Oman liikkeen lihasryhmä"
-                  className="!h-9 min-w-0 flex-1 !py-1 text-sm"
+                  className="!h-9 w-24 shrink-0 !py-1 text-sm"
                   value={newMuscle}
                   onChange={(event) => setNewMuscle(event.target.value as MuscleGroupKey | "")}
                 >
-                  <option value="">Lihasryhmä</option>
+                  <option value="">Ryhmä</option>
                   {CUSTOM_MUSCLE_GROUP_OPTIONS.map((group) => (
                     <option key={group} value={group}>
                       {customMuscleGroupLabels[group]}
@@ -540,20 +540,14 @@ export function ProgramEditorOverlay({
                 <Button
                   type="button"
                   variant="secondary"
-                  className="h-9 shrink-0 gap-1.5 !border-[var(--accent)] !bg-[color-mix(in_srgb,var(--accent)_12%,var(--surface))] !text-[var(--accent)]"
-                  disabled={!pickerQuery.trim()}
+                  className="h-9 min-w-0 flex-1 justify-start gap-1.5 !border-[var(--accent)] !bg-[color-mix(in_srgb,var(--accent)_12%,var(--surface))] !text-[var(--accent)]"
                   onClick={addCustomExercise}
                 >
-                  <Plus className="size-4" aria-hidden="true" />
-                  Luo oma liike
+                  <Plus className="size-4 shrink-0" aria-hidden="true" />
+                  <span className="truncate">Luo “{pickerQuery.trim()}”</span>
                 </Button>
               </div>
-              {pickerQuery.trim() ? (
-                <p className="mt-1.5 truncate text-[12px] text-[var(--text-subtle)]">Luodaan: “{pickerQuery.trim()}”</p>
-              ) : (
-                <p className="mt-1.5 text-[12px] text-[var(--text-subtle)]">Kirjoita liikkeen nimi hakukenttään.</p>
-              )}
-            </div>
+            ) : null}
 
             <div className="mt-2 divide-y divide-[var(--border)]">
               {bankResults.map((exercise) => (
