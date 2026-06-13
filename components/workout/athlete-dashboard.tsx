@@ -780,8 +780,15 @@ export function AthleteDashboard({
     }
 
     const pendingWorkout = workouts.find((item) => item.id === pendingStartWorkoutId);
+    // Optimistinen id rekeytettiin oikeaksi → vanhaa id:tä ei enää ole tilassa.
+    // Älä jää odottamaan kuollutta id:tä, muuten sync-tila ei koskaan vapaudu.
+    if (!pendingWorkout) {
+      setPendingStartWorkoutId(null);
+      return;
+    }
+
     const pendingSession = sessionByWorkoutId.get(pendingStartWorkoutId);
-    if (!pendingWorkout || !pendingSession) {
+    if (!pendingSession) {
       return;
     }
 
@@ -791,6 +798,18 @@ export function AthleteDashboard({
 
     setPendingStartWorkoutId(null);
   }, [pendingStartWorkoutId, sessionByWorkoutId, workouts]);
+  // Turvaverkko: vaikka palvelinsynkka takkuaisi, älä jätä aloitusspinneriä ikuisesti pyörimään.
+  useEffect(() => {
+    if (!pendingStartWorkoutId) {
+      return;
+    }
+
+    const timeout = window.setTimeout(() => {
+      setPendingStartWorkoutId(null);
+    }, 12000);
+
+    return () => window.clearTimeout(timeout);
+  }, [pendingStartWorkoutId]);
   useEffect(() => {
     if (pendingWorkoutTransition?.type !== "start" || athleteLogMode !== "workout") {
       return;
@@ -1917,7 +1936,7 @@ export function AthleteDashboard({
                 scheduledWorkoutDescription={undefined}
                 scheduledWorkoutGuidance={selectedProgramWorkout ? deriveProgramWorkoutGuidance(selectedProgramWorkout) : undefined}
                 scheduledDate={selectedWorkout.completedAt ?? selectedSession?.completedAt ?? selectedWorkout.scheduledDate}
-                isSessionSyncing={pendingStartWorkoutId === selectedWorkout.id}
+                isSessionSyncing={pendingStartWorkoutId === selectedWorkout.id && !(selectedSession && selectedSession.setLogs.length > 0)}
                 forceReadOnly={readOnly}
                 onStart={async () => {
                   setSelectedWorkoutId(selectedWorkout.id);
