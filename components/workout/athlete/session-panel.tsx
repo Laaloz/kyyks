@@ -11,6 +11,7 @@ import {
   type PointerEvent as ReactPointerEvent,
   type CSSProperties,
 } from "react";
+import { createPortal } from "react-dom";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -141,7 +142,11 @@ function CoachInstructionDialog({
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [onClose]);
 
-  return (
+  if (typeof document === "undefined") {
+    return null;
+  }
+
+  return createPortal(
     <div
       className="fixed inset-0 z-50 flex items-end justify-center bg-[color:color-mix(in_srgb,var(--background)_48%,transparent)] p-0"
       role="presentation"
@@ -174,7 +179,8 @@ function CoachInstructionDialog({
           </Button>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }
 
@@ -224,7 +230,11 @@ function ExerciseStructureDialog({
     ? customExerciseName.trim() || "Luo oma liike"
     : selectedExercise?.name ?? "Valitse liike";
 
-  return (
+  if (typeof document === "undefined") {
+    return null;
+  }
+
+  return createPortal(
     <div
       className="fixed inset-0 z-50 flex items-end justify-center bg-[color:color-mix(in_srgb,var(--background)_48%,transparent)] p-0"
       role="presentation"
@@ -352,7 +362,8 @@ function ExerciseStructureDialog({
           </Button>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }
 
