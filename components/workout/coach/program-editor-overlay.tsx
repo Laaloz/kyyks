@@ -125,6 +125,12 @@ export function ProgramEditorOverlay({
 
   useEffect(() => {
     setMounted(true);
+    // Lukitse taustan vieritys, ettei se vuoda overscrollissa overlayn taakse.
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.body.style.overflow = previousOverflow;
+    };
   }, []);
 
   const weekCount = basePlan?.weekCount ?? 8;
@@ -269,7 +275,7 @@ export function ProgramEditorOverlay({
         </div>
       </div>
 
-      <div className="min-h-0 flex-1 overflow-y-auto px-4 pb-36">
+      <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 pb-36">
         <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-4">
           <label
             htmlFor="program-editor-name"
