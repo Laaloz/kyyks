@@ -106,9 +106,11 @@ export function DashboardShell() {
     authenticatedUser,
     currentUser,
     isImpersonating,
+    isPreviewMode,
     logout,
     state,
     stopAdminImpersonation,
+    stopAthletePreview,
     markConversationRead,
   } = useAppState();
   const [view, setView] = useState<WorkspaceView>(() =>
@@ -131,6 +133,9 @@ export function DashboardShell() {
     return null;
   }
 
+  // Esikatselu on aktiivinen vain kun myös impersonointi on päällä (suojaa
+  // vanhentuneelta isPreviewMode-tilalta esim. uloskirjautumisen jälkeen).
+  const isActivePreview = isPreviewMode && isImpersonating;
   const navItems = navItemsForRole(currentUser.role);
   const navLabelByView: Record<WorkspaceView, string> = {
     overview: "Tänään",
@@ -606,7 +611,26 @@ export function DashboardShell() {
             </nav>
           </div>
 
-          {isImpersonating && authenticatedUser ? (
+          {isActivePreview ? (
+            <div className="flex flex-col gap-3 rounded-2xl bg-[var(--accent)] px-3 py-3 text-[var(--accent-contrast)] sm:flex-row sm:items-center sm:justify-between">
+              <p className="text-sm font-semibold">
+                Esikatselu · {currentUser.fullName}
+              </p>
+              <Button
+                type="button"
+                variant="secondary"
+                className="h-10 shrink-0 rounded-xl px-4 text-sm"
+                onClick={() => {
+                  const result = stopAthletePreview();
+                  if (result.ok) {
+                    setView("overview");
+                  }
+                }}
+              >
+                Sulje esikatselu
+              </Button>
+            </div>
+          ) : isImpersonating && authenticatedUser ? (
             <div className="flex flex-col gap-2 sm:gap-2.5">
               <div className="flex flex-col gap-3 rounded-2xl border border-[var(--border-strong)] bg-[var(--surface-2)] px-3 py-3 sm:flex-row sm:items-center sm:justify-between">
                 <p className="text-sm text-[var(--text-muted)]">
@@ -647,6 +671,7 @@ export function DashboardShell() {
             {view === "athlete-log" ? (
               <AthleteDashboard
                 view={view}
+                readOnly={isActivePreview}
                 onOpenWorkoutLog={() => setView("athlete-log")}
                 onOpenSettings={() => setView("settings")}
                 onOpenProgramEditor={() => setView(PROGRAMS_WORKSPACE_VIEW)}
@@ -660,6 +685,7 @@ export function DashboardShell() {
               ) : (
                 <AthleteDashboard
                   view={view}
+                  readOnly={isActivePreview}
                   onOpenWorkoutLog={() => setView("athlete-log")}
                   onOpenSettings={() => setView("settings")}
                   onOpenProgramEditor={() => setView(PROGRAMS_WORKSPACE_VIEW)}
@@ -688,6 +714,7 @@ export function DashboardShell() {
             ) : (
               <AthleteDashboard
                 view={view}
+                readOnly={isActivePreview}
                 onOpenWorkoutLog={() => setView("athlete-log")}
                 onOpenSettings={() => setView("settings")}
                 onOpenProgramEditor={() => setView(PROGRAMS_WORKSPACE_VIEW)}

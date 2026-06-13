@@ -9,6 +9,7 @@ import {
   CircleCheckBig,
   ClipboardList,
   ClipboardPenLine,
+  Eye,
   type LucideIcon,
   MoreHorizontal,
   Plus,
@@ -2561,6 +2562,7 @@ function CoachAthleteInsights({
   state: AppState;
   onOpenConversation?: () => void;
 }) {
+  const { startAthletePreview, notify } = useAppState();
   const [expandedWorkoutDetailsId, setExpandedWorkoutDetailsId] = useState<string | null>(null);
   const [selectedWorkoutByGroup, setSelectedWorkoutByGroup] = useState<Record<string, string>>({});
   const [isArchiveExpanded, setIsArchiveExpanded] = useState(false);
@@ -2897,6 +2899,22 @@ function CoachAthleteInsights({
               </option>
             ))}
           </Select>
+          {selectedAthlete ? (
+            <Button
+              type="button"
+              variant="secondary"
+              className="mt-2 w-full gap-2"
+              onClick={() => {
+                const result = startAthletePreview(selectedAthleteId);
+                if (!result.ok) {
+                  notify({ tone: "danger", message: result.message });
+                }
+              }}
+            >
+              <Eye className="size-4" aria-hidden="true" />
+              Esikatsele urheilijan näkymää
+            </Button>
+          ) : null}
         </div>
       </div>
 

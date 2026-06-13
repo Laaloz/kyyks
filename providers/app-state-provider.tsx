@@ -2290,6 +2290,7 @@ interface AppStateContextValue {
   isAuthTransitionPending: boolean;
   currentRole: Role | null;
   isImpersonating: boolean;
+  isPreviewMode: boolean;
   isHydrated: boolean;
   notify: (input: { tone: "success" | "danger" | "info"; message: string }) => void;
   login: (email: string, password: string, options?: { captchaToken?: string }) => Promise<LoginResult>;
@@ -2297,6 +2298,8 @@ interface AppStateContextValue {
   loginAsDemoUser: (userId: string) => void;
   startAdminImpersonation: (userId: string) => ActionResult;
   stopAdminImpersonation: () => ActionResult;
+  startAthletePreview: (userId: string) => ActionResult;
+  stopAthletePreview: () => ActionResult;
   updateCurrentUserSettings: (input: UserSettingsInput) => Promise<ActionResult>;
   uploadCurrentUserProfileImage: (file: File) => Promise<ActionResult>;
   removeCurrentUserProfileImage: () => Promise<ActionResult>;
@@ -2415,6 +2418,10 @@ export function AppStateProvider({ children }: PropsWithChildren) {
   const [state, setState] = useState<AppState>(() => createInitialAppState());
   const [authenticatedUserId, setAuthenticatedUserId] = useState<string | null>(null);
   const [impersonatedUserId, setImpersonatedUserId] = useState<string | null>(null);
+  // Esikatselu (vaihe 8): valmentaja/admin katselee urheilijan näkymää read-only.
+  // Käyttää samaa impersonointikytkintä (impersonatedUserId), mutta merkitsee
+  // istunnon read-onlyksi eikä mutatoivia toimintoja sallita.
+  const [isPreviewMode, setIsPreviewMode] = useState(false);
   const [isAuthTransitionPending, setIsAuthTransitionPending] = useState(false);
   const [isStorageHydrated, setIsStorageHydrated] = useState(false);
   const [isSupabaseAuthResolved, setIsSupabaseAuthResolved] = useState(false);
@@ -3761,6 +3768,7 @@ function findResolvedUserIdInSnapshot(
       isAuthTransitionPending,
       currentRole: currentUser?.role ?? null,
       isImpersonating,
+      isPreviewMode,
       isHydrated,
       notify,
       async login(email, password, options) {
@@ -3841,6 +3849,38 @@ function findResolvedUserIdInSnapshot(
         }
 
         setImpersonatedUserId(null);
+        setIsPreviewMode(false);
+        return { ok: true };
+      },
+      startAthletePreview(userId) {
+        if (!authenticatedUser || !canActAsCoach(authenticatedUser.role)) {
+          return { ok: false, message: "Vain valmentaja tai admin voi esikatsella urheilijaa." };
+        }
+
+        const targetUser = state.users.find((user) => user.id === userId);
+        if (!targetUser || targetUser.status !== "active") {
+          return { ok: false, message: "Urheilijaa ei löytynyt." };
+        }
+
+        const coachesThisAthlete =
+          authenticatedUser.role === "admin" ||
+          state.assignments.some(
+            (assignment) =>
+              assignment.coachId === authenticatedUser.id &&
+              assignment.athleteId === userId &&
+              assignment.active,
+          );
+        if (!coachesThisAthlete) {
+          return { ok: false, message: "Voit esikatsella vain omia urheilijoitasi." };
+        }
+
+        setImpersonatedUserId(targetUser.id);
+        setIsPreviewMode(true);
+        return { ok: true };
+      },
+      stopAthletePreview() {
+        setImpersonatedUserId(null);
+        setIsPreviewMode(false);
         return { ok: true };
       },
       async updateCurrentUserSettings(input) {
