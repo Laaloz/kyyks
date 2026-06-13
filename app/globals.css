@@ -1,51 +1,130 @@
 @import "tailwindcss";
 
+/* Teemapaletit: arvot handoff/redesign/tokens.css:stä (vaalea→light, tumma→dark).
+   Tokenien nimet ja data-theme-mekanismi säilyvät ennallaan. */
+
 :root {
-  --background: #f3f7fc;
-  --background-accent: #e6eef9;
-  --background-glow-1: #ffffff;
-  --background-glow-2: #dceafe;
+  --background: #f3f4f0;
   --surface: #ffffff;
-  --surface-2: #f7fafe;
-  --surface-3: #edf3fb;
-  --surface-4: #e4edf8;
-  --panel: #ffffff;
-  --panel-soft: #f7fafe;
-  --panel-strong: #edf3fb;
-  --text: #17212b;
-  --text-muted: #425466;
-  --text-subtle: #5f7286;
-  --accent: #1e5ed7;
-  --accent-strong: #1749a7;
+  --surface-2: #e9ebe5;
+  --text: #171d19;
+  --text-muted: #59635c;
+  --text-subtle: #87908a;
+  --border: #e4e7e1;
+  --border-strong: #cdd3cb;
+  --accent: oklch(0.52 0.14 158);
+  --accent-soft: oklch(0.94 0.04 158);
   --accent-contrast: #ffffff;
-  --accent-secondary: #0f8b8d;
-  --accent-tertiary: #0d7a3c;
-  --border: #c8d4e3;
-  --border-strong: #aebfd3;
-  --shadow: #d4deea;
-  --shadow-soft: #e0e8f3;
-  --success: #0d7a3c;
-  --warning: #b76b00;
-  --danger: #b42318;
-  --font-display: "Manrope", "Segoe UI", "Helvetica Neue", sans-serif;
-  --font-body: "Inter", "Segoe UI", "Helvetica Neue", sans-serif;
-  --selection-background: #bfd4fb;
-  --nav-group-bg: #edf2fc;
-  --nav-group-icon-bg: color-mix(in srgb, var(--nav-group-bg) 72%, white);
-  --nav-group-icon-active-bg: color-mix(in srgb, var(--nav-group-bg) 88%, white);
-  --nav-active-bg: color-mix(in srgb, var(--nav-group-bg) 64%, white);
-  --nav-workout-bg-soft: color-mix(in srgb, var(--accent) 22%, white);
-  --nav-workout-icon-bg-soft: color-mix(in srgb, var(--accent) 12%, white);
-  --nav-workout-hover-bg-soft: color-mix(in srgb, var(--accent) 18%, white);
-  --nav-workout-bg-energetic: #dbe8ff;
-  --nav-workout-icon-bg-energetic: #eef4ff;
-  --nav-workout-hover-bg-energetic: #cfe0ff;
-  --nav-workout-bg-sporty: color-mix(in srgb, var(--accent) 38%, white);
-  --nav-workout-icon-bg-sporty: color-mix(in srgb, var(--accent) 20%, white);
-  --nav-workout-hover-bg-sporty: color-mix(in srgb, var(--accent) 30%, white);
-  --nav-workout-bg: var(--nav-workout-bg-energetic);
-  --nav-workout-icon-bg: var(--nav-workout-icon-bg-energetic);
-  --nav-workout-hover-bg: var(--nav-workout-hover-bg-energetic);
+  --accent-secondary: oklch(0.56 0.11 65);
+  --success: oklch(0.52 0.14 158);
+  --warning: oklch(0.6 0.13 80);
+  --danger: oklch(0.55 0.18 28);
+  --shadow: rgba(0, 0, 0, 0.1);
+  --shadow-soft: rgba(0, 0, 0, 0.04);
+  --radius: 18px;
+  --font-display: var(--font-schibsted-grotesk), "Schibsted Grotesk", "Segoe UI", "Helvetica Neue", sans-serif;
+  --font-body: var(--font-manrope), "Manrope", "Segoe UI", "Helvetica Neue", sans-serif;
+  color-scheme: light;
+}
+
+:root[data-theme="dark"] {
+  --background: #0f1311;
+  --surface: #181d1a;
+  --surface-2: #232925;
+  --text: #eef2ee;
+  --text-muted: #a8b2aa;
+  --text-subtle: #76807a;
+  --border: #242b26;
+  --border-strong: #3a423c;
+  --accent: oklch(0.79 0.15 158);
+  --accent-soft: oklch(0.31 0.05 158);
+  --accent-contrast: #0c1410;
+  --accent-secondary: oklch(0.76 0.11 65);
+  --success: oklch(0.79 0.15 158);
+  --warning: oklch(0.8 0.12 80);
+  --danger: oklch(0.7 0.16 28);
+  --shadow: rgba(0, 0, 0, 0.5);
+  --shadow-soft: rgba(0, 0, 0, 0.3);
+  color-scheme: dark;
+}
+
+:root[data-theme="mallu"] {
+  --background: #f8efec;
+  --surface: #fffaf8;
+  --surface-2: #f0dfd9;
+  --text: #2e1412;
+  --text-muted: #7a5650;
+  --text-subtle: #a3837d;
+  --border: #ecdcd7;
+  --border-strong: #d8beb7;
+  --accent: oklch(0.55 0.18 28);
+  --accent-soft: oklch(0.93 0.04 28);
+  --accent-contrast: #fff7f4;
+  --accent-secondary: oklch(0.58 0.12 55);
+  --success: oklch(0.54 0.13 155);
+  --warning: oklch(0.6 0.13 80);
+  --danger: oklch(0.5 0.2 28);
+  color-scheme: light;
+}
+
+:root[data-theme="camel"] {
+  --background: #f6f0e4;
+  --surface: #fffcf5;
+  --surface-2: #ece2cd;
+  --text: #2a1e10;
+  --text-muted: #6f5e48;
+  --text-subtle: #998871;
+  --border: #e9decb;
+  --border-strong: #d2c3a6;
+  --accent: oklch(0.55 0.12 65);
+  --accent-soft: oklch(0.93 0.035 65);
+  --accent-contrast: #fffaf0;
+  --accent-secondary: oklch(0.55 0.1 130);
+  --success: oklch(0.54 0.12 145);
+  --warning: oklch(0.58 0.13 80);
+  --danger: oklch(0.55 0.17 28);
+  color-scheme: light;
+}
+
+/* Aksenttivaihtoehdot (vain vaalea + tumma; mallu/camel pitävät oman aksenttinsa) */
+:root[data-theme="light"][data-accent="sini"] {
+  --accent: oklch(0.5 0.14 255);
+  --accent-soft: oklch(0.93 0.04 255);
+}
+
+:root[data-theme="dark"][data-accent="sini"] {
+  --accent: oklch(0.76 0.13 255);
+  --accent-soft: oklch(0.31 0.06 255);
+  --accent-contrast: #0a0f16;
+}
+
+:root[data-theme="light"][data-accent="kupari"] {
+  --accent: oklch(0.54 0.13 55);
+  --accent-soft: oklch(0.93 0.04 55);
+  --accent-secondary: oklch(0.52 0.12 158);
+}
+
+:root[data-theme="dark"][data-accent="kupari"] {
+  --accent: oklch(0.78 0.13 55);
+  --accent-soft: oklch(0.31 0.05 55);
+  --accent-contrast: #160f08;
+  --accent-secondary: oklch(0.79 0.13 158);
+}
+
+/* Johdetut tokenit: lasketaan teeman perusarvoista, joten yksi määrittely riittää */
+:root {
+  --surface-3: color-mix(in srgb, var(--surface-2) 62%, var(--border-strong));
+  --surface-4: color-mix(in srgb, var(--surface-2) 35%, var(--border-strong));
+  --accent-strong: color-mix(in oklab, var(--accent) 72%, var(--text));
+  --accent-tertiary: var(--success);
+  --selection-background: var(--accent-soft);
+  --nav-group-bg: var(--surface-2);
+  --nav-group-icon-bg: var(--surface-2);
+  --nav-group-icon-active-bg: var(--accent-soft);
+  --nav-active-bg: var(--surface-2);
+  --nav-workout-bg: var(--accent-soft);
+  --nav-workout-icon-bg: var(--accent-soft);
+  --nav-workout-hover-bg: color-mix(in srgb, var(--accent) 24%, var(--surface));
   --button-secondary-border: var(--border-strong);
   --button-secondary-bg: var(--surface);
   --button-secondary-text: var(--text);
@@ -59,174 +138,6 @@
   --button-disabled-border: var(--border);
   --button-disabled-bg: var(--surface-2);
   --button-disabled-text: var(--text-subtle);
-  color-scheme: light;
-}
-
-:root[data-theme="dark"] {
-  --background: #08111f;
-  --background-accent: #0e1a2f;
-  --background-glow-1: #163a6b;
-  --background-glow-2: #0b2343;
-  --surface: #0d1727;
-  --surface-2: #122033;
-  --surface-3: #17283f;
-  --surface-4: #1d314d;
-  --panel: #0d1727;
-  --panel-soft: #122033;
-  --panel-strong: #17283f;
-  --text: #f4f8ff;
-  --text-muted: #c3d2e6;
-  --text-subtle: #99abc2;
-  --accent: #4f8cff;
-  --accent-strong: #82afff;
-  --accent-contrast: #08111f;
-  --accent-secondary: #47c7c6;
-  --accent-tertiary: #49bf79;
-  --border: #29415f;
-  --border-strong: #365275;
-  --shadow: rgba(0, 0, 0, 0.5);
-  --shadow-soft: rgba(8, 17, 31, 0.78);
-  --success: #49bf79;
-  --warning: #f0b44b;
-  --danger: #ff7a7a;
-  --selection-background: #204c8f;
-  --nav-group-bg: color-mix(in srgb, var(--surface-3) 78%, #223c61);
-  --nav-group-icon-bg: color-mix(in srgb, var(--nav-group-bg) 82%, var(--surface));
-  --nav-group-icon-active-bg: color-mix(in srgb, var(--accent) 24%, var(--surface));
-  --nav-active-bg: color-mix(in srgb, var(--nav-group-bg) 74%, var(--surface));
-  --nav-workout-bg-soft: color-mix(in srgb, var(--accent) 38%, var(--surface-2));
-  --nav-workout-icon-bg-soft: color-mix(in srgb, var(--accent) 24%, var(--surface));
-  --nav-workout-hover-bg-soft: color-mix(in srgb, var(--accent) 46%, var(--surface-2));
-  --nav-workout-bg-energetic: color-mix(in srgb, var(--accent) 54%, var(--surface));
-  --nav-workout-icon-bg-energetic: color-mix(in srgb, var(--accent) 38%, var(--surface));
-  --nav-workout-hover-bg-energetic: color-mix(in srgb, var(--accent) 62%, var(--surface-2));
-  --nav-workout-bg-sporty: color-mix(in srgb, var(--accent) 58%, var(--surface-2));
-  --nav-workout-icon-bg-sporty: color-mix(in srgb, var(--accent) 36%, var(--surface));
-  --nav-workout-hover-bg-sporty: color-mix(in srgb, var(--accent) 64%, var(--surface-2));
-  --nav-workout-bg: var(--nav-workout-bg-energetic);
-  --nav-workout-icon-bg: var(--nav-workout-icon-bg-energetic);
-  --nav-workout-hover-bg: var(--nav-workout-hover-bg-energetic);
-  color-scheme: dark;
-}
-
-:root[data-theme="mallu"] {
-  --background: #fff1ef;
-  --background-accent: #f4d0ca;
-  --background-glow-1: #fff8f6;
-  --background-glow-2: #ef9c93;
-  --surface: #fff8f7;
-  --surface-2: #ffe7e2;
-  --surface-3: #f8c9c0;
-  --surface-4: #efa89c;
-  --panel: #fff8f7;
-  --panel-soft: #ffe7e2;
-  --panel-strong: #f8c9c0;
-  --text: #2c0f10;
-  --text-muted: #7c3430;
-  --text-subtle: #9b4d45;
-  --accent: #b11f24;
-  --accent-strong: #8f171b;
-  --accent-contrast: #fff7f2;
-  --accent-secondary: #d53b35;
-  --accent-tertiary: #f05f43;
-  --border: #e3a39a;
-  --border-strong: #cf7367;
-  --shadow: rgba(120, 31, 25, 0.18);
-  --shadow-soft: rgba(177, 31, 36, 0.1);
-  --success: #0f7a45;
-  --warning: #d97706;
-  --danger: #b11f24;
-  --selection-background: #f3a093;
-  --nav-group-bg: color-mix(in srgb, var(--surface-2) 82%, white);
-  --nav-group-icon-bg: color-mix(in srgb, var(--nav-group-bg) 72%, white);
-  --nav-group-icon-active-bg: color-mix(in srgb, var(--nav-group-bg) 88%, white);
-  --nav-active-bg: color-mix(in srgb, var(--nav-group-bg) 70%, white);
-  --nav-workout-bg-soft: color-mix(in srgb, var(--accent) 18%, white);
-  --nav-workout-icon-bg-soft: color-mix(in srgb, var(--accent) 10%, white);
-  --nav-workout-hover-bg-soft: color-mix(in srgb, var(--accent) 14%, white);
-  --nav-workout-bg-energetic: color-mix(in srgb, var(--accent) 30%, white);
-  --nav-workout-icon-bg-energetic: color-mix(in srgb, var(--accent) 18%, white);
-  --nav-workout-hover-bg-energetic: color-mix(in srgb, var(--accent) 24%, white);
-  --nav-workout-bg-sporty: color-mix(in srgb, var(--accent) 30%, white);
-  --nav-workout-icon-bg-sporty: color-mix(in srgb, var(--accent) 16%, white);
-  --nav-workout-hover-bg-sporty: color-mix(in srgb, var(--accent) 24%, white);
-  --nav-workout-bg: var(--nav-workout-bg-energetic);
-  --nav-workout-icon-bg: var(--nav-workout-icon-bg-energetic);
-  --nav-workout-hover-bg: var(--nav-workout-hover-bg-energetic);
-  --button-secondary-border: color-mix(in srgb, var(--accent) 42%, var(--border));
-  --button-secondary-bg: color-mix(in srgb, var(--accent) 10%, var(--surface));
-  --button-secondary-text: var(--accent-strong);
-  --button-secondary-hover-bg: color-mix(in srgb, var(--accent) 16%, var(--surface));
-  --button-ghost-border: color-mix(in srgb, var(--accent) 30%, var(--border));
-  --button-ghost-bg: color-mix(in srgb, var(--accent) 6%, var(--surface));
-  --button-ghost-text: var(--accent-strong);
-  --button-ghost-hover-border: color-mix(in srgb, var(--accent) 46%, var(--border-strong));
-  --button-ghost-hover-bg: color-mix(in srgb, var(--accent) 14%, var(--surface));
-  --button-ghost-hover-text: #4e2217;
-  --button-disabled-border: color-mix(in srgb, var(--accent) 28%, var(--border));
-  --button-disabled-bg: color-mix(in srgb, var(--accent) 12%, var(--surface));
-  --button-disabled-text: color-mix(in srgb, var(--accent-strong) 55%, white);
-  color-scheme: light;
-}
-
-:root[data-theme="camel"] {
-  --background: #fff8ec;
-  --background-accent: #efdfc2;
-  --background-glow-1: #fffdf6;
-  --background-glow-2: #e8bc73;
-  --surface: #fffdf7;
-  --surface-2: #f7ecd9;
-  --surface-3: #ecd9b8;
-  --surface-4: #dfc49d;
-  --panel: #fffdf7;
-  --panel-soft: #f7ecd9;
-  --panel-strong: #ecd9b8;
-  --text: #2a1b14;
-  --text-muted: #543f35;
-  --text-subtle: #6d5347;
-  --accent: #9a432d;
-  --accent-strong: #6f2e1f;
-  --accent-contrast: #fffdf8;
-  --accent-secondary: #8f582b;
-  --accent-tertiary: #6f522f;
-  --border: #c9ab83;
-  --border-strong: #ac8961;
-  --shadow: rgba(74, 43, 25, 0.22);
-  --shadow-soft: rgba(111, 60, 36, 0.12);
-  --success: #3f7f3b;
-  --warning: #9f6118;
-  --danger: #8f2e22;
-  --selection-background: #e8c98c;
-  --nav-group-bg: color-mix(in srgb, var(--surface-2) 78%, white);
-  --nav-group-icon-bg: color-mix(in srgb, var(--nav-group-bg) 70%, white);
-  --nav-group-icon-active-bg: color-mix(in srgb, var(--accent) 18%, white);
-  --nav-active-bg: color-mix(in srgb, var(--accent) 14%, white);
-  --nav-workout-bg-soft: color-mix(in srgb, var(--accent) 28%, white);
-  --nav-workout-icon-bg-soft: color-mix(in srgb, var(--accent) 16%, white);
-  --nav-workout-hover-bg-soft: color-mix(in srgb, var(--accent) 24%, white);
-  --nav-workout-bg-energetic: color-mix(in srgb, var(--accent) 38%, white);
-  --nav-workout-icon-bg-energetic: color-mix(in srgb, var(--accent) 26%, white);
-  --nav-workout-hover-bg-energetic: color-mix(in srgb, var(--accent) 34%, white);
-  --nav-workout-bg-sporty: color-mix(in srgb, var(--accent) 38%, white);
-  --nav-workout-icon-bg-sporty: color-mix(in srgb, var(--accent) 24%, white);
-  --nav-workout-hover-bg-sporty: color-mix(in srgb, var(--accent) 34%, white);
-  --nav-workout-bg: var(--nav-workout-bg-energetic);
-  --nav-workout-icon-bg: var(--nav-workout-icon-bg-energetic);
-  --nav-workout-hover-bg: var(--nav-workout-hover-bg-energetic);
-  --button-secondary-border: color-mix(in srgb, var(--accent) 42%, var(--border));
-  --button-secondary-bg: color-mix(in srgb, var(--accent) 10%, var(--surface));
-  --button-secondary-text: var(--accent-strong);
-  --button-secondary-hover-bg: color-mix(in srgb, var(--accent) 16%, var(--surface));
-  --button-ghost-border: color-mix(in srgb, var(--accent) 30%, var(--border));
-  --button-ghost-bg: color-mix(in srgb, var(--accent) 6%, var(--surface));
-  --button-ghost-text: var(--accent-strong);
-  --button-ghost-hover-border: color-mix(in srgb, var(--accent) 46%, var(--border-strong));
-  --button-ghost-hover-bg: color-mix(in srgb, var(--accent) 14%, var(--surface));
-  --button-ghost-hover-text: #46211a;
-  --button-disabled-border: color-mix(in srgb, var(--accent) 28%, var(--border));
-  --button-disabled-bg: color-mix(in srgb, var(--accent) 12%, var(--surface));
-  --button-disabled-text: color-mix(in srgb, var(--accent-strong) 55%, white);
-  color-scheme: light;
 }
 
 html,
@@ -240,10 +151,7 @@ body {
 
 html {
   scroll-behavior: smooth;
-  background:
-    radial-gradient(circle at 0% 0%, var(--background-glow-1) 0%, transparent 44%),
-    radial-gradient(circle at 100% 0%, var(--background-glow-2) 0%, transparent 38%),
-    linear-gradient(180deg, var(--background) 0%, var(--background-accent) 100%);
+  background: var(--background);
 }
 
 body {
@@ -255,6 +163,19 @@ body {
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   text-rendering: optimizeLegibility;
+}
+
+h1,
+h2,
+h3,
+.display {
+  font-family: var(--font-display);
+  letter-spacing: -0.01em;
+}
+
+.num {
+  font-family: var(--font-display);
+  font-variant-numeric: tabular-nums;
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -290,22 +211,15 @@ textarea {
 }
 
 fieldset {
-  margin: 0.5rem 0;
+  margin: 0;
   min-width: 0;
-  padding: 0.85rem 1rem 1rem;
-  border: 1px solid var(--border);
-  border-radius: 1rem;
-  background: var(--surface-2);
+  padding: 0;
+  border: none;
 }
 
 legend {
   margin: 0;
   padding: 0;
-  color: var(--text-subtle);
-  font-size: 0.875rem;
-  line-height: 1.4;
-  font-weight: 700;
-  letter-spacing: 0.03em;
 }
 
 ::selection {
