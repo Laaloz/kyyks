@@ -31,6 +31,7 @@ const dashboardViewLabel: Record<DashboardHomeView, string> = {
   invites: "Kutsut",
   "athlete-log": "Treeni",
   conversation: "Chat",
+  ingredients: "Raaka-aineet",
 };
 
 const themeModeLabel: Record<ThemeMode, string> = {

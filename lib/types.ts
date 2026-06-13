@@ -44,6 +44,7 @@ export type DashboardHomeView =
   | "athlete-log"
   | "conversation"
   | "athletes"
+  | "ingredients"
   | "users";
 export type MuscleGroupKey = "shoulders" | "arms" | "chest" | "abs" | "back" | "legs" | "other";
 export type ThemeMode = "light" | "dark" | "mallu" | "camel";

@@ -11,15 +11,16 @@ const coachWorkspaceViews: DashboardHomeView[] = [
   "athletes",
 ];
 
+// Admin käyttää samaa treenaajasovellusta (Tänään/Ravinto/Treeni/Keho) ja
+// Tiimi = hallintakooste (valmentajat, käyttäjät, kutsut, raaka-ainekatalogi).
+// Muut hallintanäkymät (users/invites/ingredients/templates/conversation) ovat
+// yhä valideja näkymiä, joihin pääsee Tiimin silloista — ei välilehtipalkissa.
 const adminWorkspaceViews: DashboardHomeView[] = [
-  "athlete-log",
   "overview",
   "nutrition",
+  "athlete-log",
+  "measurements",
   "athletes",
-  PROGRAMS_DASHBOARD_VIEW,
-  "conversation",
-  "invites",
-  "users",
 ];
 
 // Treenaajaroolien alapalkki: Tänään / Treeni / Ravinto / Keho (4 tasakokoista).

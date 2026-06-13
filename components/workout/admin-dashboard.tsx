@@ -1,7 +1,7 @@
 "use client";
 
 import { zodResolver } from "@hookform/resolvers/zod";
-import { Activity, AlertTriangle, ShieldCheck, UserRoundPlus, UsersRound } from "lucide-react";
+import { Activity, AlertTriangle, Carrot, ScrollText, ShieldCheck, UserRoundPlus, UsersRound } from "lucide-react";
 import Link from "next/link";
 import { useId, useMemo, useState } from "react";
 import { useForm } from "react-hook-form";
@@ -37,10 +37,14 @@ export function AdminDashboard({
   view,
   onOpenWorkoutLog,
   onOpenSettings,
+  onOpenIngredients,
+  onOpenPrograms,
 }: {
   view: WorkspaceView;
   onOpenWorkoutLog?: () => void;
   onOpenSettings?: () => void;
+  onOpenIngredients?: () => void;
+  onOpenPrograms?: () => void;
 }) {
   const { currentUser, state, notify, createInvite, resendInvite } = useAppState();
   const formId = useId();
@@ -198,8 +202,24 @@ export function AdminDashboard({
 
   return (
     <div className="grid gap-6">
-      {view === "overview" ? (
+      {view === "overview" || view === "athletes" ? (
         <>
+          {onOpenIngredients || onOpenPrograms ? (
+            <div className="flex flex-wrap gap-2">
+              {onOpenPrograms ? (
+                <Button type="button" variant="secondary" className="gap-2" onClick={onOpenPrograms}>
+                  <ScrollText className="size-4" aria-hidden="true" />
+                  Ohjelmat
+                </Button>
+              ) : null}
+              {onOpenIngredients ? (
+                <Button type="button" variant="secondary" className="gap-2" onClick={onOpenIngredients}>
+                  <Carrot className="size-4" aria-hidden="true" />
+                  Raaka-ainekatalogi
+                </Button>
+              ) : null}
+            </div>
+          ) : null}
           <div
             role="tablist"
             aria-label="Adminin etusivun osiot"

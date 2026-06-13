@@ -1,6 +1,6 @@
 "use client";
 
-import { BellRing, Dumbbell, HeartPulse, Home, LogOut, MessageSquare, MoreHorizontal, ScrollText, UserPlus, UserRound, UserRoundCog, Users, UtensilsCrossed, type LucideIcon } from "lucide-react";
+import { BellRing, Carrot, Dumbbell, HeartPulse, Home, LogOut, MessageSquare, MoreHorizontal, ScrollText, UserPlus, UserRound, UserRoundCog, Users, UtensilsCrossed, type LucideIcon } from "lucide-react";
 import { useEffect, useRef, useState, type KeyboardEvent } from "react";
 
 import dynamic from "next/dynamic";
@@ -50,11 +50,7 @@ function mobilePrimaryNavItemsForRole(role: Role): PrimaryWorkspaceView[] {
     return ["overview", "athlete-log", "nutrition", "measurements"];
   }
 
-  if (role === "admin") {
-    return ["overview", "nutrition", "athlete-log", "users"];
-  }
-
-  // Valmentaja: Tänään / Ravinto / Treeni / Keho / Tiimi (Treeni keskellä).
+  // Valmentaja JA admin: Tänään / Ravinto / Treeni / Keho / Tiimi (Treeni keskellä).
   return ["overview", "nutrition", "athlete-log", "measurements", "athletes"];
 }
 
@@ -148,6 +144,7 @@ export function DashboardShell() {
     invites: "Kutsut",
     "athlete-log": "Treeni",
     conversation: "Chat",
+    ingredients: "Raaka-aineet",
     settings: "Tili",
   };
   const mobileNavLabelByView = navLabelByView;
@@ -161,6 +158,7 @@ export function DashboardShell() {
     invites: UserPlus,
     "athlete-log": Dumbbell,
     conversation: MessageSquare,
+    ingredients: Carrot,
   };
   const mobilePrimaryNavItems = mobilePrimaryNavItemsForRole(currentUser.role).filter((item) => navItems.includes(item));
   const mobileOverflowNavItems = navItems.filter((item) => !mobilePrimaryNavItems.includes(item));
@@ -694,26 +692,23 @@ export function DashboardShell() {
                 onOverviewFocusHandled={() => setAthleteOverviewFocusTarget(null)}
               />
             ) : view === "nutrition" ? (
-              currentUser.role === "admin" ? (
-                <NutritionAdminPanel />
-              ) : (
-                <AthleteDashboard
-                  view={view}
-                  readOnly={isActivePreview}
-                  onOpenWorkoutLog={() => setView("athlete-log")}
-                  onOpenSettings={() => setView("settings")}
-                  onOpenProgramEditor={() => setView(PROGRAMS_WORKSPACE_VIEW)}
-                  onWorkoutDetailModeChange={setIsMobileWorkoutDetailOpen}
-                  overviewFocusTarget={athleteOverviewFocusTarget}
-                  onOverviewFocusHandled={() => setAthleteOverviewFocusTarget(null)}
-                />
-              )
+              // Kaikki roolit (myös valmentaja/admin) saavat oman ravintonsa
+              // treenaajasovelluksesta. Raaka-ainekatalogi on erillinen "ingredients".
+              <AthleteDashboard
+                view={view}
+                readOnly={isActivePreview}
+                onOpenWorkoutLog={() => setView("athlete-log")}
+                onOpenSettings={() => setView("settings")}
+                onOpenProgramEditor={() => setView(PROGRAMS_WORKSPACE_VIEW)}
+                onWorkoutDetailModeChange={setIsMobileWorkoutDetailOpen}
+                overviewFocusTarget={athleteOverviewFocusTarget}
+                onOverviewFocusHandled={() => setAthleteOverviewFocusTarget(null)}
+              />
             ) : view === PROGRAMS_WORKSPACE_VIEW ||
-              ((currentUser.role === "coach" || currentUser.role === "admin") &&
-                (view === "athletes" || view === "conversation")) ? (
-              // Valmentajan henkilökohtaiset näkymät (Tänään/Ravinto/Treeni/Keho)
-              // renderöityvät treenaajasovelluksena (alla); vain Tiimi/Ohjelmat/Chat
-              // tulevat CoachDashboardista.
+              (currentUser.role === "coach" && (view === "athletes" || view === "conversation")) ||
+              (currentUser.role === "admin" && view === "conversation") ? (
+              // Valmentajan/adminin henkilökohtaiset näkymät renderöityvät
+              // treenaajasovelluksena (alla); Tiimi/Ohjelmat/Chat CoachDashboardista.
               <CoachDashboard
                 view={view}
                 onOpenConversation={() => setView("conversation")}
@@ -723,11 +718,17 @@ export function DashboardShell() {
               />
             ) : currentUser.role === "admin" && view === "users" ? (
               <UserSettingsPanel adminOnly />
-            ) : currentUser.role === "admin" ? (
+            ) : currentUser.role === "admin" && view === "ingredients" ? (
+              <NutritionAdminPanel />
+            ) : currentUser.role === "admin" && (view === "athletes" || view === "invites") ? (
+              // Adminin Tiimi = hallintakooste (valmentajat, käyttäjät, kutsut)
+              // + sillat raaka-ainekatalogiin ja ohjelmiin.
               <AdminDashboard
                 view={view}
                 onOpenWorkoutLog={() => setView("athlete-log")}
                 onOpenSettings={() => setView("settings")}
+                onOpenIngredients={() => setView("ingredients")}
+                onOpenPrograms={() => setView(PROGRAMS_WORKSPACE_VIEW)}
               />
             ) : (
               <AthleteDashboard

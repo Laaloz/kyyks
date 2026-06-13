@@ -57,12 +57,19 @@ describe("role access helpers", () => {
     expect(canTrackOwnTraining(null)).toBe(false);
   });
 
-  it("exposes dedicated admin workspace views", () => {
-    expect(getDashboardViewsForRole("admin")).toContain("athletes");
-    expect(getDashboardViewsForRole("admin")).toContain("conversation");
-    expect(getDashboardViewsForRole("admin")).toContain("athlete-log");
-    expect(getDashboardViewsForRole("admin")).toContain("templates");
-    expect(getDashboardViewsForRole("admin")).toContain("nutrition");
+  it("gives the admin the same five-tab workspace as the coach (management bridged from Tiimi)", () => {
+    // Admin käyttää treenaajasovellusta; hallintapinnat (templates/conversation/
+    // invites/users/ingredients) avataan Tiimistä, eivät ole välilehtipalkissa.
+    expect(getDashboardViewsForRole("admin")).toEqual([
+      "overview",
+      "nutrition",
+      "athlete-log",
+      "measurements",
+      "athletes",
+    ]);
+    expect(getDashboardViewsForRole("admin")).not.toContain("conversation");
+    expect(getDashboardViewsForRole("admin")).not.toContain("templates");
+    expect(getDashboardViewsForRole("admin")).not.toContain("users");
     expect(getDashboardViewsForRole("coach")).not.toContain("conversation");
     expect(getDashboardViewsForRole("independent_athlete")).not.toContain("invites");
     expect(getDefaultDashboardView("admin")).toBe("overview");
