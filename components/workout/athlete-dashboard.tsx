@@ -488,6 +488,8 @@ export function AthleteDashboard({
   const [isSavingMeasurements, setIsSavingMeasurements] = useState(false);
   const [isMeasurementSheetOpen, setIsMeasurementSheetOpen] = useState(false);
   const [activeMeasurementTrend, setActiveMeasurementTrend] = useState<"weight" | "waist">("weight");
+  const [bodyMetricRange, setBodyMetricRange] = useState<"3m" | "1y" | "all">("3m");
+  const [showAllMeasurementEntries, setShowAllMeasurementEntries] = useState(false);
   const [extraActivityType, setExtraActivityType] = useState<ExtraActivityType>("run");
   const [extraActivityDurationMinutes, setExtraActivityDurationMinutes] = useState("30");
   const [extraActivityDate, setExtraActivityDate] = useState(() => new Date().toISOString().slice(0, 10));
@@ -882,35 +884,8 @@ export function AthleteDashboard({
     }
   }, [athleteLogMode, pendingStartWorkoutId, pendingWorkoutTransition, selectedWorkoutId, workouts]);
   const canTrackOwnMeasurements = canTrackOwnTraining(currentUser?.role);
-  const weightTrendPoints = useMemo(
-    () =>
-      currentUser
-        ? bodyMeasurements
-            .filter((entry) => entry.weightKg !== undefined)
-            .slice(0, 12)
-            .reverse()
-            .map((entry) => ({
-              date: entry.measuredAt,
-              value: entry.weightKg as number,
-            }))
-        : [],
-    [bodyMeasurements, currentUser],
-  );
-  const waistTrendPoints = useMemo(
-    () =>
-      currentUser
-        ? bodyMeasurements
-            .filter((entry) => entry.waistCm !== undefined)
-            .slice(0, 12)
-            .reverse()
-            .map((entry) => ({
-              date: entry.measuredAt,
-              value: entry.waistCm as number,
-            }))
-        : [],
-    [bodyMeasurements, currentUser],
-  );
-  // Keho-näkymä (prototyyppi): valitun mittarin nykyarvo, ~8 vk muutos, merkinnät.
+  // Keho-näkymä (prototyyppi): valitun mittarin nykyarvo, muutos valitulta
+  // aikaväliltä, koko historia merkintälistana.
   const measurementReminderState = useMemo(
     () => (currentUser ? getMeasurementReminderState(state, currentUser) : null),
     [currentUser, state],
@@ -920,13 +895,37 @@ export function AthleteDashboard({
     !readOnly && weeklyRemindersEnabled && Boolean(measurementReminderState?.isDue);
   const bodyMetric = activeMeasurementTrend; // "weight" | "waist"
   const bodyMetricUnit = bodyMetric === "weight" ? "kg" : "cm";
-  const bodyMetricPoints = bodyMetric === "weight" ? weightTrendPoints : waistTrendPoints;
+  // Koko historia uusin ensin (lista) ja erikseen vanhin→uusin (kaavio).
+  const bodyMetricEntries = useMemo(
+    () => bodyMeasurements.filter((entry) => (bodyMetric === "weight" ? entry.weightKg : entry.waistCm) !== undefined),
+    [bodyMeasurements, bodyMetric],
+  );
+  const bodyMetricSeries = useMemo(
+    () =>
+      [...bodyMetricEntries]
+        .reverse()
+        .map((entry) => ({
+          date: entry.measuredAt,
+          value: (bodyMetric === "weight" ? entry.weightKg : entry.waistCm) as number,
+        })),
+    [bodyMetricEntries, bodyMetric],
+  );
   const bodyMetricCurrentValue =
-    bodyMetricPoints.length > 0
-      ? bodyMetricPoints[bodyMetricPoints.length - 1]!.value
+    bodyMetricSeries.length > 0
+      ? bodyMetricSeries[bodyMetricSeries.length - 1]!.value
       : bodyMetric === "weight"
         ? currentUser?.weightKg
         : latestWaistCm;
+  // Aikavälivalitsin (3 kk / 1 v / kaikki) rajaa kaavion ja muutospillerin.
+  const bodyMetricPoints = useMemo(() => {
+    if (bodyMetricRange === "all") {
+      return bodyMetricSeries;
+    }
+    const days = bodyMetricRange === "3m" ? 90 : 365;
+    const cutoff = Date.now() - days * 24 * 60 * 60 * 1000;
+    const windowed = bodyMetricSeries.filter((point) => Date.parse(point.date) >= cutoff);
+    return windowed.length >= 2 ? windowed : bodyMetricSeries.slice(-2);
+  }, [bodyMetricSeries, bodyMetricRange]);
   const bodyMetricDelta =
     bodyMetricPoints.length >= 2
       ? bodyMetricPoints[bodyMetricPoints.length - 1]!.value - bodyMetricPoints[0]!.value
@@ -941,13 +940,7 @@ export function AthleteDashboard({
           ),
         )
       : null;
-  const bodyMetricEntries = useMemo(
-    () =>
-      bodyMeasurements
-        .filter((entry) => (bodyMetric === "weight" ? entry.weightKg : entry.waistCm) !== undefined)
-        .slice(0, 12),
-    [bodyMeasurements, bodyMetric],
-  );
+  const visibleMeasurementEntries = showAllMeasurementEntries ? bodyMetricEntries : bodyMetricEntries.slice(0, 12);
   const handleSaveMeasurement = async () => {
     const parsed = bodyMeasurementSchema.safeParse({
       heightCm: "",
@@ -1678,7 +1671,29 @@ export function AthleteDashboard({
                 </span>
               ) : null}
             </div>
-            <div className="mt-4">
+            <div className="mt-4 flex gap-1.5">
+              {([
+                ["3m", "3 kk"],
+                ["1y", "1 v"],
+                ["all", "Kaikki"],
+              ] as const).map(([value, label]) => (
+                <button
+                  key={value}
+                  type="button"
+                  aria-pressed={bodyMetricRange === value}
+                  className={cn(
+                    "rounded-full px-3 py-1 text-xs font-semibold transition",
+                    bodyMetricRange === value
+                      ? "bg-[var(--text)] text-[var(--background)]"
+                      : "bg-[var(--surface-2)] text-[var(--text-muted)]",
+                  )}
+                  onClick={() => setBodyMetricRange(value)}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+            <div className="mt-3">
               <MeasurementSparkline points={bodyMetricPoints} />
             </div>
           </Card>
@@ -1716,24 +1731,38 @@ export function AthleteDashboard({
             <p className="px-1 text-xs font-semibold uppercase tracking-[0.06em] text-[var(--text-subtle)]">Merkinnät</p>
             <Card className="mt-2">
               {bodyMetricEntries.length > 0 ? (
-                <div className="divide-y divide-[var(--border)]">
-                  {bodyMetricEntries.map((entry) => {
-                    const value = bodyMetric === "weight" ? entry.weightKg : entry.waistCm;
-                    const dateObj = new Date(entry.measuredAt);
-                    const weekdayShort = ["Su", "Ma", "Ti", "Ke", "To", "Pe", "La"];
-                    const label = Number.isFinite(dateObj.getTime())
-                      ? `${weekdayShort[dateObj.getDay()]} ${dateObj.getDate()}.${dateObj.getMonth() + 1}.`
-                      : formatDate(entry.measuredAt);
-                    return (
-                      <div key={entry.id} className="flex items-center justify-between gap-3 py-3">
-                        <span className="text-sm text-[var(--text-muted)]">{label}</span>
-                        <span className="font-[family-name:var(--font-display)] text-base font-bold tabular-nums text-[var(--text)]">
-                          {value} {bodyMetricUnit}
-                        </span>
-                      </div>
-                    );
-                  })}
-                </div>
+                <>
+                  <div className="divide-y divide-[var(--border)]">
+                    {visibleMeasurementEntries.map((entry) => {
+                      const value = bodyMetric === "weight" ? entry.weightKg : entry.waistCm;
+                      const dateObj = new Date(entry.measuredAt);
+                      const weekdayShort = ["Su", "Ma", "Ti", "Ke", "To", "Pe", "La"];
+                      const label = Number.isFinite(dateObj.getTime())
+                        ? `${weekdayShort[dateObj.getDay()]} ${dateObj.getDate()}.${dateObj.getMonth() + 1}.${dateObj.getFullYear() !== new Date().getFullYear() ? dateObj.getFullYear() : ""}`
+                        : formatDate(entry.measuredAt);
+                      return (
+                        <div key={entry.id} className="flex items-center justify-between gap-3 py-3">
+                          <span className="text-sm text-[var(--text-muted)]">{label}</span>
+                          <span className="font-[family-name:var(--font-display)] text-base font-bold tabular-nums text-[var(--text)]">
+                            {value} {bodyMetricUnit}
+                          </span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                  {bodyMetricEntries.length > 12 ? (
+                    <div className="pt-2">
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        className="h-8 px-2 text-xs"
+                        onClick={() => setShowAllMeasurementEntries((current) => !current)}
+                      >
+                        {showAllMeasurementEntries ? "Näytä vähemmän" : `Näytä lisää (${bodyMetricEntries.length - 12})`}
+                      </Button>
+                    </div>
+                  ) : null}
+                </>
               ) : (
                 <p className="py-6 text-center text-sm text-[var(--text-subtle)]">
                   Ei vielä merkintöjä. Lisää ensimmäinen mittaus.
