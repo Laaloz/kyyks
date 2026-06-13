@@ -18,6 +18,7 @@ import { Input, Label, Textarea } from "@/components/ui/field";
 import { InfoTooltip } from "@/components/ui/tooltip";
 import { InlineFeedback } from "@/components/workout/inline-feedback";
 import { withMinimumDelay } from "@/lib/min-delay";
+import { useKeepScreenOnPreference, useWakeLock } from "@/lib/use-wake-lock";
 import { workoutStatusBadgeClass, workoutStatusLabel } from "@/components/workout/shared";
 import { calculateSessionDurationSeconds } from "@/lib/domain";
 import type { Exercise, WorkoutSession } from "@/lib/types";
@@ -1196,6 +1197,9 @@ export function AthleteSessionPanel({
   };
 
   const readOnly = (status === "completed" && !correctionMode) || Boolean(isSessionSyncing);
+  // Pidä näyttö päällä aktiivisen kirjauksen ajan (laitekohtainen preferenssi).
+  const [keepScreenOn] = useKeepScreenOnPreference();
+  useWakeLock(keepScreenOn && !readOnly && status === "in_progress");
   const showCancelAction = status === "in_progress";
   const showResumeAction = status === "cancelled";
   const showDeleteAction = canDeleteWorkout;

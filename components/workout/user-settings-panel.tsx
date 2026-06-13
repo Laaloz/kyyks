@@ -18,6 +18,7 @@ import { getMeasurementsForUser } from "@/lib/body-metrics";
 import { withMinimumDelay } from "@/lib/min-delay";
 import { canTrackOwnTraining, getDashboardViewsForRole, getDefaultDashboardView, isAthleteRole } from "@/lib/role-access";
 import { PROGRAMS_DASHBOARD_VIEW, type DashboardHomeView, type ProfileSex, type Role, type ThemeMode } from "@/lib/types";
+import { useKeepScreenOnPreference } from "@/lib/use-wake-lock";
 import { useAppState } from "@/providers/app-state-provider";
 
 const dashboardViewLabel: Record<DashboardHomeView, string> = {
@@ -86,6 +87,7 @@ export function UserSettingsPanel({ adminOnly = false }: { adminOnly?: boolean }
     updateCurrentUserMeasurements,
     requestCurrentUserPasswordReset,
   } = useAppState();
+  const [keepScreenOn, setKeepScreenOn] = useKeepScreenOnPreference();
   const [message, setMessage] = useState<string>("");
   const [messageTone, setMessageTone] = useState<"success" | "danger" | null>(null);
   const [profileMessage, setProfileMessage] = useState<string>("");
@@ -780,6 +782,29 @@ export function UserSettingsPanel({ adminOnly = false }: { adminOnly?: boolean }
                   className="mt-0.5 size-4 shrink-0 accent-[var(--accent)]"
                   disabled={isSavingSettings}
                   {...form.register("emailNotifications")}
+                />
+              </label>
+
+              <div className="border-t border-[var(--border)]" />
+
+              <label className="flex items-start justify-between gap-3 rounded-lg px-1 py-1">
+                <span className="min-w-0">
+                  <span
+                    id="settings-keep-screen-on-label"
+                    className="block text-sm font-semibold text-[var(--text)]"
+                  >
+                    Pidä näyttö päällä
+                  </span>
+                  <span className="mt-0.5 block text-xs leading-5 text-[var(--text-subtle)]">
+                    Estä näytön sammuminen treenin kirjauksen ja reseptien aikana. Laitekohtainen asetus.
+                  </span>
+                </span>
+                <input
+                  type="checkbox"
+                  aria-labelledby="settings-keep-screen-on-label"
+                  className="mt-0.5 size-4 shrink-0 accent-[var(--accent)]"
+                  checked={keepScreenOn}
+                  onChange={(event) => setKeepScreenOn(event.target.checked)}
                 />
               </label>
             </div>
