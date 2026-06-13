@@ -27,7 +27,6 @@ import {
   Activity,
   X,
   Clock3,
-  Pencil,
 } from "lucide-react";
 import {
   startTransition,
@@ -63,7 +62,7 @@ import { buildScheduledWorkoutExerciseOrder } from "@/lib/workout-exercise-order
 import { buildWorkoutHistoryTitleMap, normalizeWorkoutHistoryTitle } from "@/lib/workout-history-title";
 import { cn } from "@/lib/utils";
 import { estimateExtraActivityKcal, extraActivityCatalog } from "@/lib/extra-activities";
-import type { AppState, ConversationEntry, ExtraActivityType, WorkoutSession } from "@/lib/types";
+import type { AppState, ConversationEntry, ExtraActivity, ExtraActivityType, WorkoutSession } from "@/lib/types";
 import { formatDate, formatDateWithWeekday, formatRelativeDate } from "@/lib/utils";
 import { resolveBlockingWorkoutStart, useAppState } from "@/providers/app-state-provider";
 
@@ -744,6 +743,16 @@ export function AthleteDashboard({
     exercises: Array<{ name: string; target: string; sets: Array<{ logId: string; load: number; reps: number; targetMin?: number }> }>;
   } | null>(null);
   const [isSavingHistoryEdit, setIsSavingHistoryEdit] = useState(false);
+  // Extra-treenin inline-muokkaus historiassa (sama tyyppi kuin normaalitreenillä).
+  const [extraEditDraft, setExtraEditDraft] = useState<{
+    activityId: string;
+    activityType: ExtraActivityType;
+    durationMin: number;
+    kcal: number;
+    occurredDate: string;
+    notes: string;
+  } | null>(null);
+  const [isSavingExtraEdit, setIsSavingExtraEdit] = useState(false);
   const sessionByWorkoutId = useMemo(
     () => new Map(state.sessions.map((session) => [session.scheduledWorkoutId, session])),
     [state.sessions],
@@ -1272,6 +1281,40 @@ export function AthleteDashboard({
       }
     } finally {
       setIsSavingHistoryEdit(false);
+    }
+  };
+  const startExtraEdit = (activity: ExtraActivity) => {
+    setExpandedHistoryGroups((current) => ({ ...current, [`extra-${activity.id}`]: true }));
+    setExtraEditDraft({
+      activityId: activity.id,
+      activityType: activity.activityType,
+      durationMin: Math.max(1, activity.durationMinutes),
+      kcal: activity.estimatedKcal,
+      occurredDate: activity.occurredAt.slice(0, 10),
+      notes: activity.notes ?? "",
+    });
+  };
+  const saveExtraEdit = async () => {
+    if (!extraEditDraft) {
+      return;
+    }
+    setIsSavingExtraEdit(true);
+    try {
+      const result = await updateExtraActivity(extraEditDraft.activityId, {
+        activityType: extraEditDraft.activityType,
+        durationMinutes: extraEditDraft.durationMin,
+        manualKcal: extraEditDraft.kcal,
+        occurredAt: new Date(`${extraEditDraft.occurredDate}T12:00:00`).toISOString(),
+        notes: extraEditDraft.notes,
+      });
+      if (result.ok) {
+        notify({ tone: "success", message: "Extra-treeni päivitetty." });
+        setExtraEditDraft(null);
+      } else {
+        notify({ tone: "danger", message: result.message });
+      }
+    } finally {
+      setIsSavingExtraEdit(false);
     }
   };
   const startWorkoutFromProgram = async (programId: string, workoutId: string, workoutName: string, sourceKey: string) => {
@@ -3287,82 +3330,197 @@ export function AthleteDashboard({
                     </div>
                   </Card>
                 )}
-                <div className="mt-5 rounded-2xl border border-[var(--border)] bg-[var(--surface-2)] p-4">
+                <div className="mt-6">
                   <p className="text-sm font-semibold text-[var(--text)]">Extra-treenien historia</p>
                   {extraActivities.length === 0 ? (
-                    <p className="mt-3 text-xs text-[var(--text-subtle)]">Ei extra-treenejä vielä.</p>
+                    <p className="mt-3 rounded-2xl border border-[var(--border)] bg-[var(--surface-2)] px-4 py-3 text-sm text-[var(--text-muted)]">
+                      Ei extra-treenejä vielä.
+                    </p>
                   ) : (
-                    <div className="mt-3 space-y-2">
-                      {visibleExtraActivities.map((activity) => (
-                        <div key={activity.id} className="flex items-center justify-between gap-2 rounded-xl border border-[var(--border)] bg-[var(--surface)] px-3 py-2.5">
-                          <div className="flex min-w-0 items-start gap-2">
-                            <span className="mt-0.5 grid size-7 shrink-0 place-items-center rounded-full bg-[color:color-mix(in_srgb,var(--accent)_13%,var(--surface))] text-[var(--accent)]">
-                              {renderCalendarActivityIcon(activity.activityType)}
-                            </span>
-                            <div className="min-w-0">
-                              <p className="truncate text-sm font-medium text-[var(--text)]">
-                                {extraActivityCatalog[activity.activityType].label}
-                              </p>
-                              <div className="mt-1 flex flex-wrap items-center gap-1.5 text-[11px] text-[var(--text-subtle)]">
-                                <span className="rounded-full border border-[var(--border)] bg-[var(--surface-2)] px-1.5 py-0.5">
-                                  {activity.durationMinutes} min
+                    <Card className="mt-2">
+                      <div className="divide-y divide-[var(--border)]">
+                        {visibleExtraActivities.map((activity) => {
+                          const expanded = expandedHistoryGroups[`extra-${activity.id}`] ?? false;
+                          const label = extraActivityCatalog[activity.activityType].label;
+                          const weekdayShort = ["Su", "Ma", "Ti", "Ke", "To", "Pe", "La"];
+                          const dateObj = new Date(activity.occurredAt);
+                          const shortDate = Number.isFinite(dateObj.getTime())
+                            ? `${weekdayShort[dateObj.getDay()]} ${dateObj.getDate()}.${dateObj.getMonth() + 1}.`
+                            : formatDateWithWeekday(activity.occurredAt);
+                          const editing = extraEditDraft?.activityId === activity.id;
+                          return (
+                            <div key={activity.id} className="py-3">
+                              <button
+                                type="button"
+                                className="flex w-full items-center gap-3 text-left"
+                                aria-expanded={expanded}
+                                onClick={() => toggleHistoryGroup(`extra-${activity.id}`, !expanded)}
+                              >
+                                <span className="grid size-8 shrink-0 place-items-center rounded-full bg-[color:color-mix(in_srgb,var(--accent)_13%,var(--surface))] text-[var(--accent)]">
+                                  {renderCalendarActivityIcon(activity.activityType)}
                                 </span>
-                                <span className="rounded-full border border-[var(--border)] bg-[var(--surface-2)] px-1.5 py-0.5">
+                                <span className="min-w-0 flex-1">
+                                  <span className="truncate font-semibold text-[var(--text)]">{label}</span>
+                                  <span className="mt-0.5 block text-xs text-[var(--text-subtle)]">
+                                    {shortDate} · {activity.durationMinutes} min
+                                  </span>
+                                </span>
+                                <span className="shrink-0 rounded-full bg-[var(--surface-2)] px-2.5 py-1 text-xs font-semibold tabular-nums text-[var(--text-muted)]">
                                   {activity.estimatedKcal} kcal
                                 </span>
-                                <span>{formatDateWithWeekday(activity.occurredAt)}</span>
-                              </div>
+                              </button>
+
+                              {expanded ? (
+                                editing && extraEditDraft ? (
+                                  <div className="mt-3 space-y-3">
+                                    <div>
+                                      <Label htmlFor={`extra-edit-type-${activity.id}`} className="text-xs">Laji</Label>
+                                      <Select
+                                        id={`extra-edit-type-${activity.id}`}
+                                        value={extraEditDraft.activityType}
+                                        onChange={(event) =>
+                                          setExtraEditDraft((draft) => (draft ? { ...draft, activityType: event.target.value as ExtraActivityType } : draft))
+                                        }
+                                      >
+                                        {Object.entries(extraActivityCatalog).map(([key, value]) => (
+                                          <option key={key} value={key}>
+                                            {value.label}
+                                          </option>
+                                        ))}
+                                      </Select>
+                                    </div>
+                                    <div className="flex items-center justify-between gap-3">
+                                      <span className="text-sm font-semibold text-[var(--text)]">Kesto (min)</span>
+                                      <div className="flex items-center overflow-hidden rounded-xl bg-[var(--surface-2)]">
+                                        <button
+                                          type="button"
+                                          className="grid h-9 w-10 place-items-center text-[var(--text)]"
+                                          aria-label="Vähennä kestoa"
+                                          onClick={() => setExtraEditDraft((draft) => (draft ? { ...draft, durationMin: Math.max(1, draft.durationMin - 5) } : draft))}
+                                        >
+                                          −
+                                        </button>
+                                        <span className="min-w-10 text-center font-[family-name:var(--font-display)] text-base font-bold tabular-nums text-[var(--text)]">
+                                          {extraEditDraft.durationMin}
+                                        </span>
+                                        <button
+                                          type="button"
+                                          className="grid h-9 w-10 place-items-center text-[var(--text)]"
+                                          aria-label="Lisää kestoa"
+                                          onClick={() => setExtraEditDraft((draft) => (draft ? { ...draft, durationMin: Math.min(600, draft.durationMin + 5) } : draft))}
+                                        >
+                                          +
+                                        </button>
+                                      </div>
+                                    </div>
+                                    <div className="flex items-center justify-between gap-3">
+                                      <span className="text-sm font-semibold text-[var(--text)]">Kalorit (kcal)</span>
+                                      <DragNumber
+                                        value={extraEditDraft.kcal}
+                                        step={10}
+                                        ariaLabel="Extra-treenin kalorit"
+                                        onChange={(next) => setExtraEditDraft((draft) => (draft ? { ...draft, kcal: next } : draft))}
+                                      />
+                                    </div>
+                                    <div>
+                                      <Label htmlFor={`extra-edit-date-${activity.id}`} className="text-xs">Päivä</Label>
+                                      <Input
+                                        id={`extra-edit-date-${activity.id}`}
+                                        type="date"
+                                        value={extraEditDraft.occurredDate}
+                                        onChange={(event) =>
+                                          setExtraEditDraft((draft) => (draft ? { ...draft, occurredDate: event.target.value } : draft))
+                                        }
+                                      />
+                                    </div>
+                                    <div>
+                                      <Label htmlFor={`extra-edit-notes-${activity.id}`} className="text-xs">Muistiinpano (valinnainen)</Label>
+                                      <Textarea
+                                        id={`extra-edit-notes-${activity.id}`}
+                                        rows={2}
+                                        value={extraEditDraft.notes}
+                                        onChange={(event) =>
+                                          setExtraEditDraft((draft) => (draft ? { ...draft, notes: event.target.value } : draft))
+                                        }
+                                      />
+                                    </div>
+                                    <div className="flex gap-2 pt-1">
+                                      <Button type="button" variant="secondary" className="px-4" onClick={() => setExtraEditDraft(null)}>
+                                        Peruuta
+                                      </Button>
+                                      <Button
+                                        type="button"
+                                        className="flex-1"
+                                        loading={isSavingExtraEdit}
+                                        loadingText="Tallennetaan..."
+                                        onClick={() => void saveExtraEdit()}
+                                      >
+                                        Tallenna muutokset
+                                      </Button>
+                                    </div>
+                                  </div>
+                                ) : (
+                                  <div className="mt-3">
+                                    <div className="grid grid-cols-2 gap-3">
+                                      <div className="rounded-xl bg-[var(--surface-2)] px-3 py-2.5">
+                                        <p className="font-[family-name:var(--font-display)] text-lg font-bold tabular-nums text-[var(--text)]">
+                                          {activity.durationMinutes} min
+                                        </p>
+                                        <p className="text-[11px] font-semibold text-[var(--text-subtle)]">Kesto</p>
+                                      </div>
+                                      <div className="rounded-xl bg-[var(--surface-2)] px-3 py-2.5">
+                                        <p className="font-[family-name:var(--font-display)] text-lg font-bold tabular-nums text-[var(--text)]">
+                                          {activity.estimatedKcal} kcal
+                                        </p>
+                                        <p className="text-[11px] font-semibold text-[var(--text-subtle)]">Energia</p>
+                                      </div>
+                                    </div>
+                                    {activity.notes ? (
+                                      <p className="mt-3 text-sm text-[var(--text-muted)]">{activity.notes}</p>
+                                    ) : null}
+                                    {!readOnly ? (
+                                      <div className="mt-3 flex flex-wrap gap-2">
+                                        <Button
+                                          type="button"
+                                          variant="secondary"
+                                          className="h-9 px-3 text-sm"
+                                          onClick={() => startExtraEdit(activity)}
+                                        >
+                                          Muokkaa
+                                        </Button>
+                                        <Button
+                                          type="button"
+                                          variant="ghost"
+                                          className="h-9 gap-1.5 px-3 text-sm text-[var(--danger)]"
+                                          onClick={async () => {
+                                            const confirmed = window.confirm(
+                                              `Poistetaanko extra-treeni "${label}" päivältä ${formatDateWithWeekday(activity.occurredAt)}? Toimintoa ei voi kumota.`,
+                                            );
+                                            if (!confirmed) {
+                                              return;
+                                            }
+                                            const result = await deleteExtraActivity(activity.id);
+                                            if (result.ok) {
+                                              notify({ tone: "success", message: "Extra-treeni poistettu." });
+                                            } else {
+                                              notify({ tone: "danger", message: result.message });
+                                            }
+                                          }}
+                                        >
+                                          <Trash2 className="size-4" aria-hidden="true" />
+                                          Poista merkintä
+                                        </Button>
+                                      </div>
+                                    ) : null}
+                                  </div>
+                                )
+                              ) : null}
                             </div>
-                          </div>
-                          <div className="flex shrink-0 items-center gap-1">
-                            <Button
-                              type="button"
-                              variant="ghost"
-                              className="size-8 rounded-full p-0"
-                              aria-label="Muokkaa extra-treeniä"
-                              onClick={() => {
-                                const minutes = activity.durationMinutes;
-                                const hours = Math.floor(minutes / 60);
-                                const remainder = minutes % 60;
-                                setExtraActivityType(activity.activityType);
-                                setExtraActivityDurationMinutes(String(hours * 60 + remainder));
-                                setExtraActivityDate(activity.occurredAt.slice(0, 10));
-                                setExtraActivityNotes(activity.notes ?? "");
-                                setManualExtraActivityKcal(String(activity.estimatedKcal));
-                                setIsManualExtraActivityKcalEnabled(true);
-                                setEditingExtraActivityId(activity.id);
-                                setIsExtraActivityDialogOpen(true);
-                              }}
-                            >
-                              <Pencil className="size-4" aria-hidden="true" />
-                            </Button>
-                            <Button
-                              type="button"
-                              variant="ghost"
-                              className="size-8 rounded-full p-0 text-[var(--danger)]"
-                              aria-label="Poista extra-treeni"
-                              onClick={async () => {
-                                const confirmed = window.confirm(
-                                  `Poistetaanko extra-treeni "${extraActivityCatalog[activity.activityType].label}" päivältä ${formatDateWithWeekday(activity.occurredAt)}? Toimintoa ei voi kumota.`,
-                                );
-                                if (!confirmed) {
-                                  return;
-                                }
-                                const result = await deleteExtraActivity(activity.id);
-                                if (result.ok) {
-                                  notify({ tone: "success", message: "Extra-treeni poistettu." });
-                                } else {
-                                  notify({ tone: "danger", message: result.message });
-                                }
-                              }}
-                            >
-                              <Trash2 className="size-4" aria-hidden="true" />
-                            </Button>
-                          </div>
-                        </div>
-                      ))}
+                          );
+                        })}
+                      </div>
                       {extraActivities.length > 5 ? (
-                        <div className="pt-1">
+                        <div className="pt-2">
                           <Button
                             type="button"
                             variant="ghost"
@@ -3373,7 +3531,7 @@ export function AthleteDashboard({
                           </Button>
                         </div>
                       ) : null}
-                    </div>
+                    </Card>
                   )}
                 </div>
             </div>
