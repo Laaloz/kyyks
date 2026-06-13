@@ -711,8 +711,8 @@ export function DashboardShell() {
                 onOverviewFocusHandled={() => setAthleteOverviewFocusTarget(null)}
               />
             ) : view === PROGRAMS_WORKSPACE_VIEW ||
-              (currentUser.role === "coach" && (view === "athletes" || view === "conversation")) ||
-              (currentUser.role === "admin" && view === "conversation") ? (
+              ((currentUser.role === "coach" || currentUser.role === "admin") &&
+                (view === "athletes" || view === "conversation")) ? (
               // Valmentajan/adminin henkilökohtaiset näkymät renderöityvät
               // treenaajasovelluksena (alla); Tiimi/Ohjelmat/Chat CoachDashboardista.
               <CoachDashboard
@@ -721,14 +721,17 @@ export function DashboardShell() {
                 onOpenWorkoutLog={() => setView("athlete-log")}
                 onOpenSettings={() => setView("settings")}
                 onOpenPrograms={() => setView(PROGRAMS_WORKSPACE_VIEW)}
+                onOpenInvites={currentUser.role === "admin" ? () => setView("invites") : undefined}
+                onOpenUsers={currentUser.role === "admin" ? () => setView("users") : undefined}
+                onOpenIngredients={currentUser.role === "admin" ? () => setView("ingredients") : undefined}
               />
             ) : currentUser.role === "admin" && view === "users" ? (
               <UserSettingsPanel adminOnly />
             ) : currentUser.role === "admin" && view === "ingredients" ? (
               <NutritionAdminPanel />
-            ) : currentUser.role === "admin" && (view === "athletes" || view === "invites") ? (
-              // Adminin Tiimi = hallintakooste (valmentajat, käyttäjät, kutsut)
-              // + sillat raaka-ainekatalogiin ja ohjelmiin.
+            ) : currentUser.role === "admin" && view === "invites" ? (
+              // Adminin Kutsut-näkymä = hallintakooste + sillat
+              // raaka-ainekatalogiin ja ohjelmiin. (Tiimi = CoachDashboard yllä.)
               <AdminDashboard
                 view={view}
                 onOpenWorkoutLog={() => setView("athlete-log")}

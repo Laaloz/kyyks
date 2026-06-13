@@ -3,12 +3,15 @@
 import { zodResolver } from "@hookform/resolvers/zod";
 import {
   ArrowLeft,
+  Carrot,
   Check,
   ChevronDown,
   ChevronUp,
   MoreHorizontal,
   Plus,
   Search,
+  UserPlus,
+  Users,
   X,
 } from "lucide-react";
 import { type CSSProperties, type ReactNode, useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from "react";
@@ -778,12 +781,18 @@ export function CoachDashboard({
   onOpenWorkoutLog,
   onOpenSettings,
   onOpenPrograms,
+  onOpenInvites,
+  onOpenUsers,
+  onOpenIngredients,
 }: {
   view: WorkspaceView;
   onOpenConversation?: () => void;
   onOpenWorkoutLog?: () => void;
   onOpenSettings?: () => void;
   onOpenPrograms?: () => void;
+  onOpenInvites?: () => void;
+  onOpenUsers?: () => void;
+  onOpenIngredients?: () => void;
 }) {
   const {
     currentUser,
@@ -1248,6 +1257,9 @@ export function CoachDashboard({
           state={state}
           currentUser={currentUser}
           onOpenPrograms={onOpenPrograms}
+          onOpenInvites={onOpenInvites}
+          onOpenUsers={onOpenUsers}
+          onOpenIngredients={onOpenIngredients}
         />
       ) : null}
 
@@ -2584,20 +2596,33 @@ function CoachTeamView({
   state,
   currentUser,
   onOpenPrograms,
+  onOpenInvites,
+  onOpenUsers,
+  onOpenIngredients,
 }: {
   athletes: Array<{ id: string; fullName: string }>;
   programs: TrainingPlan[];
   state: AppState;
   currentUser: UserProfile;
   onOpenPrograms?: () => void;
+  onOpenInvites?: () => void;
+  onOpenUsers?: () => void;
+  onOpenIngredients?: () => void;
 }) {
   const { startAthletePreview, notify } = useAppState();
   const [segment, setSegment] = useState<"tiimi" | "ohjelmat">("tiimi");
   const isAdmin = isAdminRole(currentUser.role);
 
+  const statusById = useMemo(
+    () => new Map(state.users.map((user) => [user.id, user.status])),
+    [state.users],
+  );
   const rosterAthletes = useMemo(
-    () => athletes.filter((athlete) => athlete.id !== currentUser.id),
-    [athletes, currentUser.id],
+    () =>
+      athletes.filter(
+        (athlete) => athlete.id !== currentUser.id && statusById.get(athlete.id) === "active",
+      ),
+    [athletes, currentUser.id, statusById],
   );
   const rosterEntries = useMemo(
     () => rosterAthletes.map((athlete) => ({ athlete, summary: buildAthleteRosterSummary(state, athlete.id) })),
@@ -2747,6 +2772,32 @@ function CoachTeamView({
                   </div>
                 ))}
               </Card>
+            </>
+          ) : null}
+
+          {isAdmin && (onOpenInvites || onOpenUsers || onOpenIngredients) ? (
+            <>
+              <SectionLabel label="Hallinta" />
+              <div className="grid gap-2 sm:grid-cols-3">
+                {onOpenInvites ? (
+                  <Button type="button" variant="secondary" className="justify-start gap-2" onClick={onOpenInvites}>
+                    <UserPlus className="size-4" aria-hidden="true" />
+                    Kutsut
+                  </Button>
+                ) : null}
+                {onOpenUsers ? (
+                  <Button type="button" variant="secondary" className="justify-start gap-2" onClick={onOpenUsers}>
+                    <Users className="size-4" aria-hidden="true" />
+                    Käyttäjät
+                  </Button>
+                ) : null}
+                {onOpenIngredients ? (
+                  <Button type="button" variant="secondary" className="justify-start gap-2" onClick={onOpenIngredients}>
+                    <Carrot className="size-4" aria-hidden="true" />
+                    Raaka-ainekatalogi
+                  </Button>
+                ) : null}
+              </div>
             </>
           ) : null}
         </div>
