@@ -37,6 +37,7 @@ import {
 import { estimateStrengthCalories, getLatestMeasurement, getMeasurementsForUser, getWeightAtMoment } from "@/lib/body-metrics";
 import { isConversationEntryNotifiable } from "@/lib/conversation";
 import { calculateSessionDurationSeconds, getCoachConversationAthletes, splitLabel } from "@/lib/domain";
+import { buildAthleteRosterSummary } from "@/lib/coach-roster";
 import { buildExerciseProgressCatalog } from "@/lib/exercise-progress";
 import { withMinimumDelay } from "@/lib/min-delay";
 import { deriveProgramWorkoutGuidance } from "@/lib/program-workout-guidance";
@@ -44,7 +45,7 @@ import { buildScheduledWorkoutExerciseOrder } from "@/lib/workout-exercise-order
 import { buildWorkoutHistoryTitleMap } from "@/lib/workout-history-title";
 import { getProgramStatus, isProgramActive } from "@/lib/program-status";
 import { isAdminRole } from "@/lib/role-access";
-import type { AppState, ConversationEntry, Role, ScheduledWorkoutStatus, WorkoutSession } from "@/lib/types";
+import type { AppState, ConversationEntry, Role, ScheduledWorkoutStatus, TrainingPlan, UserProfile, WorkoutSession } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import { formatDate, formatDateWithWeekday } from "@/lib/utils";
 import { canDeleteProgramFromState, useAppState } from "@/providers/app-state-provider";
@@ -1293,14 +1294,12 @@ export function CoachDashboard({
 
   return (
     <div className="grid w-full min-w-0 gap-6">
-      {view === "athletes" ? (
-        <CoachAthleteInsights
+      {view === "athletes" && currentUser ? (
+        <CoachTeamView
           athletes={athletes}
-          coachId={undefined}
-          selectedAthleteId={selectedAthleteId}
-          onSelectAthlete={setSelectedAthleteId}
+          programs={coachPrograms}
           state={state}
-          onOpenConversation={onOpenConversation}
+          currentUser={currentUser}
           onOpenPrograms={onOpenPrograms}
         />
       ) : null}
@@ -2537,6 +2536,315 @@ export function buildProgramDraftFromProgram(
       })),
     })),
   };
+}
+
+function rosterInitials(fullName: string): string {
+  const parts = fullName.trim().split(/\s+/).filter(Boolean);
+  if (!parts.length) {
+    return "?";
+  }
+  if (parts.length === 1) {
+    return parts[0].slice(0, 2).toUpperCase();
+  }
+  return `${parts[0][0]}${parts[parts.length - 1][0]}`.toUpperCase();
+}
+
+function programWeekLabel(plan: TrainingPlan, reference: Date = new Date()): string | null {
+  if (!plan.weekCount || plan.weekCount < 1) {
+    return null;
+  }
+  const start = new Date(plan.startDate);
+  start.setHours(0, 0, 0, 0);
+  const today = new Date(reference);
+  today.setHours(0, 0, 0, 0);
+  const elapsedWeeks = Math.floor((today.getTime() - start.getTime()) / (7 * 86_400_000)) + 1;
+  const current = Math.min(Math.max(1, elapsedWeeks), plan.weekCount);
+  return `viikko ${current}/${plan.weekCount}`;
+}
+
+const ROSTER_PILL_TONE: Record<"good" | "warn" | "neutral", string> = {
+  good: "border-[color:color-mix(in_oklab,var(--accent)_30%,var(--border))] bg-[var(--accent-soft)] text-[var(--accent)]",
+  warn: "border-[color:color-mix(in_oklab,var(--accent-secondary)_40%,var(--border))] bg-[color:color-mix(in_oklab,var(--accent-secondary)_14%,var(--surface))] text-[var(--accent-secondary)]",
+  neutral: "border-[var(--border)] bg-[var(--surface-3)] text-[var(--text-subtle)]",
+};
+
+function RosterMiniWeek({ cells }: { cells: ReturnType<typeof buildAthleteRosterSummary>["cells"] }) {
+  return (
+    <div className="mt-3 grid grid-cols-7 gap-1.5">
+      {cells.map((cell) => (
+        <div key={cell.key} className="flex min-w-0 flex-col items-center gap-1.5">
+          <span
+            className={cn(
+              "flex w-full flex-col gap-1 rounded-lg",
+              cell.isToday ? "outline outline-2 outline-offset-2 outline-[var(--text)]" : null,
+            )}
+          >
+            <span
+              className={cn(
+                "block h-4 rounded-md",
+                cell.training === "done"
+                  ? "bg-[var(--accent)]"
+                  : cell.training === "plan"
+                    ? "bg-[color:color-mix(in_srgb,var(--accent)_14%,var(--surface))] shadow-[inset_0_0_0_1.5px_var(--accent)]"
+                    : "bg-[var(--surface-2)]",
+              )}
+              aria-hidden="true"
+            />
+            <span
+              className={cn(
+                "block h-4 rounded-md",
+                cell.nutrition === "ok"
+                  ? "bg-[var(--accent-secondary)]"
+                  : cell.nutrition === "part"
+                    ? "bg-[color:color-mix(in_srgb,var(--accent-secondary)_35%,var(--surface-2))]"
+                    : "bg-[var(--surface-2)]",
+              )}
+              aria-hidden="true"
+            />
+          </span>
+          <span
+            className={cn(
+              "text-[11px] font-semibold",
+              cell.isToday ? "text-[var(--accent)]" : "text-[var(--text-subtle)]",
+            )}
+          >
+            {cell.weekdayLabel}
+          </span>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function SectionLabel({ label, meta }: { label: string; meta?: string }) {
+  return (
+    <div className="mb-2 mt-6 flex items-baseline justify-between gap-3 px-1 first:mt-0">
+      <span className="text-xs font-semibold uppercase tracking-[0.06em] text-[var(--text-subtle)]">{label}</span>
+      {meta ? <span className="text-xs font-semibold uppercase tracking-[0.06em] text-[var(--text-subtle)]">{meta}</span> : null}
+    </div>
+  );
+}
+
+/**
+ * Valmentajan/adminin Tiimi-näkymä prototyypin mukaisena: [Tiimi | Ohjelmat]
+ * -segmentti. Tiimi = urheilijakortit (viikkorytmi + tila-pilleri, napautus →
+ * read-only-esikatselu) + adminille Valmentajat. Ohjelmat = aktiiviset ohjelmat
+ * + Uusi ohjelma.
+ */
+function CoachTeamView({
+  athletes,
+  programs,
+  state,
+  currentUser,
+  onOpenPrograms,
+}: {
+  athletes: Array<{ id: string; fullName: string }>;
+  programs: TrainingPlan[];
+  state: AppState;
+  currentUser: UserProfile;
+  onOpenPrograms?: () => void;
+}) {
+  const { startAthletePreview, notify } = useAppState();
+  const [segment, setSegment] = useState<"tiimi" | "ohjelmat">("tiimi");
+  const isAdmin = isAdminRole(currentUser.role);
+
+  const rosterAthletes = useMemo(
+    () => athletes.filter((athlete) => athlete.id !== currentUser.id),
+    [athletes, currentUser.id],
+  );
+  const rosterEntries = useMemo(
+    () => rosterAthletes.map((athlete) => ({ athlete, summary: buildAthleteRosterSummary(state, athlete.id) })),
+    [rosterAthletes, state],
+  );
+
+  const otherCoaches = useMemo(() => {
+    if (!isAdmin) {
+      return [];
+    }
+    return state.users
+      .filter((user) => (user.role === "coach" || user.role === "admin") && user.id !== currentUser.id && user.status === "active")
+      .map((coach) => {
+        const coachPlans = state.plans.filter((plan) => plan.coachId === coach.id && getProgramStatus(plan) !== "removed");
+        const athleteIds = new Set(coachPlans.map((plan) => plan.athleteId));
+        const activePrograms = coachPlans.filter((plan) => isProgramActive(plan)).length;
+        return { coach, athleteCount: athleteIds.size, activePrograms };
+      });
+  }, [currentUser.id, isAdmin, state.plans, state.users]);
+
+  const userNameById = useMemo(() => new Map(state.users.map((user) => [user.id, user.fullName])), [state.users]);
+  const programRows = useMemo(
+    () =>
+      programs
+        .filter((plan) => isProgramActive(plan))
+        .map((plan) => {
+          const assignedName =
+            plan.athleteId === currentUser.id
+              ? "Sinä"
+              : (userNameById.get(plan.athleteId) ?? "Ei urheilijaa").split(/\s+/)[0];
+          return {
+            plan,
+            weekLabel: programWeekLabel(plan),
+            workoutCount: plan.workouts?.length ?? 0,
+            assignedName,
+          };
+        }),
+    [currentUser.id, programs, userNameById],
+  );
+
+  const handlePreview = (athleteId: string) => {
+    const result = startAthletePreview(athleteId);
+    if (!result.ok) {
+      notify({ tone: "danger", message: result.message });
+    }
+  };
+
+  return (
+    <div className="grid w-full min-w-0 gap-2">
+      <div className="grid w-full grid-cols-2 rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-1">
+        {(["tiimi", "ohjelmat"] as const).map((value) => (
+          <button
+            key={value}
+            type="button"
+            className={cn(
+              "min-w-0 rounded-xl px-4 py-2.5 text-sm font-semibold transition",
+              segment === value
+                ? "border border-[color:color-mix(in_srgb,var(--accent)_18%,var(--border))] bg-[color:color-mix(in_srgb,var(--accent)_10%,var(--surface))] text-[var(--accent)] shadow-[0_8px_18px_-20px_var(--accent)]"
+                : "border border-transparent text-[var(--text-muted)] hover:bg-[var(--surface)] hover:text-[var(--text)]",
+            )}
+            aria-pressed={segment === value}
+            onClick={() => setSegment(value)}
+          >
+            {value === "tiimi" ? "Tiimi" : "Ohjelmat"}
+          </button>
+        ))}
+      </div>
+
+      {segment === "tiimi" ? (
+        <div>
+          <SectionLabel label="Urheilijat" meta={`${rosterEntries.length} aktiivista`} />
+          {rosterEntries.length ? (
+            <div className="grid gap-3">
+              {rosterEntries.map(({ athlete, summary }) => (
+                <button
+                  key={athlete.id}
+                  type="button"
+                  className="w-full rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-4 text-left transition hover:border-[var(--border-strong)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--background)]"
+                  aria-label={`Esikatsele: ${athlete.fullName}`}
+                  onClick={() => handlePreview(athlete.id)}
+                >
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="flex min-w-0 items-center gap-2.5">
+                      <span className="grid size-10 shrink-0 place-items-center rounded-full bg-[var(--accent-soft)] font-[family-name:var(--font-display)] text-sm font-bold text-[var(--accent)]">
+                        {rosterInitials(athlete.fullName)}
+                      </span>
+                      <div className="min-w-0">
+                        <p className="truncate font-[family-name:var(--font-display)] text-[15.5px] font-bold text-[var(--text)]">
+                          {athlete.fullName}
+                        </p>
+                        <p className="text-[12.5px] text-[var(--text-subtle)]">
+                          {summary.weeklyTarget > 0
+                            ? `Viikko ${summary.doneThisWeek}/${summary.weeklyTarget}`
+                            : "Ei ohjelmaa"}
+                          {summary.lastSeenLabel !== "—" ? ` · ${summary.lastSeenLabel}` : ""}
+                        </p>
+                      </div>
+                    </div>
+                    <span
+                      className={cn(
+                        "inline-flex shrink-0 items-center rounded-full border px-3 py-1 text-xs font-semibold",
+                        ROSTER_PILL_TONE[summary.statusTone],
+                      )}
+                    >
+                      {summary.statusLabel}
+                    </span>
+                  </div>
+                  <RosterMiniWeek cells={summary.cells} />
+                </button>
+              ))}
+            </div>
+          ) : (
+            <Card>
+              <CardDescription>
+                Lisää ensin treenaajia, niin näet heidän viikkorytminsä ja voit esikatsella heidän näkymäänsä.
+              </CardDescription>
+            </Card>
+          )}
+
+          {rosterEntries.length ? (
+            <p className="mx-1 mt-3 text-[13px] text-pretty text-[var(--text-subtle)]">
+              Napauta urheilijaa — esikatselet hänen omaa näkymäänsä vain luku -tilassa.
+            </p>
+          ) : null}
+
+          {isAdmin && otherCoaches.length ? (
+            <>
+              <SectionLabel label="Valmentajat" meta={`${otherCoaches.length} aktiivinen`} />
+              <Card className="divide-y divide-[var(--border)] p-0">
+                {otherCoaches.map(({ coach, athleteCount, activePrograms }) => (
+                  <div key={coach.id} className="flex items-center justify-between gap-3 p-4">
+                    <div className="flex min-w-0 items-center gap-2.5">
+                      <span className="grid size-10 shrink-0 place-items-center rounded-full bg-[var(--accent-soft)] font-[family-name:var(--font-display)] text-sm font-bold text-[var(--accent)]">
+                        {rosterInitials(coach.fullName)}
+                      </span>
+                      <div className="min-w-0">
+                        <p className="truncate font-[family-name:var(--font-display)] text-[15.5px] font-bold text-[var(--text)]">
+                          {coach.fullName}
+                        </p>
+                        <p className="text-[12.5px] text-[var(--text-subtle)]">
+                          {athleteCount} {athleteCount === 1 ? "urheilija" : "urheilijaa"} · {activePrograms}{" "}
+                          {activePrograms === 1 ? "ohjelma" : "ohjelmaa"}
+                        </p>
+                      </div>
+                    </div>
+                    <Badge>{coach.role === "admin" ? "Admin" : "Valmentaja"}</Badge>
+                  </div>
+                ))}
+              </Card>
+            </>
+          ) : null}
+        </div>
+      ) : (
+        <div>
+          <SectionLabel label="Aktiiviset ohjelmat" />
+          {programRows.length ? (
+            <Card className="divide-y divide-[var(--border)] p-0">
+              {programRows.map(({ plan, weekLabel, workoutCount, assignedName }) => (
+                <button
+                  key={plan.id}
+                  type="button"
+                  className="flex w-full items-center justify-between gap-3 p-4 text-left transition hover:bg-[var(--surface-2)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--surface)]"
+                  aria-label={`Muokkaa: ${plan.title}`}
+                  onClick={onOpenPrograms}
+                >
+                  <div className="min-w-0">
+                    <p className="truncate font-[family-name:var(--font-display)] text-[15.5px] font-bold text-[var(--text)]">
+                      {plan.title}
+                      {weekLabel ? <span className="text-[var(--text-subtle)]"> · {weekLabel}</span> : null}
+                    </p>
+                    <p className="text-[12.5px] text-[var(--text-subtle)]">
+                      {workoutCount} treeniä/vko · {assignedName}
+                    </p>
+                  </div>
+                  <Badge>Muokkaa</Badge>
+                </button>
+              ))}
+            </Card>
+          ) : (
+            <Card>
+              <CardDescription>Ei vielä aktiivisia ohjelmia. Luo ensimmäinen ohjelma alta.</CardDescription>
+            </Card>
+          )}
+          <Button type="button" variant="secondary" className="mt-3 w-full gap-2" onClick={onOpenPrograms}>
+            <Plus className="size-4" aria-hidden="true" />
+            Uusi ohjelma
+          </Button>
+          <p className="mx-1 mt-3 text-[13px] text-pretty text-[var(--text-subtle)]">
+            Ohjelmia voi luoda ja muokata suoraan mobiilissa — muutokset näkyvät urheilijoille heti.
+          </p>
+        </div>
+      )}
+    </div>
+  );
 }
 
 function CoachAthleteInsights({
