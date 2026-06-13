@@ -68,6 +68,16 @@ describe("role access helpers", () => {
     expect(getDefaultDashboardView("admin")).toBe("overview");
   });
 
+  it("gives the coach a five-tab workspace (Tänään/Ravinto/Treeni/Keho/Tiimi) with Treeni centered", () => {
+    const coachViews = getDashboardViewsForRole("coach");
+    expect(coachViews).toEqual(["overview", "nutrition", "athlete-log", "measurements", "athletes"]);
+    // Treeni (athlete-log) on keskellä viittä välilehteä.
+    expect(coachViews.indexOf("athlete-log")).toBe(2);
+    // Keho mukana; Ohjelmat (templates) avataan Tiimistä, ei navissa.
+    expect(coachViews).toContain("measurements");
+    expect(coachViews).not.toContain("templates");
+  });
+
   it("gives both athlete roles the same four-tab workspace (Tänään/Treeni/Ravinto/Keho)", () => {
     const expected = ["overview", "athlete-log", "nutrition", "measurements"];
     expect(getDashboardViewsForRole("athlete")).toEqual(expected);

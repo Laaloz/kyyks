@@ -830,11 +830,13 @@ export function CoachDashboard({
   onOpenConversation,
   onOpenWorkoutLog,
   onOpenSettings,
+  onOpenPrograms,
 }: {
   view: WorkspaceView;
   onOpenConversation?: () => void;
   onOpenWorkoutLog?: () => void;
   onOpenSettings?: () => void;
+  onOpenPrograms?: () => void;
 }) {
   const {
     currentUser,
@@ -1310,6 +1312,7 @@ export function CoachDashboard({
           onSelectAthlete={setSelectedAthleteId}
           state={state}
           onOpenConversation={onOpenConversation}
+          onOpenPrograms={onOpenPrograms}
         />
       ) : null}
 
@@ -2554,6 +2557,7 @@ function CoachAthleteInsights({
   onSelectAthlete,
   state,
   onOpenConversation,
+  onOpenPrograms,
 }: {
   athletes: Array<{ id: string; fullName: string }>;
   coachId?: string;
@@ -2561,6 +2565,7 @@ function CoachAthleteInsights({
   onSelectAthlete: (athleteId: string) => void;
   state: AppState;
   onOpenConversation?: () => void;
+  onOpenPrograms?: () => void;
 }) {
   const { startAthletePreview, notify } = useAppState();
   const [expandedWorkoutDetailsId, setExpandedWorkoutDetailsId] = useState<string | null>(null);
@@ -2879,12 +2884,20 @@ function CoachAthleteInsights({
   return (
     <Card className="border-[var(--border-strong)]">
       <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-        <div>
-          <p className="text-xs font-semibold tracking-[0.04em] text-[var(--text-subtle)]">Tiimi</p>
-          <CardTitle className="text-2xl">Treenaajan kehitys</CardTitle>
-          <CardDescription className="mt-2">
-            Seuraa toteumaa, kehitystä ja kehon seurantaa yhdestä paikasta.
-          </CardDescription>
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <p className="text-xs font-semibold tracking-[0.04em] text-[var(--text-subtle)]">Tiimi</p>
+            <CardTitle className="text-2xl">Treenaajan kehitys</CardTitle>
+            <CardDescription className="mt-2">
+              Seuraa toteumaa, kehitystä ja kehon seurantaa yhdestä paikasta.
+            </CardDescription>
+          </div>
+          {onOpenPrograms ? (
+            <Button type="button" variant="secondary" className="h-9 shrink-0 gap-2 px-3 text-sm" onClick={onOpenPrograms}>
+              <ClipboardList className="size-4" aria-hidden="true" />
+              Ohjelmat
+            </Button>
+          ) : null}
         </div>
         <div className="w-full">
           <Label htmlFor="coach-athlete-insight-select">Treenaaja</Label>

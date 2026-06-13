@@ -33,7 +33,7 @@ import { Button } from "@/components/ui/button";
 import { isConversationEntryNotifiable } from "@/lib/conversation";
 import { getCoachConversationAthletes } from "@/lib/domain";
 import { getMeasurementReminderState } from "@/lib/measurement-reminder";
-import { canActAsCoach, getDashboardViewsForRole, getDefaultDashboardView, isAdminRole, isAthleteRole } from "@/lib/role-access";
+import { canActAsCoach, canManagePrograms, getDashboardViewsForRole, getDefaultDashboardView, isAdminRole, isAthleteRole } from "@/lib/role-access";
 import type { Role } from "@/lib/types";
 import { useAppState } from "@/providers/app-state-provider";
 
@@ -54,7 +54,8 @@ function mobilePrimaryNavItemsForRole(role: Role): PrimaryWorkspaceView[] {
     return ["overview", "nutrition", "athlete-log", "users"];
   }
 
-  return ["overview", "nutrition", "athlete-log", PROGRAMS_WORKSPACE_VIEW, "athletes"];
+  // Valmentaja: Tänään / Ravinto / Treeni / Keho / Tiimi (Treeni keskellä).
+  return ["overview", "nutrition", "athlete-log", "measurements", "athletes"];
 }
 
 function navItemsForRole(role: Role): PrimaryWorkspaceView[] {
@@ -278,10 +279,23 @@ export function DashboardShell() {
       return;
     }
 
-    const roleNavItems = navItemsForRole(currentUser.role);
-    if (!roleNavItems.includes(view as PrimaryWorkspaceView)) {
-      setView(resolveInitialView(currentUser.role, currentUser.settings?.defaultDashboardView));
+    const role = currentUser.role;
+    const roleNavItems = navItemsForRole(role);
+    if (roleNavItems.includes(view as PrimaryWorkspaceView)) {
+      return;
     }
+
+    // Sallitut näkymät joihin pääsee sovelluksen sisäisillä silloilla / ikoneilla
+    // vaikka ne eivät ole välilehtipalkissa (esim. ohjelmaeditori, chat). Vain
+    // aidosti roolille kuulumaton näkymä (esim. roolinvaihdon jälkeen) ohjataan pois.
+    if (view === PROGRAMS_WORKSPACE_VIEW && canManagePrograms(role)) {
+      return;
+    }
+    if (view === "conversation" && role !== "independent_athlete") {
+      return;
+    }
+
+    setView(resolveInitialView(role, currentUser.settings?.defaultDashboardView));
   }, [currentUser, view]);
 
   useEffect(() => {
@@ -695,13 +709,17 @@ export function DashboardShell() {
                 />
               )
             ) : view === PROGRAMS_WORKSPACE_VIEW ||
-              currentUser.role === "coach" ||
-              (currentUser.role === "admin" && (view === "athletes" || view === "conversation")) ? (
+              ((currentUser.role === "coach" || currentUser.role === "admin") &&
+                (view === "athletes" || view === "conversation")) ? (
+              // Valmentajan henkilökohtaiset näkymät (Tänään/Ravinto/Treeni/Keho)
+              // renderöityvät treenaajasovelluksena (alla); vain Tiimi/Ohjelmat/Chat
+              // tulevat CoachDashboardista.
               <CoachDashboard
                 view={view}
                 onOpenConversation={() => setView("conversation")}
                 onOpenWorkoutLog={() => setView("athlete-log")}
                 onOpenSettings={() => setView("settings")}
+                onOpenPrograms={() => setView(PROGRAMS_WORKSPACE_VIEW)}
               />
             ) : currentUser.role === "admin" && view === "users" ? (
               <UserSettingsPanel adminOnly />

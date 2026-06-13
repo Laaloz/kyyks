@@ -1,10 +1,13 @@
 import { PROGRAMS_DASHBOARD_VIEW, type AthleteRole, type DashboardHomeView, type Invite, type Role, type UserProfile } from "@/lib/types";
 
+// Valmentaja käyttää samaa treenaajasovellusta omaan treeniinsä; vain Tiimi on
+// erillinen. 5 välilehteä, Treeni keskellä: Tänään / Ravinto / Treeni / Keho / Tiimi.
+// Ohjelmat avataan Tiimistä (PROGRAMS_DASHBOARD_VIEW yhä validi näkymä, ei navissa).
 const coachWorkspaceViews: DashboardHomeView[] = [
-  "athlete-log",
   "overview",
   "nutrition",
-  PROGRAMS_DASHBOARD_VIEW,
+  "athlete-log",
+  "measurements",
   "athletes",
 ];
 
