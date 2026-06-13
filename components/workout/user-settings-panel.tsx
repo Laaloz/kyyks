@@ -628,94 +628,66 @@ export function UserSettingsPanel({
           </div>
 
           <div>
-            <Label htmlFor="account-age">Ikä</Label>
-            <Input
-              id="account-age"
-              type="number"
-              inputMode="numeric"
-              min={13}
-              max={100}
-              step="1"
-              placeholder="Esim. 29"
-              value={ageDraft}
-              disabled={isSavingProfile || !canTrackOwnTraining(currentUser.role)}
-              onChange={(event) => {
-                setAgeDraft(event.target.value);
-                setProfileMessage("");
-              }}
-            />
-          </div>
-
-          <div>
-            <Label htmlFor="account-sex">Sukupuoli</Label>
-            <Select
-              id="account-sex"
-              value={sexDraft}
-              disabled={isSavingProfile || !canTrackOwnTraining(currentUser.role)}
-              onChange={(event) => {
-                setSexDraft(event.target.value as ProfileSex | "");
-                setProfileMessage("");
-              }}
-            >
-              <option value="">Valitse</option>
-              <option value="female">Nainen</option>
-              <option value="male">Mies</option>
-              <option value="other">Muu</option>
-            </Select>
-          </div>
-
-          <div>
-            <Label htmlFor="account-height-cm">Pituus (cm)</Label>
-            <Input
-              id="account-height-cm"
-              type="number"
-              inputMode="decimal"
-              min={80}
-              max={250}
-              step="0.5"
-              placeholder="Esim. 178"
-              value={heightCmDraft}
-              disabled={isSavingProfile || !canTrackOwnTraining(currentUser.role)}
-              onChange={(event) => {
-                setHeightCmDraft(event.target.value);
-                setProfileMessage("");
-              }}
-            />
+            <p className="text-[11px] font-semibold uppercase tracking-[0.05em] text-[var(--text-subtle)]">Keho</p>
+            <div className="mt-2 grid grid-cols-2 gap-3">
+              <div>
+                <Label htmlFor="account-age">Ikä</Label>
+                <Input
+                  id="account-age"
+                  type="number"
+                  inputMode="numeric"
+                  min={13}
+                  max={100}
+                  step="1"
+                  placeholder="Esim. 29"
+                  value={ageDraft}
+                  disabled={isSavingProfile || !canTrackOwnTraining(currentUser.role)}
+                  onChange={(event) => {
+                    setAgeDraft(event.target.value);
+                    setProfileMessage("");
+                  }}
+                />
+              </div>
+              <div>
+                <Label htmlFor="account-sex">Sukupuoli</Label>
+                <Select
+                  id="account-sex"
+                  value={sexDraft}
+                  disabled={isSavingProfile || !canTrackOwnTraining(currentUser.role)}
+                  onChange={(event) => {
+                    setSexDraft(event.target.value as ProfileSex | "");
+                    setProfileMessage("");
+                  }}
+                >
+                  <option value="">Valitse</option>
+                  <option value="female">Nainen</option>
+                  <option value="male">Mies</option>
+                  <option value="other">Muu</option>
+                </Select>
+              </div>
+              <div className="col-span-2">
+                <Label htmlFor="account-height-cm">Pituus (cm)</Label>
+                <Input
+                  id="account-height-cm"
+                  type="number"
+                  inputMode="decimal"
+                  min={80}
+                  max={250}
+                  step="0.5"
+                  placeholder="Esim. 178"
+                  value={heightCmDraft}
+                  disabled={isSavingProfile || !canTrackOwnTraining(currentUser.role)}
+                  onChange={(event) => {
+                    setHeightCmDraft(event.target.value);
+                    setProfileMessage("");
+                  }}
+                />
+              </div>
+            </div>
             <p className="mt-2 text-xs text-[var(--text-subtle)]">
-              Pituus on pysyvä profiilitieto. Päivitä paino ja vyötärö edelleen yleiskuvan omasta mittaseurannasta.
+              Paino ja vyötärö päivittyvät Keho-näkymästä.
             </p>
           </div>
-
-          {canTrackOwnTraining(currentUser.role) ? (
-            <div>
-              <Label htmlFor="account-goal">Tavoite</Label>
-              <Select
-                id="account-goal"
-                value={goalDraft}
-                disabled={isSavingGoal}
-                onChange={(event) => void handleGoalChange(event.target.value as NutritionGoal)}
-              >
-                <option value="lose">Pudota painoa</option>
-                <option value="maintain">Ylläpidä</option>
-                <option value="gain">Kasvata</option>
-              </Select>
-              {missingGoalFields.length > 0 ? (
-                <p className="mt-2 text-xs text-[var(--warning)]">
-                  Täytä ikä, sukupuoli, pituus ja paino, niin laskemme kcal-tavoitteen automaattisesti.
-                </p>
-              ) : computedGoalTarget ? (
-                <p className="mt-2 text-xs text-[var(--text-subtle)]">
-                  Laskettu kcal-tavoite:{" "}
-                  <span className="font-semibold text-[var(--text)]">{computedGoalTarget.kcal} kcal</span>
-                  {" · "}P {computedGoalTarget.proteinG} / H {computedGoalTarget.carbsG} / R {computedGoalTarget.fatG} g.
-                  Tavoite laskee ja korvaa ravinnon kcal- ja makrotavoitteet.
-                </p>
-              ) : null}
-              {goalMessage ? (
-                <InlineFeedback message={goalMessage} tone={goalMessageTone} className="mt-2 text-sm" />
-              ) : null}
-            </div>
-          ) : null}
 
           {isSavingProfile || profileMessage ? (
             <InlineFeedback
@@ -738,6 +710,35 @@ export function UserSettingsPanel({
             Tallenna profiili
           </Button>
         </div>
+
+        {canTrackOwnTraining(currentUser.role) ? (
+          <div className="mt-4 rounded-xl border border-[color-mix(in_srgb,var(--accent)_30%,var(--border))] bg-[color-mix(in_srgb,var(--accent)_7%,var(--surface))] p-3">
+            <Label htmlFor="account-goal" className="mb-1.5">Tavoite</Label>
+            <Select
+              id="account-goal"
+              value={goalDraft}
+              disabled={isSavingGoal}
+              onChange={(event) => void handleGoalChange(event.target.value as NutritionGoal)}
+            >
+              <option value="lose">Pudota painoa</option>
+              <option value="maintain">Ylläpidä</option>
+              <option value="gain">Kasvata</option>
+            </Select>
+            {missingGoalFields.length > 0 ? (
+              <p className="mt-2 text-xs text-[var(--warning)]">
+                Täytä ikä, sukupuoli, pituus ja paino, niin laskemme kcal-tavoitteen automaattisesti.
+              </p>
+            ) : computedGoalTarget ? (
+              <p className="mt-2 text-xs text-[var(--text-muted)]">
+                Laskettu kcal-tavoite:{" "}
+                <span className="font-semibold text-[var(--text)]">{computedGoalTarget.kcal} kcal</span>
+                {" · "}P {computedGoalTarget.proteinG} / H {computedGoalTarget.carbsG} / R {computedGoalTarget.fatG} g.
+                Tavoite laskee ja korvaa ravinnon kcal- ja makrotavoitteet.
+              </p>
+            ) : null}
+            {goalMessage ? <InlineFeedback message={goalMessage} tone={goalMessageTone} className="mt-2 text-sm" /> : null}
+          </div>
+        ) : null}
 
         <div className="mt-4 rounded-xl border border-[var(--border)] bg-[var(--surface-2)] px-3 py-2.5">
           <p className="text-[11px] font-semibold tracking-[0.04em] text-[var(--text-subtle)]">Turvallisuus</p>
