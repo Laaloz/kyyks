@@ -592,7 +592,9 @@ export function UserSettingsPanel({
               <Button
                 type="button"
                 variant="secondary"
-                className="size-10 shrink-0 p-0 text-[var(--danger)]"
+                className={`size-10 shrink-0 p-0 ${
+                  currentUser.profileImageUrl && !isUploadingProfileImage ? "text-[var(--danger)]" : ""
+                }`}
                 aria-label="Poista kuva"
                 title="Poista kuva"
                 disabled={!currentUser.profileImageUrl || isUploadingProfileImage}
