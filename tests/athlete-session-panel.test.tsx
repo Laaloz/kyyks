@@ -1,4 +1,4 @@
-import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { AthleteSessionPanel } from "@/components/workout/athlete/session-panel";
@@ -119,29 +119,20 @@ describe("AthleteSessionPanel", () => {
     expect(dialog).toHaveTextContent("Pidä lapatuet tiukkana");
   });
 
-  it("moves focus semantically to next workout field on Enter", async () => {
-    const session = buildSession();
-    session.setLogs = [
-      ...session.setLogs,
-      {
-        ...session.setLogs[0]!,
-        id: "log_2",
-        setId: "set_2",
-        setLabel: "2",
-      },
-    ];
+  it("renders draggable weight and reps fields and reports edits", () => {
+    const onUpdate = vi.fn();
 
     render(
       <AthleteSessionPanel
         scheduledWorkoutId="workout_1"
         scheduledWorkoutTitle="Penkkipäivä"
         scheduledWorkoutGuidance="Pidä päivä hallittuna."
-        selectedSession={session}
+        selectedSession={buildSession()}
         note=""
         status="in_progress"
         scheduledDate="2026-03-24T08:00:00.000Z"
         onStart={() => undefined}
-        onUpdate={() => undefined}
+        onUpdate={onUpdate}
         onUpdateDate={async () => ({ ok: true })}
         onUpdateDuration={async () => ({ ok: true })}
         onSaveNote={() => undefined}
@@ -151,7 +142,7 @@ describe("AthleteSessionPanel", () => {
         onBackToList={() => undefined}
         canDeleteWorkout
         initialCorrectionMode={false}
-        progress={{ totalSets: 2, completedSets: 0, percent: 0, allDone: false }}
+        progress={{ totalSets: 1, completedSets: 0, percent: 0, allDone: false }}
         previousExerciseResults={new Map()}
         exerciseInstructions={new Map()}
         exerciseOrder={new Map([["exercise_group_1", 0]])}
@@ -163,16 +154,12 @@ describe("AthleteSessionPanel", () => {
       />,
     );
 
-    const repsInput = screen.getByLabelText("Penkkipunnerrus sarja 1 toteutuneet toistot");
-    const loadInput = screen.getByLabelText("Penkkipunnerrus sarja 1 toteutunut kuorma");
-    const nextRepsInput = screen.getByLabelText("Penkkipunnerrus sarja 2 toteutuneet toistot");
+    expect(screen.getByLabelText("Penkkipunnerrus sarja 1 paino")).toBeInTheDocument();
+    const repsInput = screen.getByLabelText("Penkkipunnerrus sarja 1 toistot");
+    expect(repsInput).toBeInTheDocument();
 
-    repsInput.focus();
-    fireEvent.keyDown(repsInput, { key: "Enter" });
-    await vi.waitFor(() => expect(loadInput).toHaveFocus());
-
-    fireEvent.keyDown(loadInput, { key: "Enter" });
-    await vi.waitFor(() => expect(nextRepsInput).toHaveFocus());
+    fireEvent.change(repsInput, { target: { value: "8" } });
+    expect(onUpdate).toHaveBeenCalledWith("log_1", { actualReps: 8 });
   });
 
   it("uses warning state on the reps input when reps stay below target minimum", () => {
@@ -220,17 +207,15 @@ describe("AthleteSessionPanel", () => {
       />,
     );
 
-    const repsInput = screen.getByLabelText("Penkkipunnerrus sarja 1 toteutuneet toistot");
-    expect(repsInput).toHaveAttribute("data-below-target", "true");
-    expect(repsInput.className).toContain("border-[color-mix(in_srgb,var(--warning)_55%,var(--border))]");
+    const repsInput = screen.getByLabelText("Penkkipunnerrus sarja 1 toistot");
+    expect(repsInput.className).toContain("text-[var(--warning)]");
   });
 
-  it("constrains the rest timer inside the viewport with long exercise names", () => {
+  it("shows a viewport-constrained rest timer after a set is checked", () => {
     const session = buildSession();
     session.setLogs = [
       {
         ...session.setLogs[0]!,
-        exerciseName: "Erittäin pitkä polven koukistus laitteessa kontrolloidulla eksentrisellä vaiheella",
         targetRestSeconds: 120,
       },
     ];
@@ -267,20 +252,14 @@ describe("AthleteSessionPanel", () => {
       />,
     );
 
-    fireEvent.click(screen.getByRole("button", { name: "Merkitse tehdyksi" }));
+    fireEvent.click(screen.getByRole("button", { name: "Kuittaa sarja 1" }));
 
-    const exerciseNameNodes = screen.getAllByText(/Erittäin pitkä polven koukistus/);
-    expect(exerciseNameNodes.some((node) => node.className.includes("[overflow-wrap:anywhere]"))).toBe(true);
-
-    const timer = screen.getByRole("status", { name: "Lepoajastin" });
+    const timer = screen.getByRole("status", { name: /Lepoajastin/ });
     const timerShell = timer.parentElement;
     expect(timerShell?.className).toContain("fixed");
     expect(timerShell?.className).not.toContain("sticky");
     expect(timerShell?.className).toContain("w-[min(100%,calc(100dvw-2rem))]");
-    expect(timerShell?.className).toContain("md:w-[min(18rem,calc(100dvw-1.5rem))]");
     expect(timer).toHaveClass("overflow-hidden");
-    expect(screen.getByText("Käynnissä")).toBeInTheDocument();
-    expect(within(timer).getByText(/Erittäin pitkä polven koukistus/)).toHaveClass("truncate");
   });
 
   it("starts completed workout in edit mode without toggle and allows date save", async () => {

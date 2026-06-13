@@ -1,6 +1,6 @@
 "use client";
 
-import { BookOpen, Check, ChevronDown, ChevronUp, GripVertical, MoreHorizontal, Plus, Search, Settings2, Trash2 } from "lucide-react";
+import { BookOpen, Check, ChevronDown, ChevronUp, Clock3, GripVertical, MoreHorizontal, Plus, Search, Settings2, Trash2, X } from "lucide-react";
 import {
   useEffect,
   useLayoutEffect,
@@ -14,6 +14,8 @@ import {
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { DragNumber } from "@/components/ui/drag-number";
+import { calculateEstimatedOneRepMax } from "@/lib/exercise-progress";
 import { Input, Label, Textarea } from "@/components/ui/field";
 import { InfoTooltip } from "@/components/ui/tooltip";
 import { InlineFeedback } from "@/components/workout/inline-feedback";
@@ -1200,6 +1202,9 @@ export function AthleteSessionPanel({
   };
 
   const readOnly = forceReadOnly || (status === "completed" && !correctionMode) || Boolean(isSessionSyncing);
+  // Aktiivinen kirjausnäkymä = prototyypin SessionOverlay-tyyli. Muut tilat
+  // (valmis/korjaus/aloitus/synkkaus) säilyttävät vanhan rakenteen.
+  const activeLoggingView = status === "in_progress" && !readOnly;
   // Pidä näyttö päällä aktiivisen kirjauksen ajan (laitekohtainen preferenssi).
   const [keepScreenOn] = useKeepScreenOnPreference();
   useWakeLock(keepScreenOn && !readOnly && status === "in_progress");
@@ -1384,6 +1389,155 @@ export function AthleteSessionPanel({
 
     setSecondaryActionsAnchorRect(toAnchorRect(anchor.getBoundingClientRect()));
     setIsSecondaryActionsOpen(true);
+  };
+
+  // Prototyypin (SessionOverlay) mukainen aktiivisen kirjauksen liikekortti:
+  // aina auki, paino × toistot DragNumberilla, pyöreä kuittaus. Kytkennät
+  // (onUpdate paino/toistot/done) säilytetty.
+  const renderActiveExerciseCard = (group: ExerciseGroup) => {
+    const logs = group.logs;
+    const exerciseName = group.exerciseName;
+    const allDone = logs.length > 0 && logs.every((log) => log.done);
+    const targetSummary = logs.length > 0 ? `${logs.length} × ${formatTargetReps(logs[0]!)}` : "";
+    const liveOneRepMax = logs.reduce((best, log) => {
+      const load = log.actualLoad ?? 0;
+      const reps = log.actualReps ?? 0;
+      if (load <= 0 || reps <= 0) {
+        return best;
+      }
+      return Math.max(best, calculateEstimatedOneRepMax(load, reps));
+    }, 0);
+    const usesRepRange = logs.some(
+      (log) =>
+        log.targetRepsMin !== undefined &&
+        log.targetRepsMax !== undefined &&
+        log.targetRepsMax > log.targetRepsMin,
+    );
+    const shouldIncreaseLoad =
+      usesRepRange &&
+      allDone &&
+      logs.every((log) => {
+        const repMax = log.targetRepsMax ?? log.targetReps;
+        return repMax !== undefined && log.actualReps !== undefined && log.actualReps !== null && log.actualReps >= repMax;
+      });
+    const previous = previousExerciseResults.get(logs[0]?.exerciseId ?? "");
+    const previousOneRepMax =
+      previous?.actualLoad !== undefined && previous?.actualReps !== undefined && previous.actualLoad > 0 && previous.actualReps > 0
+        ? calculateEstimatedOneRepMax(previous.actualLoad, previous.actualReps)
+        : 0;
+    const isRecord = previousOneRepMax > 0 && liveOneRepMax > previousOneRepMax && logs.some((log) => log.done);
+    const instruction = exerciseInstructions.get(group.key)?.trim();
+
+    return (
+      <div
+        key={group.key}
+        className="min-w-0 max-w-full overflow-hidden rounded-[1.6rem] border border-[var(--border)] bg-[var(--surface)] p-4 shadow-[0_12px_30px_-28px_var(--shadow)]"
+      >
+        <div className="flex items-start justify-between gap-3">
+          <div className="min-w-0">
+            <div className="flex min-w-0 flex-wrap items-center gap-2">
+              <span className="font-[family-name:var(--font-display)] text-[1.05rem] font-bold leading-tight text-[var(--text)] [overflow-wrap:anywhere]">
+                {exerciseName}
+              </span>
+              {shouldIncreaseLoad ? (
+                <span className="inline-flex items-center gap-1 rounded-full bg-[color-mix(in_srgb,var(--accent)_14%,var(--surface))] px-2.5 py-0.5 text-[11px] font-semibold text-[var(--accent)]">
+                  Nosta painoa <span aria-hidden="true">↑</span>
+                </span>
+              ) : isRecord ? (
+                <span className="inline-flex items-center rounded-full bg-[color-mix(in_srgb,var(--accent)_14%,var(--surface))] px-2.5 py-0.5 text-[11px] font-semibold text-[var(--accent)]">
+                  Uusi e1RM
+                </span>
+              ) : null}
+            </div>
+            <p className="mt-0.5 text-xs tabular-nums text-[var(--text-subtle)]">
+              Tavoite {targetSummary}
+              {liveOneRepMax > 0 ? ` · e1RM nyt ${Math.round(liveOneRepMax)} kg` : ""}
+            </p>
+          </div>
+          <div className="flex shrink-0 items-center gap-1.5">
+            {instruction ? (
+              <button
+                type="button"
+                aria-label={`${exerciseName} ohje`}
+                title="Ohje"
+                className="grid size-8 place-items-center rounded-full border border-[color-mix(in_srgb,var(--accent)_22%,var(--border))] bg-[color-mix(in_srgb,var(--accent)_7%,var(--surface))] text-[var(--accent)] transition hover:bg-[color-mix(in_srgb,var(--accent)_12%,var(--surface))]"
+                onClick={() => setOpenInstruction({ exerciseName, instruction })}
+              >
+                <BookOpen className="size-3.5" aria-hidden="true" />
+              </button>
+            ) : null}
+            <button
+              type="button"
+              aria-label={`${exerciseName} asetukset`}
+              title="Liikkeen asetukset"
+              className="grid size-8 place-items-center rounded-full border border-[var(--border)] bg-[var(--surface)] text-[var(--text-subtle)] transition hover:border-[var(--border-strong)] hover:text-[var(--text)]"
+              onClick={() =>
+                setOpenExerciseStructure({
+                  mode: "edit",
+                  templateExerciseId: logs[0]?.templateExerciseId ?? "",
+                  exerciseName,
+                  initialExerciseId: logs[0]?.exerciseId,
+                  initialSetCount: logs.length,
+                  initialTargetReps: logs[0]?.targetReps,
+                  initialRestSeconds: logs[0]?.targetRestSeconds,
+                })
+              }
+            >
+              <Settings2 className="size-3.5" aria-hidden="true" />
+            </button>
+            {allDone ? (
+              <span className="grid size-8 place-items-center rounded-full bg-[color-mix(in_srgb,var(--success)_16%,var(--surface))] text-[var(--success)]">
+                <Check className="size-4 stroke-[2.5]" aria-hidden="true" />
+              </span>
+            ) : null}
+          </div>
+        </div>
+        <div className="mt-3 space-y-2">
+          {logs.map((log, index) => {
+            const targetMinimum = log.targetRepsMin ?? log.targetReps;
+            const missed =
+              log.actualReps !== undefined && log.actualReps !== null && targetMinimum !== undefined && log.actualReps < targetMinimum;
+            return (
+              <div key={log.id} className="grid grid-cols-[1.25rem_1fr_0.75rem_1fr_2.75rem] items-center gap-2">
+                <span className="text-center font-[family-name:var(--font-display)] text-sm font-semibold text-[var(--text-subtle)]">
+                  {index + 1}
+                </span>
+                <DragNumber
+                  value={log.actualLoad ?? 0}
+                  step={loadIncrementKg}
+                  ariaLabel={`${exerciseName} sarja ${log.setLabel} paino`}
+                  disabled={readOnly}
+                  onChange={(next) => handleLogUpdate(log, { actualLoad: next })}
+                />
+                <span className="text-center text-sm text-[var(--text-subtle)]">×</span>
+                <DragNumber
+                  value={log.actualReps ?? 0}
+                  step={1}
+                  tone={missed ? "warn" : undefined}
+                  ariaLabel={`${exerciseName} sarja ${log.setLabel} toistot`}
+                  disabled={readOnly}
+                  onChange={(next) => handleLogUpdate(log, { actualReps: next })}
+                />
+                <button
+                  type="button"
+                  disabled={readOnly}
+                  aria-pressed={log.done}
+                  aria-label={log.done ? `Kumoa sarja ${log.setLabel}` : `Kuittaa sarja ${log.setLabel}${missed ? ", toistot alle tavoitteen" : ""}`}
+                  className={`grid size-11 place-items-center rounded-full border transition ${
+                    log.done
+                      ? "border-[var(--success)] bg-[var(--success)] text-white"
+                      : "border-[var(--border-strong)] bg-[var(--surface)] text-[var(--text-subtle)] hover:border-[var(--accent)] hover:text-[var(--accent)]"
+                  }`}
+                  onClick={() => handleDoneUpdate(log, !log.done)}
+                >
+                  <Check className="size-5 stroke-[2.5]" aria-hidden="true" />
+                </button>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    );
   };
 
   const renderExerciseGroupCard = (group: ExerciseGroup) => {
@@ -1767,14 +1921,20 @@ export function AthleteSessionPanel({
 
   return (
     <div className="mt-6 min-w-0 max-w-full space-y-5 overflow-x-clip [contain:inline-size]">
-      <div className="flex min-w-0 flex-wrap items-center gap-3">
-        <Badge className={workoutStatusBadgeClass(status)}>{workoutStatusLabel(status)}</Badge>
-        <p className="text-sm text-[var(--text-muted)]">Käynnistetty {formatDate(selectedSession.startedAt)}</p>
-        <Badge className="border-[var(--accent)] bg-[var(--surface-3)] text-[var(--accent)]">
-          Treeniaika {formatWorkoutDuration(elapsedSeconds)}
-        </Badge>
-        {readOnly ? <Badge className="border-[var(--accent-secondary)] bg-[var(--surface-3)] text-[var(--accent-secondary)]">Lukittu</Badge> : null}
-      </div>
+      {activeLoggingView ? (
+        <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-[var(--text-subtle)]">
+          Käynnissä · {formatWorkoutDuration(elapsedSeconds)}
+        </p>
+      ) : (
+        <div className="flex min-w-0 flex-wrap items-center gap-3">
+          <Badge className={workoutStatusBadgeClass(status)}>{workoutStatusLabel(status)}</Badge>
+          <p className="text-sm text-[var(--text-muted)]">Käynnistetty {formatDate(selectedSession.startedAt)}</p>
+          <Badge className="border-[var(--accent)] bg-[var(--surface-3)] text-[var(--accent)]">
+            Treeniaika {formatWorkoutDuration(elapsedSeconds)}
+          </Badge>
+          {readOnly ? <Badge className="border-[var(--accent-secondary)] bg-[var(--surface-3)] text-[var(--accent-secondary)]">Lukittu</Badge> : null}
+        </div>
+      )}
       {status === "completed" && correctionMode ? (
         <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface-2)] p-4">
           <div className="mb-3 flex items-center justify-between gap-2 rounded-xl border border-[color-mix(in_srgb,var(--accent)_18%,var(--border))] bg-[color-mix(in_srgb,var(--accent)_6%,var(--surface))] px-3 py-2 text-xs text-[var(--text-subtle)]">
@@ -1925,36 +2085,42 @@ export function AthleteSessionPanel({
         </div>
       ) : (
         <>
-      {!readOnly ? (
+      {activeLoggingView ? (
+        <p className="px-0.5 text-xs text-[var(--text-subtle)] [text-wrap:pretty]">
+          Vedä kahvasta ylös tai alas säätääksesi · napauta numeroa kirjoittaaksesi.
+        </p>
+      ) : !readOnly ? (
         <div className="flex min-w-0 items-center justify-between gap-2 rounded-xl border border-[color-mix(in_srgb,var(--accent)_18%,var(--border))] bg-[color-mix(in_srgb,var(--accent)_6%,var(--surface))] px-3 py-2 text-xs text-[var(--text-subtle)]">
           <span className="min-w-0 [overflow-wrap:anywhere]">Toisto- ja kuormakentissä voit painaa oikean reunan kahvaa ja vetää ylös tai alas muuttaaksesi arvoa.</span>
           <GripVertical className="size-3.5 shrink-0 text-[var(--accent)]" aria-hidden="true" />
         </div>
       ) : null}
-          {exerciseRenderBlocks.map((block) => {
-            if (block.type === "single") {
-              return renderExerciseGroupCard(block.groups[0]!);
-            }
+          {activeLoggingView
+            ? exerciseGroups.map((group) => renderActiveExerciseCard(group))
+            : exerciseRenderBlocks.map((block) => {
+                if (block.type === "single") {
+                  return renderExerciseGroupCard(block.groups[0]!);
+                }
 
-            return (
-              <div key={block.key} className="min-w-0 max-w-full overflow-x-clip rounded-3xl border border-[var(--accent)] bg-[var(--surface-3)]/60 p-3 [contain:inline-size]">
-                <div className="mb-3 flex min-w-0 items-center justify-between gap-3">
-                  <div className="inline-flex min-w-0 items-center gap-1.5">
-                    <p className="text-sm font-semibold text-[var(--accent)]">
-                      Superset {block.supersetGroup}
-                    </p>
-                    <InfoTooltip text="Supersetissä tämän ryhmän liikkeet tehdään vuorotellen. Saman sarjan kuittaus peilautuu ryhmän muihin liikkeisiin." />
+                return (
+                  <div key={block.key} className="min-w-0 max-w-full overflow-x-clip rounded-3xl border border-[var(--accent)] bg-[var(--surface-3)]/60 p-3 [contain:inline-size]">
+                    <div className="mb-3 flex min-w-0 items-center justify-between gap-3">
+                      <div className="inline-flex min-w-0 items-center gap-1.5">
+                        <p className="text-sm font-semibold text-[var(--accent)]">
+                          Superset {block.supersetGroup}
+                        </p>
+                        <InfoTooltip text="Supersetissä tämän ryhmän liikkeet tehdään vuorotellen. Saman sarjan kuittaus peilautuu ryhmän muihin liikkeisiin." />
+                      </div>
+                      <Badge className="border-[var(--accent)] bg-[var(--surface)] text-[var(--accent)]">
+                        {block.groups.length} liikettä
+                      </Badge>
+                    </div>
+                    <div className="grid min-w-0 gap-3">
+                      {block.groups.map((group) => renderExerciseGroupCard(group))}
+                    </div>
                   </div>
-                  <Badge className="border-[var(--accent)] bg-[var(--surface)] text-[var(--accent)]">
-                    {block.groups.length} liikettä
-                  </Badge>
-                </div>
-                <div className="grid min-w-0 gap-3">
-                  {block.groups.map((group) => renderExerciseGroupCard(group))}
-                </div>
-              </div>
-            );
-          })}
+                );
+              })}
           {!readOnly ? (
             <button
               type="button"
@@ -1962,7 +2128,7 @@ export function AthleteSessionPanel({
               className="mt-2 inline-flex w-full items-center justify-center gap-2 rounded-2xl border border-dashed border-[var(--border-strong)] bg-[var(--surface)] px-4 py-3 text-sm font-semibold text-[var(--text-muted)] transition hover:border-[var(--accent)] hover:text-[var(--accent)]"
             >
               <Plus className="size-4" aria-hidden="true" />
-              Lisää extra-liike
+              {activeLoggingView ? "Lisää liike" : "Lisää extra-liike"}
             </button>
           ) : null}
         </>
@@ -2049,55 +2215,41 @@ export function AthleteSessionPanel({
       </div>
 
       {status !== "completed" && restTotalSeconds > 0 && restExerciseKey ? (
-        <div className="fixed bottom-[max(env(safe-area-inset-bottom),0.75rem)] left-1/2 z-30 mt-0 box-border w-[min(100%,calc(100dvw-2rem))] min-w-0 max-w-[calc(100dvw-2rem)] -translate-x-1/2 md:bottom-3 md:right-3 md:left-auto md:w-[min(18rem,calc(100dvw-1.5rem))] md:max-w-[calc(100dvw-1.5rem)] md:translate-x-0 lg:right-6 lg:w-[min(18rem,calc(100dvw-3rem))] lg:max-w-[calc(100dvw-3rem)]">
+        <div className="fixed bottom-[max(env(safe-area-inset-bottom),0.75rem)] left-1/2 z-30 mt-0 box-border w-[min(100%,calc(100dvw-2rem))] min-w-0 max-w-[calc(100dvw-2rem)] -translate-x-1/2 md:bottom-3 md:right-3 md:left-auto md:w-[min(20rem,calc(100dvw-1.5rem))] md:max-w-[calc(100dvw-1.5rem)] md:translate-x-0 lg:right-6 lg:w-[min(20rem,calc(100dvw-3rem))] lg:max-w-[calc(100dvw-3rem)]">
           <div
             role="status"
-            aria-label="Lepoajastin"
-            className="box-border w-full min-w-0 max-w-full overflow-hidden rounded-2xl border border-[color-mix(in_srgb,var(--accent)_50%,var(--border))] bg-[color-mix(in_srgb,var(--surface)_94%,var(--surface-3))] px-3 py-2.5 shadow-[0_12px_26px_-20px_var(--shadow)] backdrop-blur"
+            aria-label={`Lepoajastin ${formatDuration(restSecondsLeft)}`}
+            className="box-border flex w-full min-w-0 items-center gap-3 overflow-hidden rounded-full bg-[var(--text)] px-3 py-2.5 shadow-[0_16px_30px_-18px_var(--shadow)]"
           >
-            <div className="flex items-start justify-between gap-3">
-              <div className="min-w-0 flex-1">
-                <p className="text-[10px] font-semibold uppercase tracking-[0.06em] text-[var(--text-subtle)]">
-                  Lepo
-                </p>
-                <p className="truncate text-sm font-medium text-[var(--text)]">{restExerciseName ?? "Liike"}</p>
-              </div>
-              <div className="shrink-0 text-right">
-                <p className="text-lg font-semibold tabular-nums text-[var(--accent)]">
-                  {formatDuration(restSecondsLeft)}
-                </p>
-                <p className="text-[10px] text-[var(--text-subtle)]">
-                  {restRunning ? "Käynnissä" : "Valmis"}
-                </p>
-              </div>
-            </div>
-            <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-[var(--surface-3)]">
+            <button
+              type="button"
+              aria-label="Käynnistä lepo uudelleen"
+              title="Uudelleen"
+              className="grid size-7 shrink-0 place-items-center rounded-full text-[color-mix(in_srgb,var(--background)_82%,var(--text))] transition hover:text-[var(--background)]"
+              onClick={restartRestTimer}
+            >
+              <Clock3 className="size-5" aria-hidden="true" />
+            </button>
+            <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-[color-mix(in_srgb,var(--background)_28%,var(--text))]">
               <div
-                className="h-full rounded-full bg-[var(--accent)] transition-[width]"
+                className="h-full rounded-full bg-[var(--success)] transition-[width]"
                 style={{
                   width: `${restTotalSeconds > 0 ? Math.round((restSecondsLeft / restTotalSeconds) * 100) : 0}%`,
                 }}
               />
             </div>
-            <div className="mt-2 grid min-w-0 grid-cols-1 gap-2 text-[11px] text-[var(--text-subtle)] min-[360px]:grid-cols-[minmax(0,1fr)_auto] min-[360px]:items-center">
-              <span className="min-w-0 truncate">Aloitus {formatDuration(restTotalSeconds)}</span>
-              <div className="flex min-w-0 max-w-full flex-wrap items-center justify-end gap-1.5">
-                <button
-                  type="button"
-                  className="max-w-full whitespace-nowrap rounded-full border border-[var(--border)] bg-[var(--surface)] px-2 py-1 text-[11px] font-medium text-[var(--text-muted)] transition hover:border-[var(--border-strong)] hover:text-[var(--text)]"
-                  onClick={skipRestTimer}
-                >
-                  Ohita
-                </button>
-                <button
-                  type="button"
-                  className="max-w-full whitespace-nowrap rounded-full border border-[var(--border)] bg-[var(--surface)] px-2 py-1 text-[11px] font-medium text-[var(--text-muted)] transition hover:border-[var(--border-strong)] hover:text-[var(--text)]"
-                  onClick={restartRestTimer}
-                >
-                  Uudelleen
-                </button>
-              </div>
-            </div>
+            <span className="shrink-0 font-[family-name:var(--font-display)] text-base font-bold tabular-nums text-[var(--background)]">
+              {formatDuration(restSecondsLeft)}
+            </span>
+            <button
+              type="button"
+              aria-label="Ohita lepo"
+              title="Ohita"
+              className="grid size-7 shrink-0 place-items-center rounded-full text-[color-mix(in_srgb,var(--background)_82%,var(--text))] transition hover:text-[var(--background)]"
+              onClick={skipRestTimer}
+            >
+              <X className="size-4" aria-hidden="true" />
+            </button>
           </div>
         </div>
       ) : null}
@@ -2118,6 +2270,38 @@ export function AthleteSessionPanel({
             </span>
           </div>
         ) : null}
+        {activeLoggingView ? (
+          <div className="flex items-center gap-2">
+            <Button
+              type="button"
+              variant="ghost"
+              aria-label="Keskeytä treeni"
+              title="Keskeytä treeni"
+              className="size-12 shrink-0 rounded-2xl border border-[var(--border)] p-0 text-[var(--danger)]"
+              loading={isCancellingWorkout}
+              onClick={async () => {
+                setIsCancellingWorkout(true);
+                try {
+                  await onCancel();
+                } finally {
+                  setIsCancellingWorkout(false);
+                }
+              }}
+            >
+              {isCancellingWorkout ? null : <Trash2 className="size-5" aria-hidden="true" />}
+            </Button>
+            <Button
+              type="button"
+              className="h-12 flex-1 text-base"
+              disabled={!progress || progress.completedSets === 0}
+              loading={isCompleting}
+              loadingText="Tallennetaan..."
+              onClick={onComplete}
+            >
+              Merkitse valmiiksi
+            </Button>
+          </div>
+        ) : (
         <div className="flex flex-wrap gap-3 items-center">
           {status !== "completed" ? (
             <>
@@ -2315,8 +2499,9 @@ export function AthleteSessionPanel({
             </div>
           )}
         </div>
+        )}
       </div>
-      {status !== "completed" && progress && progress.percent < 100 ? (
+      {!activeLoggingView && status !== "completed" && progress && progress.percent < 100 ? (
         <p className="text-sm text-[var(--text-muted)]">
           Voit merkitä treenin valmiiksi myös osittain. Toteuma nyt {progress.completedSets}/{progress.totalSets} sarjaa ({progress.percent}%).
         </p>
