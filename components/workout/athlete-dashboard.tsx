@@ -2378,6 +2378,9 @@ export function AthleteDashboard({
                             }
                           });
                         const hasMissedSet = exerciseGroups.some((group) => group.sets.some((set) => set.missed));
+                        const workoutNote = session
+                          ? state.notes.find((note) => note.sessionId === session.id)?.body?.trim() ?? ""
+                          : "";
 
                         return (
                           <div key={workout.id} className="py-3">
@@ -2553,6 +2556,12 @@ export function AthleteDashboard({
                                     {hasMissedSet ? (
                                       <p className="text-xs text-[var(--text-subtle)]">Korostettu sarja jäi tavoitetoistoista.</p>
                                     ) : null}
+                                  </div>
+                                ) : null}
+                                {workoutNote ? (
+                                  <div className="mt-3 rounded-xl bg-[var(--surface-2)] px-3 py-2.5">
+                                    <p className="text-[11px] font-semibold text-[var(--text-subtle)]">Muistiinpano</p>
+                                    <p className="mt-1 whitespace-pre-line text-sm text-[var(--text-muted)]">{workoutNote}</p>
                                   </div>
                                 ) : null}
                                 {!readOnly ? (
