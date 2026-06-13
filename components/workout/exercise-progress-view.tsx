@@ -1,7 +1,8 @@
 "use client";
 
 import { ChevronLeft, Search } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { createPortal } from "react-dom";
 
 import { Card } from "@/components/ui/card";
 import { MetricTrendChart } from "@/components/workout/metric-trend-chart";
@@ -137,9 +138,15 @@ function ExerciseDetail({ summary, onClose }: { summary: ExerciseProgressSummary
   const delta = deltaPercent(summary);
   const bestE1rm = summary.trendPoints.reduce((best, point) => Math.max(best, point.value), 0);
   const recent = [...summary.trendPoints].reverse().slice(0, 6);
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => setMounted(true), []);
+  if (!mounted) {
+    return null;
+  }
 
-  return (
-    <div>
+  // Drill-down = kokonäytön overlay (oma takaisin-header, peittää ala/yläpalkin).
+  return createPortal(
+    <div className="fixed inset-0 z-50 flex flex-col overflow-y-auto bg-[var(--background)] px-4 pb-[calc(env(safe-area-inset-bottom)+1.5rem)] pt-[calc(env(safe-area-inset-top)+0.75rem)]">
       <div className="flex items-center gap-3">
         <button
           type="button"
@@ -266,6 +273,7 @@ function ExerciseDetail({ summary, onClose }: { summary: ExerciseProgressSummary
           ))}
         </div>
       </Card>
-    </div>
+    </div>,
+    document.body,
   );
 }

@@ -6,6 +6,7 @@ import { useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardTitle } from "@/components/ui/card";
 import { Segmented } from "@/components/ui/segmented";
+import { useHeaderAction } from "@/components/workout/header-action";
 import { OwnRecipeEditor } from "@/components/workout/own-recipe-editor";
 import { useKeepScreenOnPreference, useWakeLock } from "@/lib/use-wake-lock";
 import {
@@ -106,6 +107,20 @@ export function NutritionView({
   const [detail, setDetail] = useState<{ recipeId: string; entryId?: string } | null>(null);
   const [swapTarget, setSwapTarget] = useState<{ entryId: string; mealTag: MealTag; currentRecipeId: string } | null>(null);
   const [addTag, setAddTag] = useState<MealTag | null>(null);
+  // Ravinto-välilehden "+ Oma resepti" nostetaan yläpalkkiin (ei Tänään-dayOnly-tilassa).
+  useHeaderAction(
+    "nutrition",
+    !dayOnly && !readOnly
+      ? {
+          label: "Oma resepti",
+          icon: Plus,
+          onClick: () => {
+            setSeg("recipes");
+            setEditorOpen(true);
+          },
+        }
+      : null,
+  );
   const [isMaterializing, setIsMaterializing] = useState(false);
   const [pendingId, setPendingId] = useState<string | null>(null);
 
@@ -349,19 +364,7 @@ export function NutritionView({
         </div>
       ) : (
         <div className="mt-5">
-          {!readOnly ? (
-            <div className="mb-3 flex justify-end">
-              <Button
-                type="button"
-                variant="secondary"
-                className="gap-1.5 !border-[var(--accent)] !bg-[color-mix(in_srgb,var(--accent)_12%,var(--surface))] !text-[var(--accent)]"
-                onClick={() => setEditorOpen(true)}
-              >
-                <Plus className="size-4" aria-hidden="true" />
-                Oma resepti
-              </Button>
-            </div>
-          ) : null}
+          {/* "+ Oma resepti" on nyt yläpalkissa (useHeaderAction). */}
           <div className="flex items-center gap-2 rounded-xl bg-[var(--surface-2)] px-3 py-2.5">
             <Search className="size-4 shrink-0 text-[var(--text-subtle)]" aria-hidden="true" />
             <input
@@ -404,8 +407,9 @@ export function NutritionView({
                   <span
                     className="grid h-16 place-items-center rounded-xl text-[10px] font-medium text-[var(--text-subtle)]"
                     style={{
+                      // Raidat kontrastaavat surface-2-kortin kanssa (pohja oli ennen sama → näkymätön).
                       backgroundImage:
-                        "repeating-linear-gradient(-45deg, var(--surface-2) 0 8px, color-mix(in srgb, var(--surface-2) 55%, var(--surface)) 8px 16px)",
+                        "repeating-linear-gradient(-45deg, var(--surface) 0 8px, var(--surface-3) 8px 16px)",
                     }}
                   >
                     ruokakuva

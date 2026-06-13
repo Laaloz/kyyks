@@ -1,13 +1,14 @@
 "use client";
 
-import { BellRing, Carrot, Dumbbell, HeartPulse, Home, LogOut, MessageSquare, ScrollText, UserPlus, UserRound, UserRoundCog, Users, UtensilsCrossed, type LucideIcon } from "lucide-react";
-import { useEffect, useRef, useState, type KeyboardEvent } from "react";
+import { BellRing, Carrot, Dumbbell, HeartPulse, Home, LogOut, MessageSquare, Plus, ScrollText, UserPlus, UserRound, UserRoundCog, Users, UtensilsCrossed, type LucideIcon } from "lucide-react";
+import { useCallback, useEffect, useRef, useState, type KeyboardEvent } from "react";
 
 import dynamic from "next/dynamic";
 
 import { MeasurementReminderDialog } from "@/components/workout/athlete/measurement-reminder-dialog";
 import { AthleteDashboard } from "@/components/workout/athlete-dashboard";
 import { CoachDashboard } from "@/components/workout/coach-dashboard";
+import { HeaderActionProvider, type HeaderAction } from "@/components/workout/header-action";
 import { PanelErrorBoundary } from "@/components/workout/panel-error-boundary";
 import { ProfileSheet, type ProfileSheetSection } from "@/components/workout/profile-sheet";
 import { UserSettingsPanel } from "@/components/workout/user-settings-panel";
@@ -116,6 +117,22 @@ export function DashboardShell() {
       ? resolveInitialView(currentUser.role, currentUser.settings?.defaultDashboardView)
       : "overview",
   );
+  const [headerActions, setHeaderActions] = useState<Record<string, HeaderAction>>({});
+  const registerHeaderAction = useCallback((id: string, action: HeaderAction | null) => {
+    setHeaderActions((prev) => {
+      if (!action) {
+        if (!(id in prev)) {
+          return prev;
+        }
+        const next = { ...prev };
+        delete next[id];
+        return next;
+      }
+      return { ...prev, [id]: action };
+    });
+  }, []);
+  // Vain aktiivinen näkymä rekisteröi toiminnon kerrallaan → otetaan ensimmäinen.
+  const headerAction = Object.values(headerActions)[0] ?? null;
   const [isMeasurementReminderOpen, setIsMeasurementReminderOpen] = useState(false);
   const [isReminderPreviewMode, setIsReminderPreviewMode] = useState(false);
   const [isMobileWorkoutDetailOpen, setIsMobileWorkoutDetailOpen] = useState(false);
@@ -483,7 +500,20 @@ export function DashboardShell() {
                 )}
               </div>
               <div className="flex shrink-0 items-center gap-2">
-                {shouldShowMeasurementReminder ? (
+                {/* Alasivuilla: osion ensisijainen toiminto (esim. + Mittaus / + Oma resepti).
+                    Profiili + muistutus näkyvät vain Tänäänissä; chat säilyy athletelle. */}
+                {view !== "overview" && headerAction ? (
+                  <Button
+                    onClick={headerAction.onClick}
+                    type="button"
+                    variant="secondary"
+                    className="gap-1.5 !border-[var(--accent)] !bg-[color-mix(in_srgb,var(--accent)_12%,var(--surface))] !text-[var(--accent)]"
+                  >
+                    {headerAction.icon ? <headerAction.icon className="size-4" aria-hidden="true" /> : null}
+                    {headerAction.label}
+                  </Button>
+                ) : null}
+                {view === "overview" && shouldShowMeasurementReminder ? (
                   <Button
                     onClick={() => setIsMeasurementReminderOpen(true)}
                     type="button"
@@ -517,43 +547,47 @@ export function DashboardShell() {
                     <span className="sr-only">Avaa chat valmentajan kanssa</span>
                   </Button>
                 ) : null}
-                <Button
-                  onClick={() => setIsProfileSheetOpen(true)}
-                  type="button"
-                  variant="secondary"
-                  className={`size-10 overflow-hidden !rounded-full !border-[var(--border-strong)] !bg-[var(--surface)] !px-0 !py-0 sm:size-11 ${
-                    view === "settings" || isProfileSheetOpen ? "!border-[var(--accent)] !text-[var(--accent)]" : "!text-[var(--text)]"
-                  }`}
-                  aria-label="Avaa profiili ja asetukset"
-                  aria-haspopup="dialog"
-                  aria-expanded={isProfileSheetOpen}
-                  title="Avaa profiili ja asetukset"
-                >
-                  {profileImageSrc && !profileImageFailed ? (
-                    <img
-                      src={profileImageSrc}
-                      alt=""
-                      className="size-full object-cover"
-                      onError={() => setProfileImageFailed(true)}
-                    />
-                  ) : (
-                    <UserRound className="size-5" aria-hidden="true" />
-                  )}
-                  <span className="sr-only">Avaa profiili ja asetukset</span>
-                </Button>
-                <Button
-                  onClick={() => {
-                    void handleLogout();
-                  }}
-                  type="button"
-                  variant="secondary"
-                  className="hidden size-10 !rounded-full !border-[var(--border-strong)] !bg-[var(--surface)] !px-0 !py-0 !text-[var(--text)] sm:size-11 lg:inline-flex"
-                  aria-label="Kirjaudu ulos"
-                  title="Kirjaudu ulos"
-                >
-                  <LogOut className="size-5" aria-hidden="true" />
-                  <span className="sr-only">Kirjaudu ulos</span>
-                </Button>
+                {view === "overview" ? (
+                  <>
+                    <Button
+                      onClick={() => setIsProfileSheetOpen(true)}
+                      type="button"
+                      variant="secondary"
+                      className={`size-10 overflow-hidden !rounded-full !border-[var(--border-strong)] !bg-[var(--surface)] !px-0 !py-0 sm:size-11 ${
+                        isProfileSheetOpen ? "!border-[var(--accent)] !text-[var(--accent)]" : "!text-[var(--text)]"
+                      }`}
+                      aria-label="Avaa profiili ja asetukset"
+                      aria-haspopup="dialog"
+                      aria-expanded={isProfileSheetOpen}
+                      title="Avaa profiili ja asetukset"
+                    >
+                      {profileImageSrc && !profileImageFailed ? (
+                        <img
+                          src={profileImageSrc}
+                          alt=""
+                          className="size-full object-cover"
+                          onError={() => setProfileImageFailed(true)}
+                        />
+                      ) : (
+                        <UserRound className="size-5" aria-hidden="true" />
+                      )}
+                      <span className="sr-only">Avaa profiili ja asetukset</span>
+                    </Button>
+                    <Button
+                      onClick={() => {
+                        void handleLogout();
+                      }}
+                      type="button"
+                      variant="secondary"
+                      className="hidden size-10 !rounded-full !border-[var(--border-strong)] !bg-[var(--surface)] !px-0 !py-0 !text-[var(--text)] sm:size-11 lg:inline-flex"
+                      aria-label="Kirjaudu ulos"
+                      title="Kirjaudu ulos"
+                    >
+                      <LogOut className="size-5" aria-hidden="true" />
+                      <span className="sr-only">Kirjaudu ulos</span>
+                    </Button>
+                  </>
+                ) : null}
               </div>
             </div>
           </section>
@@ -685,6 +719,7 @@ export function DashboardShell() {
       </header>
 
       <main id="main-content" className={view === "conversation" ? "flex min-h-0 min-w-0 flex-1 overflow-x-hidden" : "min-w-0 overflow-x-hidden"}>
+        <HeaderActionProvider register={registerHeaderAction}>
         <PanelErrorBoundary key={view}>
         {view === "settings" ? (
           <UserSettingsPanel initialSection={settingsSection} />
@@ -763,6 +798,7 @@ export function DashboardShell() {
           </div>
         )}
         </PanelErrorBoundary>
+        </HeaderActionProvider>
       </main>
 
       <div className={`${shouldHideMobileBottomNav ? "hidden" : "fixed"} inset-x-0 bottom-0 z-30 border-t border-[color-mix(in_srgb,var(--border)_90%,var(--surface))] bg-[var(--surface)] px-1 py-1 pb-[calc(0.75rem+env(safe-area-inset-bottom))] shadow-[0_-8px_18px_-24px_var(--shadow)] backdrop-blur lg:hidden`}>

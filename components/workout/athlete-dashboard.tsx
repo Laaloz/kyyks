@@ -44,6 +44,7 @@ import { AthleteSessionPanel } from "@/components/workout/athlete/session-panel"
 import { ConversationPanel } from "@/components/workout/conversation-panel";
 import { DragNumber } from "@/components/ui/drag-number";
 import { Segmented } from "@/components/ui/segmented";
+import { useHeaderAction } from "@/components/workout/header-action";
 import { ExerciseProgressView } from "@/components/workout/exercise-progress-view";
 import { NutritionView } from "@/components/workout/nutrition-view";
 import { estimateStrengthCalories, getMeasurementsForUser, getWeightAtMoment } from "@/lib/body-metrics";
@@ -879,6 +880,21 @@ export function AthleteDashboard({
     }
   }, [athleteLogMode, pendingStartWorkoutId, pendingWorkoutTransition, selectedWorkoutId, workouts]);
   const canTrackOwnMeasurements = canTrackOwnTraining(currentUser?.role);
+  // Keho-näkymän ensisijainen toiminto nostetaan yläpalkkiin (prototyypin TopBar).
+  useHeaderAction(
+    "measurements",
+    view === "measurements" && !readOnly && canTrackOwnMeasurements
+      ? {
+          label: "Mittaus",
+          icon: Plus,
+          onClick: () => {
+            setMeasurementMessage("");
+            setMeasurementMessageTone("info");
+            setIsMeasurementSheetOpen(true);
+          },
+        }
+      : null,
+  );
   // Keho-näkymä (prototyyppi): valitun mittarin nykyarvo, muutos valitulta
   // aikaväliltä, koko historia merkintälistana.
   const measurementReminderState = useMemo(
@@ -1606,24 +1622,7 @@ export function AthleteDashboard({
 
       {view === "measurements" && canTrackOwnMeasurements ? (
         <div ref={measurementsSectionRef} id="overview-measurements" className="scroll-mt-24 space-y-4">
-          {/* Osion otsikko tulee yläpalkista; tässä vain ensisijainen toiminto oikealle. */}
-          {!readOnly ? (
-            <div className="flex justify-end">
-              <Button
-                type="button"
-                variant="secondary"
-                className="gap-1.5 !border-[var(--accent)] !bg-[color-mix(in_srgb,var(--accent)_12%,var(--surface))] !text-[var(--accent)]"
-                onClick={() => {
-                  setMeasurementMessage("");
-                  setMeasurementMessageTone("info");
-                  setIsMeasurementSheetOpen(true);
-                }}
-              >
-                <Plus className="size-4" aria-hidden="true" />
-                Mittaus
-              </Button>
-            </div>
-          ) : null}
+          {/* Osion otsikko + "+ Mittaus" tulevat yläpalkista (useHeaderAction). */}
 
           {showMeasurementReminderCard ? (
             <button
