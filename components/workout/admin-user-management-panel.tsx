@@ -1,11 +1,11 @@
 "use client";
 
-import { Mail, MoreHorizontal, ShieldAlert } from "lucide-react";
+import { Mail, MoreHorizontal, Search, ShieldAlert } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Card, CardDescription, CardTitle } from "@/components/ui/card";
+import { Card } from "@/components/ui/card";
 import { Label, Select } from "@/components/ui/field";
 import { roleLabel } from "@/components/workout/shared";
 import { withMinimumDelay } from "@/lib/min-delay";
@@ -36,6 +36,7 @@ export function AdminUserManagementPanel() {
   const [isSavingCoaches, setIsSavingCoaches] = useState(false);
   const [isSendingManagedPasswordReset, setIsSendingManagedPasswordReset] = useState(false);
   const [isDeletingManagedUser, setIsDeletingManagedUser] = useState(false);
+  const [query, setQuery] = useState("");
 
   const manageableUsers = useMemo(
     () =>
@@ -50,6 +51,14 @@ export function AdminUserManagementPanel() {
     () => manageableUsers.find((user) => user.id === selectedManagedUserId) ?? manageableUsers[0],
     [manageableUsers, selectedManagedUserId],
   );
+  const filteredUsers = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    return q
+      ? manageableUsers.filter(
+          (user) => user.fullName.toLowerCase().includes(q) || user.email.toLowerCase().includes(q),
+        )
+      : manageableUsers;
+  }, [manageableUsers, query]);
   const assignableCoaches = useMemo(
     () => getAssignableCoachUsers(state.users).sort((a, b) => a.fullName.localeCompare(b.fullName, "fi-FI")),
     [state.users],
@@ -100,42 +109,57 @@ export function AdminUserManagementPanel() {
   return (
     <div className="grid gap-6">
       <Card className="border-[var(--border-strong)]">
-        <p className="text-xs font-semibold tracking-[0.04em] text-[var(--text-subtle)]">Käyttäjähallinta</p>
-        <CardTitle className="text-2xl">Hallitse käyttäjiä turvallisesti</CardTitle>
-        <CardDescription className="mt-2">
-          Vaihda rooleja, määritä vastuuhenkilöt, lähetä salasanan nollaus ja vaihda käyttäjäksi hallitussa
-          ympäristössä.
-        </CardDescription>
+        {/* Osio-otsikko "Käyttäjät" tulee yläpalkista. */}
+        <div className="flex items-center gap-2 rounded-xl bg-[var(--surface-2)] px-3 py-2.5">
+          <Search className="size-4 shrink-0 text-[var(--text-subtle)]" aria-hidden="true" />
+          <input
+            type="search"
+            value={query}
+            onChange={(event) => setQuery(event.target.value)}
+            placeholder="Hae käyttäjää…"
+            className="min-w-0 flex-1 bg-transparent text-sm text-[var(--text)] outline-none placeholder:text-[var(--text-subtle)]"
+          />
+        </div>
 
-        {manageableUsers.length === 0 ? (
-          <p className="mt-4 rounded-xl border-2 border-[var(--border)] bg-[var(--surface-2)] px-4 py-3 text-sm text-[var(--text-muted)]">
-            Ei hallittavia käyttäjiä.
+        {filteredUsers.length === 0 ? (
+          <p className="mt-4 rounded-xl border border-[var(--border)] bg-[var(--surface-2)] px-4 py-3 text-sm text-[var(--text-muted)]">
+            {manageableUsers.length === 0 ? "Ei hallittavia käyttäjiä." : "Ei käyttäjiä tällä haulla."}
           </p>
         ) : (
-          <>
-            <div className="mt-6 grid gap-3 md:grid-cols-[1fr_auto] md:items-end">
-              <div>
-                <Label htmlFor="admin-managed-user">Käyttäjä</Label>
-                <Select
-                  id="admin-managed-user"
-                  value={selectedManagedUser?.id ?? ""}
-                  onChange={(event) => {
-                    setSelectedManagedUserId(event.target.value);
+          <div className="mt-4 divide-y divide-[var(--border)] overflow-hidden rounded-2xl border border-[var(--border)]">
+            {filteredUsers.map((user) => {
+              const isSelected = user.id === selectedManagedUser?.id;
+              return (
+                <button
+                  key={user.id}
+                  type="button"
+                  className={`flex w-full items-center justify-between gap-3 p-3.5 text-left transition ${
+                    isSelected
+                      ? "bg-[color:color-mix(in_srgb,var(--accent)_8%,var(--surface))]"
+                      : "bg-[var(--surface)] hover:bg-[var(--surface-2)]"
+                  }`}
+                  aria-pressed={isSelected}
+                  onClick={() => {
+                    setSelectedManagedUserId(user.id);
                     setAdminMessage("");
                     setPreviewResetUrl("");
                   }}
                 >
-                  {manageableUsers.map((user) => (
-                    <option key={user.id} value={user.id}>
-                      {user.fullName} ({user.email})
-                    </option>
-                  ))}
-                </Select>
-              </div>
-              <Badge>{manageableUsers.length} käyttäjää</Badge>
-            </div>
+                  <div className="min-w-0">
+                    <p className="truncate text-sm font-bold text-[var(--text)]">{user.fullName}</p>
+                    <p className="truncate text-[12.5px] text-[var(--text-subtle)]">{user.email}</p>
+                  </div>
+                  <div className="flex shrink-0 items-center gap-1.5">
+                    <Badge>{roleLabel(user.role)}</Badge>
+                    {user.status !== "active" ? <Badge>Kutsu</Badge> : null}
+                  </div>
+                </button>
+              );
+            })}
+          </div>
+        )}
 
-            {selectedManagedUser ? (
+        {selectedManagedUser ? (
               <div className="mt-4 grid gap-4 rounded-2xl border-2 border-[var(--border)] bg-[var(--surface-2)] p-4">
                 <div className="flex flex-wrap items-start justify-between gap-3">
                   <div>
@@ -391,8 +415,6 @@ export function AdminUserManagementPanel() {
                 ) : null}
               </div>
             ) : null}
-          </>
-        )}
           <p
             aria-live="polite"
             className={`mt-4 text-sm ${
