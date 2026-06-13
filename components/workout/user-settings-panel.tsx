@@ -1,7 +1,7 @@
 "use client";
 
 import { zodResolver } from "@hookform/resolvers/zod";
-import { Ellipsis, HousePlus, KeyRound, Share, UserRound } from "lucide-react";
+import { Ellipsis, HousePlus, KeyRound, Share, Trash2, UserRound } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
@@ -590,6 +590,9 @@ export function UserSettingsPanel({
               <Button
                 type="button"
                 variant="secondary"
+                className="size-10 shrink-0 p-0 text-[var(--danger)]"
+                aria-label="Poista kuva"
+                title="Poista kuva"
                 disabled={!currentUser.profileImageUrl || isUploadingProfileImage}
                 onClick={() => {
                   setIsUploadingProfileImage(true);
@@ -608,7 +611,7 @@ export function UserSettingsPanel({
                     });
                 }}
               >
-                Poista kuva
+                <Trash2 className="size-4" aria-hidden="true" />
               </Button>
             </div>
             <p className="mt-2 text-xs text-[var(--text-subtle)]">
