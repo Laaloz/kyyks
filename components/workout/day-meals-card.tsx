@@ -5,6 +5,7 @@ import { useMemo, useState } from "react";
 
 import { Button } from "@/components/ui/button";
 import { Card, CardTitle } from "@/components/ui/card";
+import { OwnRecipeEditor } from "@/components/workout/own-recipe-editor";
 import {
   getActiveMealPlanForAthlete,
   getMealPlanRecipes,
@@ -34,6 +35,7 @@ export function DayMealsCard({ user, readOnly = false }: { user: UserProfile; re
   const [isMaterializing, setIsMaterializing] = useState(false);
   const [swapTarget, setSwapTarget] = useState<{ entryId: string; mealTag: MealTag; currentRecipeId: string } | null>(null);
   const [addTag, setAddTag] = useState<MealTag | null>(null);
+  const [isRecipeEditorOpen, setIsRecipeEditorOpen] = useState(false);
 
   const todayKey = useMemo(() => localDateKey(new Date()), []);
   const recipeById = useMemo(() => new Map(state.recipes.map((recipe) => [recipe.id, recipe])), [state.recipes]);
@@ -218,6 +220,20 @@ export function DayMealsCard({ user, readOnly = false }: { user: UserProfile; re
         </>
       )}
 
+      {!readOnly ? (
+        <button
+          type="button"
+          className="mt-3 text-sm font-semibold text-[var(--accent)]"
+          onClick={() => setIsRecipeEditorOpen(true)}
+        >
+          + Oma resepti
+        </button>
+      ) : null}
+
+      {isRecipeEditorOpen ? (
+        <OwnRecipeEditor onClose={() => setIsRecipeEditorOpen(false)} />
+      ) : null}
+
       {swapTarget ? (
         <MealPickerSheet
           title="Vaihda ateria"
@@ -334,7 +350,14 @@ function MealPickerSheet({
                   onClick={() => void onPick(recipe.id)}
                 >
                   <span className="min-w-0">
-                    <span className="block truncate text-sm font-semibold text-[var(--text)]">{recipe.name}</span>
+                    <span className="flex items-center gap-1.5">
+                      <span className="truncate text-sm font-semibold text-[var(--text)]">{recipe.name}</span>
+                      {recipe.ownerRole === "athlete" ? (
+                        <span className="shrink-0 rounded-full bg-[var(--accent-soft)] px-1.5 py-0.5 text-[10px] font-semibold text-[var(--accent)]">
+                          Oma
+                        </span>
+                      ) : null}
+                    </span>
                     <span className="block text-xs text-[var(--text-subtle)]">{kcal} kcal</span>
                   </span>
                   {diff !== null && diff !== 0 ? (

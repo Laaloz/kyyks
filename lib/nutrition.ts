@@ -12,6 +12,7 @@ import type {
   MealPlanTemplateInput,
   MealTag,
   NutritionActivityLevel,
+  NutritionOwnerRole,
   NutritionProfile,
   NutritionProfileInput,
   NutritionGoal,
@@ -847,7 +848,12 @@ export function upsertIngredient(state: AppState, actorId: string, input: Ingred
   };
 }
 
-export function upsertRecipe(state: AppState, actorId: string, input: RecipeInput) {
+export function upsertRecipe(
+  state: AppState,
+  actorId: string,
+  input: RecipeInput,
+  ownerRole: NutritionOwnerRole = "admin",
+) {
   const timestamp = nowIso();
   const current = input.id ? state.recipes.find((recipe) => recipe.id === input.id) : undefined;
   const nextRecipeBase: Recipe = {
@@ -858,7 +864,7 @@ export function upsertRecipe(state: AppState, actorId: string, input: RecipeInpu
     mealTag: input.mealTag,
     dietaryFlags: input.dietaryFlags ?? current?.dietaryFlags ?? [],
     allergies: input.allergies ?? current?.allergies ?? [],
-    ownerRole: "admin",
+    ownerRole: current?.ownerRole ?? ownerRole,
     createdBy: current?.createdBy ?? actorId,
     defaultServings: input.defaultServings,
     minServings: input.minServings,

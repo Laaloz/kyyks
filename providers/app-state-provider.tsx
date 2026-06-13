@@ -66,6 +66,7 @@ import type {
   MealTag,
   InviteInput,
   MealPlanTemplateInput,
+  NutritionOwnerRole,
   NutritionProfileInput,
   PasswordResetRequest,
   ProgramBuilderInput,
@@ -4178,9 +4179,13 @@ function findResolvedUserIdInSnapshot(
         return { ok: true };
       },
       async saveRecipe(input) {
-        if (!currentUser || !canActAsCoach(currentUser.role)) {
-          return { ok: false, message: "Vain admin tai valmentaja voi hallita reseptejä." };
+        if (!currentUser) {
+          return { ok: false, message: "Kirjaudu sisään ennen reseptin tallennusta." };
         }
+
+        // Treenaaja saa luoda omia reseptejään; admin/coach hallitsevat jaettua katalogia.
+        const ownerRole: NutritionOwnerRole =
+          currentUser.role === "admin" ? "admin" : currentUser.role === "coach" ? "coach" : "athlete";
 
         if (supabase) {
           const response = await fetch("/api/nutrition/recipes", {
@@ -4197,7 +4202,7 @@ function findResolvedUserIdInSnapshot(
           }
         }
 
-        setState((previous) => upsertRecipe(previous, currentUser.id, input));
+        setState((previous) => upsertRecipe(previous, currentUser.id, input, ownerRole));
         return { ok: true };
       },
       async deleteRecipe(recipeId) {

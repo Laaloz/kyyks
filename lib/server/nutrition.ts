@@ -188,7 +188,8 @@ export async function saveRecipeOnServer(requester: Requester, input: RecipeInpu
 
   const timestamp = new Date().toISOString();
   let recipeId = input.id;
-  const ownerRole = requester.role === "admin" ? "admin" : "coach";
+  const ownerRole =
+    requester.role === "admin" ? "admin" : requester.role === "coach" ? "coach" : "athlete";
 
   const recipePayload = {
     name: input.name.trim(),

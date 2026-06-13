@@ -29,10 +29,10 @@ async function saveRecipe(request: Request) {
     return requesterResult.error;
   }
 
-  const forbidden = ensureNutritionManagerRequester(requesterResult.requester);
-  if (forbidden) {
-    return forbidden;
-  }
+  // Treenaaja saa luoda/muokata omia reseptejään ("Oma resepti"); RLS rajaa
+  // omistajuuden (recipes/recipe_ingredients write by owner or admin) ja
+  // owner_role asetetaan palvelimella roolin mukaan. Admin/coach hallitsevat
+  // jaettua katalogia kuten ennen.
 
   const body = await request.json().catch(() => ({}));
   const parsed = recipeSchema.safeParse(body);
