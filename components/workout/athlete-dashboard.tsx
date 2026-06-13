@@ -1675,6 +1675,22 @@ export function AthleteDashboard({
       monthActiveDays,
     };
   }, [historyCalendarCells, historyCalendarMonth]);
+  // Päiväkohtainen ravintotila viikkorytmin ravintosegmenttiä varten:
+  // "ok" = kaikki päivän ateriat syöty, "part" = osa syöty, "none" = ei rivejä/ei syötyä.
+  const nutritionStatusByDay = useMemo(() => {
+    const byDay = new Map<string, { total: number; eaten: number }>();
+    (state.dayMealPlans ?? [])
+      .filter((entry) => entry.athleteId === currentUser?.id)
+      .forEach((entry) => {
+        const current = byDay.get(entry.planDate) ?? { total: 0, eaten: 0 };
+        current.total += 1;
+        if (entry.eatenAt) {
+          current.eaten += 1;
+        }
+        byDay.set(entry.planDate, current);
+      });
+    return byDay;
+  }, [currentUser?.id, state.dayMealPlans]);
   const overviewWeekCells = useMemo(() => {
     const start = new Date();
     start.setHours(0, 0, 0, 0);
@@ -1688,9 +1704,16 @@ export function AthleteDashboard({
       const key = toLocalDateKey(date);
       const activityByType = historyActivityByDay.get(key) ?? {};
       const activityCount = Object.values(activityByType).reduce((sum, count) => sum + count, 0);
-      return { key, date, activityByType, activityCount };
+      const nutrition = nutritionStatusByDay.get(key);
+      const nutritionStatus: "ok" | "part" | "none" =
+        nutrition && nutrition.total > 0 && nutrition.eaten >= nutrition.total
+          ? "ok"
+          : nutrition && nutrition.eaten > 0
+            ? "part"
+            : "none";
+      return { key, date, activityByType, activityCount, nutritionStatus };
     });
-  }, [historyActivityByDay]);
+  }, [historyActivityByDay, nutritionStatusByDay]);
   const todayCalendarKey = useMemo(() => toLocalDateKey(new Date()), []);
   const latestActivityDayKey = useMemo(() => {
     const activeKeys = Array.from(historyActivityByDay.entries())
@@ -2038,8 +2061,8 @@ export function AthleteDashboard({
             ) : null}
           </div>
 
-          {/* 7 päivää, 2 segmenttiä/päivä: treeni (accent) + ravinto (accent-2).
-              Ravintosegmentin päiväkohtainen tila kytketään vaiheessa 6 (ateriaseuranta). */}
+          {/* 7 päivää, 2 segmenttiä/päivä: treeni (accent) + ravinto (accent-secondary).
+              Ravintosegmentti: ok = kaikki päivän ateriat syöty, part = osa syöty. */}
           <div className="mt-4 grid grid-cols-7 gap-1.5">
             {overviewWeekCells.map((cell) => {
               const hasActivity = cell.activityCount > 0;
@@ -2077,7 +2100,17 @@ export function AthleteDashboard({
                       )}
                       aria-hidden="true"
                     />
-                    <span className="block h-5 rounded-md bg-[var(--surface-2)]" aria-hidden="true" />
+                    <span
+                      className={cn(
+                        "block h-5 rounded-md",
+                        cell.nutritionStatus === "ok"
+                          ? "bg-[var(--accent-secondary)]"
+                          : cell.nutritionStatus === "part"
+                            ? "bg-[color:color-mix(in_srgb,var(--accent-secondary)_35%,var(--surface-2))]"
+                            : "bg-[var(--surface-2)]",
+                      )}
+                      aria-hidden="true"
+                    />
                   </span>
                   <span className={cn("text-[11px] font-semibold", isToday ? "text-[var(--accent)]" : "text-[var(--text-subtle)]")}>
                     {weekdayLabel}
@@ -2114,6 +2147,8 @@ export function AthleteDashboard({
           </p>
         </Card>
       )}
+
+      {view === "overview" && currentUser ? <DayMealsCard user={currentUser} /> : null}
 
       {view === "measurements" && canTrackOwnMeasurements ? (
         <div
