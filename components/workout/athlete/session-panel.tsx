@@ -2221,6 +2221,8 @@ export function AthleteSessionPanel({
         </div>
         <Textarea
           id={`${scheduledWorkoutId}-note`}
+          // Fokusrengas sisään: panelin overflow-x-clip leikkaisi ulkorenkaan reunoilta.
+          className="focus-visible:ring-inset focus-visible:ring-offset-0"
           value={localNote}
           disabled={readOnly}
           onChange={(event) => {
