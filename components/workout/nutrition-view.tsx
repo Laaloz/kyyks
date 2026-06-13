@@ -326,7 +326,7 @@ export function NutritionView({
                             type="button"
                             className="grid size-8 shrink-0 place-items-center rounded-full text-[var(--text-subtle)] transition hover:text-[var(--danger)] disabled:opacity-40 disabled:hover:text-[var(--text-subtle)]"
                             aria-label="Poista ateria"
-                            disabled={isEaten || isPending}
+                            disabled={isPending}
                             onClick={async () => {
                               setPendingId(entry.id);
                               try {
