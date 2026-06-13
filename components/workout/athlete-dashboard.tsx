@@ -48,6 +48,7 @@ import { InfoTooltip } from "@/components/ui/tooltip";
 import { AthleteSessionPanel } from "@/components/workout/athlete/session-panel";
 import { ConversationPanel } from "@/components/workout/conversation-panel";
 import { MetricTrendChart } from "@/components/workout/metric-trend-chart";
+import { DragNumber } from "@/components/ui/drag-number";
 import { DayMealsCard } from "@/components/workout/day-meals-card";
 import { ExerciseProgressView } from "@/components/workout/exercise-progress-view";
 import { NutritionView } from "@/components/workout/nutrition-view";
@@ -736,6 +737,13 @@ export function AthleteDashboard({
   const [historyMenuAnchorRect, setHistoryMenuAnchorRect] = useState<AnchorRect | null>(null);
   const [historyMenuStyle, setHistoryMenuStyle] = useState<CSSProperties | null>(null);
   const [expandedHistoryGroups, setExpandedHistoryGroups] = useState<Record<string, boolean>>({});
+  // Historian inline-muokkaus (kuvat 1+3): luonnos valitusta toteutuksesta.
+  const [historyEditDraft, setHistoryEditDraft] = useState<{
+    workoutId: string;
+    durationMin: number;
+    exercises: Array<{ name: string; target: string; sets: Array<{ logId: string; load: number; reps: number; targetMin?: number }> }>;
+  } | null>(null);
+  const [isSavingHistoryEdit, setIsSavingHistoryEdit] = useState(false);
   const sessionByWorkoutId = useMemo(
     () => new Map(state.sessions.map((session) => [session.scheduledWorkoutId, session])),
     [state.sessions],
@@ -1221,6 +1229,50 @@ export function AthleteDashboard({
       [groupKey]: nextExpanded,
     }));
     setHistoryFocusWorkoutId(null);
+  };
+  const startHistoryEdit = (workoutId: string) => {
+    const session = sessionByWorkoutId.get(workoutId);
+    const insight = workoutInsights.get(workoutId);
+    const exercises: Array<{ name: string; target: string; sets: Array<{ logId: string; load: number; reps: number; targetMin?: number }> }> = [];
+    (session?.setLogs ?? []).forEach((log) => {
+      const name = log.exerciseName?.trim() || "Liike";
+      const repMin = log.targetRepsMin ?? log.targetReps;
+      const repMax = log.targetRepsMax ?? log.targetReps;
+      const target =
+        repMin !== undefined && repMax !== undefined && repMax > repMin ? `${repMin}-${repMax}` : `${repMin ?? log.targetReps ?? ""}`;
+      const group = exercises.find((item) => item.name === name);
+      const entry = { logId: log.id, load: log.actualLoad ?? 0, reps: log.actualReps ?? 0, targetMin: repMin };
+      if (group) {
+        group.sets.push(entry);
+      } else {
+        exercises.push({ name, target, sets: [entry] });
+      }
+    });
+    setHistoryEditDraft({
+      workoutId,
+      durationMin: Math.max(1, Math.round((insight?.durationSeconds ?? 0) / 60)),
+      exercises,
+    });
+  };
+  const saveHistoryEdit = async () => {
+    if (!historyEditDraft) {
+      return;
+    }
+    setIsSavingHistoryEdit(true);
+    try {
+      for (const exercise of historyEditDraft.exercises) {
+        for (const set of exercise.sets) {
+          await updateWorkoutSet(historyEditDraft.workoutId, set.logId, { actualLoad: set.load, actualReps: set.reps });
+        }
+      }
+      const result = await updateWorkoutDuration(historyEditDraft.workoutId, historyEditDraft.durationMin * 60);
+      setWorkoutMessage(result.ok ? "Muutokset tallennettu." : result.message);
+      if (result.ok) {
+        setHistoryEditDraft(null);
+      }
+    } finally {
+      setIsSavingHistoryEdit(false);
+    }
   };
   const startWorkoutFromProgram = async (programId: string, workoutId: string, workoutName: string, sourceKey: string) => {
     setPendingWorkoutTransition({ type: "start", workoutId, workoutName, sourceKey });
@@ -3036,6 +3088,108 @@ export function AthleteDashboard({
                             </button>
 
                             {expanded ? (
+                              historyEditDraft?.workoutId === workout.id ? (
+                                <div className="mt-3 space-y-3">
+                                  <div className="flex items-center justify-between gap-3">
+                                    <span className="text-sm font-semibold text-[var(--text)]">Kesto (min)</span>
+                                    <div className="flex items-center overflow-hidden rounded-xl bg-[var(--surface-2)]">
+                                      <button
+                                        type="button"
+                                        className="grid h-9 w-10 place-items-center text-[var(--text)]"
+                                        aria-label="Vähennä kestoa"
+                                        onClick={() => setHistoryEditDraft((draft) => (draft ? { ...draft, durationMin: Math.max(1, draft.durationMin - 1) } : draft))}
+                                      >
+                                        −
+                                      </button>
+                                      <span className="min-w-10 text-center font-[family-name:var(--font-display)] text-base font-bold tabular-nums text-[var(--text)]">
+                                        {historyEditDraft.durationMin}
+                                      </span>
+                                      <button
+                                        type="button"
+                                        className="grid h-9 w-10 place-items-center text-[var(--text)]"
+                                        aria-label="Lisää kestoa"
+                                        onClick={() => setHistoryEditDraft((draft) => (draft ? { ...draft, durationMin: Math.min(240, draft.durationMin + 1) } : draft))}
+                                      >
+                                        +
+                                      </button>
+                                    </div>
+                                  </div>
+                                  {historyEditDraft.exercises.map((exercise, exIndex) => (
+                                    <div key={exercise.name}>
+                                      <div className="flex items-baseline justify-between gap-2">
+                                        <p className="text-sm font-semibold text-[var(--text)]">{exercise.name}</p>
+                                        <p className="shrink-0 font-[family-name:var(--font-display)] text-xs font-semibold tabular-nums text-[var(--text-subtle)]">
+                                          {exercise.sets.length} × {exercise.target}
+                                        </p>
+                                      </div>
+                                      <div className="mt-1.5 space-y-2">
+                                        {exercise.sets.map((set, setIndex) => {
+                                          const missedReps = set.targetMin !== undefined && set.reps < set.targetMin;
+                                          return (
+                                            <div key={set.logId} className="grid grid-cols-[1.5rem_1fr_0.75rem_1fr] items-center gap-2">
+                                              <span className="font-[family-name:var(--font-display)] text-sm font-semibold text-[var(--text-subtle)]">{setIndex + 1}</span>
+                                              <DragNumber
+                                                value={set.load}
+                                                step={2.5}
+                                                ariaLabel={`${exercise.name} sarja ${setIndex + 1} paino`}
+                                                onChange={(next) =>
+                                                  setHistoryEditDraft((draft) =>
+                                                    draft
+                                                      ? {
+                                                          ...draft,
+                                                          exercises: draft.exercises.map((ex, i) =>
+                                                            i === exIndex
+                                                              ? { ...ex, sets: ex.sets.map((s, j) => (j === setIndex ? { ...s, load: next } : s)) }
+                                                              : ex,
+                                                          ),
+                                                        }
+                                                      : draft,
+                                                  )
+                                                }
+                                              />
+                                              <span className="text-center text-sm text-[var(--text-subtle)]">×</span>
+                                              <DragNumber
+                                                value={set.reps}
+                                                step={1}
+                                                tone={missedReps ? "warn" : undefined}
+                                                ariaLabel={`${exercise.name} sarja ${setIndex + 1} toistot`}
+                                                onChange={(next) =>
+                                                  setHistoryEditDraft((draft) =>
+                                                    draft
+                                                      ? {
+                                                          ...draft,
+                                                          exercises: draft.exercises.map((ex, i) =>
+                                                            i === exIndex
+                                                              ? { ...ex, sets: ex.sets.map((s, j) => (j === setIndex ? { ...s, reps: next } : s)) }
+                                                              : ex,
+                                                          ),
+                                                        }
+                                                      : draft,
+                                                  )
+                                                }
+                                              />
+                                            </div>
+                                          );
+                                        })}
+                                      </div>
+                                    </div>
+                                  ))}
+                                  <div className="flex gap-2 pt-1">
+                                    <Button type="button" variant="secondary" className="px-4" onClick={() => setHistoryEditDraft(null)}>
+                                      Peruuta
+                                    </Button>
+                                    <Button
+                                      type="button"
+                                      className="flex-1"
+                                      loading={isSavingHistoryEdit}
+                                      loadingText="Tallennetaan..."
+                                      onClick={() => void saveHistoryEdit()}
+                                    >
+                                      Tallenna muutokset
+                                    </Button>
+                                  </div>
+                                </div>
+                              ) : (
                               <div className="mt-3">
                                 <div className="grid grid-cols-2 gap-3">
                                   <div className="rounded-xl bg-[var(--surface-2)] px-3 py-2.5">
@@ -3099,7 +3253,7 @@ export function AthleteDashboard({
                                         type="button"
                                         variant="secondary"
                                         className="h-9 px-3 text-sm"
-                                        onClick={() => openWorkoutView(workout.id, { correctionMode: true, returnTab: "history" })}
+                                        onClick={() => startHistoryEdit(workout.id)}
                                       >
                                         Muokkaa
                                       </Button>
@@ -3125,6 +3279,7 @@ export function AthleteDashboard({
                                   </div>
                                 ) : null}
                               </div>
+                              )
                             ) : null}
                           </div>
                         );
