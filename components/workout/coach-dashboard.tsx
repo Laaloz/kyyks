@@ -1249,7 +1249,7 @@ export function CoachDashboard({
   }, [watchedWorkouts, workoutEditorModalIndex]);
 
   return (
-    <div className="grid w-full min-w-0 gap-6">
+    <div className="flex w-full min-w-0 flex-col gap-6">
       {view === "athletes" && currentUser ? (
         <CoachTeamView
           athletes={athletes}
@@ -2706,7 +2706,7 @@ function CoachTeamView({
   };
 
   return (
-    <div className="grid w-full min-w-0 gap-2">
+    <div className="flex w-full min-w-0 flex-col gap-2">
       <Segmented
         ariaLabel="Tiimi tai ohjelmat"
         value={segment}
@@ -2721,7 +2721,7 @@ function CoachTeamView({
         <div>
           <SectionLabel label="Urheilijat" meta={`${rosterEntries.length} aktiivista`} />
           {rosterEntries.length ? (
-            <div className="grid gap-3">
+            <div className="flex flex-col gap-3">
               {rosterEntries.map(({ athlete, summary }) => (
                 <button
                   key={athlete.id}

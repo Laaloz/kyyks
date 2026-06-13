@@ -1606,9 +1606,9 @@ export function AthleteDashboard({
 
       {view === "measurements" && canTrackOwnMeasurements ? (
         <div ref={measurementsSectionRef} id="overview-measurements" className="scroll-mt-24 space-y-4">
-          <div className="flex items-center justify-between gap-3">
-            <CardTitle className="text-2xl">Keho</CardTitle>
-            {!readOnly ? (
+          {/* Osion otsikko tulee yläpalkista; tässä vain ensisijainen toiminto oikealle. */}
+          {!readOnly ? (
+            <div className="flex justify-end">
               <Button
                 type="button"
                 variant="secondary"
@@ -1622,8 +1622,8 @@ export function AthleteDashboard({
                 <Plus className="size-4" aria-hidden="true" />
                 Mittaus
               </Button>
-            ) : null}
-          </div>
+            </div>
+          ) : null}
 
           {showMeasurementReminderCard ? (
             <button

@@ -350,10 +350,17 @@ export function NutritionView({
       ) : (
         <div className="mt-5">
           {!readOnly ? (
-            <Button type="button" variant="secondary" className="mb-3 w-full gap-2" onClick={() => setEditorOpen(true)}>
-              <Plus className="size-4" aria-hidden="true" />
-              Oma resepti
-            </Button>
+            <div className="mb-3 flex justify-end">
+              <Button
+                type="button"
+                variant="secondary"
+                className="gap-1.5 !border-[var(--accent)] !bg-[color-mix(in_srgb,var(--accent)_12%,var(--surface))] !text-[var(--accent)]"
+                onClick={() => setEditorOpen(true)}
+              >
+                <Plus className="size-4" aria-hidden="true" />
+                Oma resepti
+              </Button>
+            </div>
           ) : null}
           <div className="flex items-center gap-2 rounded-xl bg-[var(--surface-2)] px-3 py-2.5">
             <Search className="size-4 shrink-0 text-[var(--text-subtle)]" aria-hidden="true" />
