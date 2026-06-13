@@ -948,6 +948,23 @@ export function AthleteDashboard({
   );
   const highlightedWorkout = activeWorkout ?? resumableWorkout;
   const highlightedWorkoutState = activeWorkout ? "active" : resumableWorkout ? "resumable" : null;
+  const highlightedLoggedSetCount = highlightedWorkout
+    ? sessionByWorkoutId.get(highlightedWorkout.id)?.setLogs.filter((log) => log.done).length ?? 0
+    : 0;
+  // When nothing is in progress, surface the next program workout to start on the hero.
+  const heroNextWorkout = useMemo(() => {
+    for (const program of athletePrograms) {
+      const workout = (program.workouts ?? [])[0];
+      if (workout) {
+        return {
+          name: workout.name,
+          exerciseCount: workout.exercises.length,
+          setCount: workout.exercises.reduce((sum, exercise) => sum + exercise.sets.length, 0),
+        };
+      }
+    }
+    return null;
+  }, [athletePrograms]);
   const fallbackSelectedWorkout = athleteLogMode === "workout" ? highlightedWorkout : undefined;
   const explicitlySelectedWorkout = selectedWorkoutId
     ? workouts.find((item) => item.id === selectedWorkoutId)
@@ -1952,38 +1969,85 @@ export function AthleteDashboard({
       ) : null}
 
       {view === "overview" && (
-        <Card className="max-w-full overflow-x-clip border-[var(--border-strong)] [contain:inline-size]">
+        <Card className="max-w-full overflow-x-clip border-[var(--text)] bg-[var(--text)] text-[var(--background)] [contain:inline-size]">
+          <p className="text-xs font-semibold tracking-[0.04em] text-[color:color-mix(in_srgb,var(--background)_62%,transparent)]">
+            {highlightedWorkoutState === "active"
+              ? "Treeni kesken"
+              : highlightedWorkoutState === "resumable"
+                ? "Keskeneräinen treeni"
+                : heroNextWorkout
+                  ? "Seuraava treeni"
+                  : "Aloita tästä"}
+          </p>
+          <h2 className="mt-1.5 font-[family-name:var(--font-display)] text-[1.75rem] font-bold leading-tight tracking-[-0.01em] text-[var(--background)]">
+            {highlightedWorkout
+              ? normalizeWorkoutHistoryTitle(highlightedWorkout.title)
+              : heroNextWorkout
+                ? heroNextWorkout.name
+                : "Ei ohjelmaa vielä"}
+          </h2>
+          <p className="mt-1 text-sm text-[color:color-mix(in_srgb,var(--background)_72%,transparent)]">
+            {highlightedWorkout
+              ? `${highlightedLoggedSetCount} ${highlightedLoggedSetCount === 1 ? "sarja" : "sarjaa"} kirjattu — jatka siitä mihin jäit`
+              : heroNextWorkout
+                ? `${heroNextWorkout.exerciseCount} ${heroNextWorkout.exerciseCount === 1 ? "liike" : "liikettä"} · ${heroNextWorkout.setCount} ${heroNextWorkout.setCount === 1 ? "sarja" : "sarjaa"}`
+                : "Pyydä valmentajaa rakentamaan ensimmäinen ohjelma."}
+          </p>
+          {highlightedWorkout ? (
+            <Button
+              type="button"
+              variant="primary"
+              className="mt-4 w-full"
+              loading={isTransitionLoading("overview-highlight")}
+              loadingText="Avataan treeniä..."
+              onClick={() => {
+                void openOrResumeWorkout(highlightedWorkout.id, "overview-highlight");
+              }}
+            >
+              {highlightedWorkoutState === "active" ? "Siirry treeniin" : "Jatka treeniä"}
+            </Button>
+          ) : (
+            <Button
+              type="button"
+              variant="primary"
+              className="mt-4 w-full"
+              disabled={!athletePrograms.length}
+              onClick={() => {
+                setAthleteLogMode("overview");
+                setAthleteLogTab("training");
+                onOpenWorkoutLog?.();
+              }}
+            >
+              Aloita treeni
+            </Button>
+          )}
+        </Card>
+      )}
+
+      {view === "overview" && (
+        <Card className="max-w-full overflow-x-clip [contain:inline-size]">
           <div className="flex items-baseline justify-between gap-3">
-            <CardTitle>Tämä viikko</CardTitle>
+            <CardTitle>Viikkorytmi</CardTitle>
             {weeklyInsights.targetCount > 0 ? (
-              <p className="shrink-0 text-sm font-semibold text-[var(--accent)]">
+              <p className="shrink-0 font-[family-name:var(--font-display)] text-sm font-semibold tabular-nums text-[var(--text)]">
                 {weeklyInsights.completedCount}/{weeklyInsights.targetCount} treeniä
               </p>
             ) : null}
           </div>
 
-          <div className="mt-4 grid grid-cols-7 gap-1 text-center text-[10px] font-medium text-[var(--text-subtle)] sm:text-[11px]">
-            {["Ma", "Ti", "Ke", "To", "Pe", "La", "Su"].map((label) => (
-              <p key={`overview-week-${label}`}>{label}</p>
-            ))}
-          </div>
-          <div className="mt-1.5 grid grid-cols-7 gap-1.5">
+          {/* 7 päivää, 2 segmenttiä/päivä: treeni (accent) + ravinto (accent-2).
+              Ravintosegmentin päiväkohtainen tila kytketään vaiheessa 6 (ateriaseuranta). */}
+          <div className="mt-4 grid grid-cols-7 gap-1.5">
             {overviewWeekCells.map((cell) => {
-              const iconKeys = Object.keys(cell.activityByType).filter((key) => (cell.activityByType[key] ?? 0) > 0);
-              const firstIcon = iconKeys[0];
-              const extraTypeCount = Math.max(0, iconKeys.length - 1);
               const hasActivity = cell.activityCount > 0;
               const isToday = cell.key === todayCalendarKey;
+              const weekdayLabel = ["Ma", "Ti", "Ke", "To", "Pe", "La", "Su"][(cell.date.getDay() + 6) % 7];
 
               return (
                 <button
                   type="button"
                   key={`overview-week-cell-${cell.key}`}
-                  className={cn(
-                    "relative z-0 aspect-square w-full max-w-11 min-h-0 min-w-0 justify-self-center appearance-none overflow-hidden rounded-full border border-[var(--border)] bg-[var(--surface)] p-0",
-                    isToday ? "border-[var(--accent)] bg-[var(--accent)]" : null,
-                    hasActivity ? "cursor-pointer hover:border-[var(--accent)]" : "cursor-pointer hover:border-[var(--border-strong)]",
-                  )}
+                  className="flex min-w-0 flex-col items-center gap-1.5 appearance-none bg-transparent p-0"
                   aria-label={`${formatCalendarDate(cell.date)} avaa historian kalenteri`}
                   onClick={() => {
                     setSelectedCalendarDayKey(hasActivity ? cell.key : latestActivityDayKey ?? null);
@@ -1993,125 +2057,58 @@ export function AthleteDashboard({
                     onOpenWorkoutLog?.();
                   }}
                 >
-                  {hasActivity ? (
-                    <div className="flex h-full w-full items-center justify-center">
-                      <div
-                        className={cn(
-                          "flex h-full w-full items-center justify-center rounded-[50%]",
-                          isToday
-                            ? "bg-[var(--accent)] text-[var(--accent-contrast)]"
-                            : "bg-[color:color-mix(in_srgb,var(--accent)_12%,var(--surface))] text-[var(--accent)]",
-                        )}
-                      >
-                        <span className="grid size-8 place-items-center">
-                          {firstIcon ? renderCalendarActivityIcon(firstIcon) : null}
-                        </span>
-                      </div>
-                    </div>
-                  ) : (
-                    <div className="flex h-full w-full items-center justify-center">
-                      <span className={cn("text-xs", isToday ? "text-[var(--accent-contrast)]" : "text-[var(--text-subtle)]")}>
-                        {cell.date.getDate()}
-                      </span>
-                    </div>
-                  )}
-                  {extraTypeCount > 0 ? (
-                    <span className="absolute -bottom-1 -right-1 grid min-h-4 min-w-4 place-items-center rounded-full border border-[color-mix(in_srgb,var(--accent)_35%,var(--border))] bg-[var(--surface)] px-1 text-[9px] font-semibold leading-4 text-[var(--accent)]">
-                      +{extraTypeCount}
-                    </span>
-                  ) : null}
+                  <span
+                    className={cn(
+                      "flex w-full flex-col gap-1 rounded-lg",
+                      isToday ? "outline outline-2 outline-offset-2 outline-[var(--text)]" : null,
+                    )}
+                  >
+                    <span
+                      className={cn(
+                        "block h-5 rounded-md",
+                        hasActivity
+                          ? "bg-[var(--accent)]"
+                          : isToday
+                            ? "bg-[color:color-mix(in_srgb,var(--accent)_14%,var(--surface))] shadow-[inset_0_0_0_1.5px_var(--accent)]"
+                            : "bg-[var(--surface-2)]",
+                      )}
+                      aria-hidden="true"
+                    />
+                    <span className="block h-5 rounded-md bg-[var(--surface-2)]" aria-hidden="true" />
+                  </span>
+                  <span className={cn("text-[11px] font-semibold", isToday ? "text-[var(--accent)]" : "text-[var(--text-subtle)]")}>
+                    {weekdayLabel}
+                  </span>
                 </button>
               );
             })}
           </div>
 
-          <div className="mt-5">
-            <div className="h-2 overflow-hidden rounded-full bg-[var(--surface-3)]">
-              <div
-                className="h-full rounded-full bg-[var(--accent)] transition-[width] duration-500"
-                style={{ width: `${Math.min(100, Math.max(0, weeklyInsights.completionRate))}%` }}
-              />
-            </div>
-            <p className="mt-2 text-sm text-[var(--text-muted)]">
-              {weeklyInsights.targetCount <= 0
-                ? "Viikkotavoitetta ei ole vielä määritetty."
-                : weeklyInsights.completedCount >= weeklyInsights.targetCount
-                  ? "Viikkotavoite saavutettu! 🔥"
-                  : weeklyInsights.completedCount === 0
-                    ? "Viikko alkaa tästä — ensimmäinen treeni odottaa."
-                    : `Hyvä vauhti! Vielä ${weeklyInsights.targetCount - weeklyInsights.completedCount} ${
-                        weeklyInsights.targetCount - weeklyInsights.completedCount === 1 ? "treeni" : "treeniä"
-                      } tavoitteeseen.`}
-            </p>
+          <div className="mt-3.5 flex items-center gap-4 text-xs font-semibold text-[var(--text-muted)]">
+            <span className="flex items-center gap-1.5">
+              <span className="size-2 rounded-full bg-[var(--accent)]" aria-hidden="true" />
+              Treeni
+            </span>
+            <span className="flex items-center gap-1.5">
+              <span className="size-2 rounded-full bg-[var(--accent-secondary)]" aria-hidden="true" />
+              Ravinto
+            </span>
           </div>
 
-          <div className="mt-5 grid grid-cols-2 gap-4">
-            <div className="min-w-0">
-              <p className="text-xl font-semibold text-[var(--text)] sm:text-2xl">
-                {formatLiftedKgValue(weeklyInsights.weeklyVolume)}
-              </p>
-              <p className="mt-0.5 text-xs text-[var(--text-subtle)]">Volyymi tällä viikolla</p>
-            </div>
-            <div className="min-w-0">
-              <p className="truncate text-xl font-semibold text-[var(--text)] sm:text-2xl">
-                {weeklyInsights.latestCompleted
-                  ? normalizeWorkoutHistoryTitle(weeklyInsights.latestCompleted.title)
-                  : "–"}
-              </p>
-              <p className="mt-0.5 truncate text-xs text-[var(--text-subtle)]">
-                {weeklyInsights.latestCompleted
-                  ? `Viimeisin treeni · ${formatDateWithWeekday(
-                      weeklyInsights.latestCompleted.completedAt ??
-                        getWorkoutOrderMetadata(weeklyInsights.latestCompleted).primaryTimestamp,
-                    )} · ${formatLiftedKgValue(weeklyInsights.latestCompletedVolume)}`
-                  : "Viimeisin treeni"}
-              </p>
-            </div>
-          </div>
-
-          <div className="mt-5">
-            {highlightedWorkout ? (
-              <>
-                <Button
-                  type="button"
-                  variant="primary"
-                  className="w-full"
-                  loading={isTransitionLoading("overview-highlight")}
-                  loadingText="Avataan treeniä..."
-                  onClick={() => {
-                    void openOrResumeWorkout(highlightedWorkout.id, "overview-highlight");
-                  }}
-                >
-                  {highlightedWorkoutState === "active" ? "Siirry treeniin" : "Jatka treeniä"}
-                </Button>
-                <p className="mt-2 text-center text-xs text-[var(--text-subtle)]">
-                  {highlightedWorkoutState === "active" ? "Käynnissä" : "Keskeytetty"}:{" "}
-                  {normalizeWorkoutHistoryTitle(highlightedWorkout.title)}
-                </p>
-              </>
-            ) : (
-              <>
-                <Button
-                  type="button"
-                  variant="primary"
-                  className="w-full"
-                  disabled={!athletePrograms.length}
-                  onClick={() => {
-                    setAthleteLogMode("overview");
-                    setAthleteLogTab("training");
-                    onOpenWorkoutLog?.();
-                  }}
-                >
-                  Avaa treenit
-                </Button>
-                {!athletePrograms.length ? (
-                  <p className="mt-2 text-center text-xs text-[var(--text-subtle)]">
-                    Pyydä valmentajaa rakentamaan ensimmäinen ohjelma.
-                  </p>
-                ) : null}
-              </>
-            )}
-          </div>
+          <p className="mt-4 border-t border-[var(--border)] pt-4 text-sm text-[var(--text-muted)]">
+            {weeklyInsights.targetCount <= 0
+              ? "Viikkotavoitetta ei ole vielä määritetty."
+              : weeklyInsights.completedCount >= weeklyInsights.targetCount
+                ? "Viikkotavoite saavutettu! 🔥"
+                : weeklyInsights.completedCount === 0
+                  ? "Viikko alkaa tästä — ensimmäinen treeni odottaa."
+                  : `Hyvä vauhti! Vielä ${weeklyInsights.targetCount - weeklyInsights.completedCount} ${
+                      weeklyInsights.targetCount - weeklyInsights.completedCount === 1 ? "treeni" : "treeniä"
+                    } tavoitteeseen.`}
+            {weeklyInsights.weeklyVolume > 0
+              ? ` Volyymi tällä viikolla ${formatLiftedKgValue(weeklyInsights.weeklyVolume)}.`
+              : ""}
+          </p>
         </Card>
       )}
 
