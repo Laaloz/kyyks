@@ -23,12 +23,11 @@ export function MeasurementReminderDialog({
         aria-modal="true"
         aria-labelledby="measurement-reminder-title"
         aria-describedby="measurement-reminder-description"
-        className="w-full max-w-lg rounded-3xl border border-[var(--border-strong)] bg-[var(--surface)] p-4 shadow-[0_24px_60px_-24px_var(--shadow)]"
+        className="w-full max-w-lg rounded-3xl bg-[var(--surface)] p-5 shadow-[0_24px_60px_-24px_var(--shadow)]"
       >
-        <p className="text-xs font-semibold tracking-[0.08em] text-[var(--accent)]">Perjantain muistutus</p>
         <h3
           id="measurement-reminder-title"
-          className="mt-2 font-[family-name:var(--font-display)] text-2xl font-semibold text-[var(--text)]"
+          className="font-[family-name:var(--font-display)] text-2xl font-semibold leading-tight text-[var(--text)]"
         >
           Päivitä kehon seuranta viikonlopun aikana
         </h3>
@@ -36,22 +35,20 @@ export function MeasurementReminderDialog({
           Kirjaa paino ja vyötärö kerran viikossa. Kun tiedot ovat ajan tasalla,
           kehon seuranta, kehitysgraafit ja kaloriarvio pysyvät hyödyllisinä.
         </p>
-        <div className="mt-4 grid gap-3 sm:grid-cols-2">
-          <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface-2)] px-4 py-3">
-            <p className="text-[11px] font-semibold tracking-[0.04em] text-[var(--text-subtle)]">Paino</p>
-            <p className="mt-1 text-sm font-semibold text-[var(--text)]">
-              {weightDue ? "Päivitä tämän viikonlopun aikana" : "Tämän viikon merkintä on kunnossa"}
+        <div className="mt-4 grid gap-4 divide-y divide-[var(--border)] sm:grid-cols-2 sm:divide-y-0 sm:divide-x">
+          <div className="sm:pr-4">
+            <p className="text-sm font-semibold text-[var(--text)]">
+              Paino — {weightDue ? "päivitä tänä viikonloppuna" : "tämän viikon merkintä kunnossa"}
             </p>
-            <p className="mt-2 text-xs leading-5 text-[var(--text-muted)]">
+            <p className="mt-1.5 text-xs leading-5 text-[var(--text-muted)]">
               Mittaa aamulla vessassa käynnin jälkeen ennen syömistä tai juomista.
             </p>
           </div>
-          <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface-2)] px-4 py-3">
-            <p className="text-[11px] font-semibold tracking-[0.04em] text-[var(--text-subtle)]">Vyötärö</p>
-            <p className="mt-1 text-sm font-semibold text-[var(--text)]">
-              {waistDue ? "Päivitä tämän viikonlopun aikana" : "Tämän viikon merkintä on kunnossa"}
+          <div className="pt-4 sm:pt-0 sm:pl-4">
+            <p className="text-sm font-semibold text-[var(--text)]">
+              Vyötärö — {waistDue ? "päivitä tänä viikonloppuna" : "tämän viikon merkintä kunnossa"}
             </p>
-            <p className="mt-2 text-xs leading-5 text-[var(--text-muted)]">
+            <p className="mt-1.5 text-xs leading-5 text-[var(--text-muted)]">
               Ota mitta navan alapuolelta vyötärön kohdalta, puhalla ilmat pois, vedä mitta kevyesti napakaksi ja kirjaa lukema siitä.
             </p>
           </div>

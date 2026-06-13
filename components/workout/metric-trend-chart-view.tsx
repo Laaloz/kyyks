@@ -124,7 +124,7 @@ export function MetricTrendChartView({
 
   return (
     <div className="mt-3 min-w-0 max-w-full overflow-hidden [contain:inline-size]" role="img" aria-label={ariaLabel}>
-      <div className="h-60 min-h-[15rem] min-w-0 max-w-full w-full overflow-hidden rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-3">
+      <div className="h-60 min-h-[15rem] min-w-0 max-w-full w-full overflow-hidden rounded-2xl">
         <div className="h-full min-w-0 max-w-full w-full overflow-hidden pr-2 sm:pr-3">
           <ResponsiveContainer width="100%" height="100%">
             <LineChart

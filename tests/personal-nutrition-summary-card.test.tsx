@@ -43,12 +43,16 @@ function createState(user: UserProfile): AppState {
   };
 }
 
-function getByExactTextContent(text: string) {
-  return screen.getByText((_, element) => element?.tagName === "P" && element.textContent === text);
+// Intl.NumberFormat("fi-FI") groups thousands with a non-breaking space, so we
+// normalise it to a plain space before comparing rendered text content.
+function normalizeSpaces(value: string) {
+  return value.replace(/\s/g, " ");
 }
 
-function getAllByExactTextContent(text: string) {
-  return screen.getAllByText((_, element) => element?.tagName === "P" && element.textContent === text);
+function getByExactTextContent(text: string) {
+  return screen.getByText(
+    (_, element) => element?.tagName === "P" && normalizeSpaces(element.textContent ?? "") === text,
+  );
 }
 
 afterEach(() => {
@@ -56,7 +60,7 @@ afterEach(() => {
 });
 
 describe("PersonalNutritionSummaryCard", () => {
-  it("renders comparison cards and highlights the active goal from nutrition profile", () => {
+  it("renders comparison list and highlights the active goal from nutrition profile", () => {
     const user = createUser();
     const state = createState(user);
     state.nutritionProfiles = [
@@ -83,12 +87,13 @@ describe("PersonalNutritionSummaryCard", () => {
     render(<PersonalNutritionSummaryCard state={state} user={user} />);
 
     expect(screen.getByText("Päivän energiasuositus")).toBeInTheDocument();
-    expect(screen.getByText("Profiilitavoite: Kasvatus")).toBeInTheDocument();
-    expect(screen.getByText("Suositukset eri vaiheisiin")).toBeInTheDocument();
+    expect(screen.getByText("Vertaile tavoitteita")).toBeInTheDocument();
     expect(screen.getAllByText("Nykyinen")).toHaveLength(1);
-    expect(getByExactTextContent("3 200")).toBeInTheDocument();
+    // Hero shows the manual-override target (3200), rounded to the nearest 50.
+    expect(getByExactTextContent("3 200")).toBeInTheDocument();
     expect(screen.getByText("Pudotus")).toBeInTheDocument();
     expect(screen.getByText("Ylläpito")).toBeInTheDocument();
+    // The active goal label appears both in the header and the comparison list.
     expect(screen.getAllByText("Kasvatus").length).toBeGreaterThan(0);
   });
 
@@ -98,9 +103,12 @@ describe("PersonalNutritionSummaryCard", () => {
 
     render(<PersonalNutritionSummaryCard state={state} user={user} />);
 
-    expect(getAllByExactTextContent("2 850")).toHaveLength(2);
-    expect(getByExactTextContent("2 400")).toBeInTheDocument();
-    expect(getByExactTextContent("3 050")).toBeInTheDocument();
+    // Hero shows the active (maintain) target rounded to the nearest 50.
+    expect(getByExactTextContent("2 850")).toBeInTheDocument();
+    // The comparison list shows all three rounded targets (number + "kcal" suffix).
+    expect(getByExactTextContent("2 400kcal")).toBeInTheDocument();
+    expect(getByExactTextContent("2 850kcal")).toBeInTheDocument();
+    expect(getByExactTextContent("3 050kcal")).toBeInTheDocument();
   });
 
   it("shows missing data guidance and opens settings callback", () => {

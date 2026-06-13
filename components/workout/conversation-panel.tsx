@@ -5,7 +5,7 @@ import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode }
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Card, CardDescription, CardTitle } from "@/components/ui/card";
+import { Card, CardTitle } from "@/components/ui/card";
 import { Label } from "@/components/ui/field";
 import { InlineFeedback } from "@/components/workout/inline-feedback";
 import { isConversationEntryNotifiable } from "@/lib/conversation";
@@ -128,18 +128,13 @@ export function ConversationPanel({
   };
 
   const placeholder = getConversationComposerPlaceholder(currentRole);
-  const hasHeader = Boolean(heading || description || headerSlot);
+  const hasHeader = Boolean(heading || headerSlot);
 
   return (
-    <Card className={cn("flex h-full min-h-0 w-full flex-col overflow-hidden border-[var(--border-strong)]", className)}>
+    <Card className={cn("flex h-full min-h-0 w-full flex-col overflow-hidden", className)}>
       {hasHeader ? (
         <div className="mb-4 flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-          {heading || description ? (
-            <div>
-              {heading ? <CardTitle className="text-2xl">{heading}</CardTitle> : null}
-              {description ? <CardDescription className="mt-2 max-w-2xl">{description}</CardDescription> : null}
-            </div>
-          ) : null}
+          {heading ? <CardTitle>{heading}</CardTitle> : null}
           {headerSlot}
         </div>
       ) : null}
@@ -153,7 +148,7 @@ export function ConversationPanel({
             groupedEntries.map((group) => (
               <div key={group.key} className="space-y-2.5">
                 <div className="flex justify-center">
-                  <div className="rounded-full border border-[var(--border)] bg-[var(--surface)] px-3 py-1 text-[11px] font-medium text-[var(--text-subtle)]">
+                  <div className="rounded-full bg-[var(--surface-2)] px-3 py-1 text-[11px] font-medium text-[var(--text-subtle)]">
                     {group.label}
                   </div>
                 </div>
@@ -178,7 +173,7 @@ export function ConversationPanel({
         <div className="border-t border-[var(--border)] bg-[var(--surface)] pt-3">
           <div className="flex items-end gap-2">
             <div
-              className={`flex min-w-0 flex-1 items-center border border-[var(--border)] bg-[var(--surface-2)] px-3 py-1.5 transition-all duration-200 ease-out ${
+              className={`flex min-w-0 flex-1 items-center bg-[var(--surface-2)] px-3 py-1.5 transition-all duration-200 ease-out ${
                 isExpandedDraft ? "rounded-[1.4rem]" : "rounded-full"
               }`}
             >
@@ -274,10 +269,10 @@ function ConversationEntryCard({
         <ConversationAvatar src={avatarSrc} label={avatarLabel} alt={authorName} />
       ) : null}
       <div
-        className={`max-w-[min(34rem,80%)] rounded-[1.1rem] px-3 py-2 shadow-[0_8px_24px_-18px_var(--shadow)] ${
+        className={`max-w-[min(34rem,80%)] rounded-[1.1rem] px-3 py-2 ${
           isOwnMessage
-            ? "border border-[color-mix(in_srgb,var(--accent)_24%,var(--border))] bg-[color-mix(in_srgb,var(--accent)_14%,var(--surface))]"
-            : "border border-[var(--border)] bg-[var(--surface)]"
+            ? "bg-[var(--accent-soft)]"
+            : "bg-[var(--surface-2)]"
         }`}
       >
         <div className="flex flex-wrap items-center gap-2">
@@ -315,7 +310,7 @@ function ConversationAvatar({
   alt: string;
 }) {
   return (
-    <div className="flex size-8 shrink-0 items-center justify-center overflow-hidden rounded-full border border-[var(--border-strong)] bg-[var(--surface)] text-[10px] font-semibold text-[var(--text-subtle)] shadow-[0_8px_18px_-20px_var(--shadow)]">
+    <div className="flex size-8 shrink-0 items-center justify-center overflow-hidden rounded-full bg-[var(--surface-2)] text-[10px] font-semibold text-[var(--text-subtle)]">
       {src ? (
         <img src={src} alt="" className="size-full object-cover" />
       ) : (
