@@ -6,6 +6,7 @@ import {
   Check,
   CircleDot,
   ChevronDown,
+  ChevronRight,
   ChevronUp,
   Dumbbell,
   Flame,
@@ -31,6 +32,7 @@ import {
   useRef,
   useState,
 } from "react";
+import { createPortal } from "react-dom";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -40,13 +42,13 @@ import { bodyMeasurementSchema } from "@/components/workout/schemas";
 import { InfoTooltip } from "@/components/ui/tooltip";
 import { AthleteSessionPanel } from "@/components/workout/athlete/session-panel";
 import { ConversationPanel } from "@/components/workout/conversation-panel";
-import { MetricTrendChart } from "@/components/workout/metric-trend-chart";
 import { DragNumber } from "@/components/ui/drag-number";
 import { ExerciseProgressView } from "@/components/workout/exercise-progress-view";
 import { NutritionView } from "@/components/workout/nutrition-view";
 import { estimateStrengthCalories, getMeasurementsForUser, getWeightAtMoment } from "@/lib/body-metrics";
 import { calculateSessionDurationSeconds, getSessionProgress } from "@/lib/domain";
 import { buildExerciseProgressCatalog, type ExerciseProgressCatalog } from "@/lib/exercise-progress";
+import { getMeasurementReminderState } from "@/lib/measurement-reminder";
 import { withMinimumDelay } from "@/lib/min-delay";
 import { deriveProgramWorkoutGuidance } from "@/lib/program-workout-guidance";
 import { isProgramActive } from "@/lib/program-status";
@@ -67,6 +69,52 @@ type WorkoutOrderMetadata = {
   primaryTimestamp: string;
   secondaryTimestamp: string;
 };
+
+// Keho-näkymän kevyt trendi (prototyyppi): siisti viiva + korostettu päätepiste.
+// SVG venyy täysleveäksi (preserveAspectRatio none + non-scaling-stroke); päätepiste
+// HTML-pisteenä jottei se vääristy venytyksessä.
+function MeasurementSparkline({ points }: { points: Array<{ date: string; value: number }> }) {
+  if (points.length < 2) {
+    return (
+      <p className="py-8 text-center text-sm text-[var(--text-subtle)]">
+        Lisää mittauksia, niin kehitys piirtyy tähän.
+      </p>
+    );
+  }
+
+  const values = points.map((point) => point.value);
+  const min = Math.min(...values);
+  const max = Math.max(...values);
+  const range = max - min || 1;
+  const px = (index: number) => (index / (points.length - 1)) * 100;
+  const py = (value: number) => 10 + (1 - (value - min) / range) * 80;
+  const path = points
+    .map((point, index) => `${index === 0 ? "M" : "L"}${px(index).toFixed(2)} ${py(point.value).toFixed(2)}`)
+    .join(" ");
+  const lastLeft = px(points.length - 1);
+  const lastTop = py(points[points.length - 1]!.value);
+
+  return (
+    <div className="relative h-24 w-full">
+      <svg viewBox="0 0 100 100" className="absolute inset-0 h-full w-full" preserveAspectRatio="none" aria-hidden="true">
+        <path
+          d={path}
+          fill="none"
+          stroke="var(--accent)"
+          strokeWidth={2.5}
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          vectorEffect="non-scaling-stroke"
+        />
+      </svg>
+      <span
+        className="absolute size-3 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-[var(--surface)] bg-[var(--accent)]"
+        style={{ left: `${lastLeft}%`, top: `${lastTop}%` }}
+        aria-hidden="true"
+      />
+    </div>
+  );
+}
 
 function CoachInstructionDialog({
   exerciseName,
@@ -438,7 +486,7 @@ export function AthleteDashboard({
   const [measurementMessage, setMeasurementMessage] = useState("");
   const [measurementMessageTone, setMeasurementMessageTone] = useState<MeasurementMessageTone>("info");
   const [isSavingMeasurements, setIsSavingMeasurements] = useState(false);
-  const [isMeasurementFormExpanded, setIsMeasurementFormExpanded] = useState(false);
+  const [isMeasurementSheetOpen, setIsMeasurementSheetOpen] = useState(false);
   const [activeMeasurementTrend, setActiveMeasurementTrend] = useState<"weight" | "waist">("weight");
   const [extraActivityType, setExtraActivityType] = useState<ExtraActivityType>("run");
   const [extraActivityDurationMinutes, setExtraActivityDurationMinutes] = useState("30");
@@ -501,7 +549,7 @@ export function AthleteDashboard({
     setMeasurementMessageTone("info");
   }, [currentUser?.id]);
   useEffect(() => {
-    setIsMeasurementFormExpanded(false);
+    setIsMeasurementSheetOpen(false);
     setActiveMeasurementTrend("weight");
   }, [currentUser?.id]);
   useEffect(() => {
@@ -560,7 +608,7 @@ export function AthleteDashboard({
       return;
     }
 
-    setIsMeasurementFormExpanded(true);
+    setIsMeasurementSheetOpen(true);
 
     const node = measurementsSectionRef.current;
     if (!node) {
@@ -833,23 +881,7 @@ export function AthleteDashboard({
       setPendingStartWorkoutId(optimisticStartedWorkout.id);
     }
   }, [athleteLogMode, pendingStartWorkoutId, pendingWorkoutTransition, selectedWorkoutId, workouts]);
-  const parseMeasurementField = (value: string) => {
-    if (!value.trim()) {
-      return undefined;
-    }
-
-    const nextValue = Number(value.replace(",", "."));
-    return Number.isFinite(nextValue) ? nextValue : undefined;
-  };
-  const nextWeightKg = parseMeasurementField(measurementDraft.weightKg);
-  const nextWaistCm = parseMeasurementField(measurementDraft.waistCm);
   const canTrackOwnMeasurements = canTrackOwnTraining(currentUser?.role);
-  const isMeasurementDirty =
-    canTrackOwnMeasurements &&
-    (currentUser.weightKg !== nextWeightKg ||
-      latestWaistCm !== nextWaistCm);
-  const measurementDisclosureButtonId = "overview-measurements-disclosure";
-  const measurementDisclosurePanelId = "overview-measurements-panel";
   const weightTrendPoints = useMemo(
     () =>
       currentUser
@@ -878,18 +910,80 @@ export function AthleteDashboard({
         : [],
     [bodyMeasurements, currentUser],
   );
-  const volumeTrendPoints = useMemo(
-    () =>
-      [...workouts]
-        .filter((workout) => workout.status === "completed")
-        .map((workout) => ({
-          date: workout.completedAt ?? sessionByWorkoutId.get(workout.id)?.completedAt ?? getWorkoutOrderMetadata(workout).primaryTimestamp,
-          value: workoutInsights.get(workout.id)?.liftedKg ?? 0,
-        }))
-        .sort((left, right) => left.date.localeCompare(right.date))
-        .slice(-12),
-    [getWorkoutOrderMetadata, sessionByWorkoutId, workoutInsights, workouts],
+  // Keho-näkymä (prototyyppi): valitun mittarin nykyarvo, ~8 vk muutos, merkinnät.
+  const measurementReminderState = useMemo(
+    () => (currentUser ? getMeasurementReminderState(state, currentUser) : null),
+    [currentUser, state],
   );
+  const weeklyRemindersEnabled = currentUser?.settings?.weeklyMeasurementReminders ?? true;
+  const showMeasurementReminderCard =
+    !readOnly && weeklyRemindersEnabled && Boolean(measurementReminderState?.isDue);
+  const bodyMetric = activeMeasurementTrend; // "weight" | "waist"
+  const bodyMetricUnit = bodyMetric === "weight" ? "kg" : "cm";
+  const bodyMetricPoints = bodyMetric === "weight" ? weightTrendPoints : waistTrendPoints;
+  const bodyMetricCurrentValue =
+    bodyMetricPoints.length > 0
+      ? bodyMetricPoints[bodyMetricPoints.length - 1]!.value
+      : bodyMetric === "weight"
+        ? currentUser?.weightKg
+        : latestWaistCm;
+  const bodyMetricDelta =
+    bodyMetricPoints.length >= 2
+      ? bodyMetricPoints[bodyMetricPoints.length - 1]!.value - bodyMetricPoints[0]!.value
+      : null;
+  const bodyMetricWeeks =
+    bodyMetricPoints.length >= 2
+      ? Math.max(
+          1,
+          Math.round(
+            (Date.parse(bodyMetricPoints[bodyMetricPoints.length - 1]!.date) - Date.parse(bodyMetricPoints[0]!.date)) /
+              (7 * 24 * 60 * 60 * 1000),
+          ),
+        )
+      : null;
+  const bodyMetricEntries = useMemo(
+    () =>
+      bodyMeasurements
+        .filter((entry) => (bodyMetric === "weight" ? entry.weightKg : entry.waistCm) !== undefined)
+        .slice(0, 12),
+    [bodyMeasurements, bodyMetric],
+  );
+  const handleSaveMeasurement = async () => {
+    const parsed = bodyMeasurementSchema.safeParse({
+      heightCm: "",
+      weightKg: measurementDraft.weightKg,
+      waistCm: measurementDraft.waistCm,
+    });
+    if (!parsed.success) {
+      setMeasurementMessage(parsed.error.issues[0]?.message ?? "Tarkista mittatiedot ja yritä uudelleen.");
+      setMeasurementMessageTone("error");
+      return;
+    }
+
+    setIsSavingMeasurements(true);
+    try {
+      const measurementInput: { heightCm?: number; weightKg?: number; waistCm?: number } = {};
+      if (parsed.data.weightKg !== undefined) {
+        measurementInput.weightKg = parsed.data.weightKg;
+      }
+      if (parsed.data.waistCm !== undefined) {
+        measurementInput.waistCm = parsed.data.waistCm;
+      }
+
+      const result = await withMinimumDelay(updateCurrentUserMeasurements(measurementInput));
+      setMeasurementMessage(result.ok ? "Mittatiedot tallennettu." : result.message);
+      setMeasurementMessageTone(result.ok ? "success" : "error");
+      if (result.ok) {
+        setMeasurementDraft((previous) => ({ ...previous, weightKg: "", waistCm: "" }));
+        setIsMeasurementSheetOpen(false);
+        notify({ tone: "success", message: "Mittaus tallennettu." });
+      } else {
+        notify({ tone: "danger", message: result.message });
+      }
+    } finally {
+      setIsSavingMeasurements(false);
+    }
+  };
   const openWorkoutView = (
     scheduledWorkoutId: string,
     options?: { correctionMode?: boolean; returnTab?: AthleteLogTab },
@@ -1523,284 +1617,204 @@ export function AthleteDashboard({
       {view === "overview" && currentUser ? <NutritionView user={currentUser} readOnly={readOnly} dayOnly /> : null}
 
       {view === "measurements" && canTrackOwnMeasurements ? (
-        <div
-          ref={measurementsSectionRef}
-          id="overview-measurements"
-        >
-          <Card className="scroll-mt-24 border-[var(--border-strong)]">
-            <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
-              <div>
-                <CardTitle>Omat mitat ja kehitys</CardTitle>
-            </div>
-            <div className="grid w-full gap-2 sm:grid-cols-2 lg:grid-cols-4">
-              <div className="rounded-xl border border-dashed border-[var(--border)] bg-[color-mix(in_srgb,var(--surface-2)_74%,var(--surface))] px-2.5 py-2">
-                <div className="flex items-center justify-between gap-2">
-                  <p className="text-[11px] font-semibold tracking-[0.04em] text-[var(--text-subtle)]">Pituus</p>
-                  <Badge className="border-[var(--border)] bg-[var(--surface)] px-2 py-0.5 text-[9px] text-[var(--text-subtle)]">
-                    Profiili
-                  </Badge>
-                </div>
-                <p className="mt-1 text-base font-semibold text-[var(--text)]">
-                  {currentUser.heightCm !== undefined ? `${currentUser.heightCm} cm` : "Ei asetettu"}
-                </p>
-              </div>
-              <div className="rounded-xl border border-[var(--border)] bg-[var(--surface-2)] px-2.5 py-2">
-                <p className="text-[11px] font-semibold tracking-[0.04em] text-[var(--text-subtle)]">Paino</p>
-                <p className="mt-1 text-base font-semibold text-[var(--text)]">
-                  {currentUser.weightKg !== undefined ? `${currentUser.weightKg} kg` : "Ei asetettu"}
-                </p>
-              </div>
-              <div className="rounded-xl border border-[var(--border)] bg-[var(--surface-2)] px-2.5 py-2">
-                <p className="text-[11px] font-semibold tracking-[0.04em] text-[var(--text-subtle)]">Vyötärö</p>
-                <p className="mt-1 text-base font-semibold text-[var(--text)]">
-                  {latestWaistCm !== undefined ? `${latestWaistCm} cm` : "Ei asetettu"}
-                </p>
-              </div>
-              <div className="rounded-xl border border-[var(--border)] bg-[var(--surface-2)] px-2.5 py-2">
-                <p className="text-[11px] font-semibold tracking-[0.04em] text-[var(--text-subtle)]">Viimeisin mittaus</p>
-                <p className="mt-1 text-base font-semibold text-[var(--text)]">
-                  {latestBodyMeasurement ? formatDate(latestBodyMeasurement.measuredAt) : "Ei vielä"}
-                </p>
-              </div>
-            </div>
-          </div>
-          {readOnly ? null : (
-          <div className="mt-4 overflow-hidden rounded-xl border border-[var(--border)] bg-[var(--surface-2)]">
-            <div className="flex items-start gap-2 p-3">
-              <button
+        <div ref={measurementsSectionRef} id="overview-measurements" className="scroll-mt-24 space-y-4">
+          <div className="flex items-center justify-between gap-3">
+            <CardTitle className="text-2xl">Keho</CardTitle>
+            {!readOnly ? (
+              <Button
                 type="button"
-                id={measurementDisclosureButtonId}
-                aria-expanded={isMeasurementFormExpanded}
-                aria-controls={measurementDisclosurePanelId}
-                className="group min-w-0 flex-1 rounded-xl py-0 text-left text-inherit transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--background)]"
-                onClick={() => setIsMeasurementFormExpanded((current) => !current)}
+                variant="secondary"
+                className="gap-1.5 !border-[var(--accent)] !bg-[color-mix(in_srgb,var(--accent)_12%,var(--surface))] !text-[var(--accent)]"
+                onClick={() => {
+                  setMeasurementMessage("");
+                  setMeasurementMessageTone("info");
+                  setIsMeasurementSheetOpen(true);
+                }}
               >
-                <span className="block text-sm font-semibold text-[var(--text)]">Kirjaa uusi mittaus</span>
-                  <span className="mt-0.5 block text-xs text-[var(--text-muted)]">
-                  Päivitä paino tai vyötärö. Voit täyttää vain muuttuneet kentät.
-                </span>
-              </button>
-              <button
-                type="button"
-                className="grid size-8 shrink-0 place-items-center rounded-full border border-[var(--border)] bg-[var(--surface)] text-[var(--text-subtle)] transition hover:border-[var(--border-strong)] hover:bg-[var(--surface-3)] hover:text-[var(--text)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--background)]"
-                aria-label={isMeasurementFormExpanded ? "Sulje uusi mittaus" : "Avaa uusi mittaus"}
-                aria-expanded={isMeasurementFormExpanded}
-                aria-controls={measurementDisclosurePanelId}
-                onClick={() => setIsMeasurementFormExpanded((current) => !current)}
-              >
-                {isMeasurementFormExpanded ? (
-                  <ChevronUp className="size-4" aria-hidden="true" />
-                ) : (
-                  <ChevronDown className="size-4" aria-hidden="true" />
-                )}
-              </button>
-            </div>
-            {isMeasurementFormExpanded ? (
-              <div
-                id={measurementDisclosurePanelId}
-                role="region"
-                aria-labelledby={measurementDisclosureButtonId}
-                className="border-t border-[var(--border)] px-3 pb-3 pt-3"
-              >
-                <div className="grid gap-3 md:grid-cols-2">
-                  <div>
-                    <Label htmlFor="overview-weight-kg">Paino (kg, valinnainen)</Label>
-                    <Input
-                      id="overview-weight-kg"
-                      type="number"
-                      inputMode="decimal"
-                      min={20}
-                      max={350}
-                      step="0.1"
-                      placeholder="Esim. 72.4"
-                      value={measurementDraft.weightKg}
-                      onChange={(event) => {
-                        setMeasurementDraft((previous) => ({ ...previous, weightKg: event.target.value }));
-                        setMeasurementMessage("");
-                        setMeasurementMessageTone("info");
-                      }}
-                    />
-                  </div>
-                  <div>
-                    <Label htmlFor="overview-waist-cm">Vyötärö (cm, valinnainen)</Label>
-                    <Input
-                      id="overview-waist-cm"
-                      type="number"
-                      inputMode="decimal"
-                      min={30}
-                      max={250}
-                      step="0.5"
-                      placeholder="Esim. 81"
-                      value={measurementDraft.waistCm}
-                      onChange={(event) => {
-                        setMeasurementDraft((previous) => ({ ...previous, waistCm: event.target.value }));
-                        setMeasurementMessage("");
-                        setMeasurementMessageTone("info");
-                      }}
-                    />
-                  </div>
-                </div>
-                <div className="mt-3 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                  <p
-                    aria-live="polite"
-                    className={`min-h-5 text-sm ${
-                      !measurementMessage
-                        ? "text-[var(--text-subtle)]"
-                        : measurementMessageTone === "success"
-                          ? "text-[var(--success)]"
-                          : measurementMessageTone === "error"
-                            ? "text-[var(--danger)]"
-                            : "text-[var(--text-subtle)]"
-                    }`}
-                  >
-                    {measurementMessage ||
-                      (isMeasurementDirty
-                        ? "Tallennus päivittää mittauksen ja trendin."
-                        : "Täytä paino tai vyötärö tallentaaksesi uuden mittauksen.")}
-                  </p>
-                  <Button
-                    type="button"
-                    variant={isMeasurementDirty ? "primary" : "secondary"}
-                    disabled={!isMeasurementDirty}
-                    loading={isSavingMeasurements}
-                    loadingText="Tallennetaan mittatietoja..."
-                    className="w-full sm:w-auto"
-                    onClick={async () => {
-                      const parsed = bodyMeasurementSchema.safeParse({
-                        heightCm: "",
-                        weightKg: measurementDraft.weightKg,
-                        waistCm: measurementDraft.waistCm,
-                      });
-                      if (!parsed.success) {
-                        setMeasurementMessage(parsed.error.issues[0]?.message ?? "Tarkista mittatiedot ja yritä uudelleen.");
-                        setMeasurementMessageTone("error");
-                        return;
-                      }
-
-                      setIsSavingMeasurements(true);
-                      try {
-                        const measurementInput: { heightCm?: number; weightKg?: number; waistCm?: number } = {};
-                        if (parsed.data.heightCm !== undefined) {
-                          measurementInput.heightCm = parsed.data.heightCm;
-                        }
-                        if (parsed.data.weightKg !== undefined) {
-                          measurementInput.weightKg = parsed.data.weightKg;
-                        }
-                        if (parsed.data.waistCm !== undefined) {
-                          measurementInput.waistCm = parsed.data.waistCm;
-                        }
-
-                        const result = await withMinimumDelay(updateCurrentUserMeasurements(measurementInput));
-                        setMeasurementMessage(result.ok ? "Mittatiedot tallennettu." : result.message);
-                        setMeasurementMessageTone(result.ok ? "success" : "error");
-                      } finally {
-                        setIsSavingMeasurements(false);
-                      }
-                    }}
-                  >
-                    Tallenna mittatiedot
-                  </Button>
-                </div>
-              </div>
+                <Plus className="size-4" aria-hidden="true" />
+                Mittaus
+              </Button>
             ) : null}
           </div>
-          )}
-          <div className="mt-4 rounded-xl border border-[var(--border)] bg-[var(--surface-2)] p-3">
-            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-              <div>
-                <p className="text-sm font-semibold text-[var(--text)]">Kehitystrendi</p>
-                <p className="mt-0.5 text-xs text-[var(--text-muted)]">Valitse paino tai vyötärö.</p>
-              </div>
-              <div className="grid w-full grid-cols-2 rounded-xl border border-[var(--border)] bg-[var(--surface)] p-1 sm:w-auto">
-                <button
-                  type="button"
-                  className={`w-full rounded-lg px-3 py-2 text-sm font-medium transition ${
-                    activeMeasurementTrend === "weight"
-                      ? "bg-[color-mix(in_srgb,var(--accent)_10%,var(--surface))] text-[var(--accent)]"
-                      : "text-[var(--text-muted)]"
-                  }`}
-                  aria-pressed={activeMeasurementTrend === "weight"}
-                  onClick={() => setActiveMeasurementTrend("weight")}
+
+          {showMeasurementReminderCard ? (
+            <button
+              type="button"
+              className="flex w-full items-center gap-3 rounded-2xl border border-[var(--border)] bg-[var(--surface)] px-4 py-3 text-left shadow-[0_1px_2px_var(--shadow-soft)] transition hover:border-[var(--border-strong)]"
+              onClick={() => {
+                setMeasurementMessage("");
+                setMeasurementMessageTone("info");
+                setIsMeasurementSheetOpen(true);
+              }}
+            >
+              <span className="size-2.5 shrink-0 rounded-full bg-[var(--success)]" aria-hidden="true" />
+              <span className="min-w-0 flex-1">
+                <span className="block font-semibold text-[var(--text)]">Viikkomittaus odottaa</span>
+                <span className="mt-0.5 block text-sm text-[var(--text-subtle)]">Vie noin 20 sekuntia</span>
+              </span>
+              <ChevronRight className="size-5 shrink-0 text-[var(--text-subtle)]" aria-hidden="true" />
+            </button>
+          ) : null}
+
+          <Card>
+            <div className="flex items-start justify-between gap-3">
+              <p className="font-[family-name:var(--font-display)] text-5xl font-bold leading-none tabular-nums text-[var(--text)]">
+                {bodyMetricCurrentValue !== undefined ? bodyMetricCurrentValue : "—"}
+                {bodyMetricCurrentValue !== undefined ? (
+                  <span className="ml-1.5 text-xl font-semibold text-[var(--text-subtle)]">{bodyMetricUnit}</span>
+                ) : null}
+              </p>
+              {bodyMetricDelta !== null && bodyMetricWeeks !== null ? (
+                <span
+                  className={cn(
+                    "shrink-0 rounded-full px-3 py-1 text-sm font-semibold tabular-nums",
+                    bodyMetricDelta <= 0
+                      ? "bg-[color-mix(in_srgb,var(--success)_18%,var(--surface))] text-[var(--success)]"
+                      : "bg-[var(--surface-2)] text-[var(--text-muted)]",
+                  )}
                 >
-                  Paino
-                </button>
-                <button
-                  type="button"
-                  className={`w-full rounded-lg px-3 py-2 text-sm font-medium transition ${
-                    activeMeasurementTrend === "waist"
-                      ? "bg-[color-mix(in_srgb,var(--accent)_10%,var(--surface))] text-[var(--accent)]"
-                      : "text-[var(--text-muted)]"
-                  }`}
-                  aria-pressed={activeMeasurementTrend === "waist"}
-                  onClick={() => setActiveMeasurementTrend("waist")}
-                >
-                  Vyötärö
-                </button>
-              </div>
+                  {bodyMetricDelta <= 0 ? "−" : "+"}
+                  {Math.abs(bodyMetricDelta).toFixed(1)} {bodyMetricUnit} / {bodyMetricWeeks} vko
+                </span>
+              ) : null}
             </div>
-            <div className="mt-3">
-              {activeMeasurementTrend === "weight" ? (
-                <>
-                  <p className="text-xs font-semibold tracking-[0.04em] text-[var(--text-subtle)]">Painotrendi</p>
-                  <MetricTrendChart
-                    points={weightTrendPoints}
-                    ariaLabel="Painon kehitystrendi"
-                    emptyMessage="Lisää paino viimeisimpään mittaukseen, niin kehitystrendi alkaa piirtyä tähän."
-                    helperText="Alarivillä näkyy kuukausi ja vuosi, oikealla painon asteikko."
-                    compactHelperText="Alarivillä näkyy kuukausi ja vuosi. Tarkka arvo näkyy pisteen kohdalla."
-                    valueLabel="Paino"
-                    unit="kg"
-                  />
-                </>
-              ) : activeMeasurementTrend === "waist" ? (
-                <>
-                  <p className="text-xs font-semibold tracking-[0.04em] text-[var(--text-subtle)]">Vyötärötrendi</p>
-                  <MetricTrendChart
-                    points={waistTrendPoints}
-                    ariaLabel="Vyötärön kehitystrendi"
-                    emptyMessage="Lisää vyötärö viimeisimpään mittaukseen, niin kehitystrendi alkaa piirtyä tähän."
-                    helperText="Alarivillä näkyy kuukausi ja vuosi, oikealla vyötärön asteikko."
-                    compactHelperText="Alarivillä näkyy kuukausi ja vuosi. Tarkka arvo näkyy pisteen kohdalla."
-                    valueLabel="Vyötärö"
-                    unit="cm"
-                  />
-                </>
-              ) : (
-                <>
-                  <p className="text-xs font-semibold tracking-[0.04em] text-[var(--text-subtle)]">Vyötärötrendi</p>
-                  <MetricTrendChart
-                    points={waistTrendPoints}
-                    ariaLabel="Vyötärön kehitystrendi"
-                    emptyMessage="Lisää vyötärö viimeisimpään mittaukseen, niin kehitystrendi alkaa piirtyä tähän."
-                    helperText="Alarivillä näkyy kuukausi ja vuosi, oikealla vyötärön asteikko."
-                    compactHelperText="Alarivillä näkyy kuukausi ja vuosi. Tarkka arvo näkyy pisteen kohdalla."
-                    valueLabel="Vyötärö"
-                    unit="cm"
-                  />
-                </>
-              )}
+            <div className="mt-4">
+              <MeasurementSparkline points={bodyMetricPoints} />
             </div>
-          </div>
-          <div className="mt-4 rounded-xl border border-[var(--border)] bg-[var(--surface-2)] p-3">
-            <div>
-              <p className="text-sm font-semibold text-[var(--text)]">Treenisuoritus</p>
-            </div>
-            <div className="mt-3">
-              <p className="text-xs font-semibold tracking-[0.04em] text-[var(--text-subtle)]">Volyymitrendi</p>
-              <MetricTrendChart
-                points={volumeTrendPoints}
-                ariaLabel="Volyymin kehitystrendi"
-                emptyMessage="Kun saat treenejä valmiiksi, volyymitrendi näkyy tässä."
-                helperText="Alarivillä näkyy kuukausi ja vuosi, oikealla volyymin asteikko."
-                compactHelperText="Alarivillä näkyy kuukausi ja vuosi. Tarkka arvo näkyy pisteen kohdalla."
-                valueLabel="Volyymi"
-                unit="kg"
-                decimals={0}
-                useZeroBaseline
-              />
-            </div>
-          </div>
           </Card>
+
+          <div className="grid grid-cols-2 gap-1 rounded-xl bg-[var(--surface-2)] p-1">
+            <button
+              type="button"
+              className={cn(
+                "rounded-lg px-3 py-2.5 text-sm font-semibold transition",
+                bodyMetric === "weight"
+                  ? "bg-[var(--surface)] text-[var(--text)] shadow-[0_1px_3px_var(--shadow-soft)]"
+                  : "text-[var(--text-muted)]",
+              )}
+              aria-pressed={bodyMetric === "weight"}
+              onClick={() => setActiveMeasurementTrend("weight")}
+            >
+              Paino
+            </button>
+            <button
+              type="button"
+              className={cn(
+                "rounded-lg px-3 py-2.5 text-sm font-semibold transition",
+                bodyMetric === "waist"
+                  ? "bg-[var(--surface)] text-[var(--text)] shadow-[0_1px_3px_var(--shadow-soft)]"
+                  : "text-[var(--text-muted)]",
+              )}
+              aria-pressed={bodyMetric === "waist"}
+              onClick={() => setActiveMeasurementTrend("waist")}
+            >
+              Vyötärö
+            </button>
+          </div>
+
+          <div>
+            <p className="px-1 text-xs font-semibold uppercase tracking-[0.06em] text-[var(--text-subtle)]">Merkinnät</p>
+            <Card className="mt-2">
+              {bodyMetricEntries.length > 0 ? (
+                <div className="divide-y divide-[var(--border)]">
+                  {bodyMetricEntries.map((entry) => {
+                    const value = bodyMetric === "weight" ? entry.weightKg : entry.waistCm;
+                    const dateObj = new Date(entry.measuredAt);
+                    const weekdayShort = ["Su", "Ma", "Ti", "Ke", "To", "Pe", "La"];
+                    const label = Number.isFinite(dateObj.getTime())
+                      ? `${weekdayShort[dateObj.getDay()]} ${dateObj.getDate()}.${dateObj.getMonth() + 1}.`
+                      : formatDate(entry.measuredAt);
+                    return (
+                      <div key={entry.id} className="flex items-center justify-between gap-3 py-3">
+                        <span className="text-sm text-[var(--text-muted)]">{label}</span>
+                        <span className="font-[family-name:var(--font-display)] text-base font-bold tabular-nums text-[var(--text)]">
+                          {value} {bodyMetricUnit}
+                        </span>
+                      </div>
+                    );
+                  })}
+                </div>
+              ) : (
+                <p className="py-6 text-center text-sm text-[var(--text-subtle)]">
+                  Ei vielä merkintöjä. Lisää ensimmäinen mittaus.
+                </p>
+              )}
+            </Card>
+          </div>
+
+          {isMeasurementSheetOpen && typeof document !== "undefined"
+            ? createPortal(
+                <div
+                  className="fixed inset-0 z-50 flex items-end justify-center bg-[color:color-mix(in_srgb,var(--background)_48%,transparent)] p-0"
+                  role="presentation"
+                  onClick={() => setIsMeasurementSheetOpen(false)}
+                >
+                  <div
+                    role="dialog"
+                    aria-modal="true"
+                    aria-label="Uusi mittaus"
+                    className="w-full max-w-lg rounded-t-3xl bg-[var(--surface)] p-5 pb-[max(env(safe-area-inset-bottom),1.25rem)] shadow-[0_24px_60px_-24px_var(--shadow)]"
+                    onClick={(event) => event.stopPropagation()}
+                  >
+                    <span className="mx-auto mb-3 block h-1 w-10 rounded-full bg-[var(--border-strong)]" aria-hidden="true" />
+                    <h2 className="font-[family-name:var(--font-display)] text-2xl font-bold text-[var(--text)]">Uusi mittaus</h2>
+                    <p className="mt-1 text-sm text-[var(--text-muted)]">Täytä vain ne, jotka mittasit tänään.</p>
+                    <div className="mt-4 space-y-3">
+                      <div>
+                        <Label htmlFor="measurement-sheet-weight">Paino (kg)</Label>
+                        <Input
+                          id="measurement-sheet-weight"
+                          type="number"
+                          inputMode="decimal"
+                          min={20}
+                          max={350}
+                          step="0.1"
+                          placeholder={currentUser?.weightKg !== undefined ? String(currentUser.weightKg) : "Esim. 72.4"}
+                          value={measurementDraft.weightKg}
+                          onChange={(event) => {
+                            setMeasurementDraft((previous) => ({ ...previous, weightKg: event.target.value }));
+                            setMeasurementMessage("");
+                            setMeasurementMessageTone("info");
+                          }}
+                        />
+                      </div>
+                      <div>
+                        <Label htmlFor="measurement-sheet-waist">Vyötärö (cm)</Label>
+                        <Input
+                          id="measurement-sheet-waist"
+                          type="number"
+                          inputMode="decimal"
+                          min={30}
+                          max={250}
+                          step="0.5"
+                          placeholder={latestWaistCm !== undefined ? String(latestWaistCm) : "Esim. 81"}
+                          value={measurementDraft.waistCm}
+                          onChange={(event) => {
+                            setMeasurementDraft((previous) => ({ ...previous, waistCm: event.target.value }));
+                            setMeasurementMessage("");
+                            setMeasurementMessageTone("info");
+                          }}
+                        />
+                      </div>
+                      {measurementMessage && measurementMessageTone === "error" ? (
+                        <p className="text-sm text-[var(--danger)]">{measurementMessage}</p>
+                      ) : null}
+                      <Button
+                        type="button"
+                        className="w-full"
+                        disabled={measurementDraft.weightKg.trim() === "" && measurementDraft.waistCm.trim() === ""}
+                        loading={isSavingMeasurements}
+                        loadingText="Tallennetaan..."
+                        onClick={() => void handleSaveMeasurement()}
+                      >
+                        Tallenna
+                      </Button>
+                    </div>
+                  </div>
+                </div>,
+                document.body,
+              )
+            : null}
         </div>
       ) : null}
 
