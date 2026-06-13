@@ -207,7 +207,7 @@ export function NutritionView({
 
       {dayOnly || seg === "day" ? (
         <div className="mt-5">
-          {nutritionProfile ? (
+          {!dayOnly && nutritionProfile ? (
             <div className="rounded-2xl bg-[var(--surface-2)] p-4">
               <p className="font-[family-name:var(--font-display)] text-4xl font-bold leading-none tabular-nums text-[var(--text)]">
                 {Math.round(consumed.kcal)}
