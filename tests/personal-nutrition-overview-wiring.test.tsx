@@ -101,39 +101,9 @@ describe("personal nutrition summary overview wiring", () => {
     expect(screen.getByText("PersonalNutritionSummaryCard")).toBeInTheDocument();
   });
 
-  it("keeps coach overview focused on training and measurements", () => {
-    const state = createBaseState();
-    const coachUser = { ...state.users[0], id: "coach_1", role: "coach", email: "coach@example.com" };
-    state.users = [coachUser];
-
-    mockUseAppState.mockReturnValue({
-      currentUser: coachUser,
-      state,
-      notify: vi.fn(),
-      createProgram: vi.fn(),
-      updateProgram: vi.fn(),
-      setProgramStatus: vi.fn(),
-      deleteProgram: vi.fn(),
-      getCoachAthletes: vi.fn(() => []),
-      createInvite: vi.fn(),
-      resendInvite: vi.fn(),
-      startWorkout: vi.fn(),
-      startProgramWorkout: vi.fn(),
-      updateWorkoutDate: vi.fn(),
-      updateWorkoutDuration: vi.fn(),
-      updateWorkoutSet: vi.fn(),
-      saveWorkoutNote: vi.fn(),
-      addConversationComment: vi.fn(),
-      completeWorkout: vi.fn(),
-      cancelWorkout: vi.fn(),
-      deleteWorkout: vi.fn(),
-      markConversationRead: vi.fn(),
-    });
-
-    render(<CoachDashboard view="overview" />);
-    expect(screen.queryByText("PersonalNutritionSummaryCard")).not.toBeInTheDocument();
-    expect(screen.getByText("OwnTrainingOverviewCard")).toBeInTheDocument();
-  });
+  // Vaihe 8: valmentajan oma treeni renderöityy treenaajasovelluksesta (shell
+  // reitittää coach overview → AthleteDashboard), ei enää CoachDashboardista.
+  // Aiempi "coach overview näyttää OwnTrainingOverviewCardin" -testi poistettu.
 
   it("keeps admin own overview focused on training and measurements", () => {
     const state = createBaseState();
