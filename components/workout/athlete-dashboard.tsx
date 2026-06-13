@@ -47,6 +47,7 @@ import { AthleteSessionPanel } from "@/components/workout/athlete/session-panel"
 import { ConversationPanel } from "@/components/workout/conversation-panel";
 import { MetricTrendChart } from "@/components/workout/metric-trend-chart";
 import { DayMealsCard } from "@/components/workout/day-meals-card";
+import { ExerciseProgressView } from "@/components/workout/exercise-progress-view";
 import { NutritionView } from "@/components/workout/nutrition-view";
 import { estimateStrengthCalories, getMeasurementsForUser, getWeightAtMoment } from "@/lib/body-metrics";
 import { calculateSessionDurationSeconds, getSessionProgress } from "@/lib/domain";
@@ -572,7 +573,7 @@ type WorkoutInsight = {
 };
 
 type AthleteLogMode = "overview" | "workout";
-type AthleteLogTab = "training" | "history";
+type AthleteLogTab = "training" | "history" | "exercises";
 type AthleteOverviewFocusTarget = "measurements";
 type MeasurementMessageTone = "info" | "success" | "error";
 type HistoryCalendarCell = {
@@ -2734,7 +2735,7 @@ export function AthleteDashboard({
             <div
               role="tablist"
               aria-label="Treeninäkymän välilehdet"
-              className="grid grid-cols-2 gap-1 rounded-[1.1rem] border border-[color-mix(in_srgb,var(--border)_88%,var(--surface))] bg-[color-mix(in_srgb,var(--surface)_78%,var(--surface-2))] p-1"
+              className="grid grid-cols-3 gap-1 rounded-[1.1rem] border border-[color-mix(in_srgb,var(--border)_88%,var(--surface))] bg-[color-mix(in_srgb,var(--surface)_78%,var(--surface-2))] p-1"
             >
               <button
                 type="button"
@@ -2768,7 +2769,29 @@ export function AthleteDashboard({
               >
                 Historia
               </button>
+              <button
+                type="button"
+                role="tab"
+                id="athlete-log-tab-exercises"
+                aria-selected={athleteLogTab === "exercises"}
+                aria-controls="athlete-log-panel-exercises"
+                className={cn(
+                  "inline-flex min-h-10 items-center justify-center rounded-xl px-3 py-2 text-sm font-semibold transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--background)]",
+                  athleteLogTab === "exercises"
+                    ? "border border-[color-mix(in_srgb,var(--accent)_22%,var(--border))] bg-[color-mix(in_srgb,var(--accent)_10%,var(--surface))] text-[var(--accent)] shadow-[0_8px_18px_-20px_var(--accent)]"
+                    : "border border-transparent bg-transparent text-[var(--text-muted)] hover:border-[var(--border-strong)] hover:bg-[var(--surface)] hover:text-[var(--text)]",
+                )}
+                onClick={() => setAthleteLogTab("exercises")}
+              >
+                Liikkeet
+              </button>
             </div>
+
+            {athleteLogTab === "exercises" ? (
+              <div role="tabpanel" id="athlete-log-panel-exercises" aria-labelledby="athlete-log-tab-exercises">
+                <ExerciseProgressView catalog={exerciseProgressCatalog} />
+              </div>
+            ) : null}
 
             {athleteLogTab === "training" ? (
             <div role="tabpanel" id="athlete-log-panel-training" aria-labelledby="athlete-log-tab-training">
