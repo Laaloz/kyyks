@@ -47,10 +47,12 @@ const clampInt = (value: number, min: number, max: number) =>
   Math.min(max, Math.max(min, Math.round(value)));
 
 // Olemassa olevan ohjelman treenipäivät → editorin luonnos (sarjat + toistohaarukka).
-function planWorkoutsToDraft(plan: TrainingPlan | null): DraftWorkout[] {
+// Ohje haetaan ensisijaisesti ohjelmaan tallennetusta, muuten liikkeen omasta cuesta.
+function planWorkoutsToDraft(plan: TrainingPlan | null, exercises: Exercise[]): DraftWorkout[] {
   if (!plan?.workouts?.length) {
     return [];
   }
+  const cueById = new Map(exercises.map((exercise) => [exercise.id, exercise.cue]));
   return plan.workouts.map((workout) => ({
     uid: makeUid("w"),
     title: workout.name,
@@ -62,7 +64,7 @@ function planWorkoutsToDraft(plan: TrainingPlan | null): DraftWorkout[] {
         uid: makeUid("e"),
         exerciseId: exercise.exerciseId,
         name: exercise.exerciseName,
-        instruction: exercise.instruction,
+        instruction: exercise.instruction?.trim() || (exercise.exerciseId ? cueById.get(exercise.exerciseId) : undefined),
         sets: Math.max(1, exercise.sets.length || 3),
         repsMin: min,
         repsMax: Math.max(min, max),
@@ -136,7 +138,7 @@ export function ProgramEditorOverlay({
 
   const [name, setName] = useState(basePlan?.title ?? "");
   const [assigned, setAssigned] = useState<string[]>(() => groupPlans.map((plan) => plan.athleteId));
-  const [workouts, setWorkouts] = useState<DraftWorkout[]>(() => planWorkoutsToDraft(basePlan));
+  const [workouts, setWorkouts] = useState<DraftWorkout[]>(() => planWorkoutsToDraft(basePlan, exercises));
   const [pickerForWorkout, setPickerForWorkout] = useState<string | null>(null);
   const [pickerQuery, setPickerQuery] = useState("");
   const [newMuscle, setNewMuscle] = useState<MuscleGroupKey | "">("");
@@ -231,7 +233,8 @@ export function ProgramEditorOverlay({
   };
 
   const addExerciseFromBank = (exercise: Exercise) =>
-    appendExercise({ exerciseId: exercise.id, name: exercise.name, sets: 3, repsMin: 8, repsMax: 8 });
+    // Tuo liikkeen oma vakio-ohje (cue) valmiiksi kenttään — muokattavissa.
+    appendExercise({ exerciseId: exercise.id, name: exercise.name, instruction: exercise.cue, sets: 3, repsMin: 8, repsMax: 8 });
 
   const addCustomExercise = () => {
     const name = pickerQuery.trim();
