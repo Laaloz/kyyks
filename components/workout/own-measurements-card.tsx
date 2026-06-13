@@ -159,11 +159,7 @@ export function OwnMeasurementsCard({ sectionId = "overview-measurements" }: { s
     <Card id={sectionId} className="scroll-mt-24 border-[var(--border-strong)]">
       <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
         <div>
-          <p className="text-xs font-semibold tracking-[0.04em] text-[var(--text-subtle)]">Kehon seuranta</p>
-          <CardTitle className="mt-2 text-2xl">Omat mitat ja kehitys</CardTitle>
-          <CardDescription className="mt-2 max-w-3xl">
-            Näet viimeisimmät mittasi ja niiden kehityksen.
-          </CardDescription>
+          <CardTitle>Omat mitat ja kehitys</CardTitle>
         </div>
         <div className="grid w-full gap-2 sm:grid-cols-2 lg:grid-cols-4">
           <div className="rounded-2xl border border-dashed border-[var(--border)] bg-[color-mix(in_srgb,var(--surface-2)_74%,var(--surface))] px-3 py-2.5">

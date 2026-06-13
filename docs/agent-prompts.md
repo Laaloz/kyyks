@@ -182,6 +182,57 @@ principle (Tiimi = athletes; Hallinta = admin).
   redesign. UI and client state only, unless a phase says otherwise.
 - All texts in Finnish, consistent with existing tone.
 
+## Reference pattern — the redesigned Home hero
+The "Tämä viikko" card in athlete-dashboard.tsx (view === "overview") is the
+style baseline every other view must be brought to. Its rules:
+- ONE Card surface; the day strip, progress bar, stats, and CTA sit directly
+  on it — zero nested bordered boxes.
+- Header = title + the one number that matters ("2/3 treeniä"), nothing else.
+  No eyebrow label, no "Yhteenveto"-style section caption, no description
+  sentence that restates the title.
+- Stats are big numbers (text-xl/2xl) with a small caption UNDER them — never
+  a labeled box around them.
+- Progress is a slim accent bar with one line of motivational copy that
+  changes with state (not started / in progress / goal reached 🔥) — never a
+  large gray ring showing 0%.
+- One primary CTA per card, full-width, with at most one short context line.
+
+## Whole-project style refactor (the current mission)
+Sweep every view and bring it to the reference pattern. Order by user value:
+1. athlete-dashboard.tsx remaining overview cards + training/history tabs
+2. athlete/session-panel.tsx (active workout)
+3. nutrition-athlete-card.tsx + personal-nutrition-summary-card.tsx
+4. own-measurements-card.tsx + user-settings-panel.tsx
+5. coach-dashboard.tsx (team views)
+6. nutrition-admin-panel.tsx + admin views
+Per view, apply this checklist and nothing more (no logic changes):
+- [ ] Delete eyebrow caption + description stacks → keep the CardTitle only
+      (keep a description ONLY if it says something the title doesn't).
+- [ ] Unwrap nested bordered boxes onto the card surface.
+- [ ] Convert labeled metric boxes to big-number + caption-under.
+- [ ] Each fact appears once; delete "no data" filler rows.
+- [ ] One primary CTA per card; secondary actions become ghost/menu.
+- [ ] Verify at 360px and ~1280px; run pnpm typecheck && pnpm test.
+Commit per view. A sweep session should finish 1–2 list items, not all six.
+
+## Visual system & content rules (apply to every view you touch)
+- Less chrome, more signal: prefer one surface level per card — avoid boxes
+  inside boxes inside boxes. If a nested box only groups text, remove the box.
+- Show data once: the same fact (date, program, duration, sets) must not
+  appear in both a card header and its expanded body. Expanded = only what
+  the header doesn't show.
+- No filler states: never render "no data for X" rows for optional content
+  (notes, descriptions); render nothing instead. Explicit empty states are
+  only for primary lists where absence needs explanation.
+- All styling through ui/ primitives (Card, Button, Badge, Input, Select,
+  Textarea) and CSS variables; if a view needs a style the primitive lacks,
+  extend the primitive, don't fork classNames in place.
+- Desktop is not stretched mobile: at lg+ use multi-column compositions
+  (summary rail + detail), tighter type scale, hover affordances. Verify
+  changed views at 360px AND ~1280px.
+- Respect prefers-reduced-motion (globals.css handles it; don't add JS
+  animations that bypass CSS).
+
 ## Reliability invariants (verify in every phase; these are release blockers)
 1. Every logged set reaches the server: the set-draft queue retries with
    backoff and flushes with keepalive on pagehide/visibilitychange (implemented
@@ -206,10 +257,21 @@ principle (Tiimi = athletes; Hallinta = admin).
   (sign-in flow + SIGNED_IN event no longer double-fetch); tab-focus refresh
   uses mode=workouts unless the full snapshot is >5 min old; ingredient
   catalog pages fetched in parallel (count + Promise.all) in training-sync.ts.
-- Phase 1 partial: history cards show duration + best-set chips (WorkoutInsight
-  has bestSet); occurrence prev/next (Vanhempi/Uudempi) buttons next to the
-  occurrence select. Still open in Phase 1: PR badge vs. previous occurrence,
-  set table 360px audit, trend chart next to the exercise.
+- Phase 1 partial: history cards show duration + best-set + kcal chips
+  (WorkoutInsight has bestSet); occurrence prev/next (Vanhempi/Uudempi)
+  buttons next to the occurrence select; redundant expanded-panel content
+  removed (Toteutus block, duplicate metric grid, "Uusin ensin", no-note
+  filler). Still open in Phase 1: PR badge vs. previous occurrence, set table
+  360px audit, trend chart next to the exercise.
+- Global visual pass: body font smoothing + prefers-reduced-motion in
+  globals.css; Card p-4→sm:p-5 and responsive CardTitle; Input/Select/
+  Textarea hover + color transitions; Button select-none + pressed-state
+  translate. Build on these instead of re-inventing per view.
+- Home hero ("Tämä viikko") rebuilt to the reference pattern: single surface,
+  X/Y count in header, unboxed day strip, slim progress bar with state-aware
+  copy, big-number stats, one contextual CTA. ProgressRing no longer used on
+  Home. Measurement card header stacks collapsed to plain CardTitle in
+  own-measurements-card.tsx and athlete-dashboard.tsx.
 - Full test suite green (181 tests), typecheck clean, production build OK.
 
 ## Phases (one at a time; finish, verify, commit before the next)
