@@ -363,6 +363,50 @@ function mergeStartedWorkoutPayload(
   };
 }
 
+// Kesken olevan treenin sarjakohtainen yhdistäminen: ota palvelimen rakenne
+// (sarjojen olemassaolo, tavoitteet, labelit) mutta säilytä käyttäjän juuri
+// syöttämät arvot (actualReps/actualLoad/done), jotta taustasnapshot ei revertoi
+// niitä itsestään. Täsmäys ensisijaisesti id:llä, varalla rakenneavaimella.
+function mergeServerSessionWithLocalSetInputs(
+  serverSession: WorkoutSession,
+  localSession: WorkoutSession,
+): WorkoutSession {
+  const structuralKey = (log: WorkoutSession["setLogs"][number]) =>
+    `${log.templateExerciseId}::${log.setLabel}`;
+  const localById = new Map(localSession.setLogs.map((log) => [log.id, log]));
+  const localByStructuralKey = new Map(localSession.setLogs.map((log) => [structuralKey(log), log]));
+
+  let changed = serverSession.setLogs.length !== localSession.setLogs.length;
+  const mergedSetLogs = serverSession.setLogs.map((serverLog) => {
+    const localLog = localById.get(serverLog.id) ?? localByStructuralKey.get(structuralKey(serverLog));
+    if (!localLog) {
+      return serverLog;
+    }
+
+    if (
+      serverLog.actualReps === localLog.actualReps &&
+      serverLog.actualLoad === localLog.actualLoad &&
+      serverLog.done === localLog.done
+    ) {
+      return serverLog;
+    }
+
+    changed = true;
+    return {
+      ...serverLog,
+      actualReps: localLog.actualReps,
+      actualLoad: localLog.actualLoad,
+      done: localLog.done,
+    };
+  });
+
+  if (!changed) {
+    return serverSession;
+  }
+
+  return { ...serverSession, setLogs: mergedSetLogs };
+}
+
 function hasOpenActiveWorkout(state: AppState, athleteId: string | null | undefined) {
   if (!athleteId) {
     return false;
@@ -1746,6 +1790,17 @@ export function reconcileSupabaseVisibleState(
     pendingWorkoutSetRequests,
     workoutSetDrafts,
   );
+  // Treenit joita kirjataan parhaillaan: palvelimen mukaan kesken, optimistiset
+  // kuoret ja juuri aloitetut. Näille taustasnapshot ei saa revertoida
+  // käyttäjän syöttämiä sarja-arvoja (per-setLog-merge).
+  const activeLoggingWorkoutIds = new Set<string>();
+  (filteredSnapshot.scheduledWorkouts ?? []).forEach((workout) => {
+    if (workout.status === "in_progress") {
+      activeLoggingWorkoutIds.add(workout.id);
+    }
+  });
+  optimisticWorkoutIds.forEach((id) => activeLoggingWorkoutIds.add(id));
+  freshStartedWorkoutIds.forEach((id) => activeLoggingWorkoutIds.add(id));
   const activeServerEmails = new Set(
     (snapshot.users ?? previous.users)
       .filter((user) => user.status === "active")
@@ -1844,6 +1899,12 @@ export function reconcileSupabaseVisibleState(
         ) {
           return localSession;
         }
+      }
+
+      // Kesken kirjattava treeni: säilytä paikalliset sarja-arvot mutta ota
+      // palvelimen rakennemuutokset, jottei snapshot revertoi toistoja/painoja.
+      if (activeLoggingWorkoutIds.has(session.scheduledWorkoutId)) {
+        return mergeServerSessionWithLocalSetInputs(session, localSession);
       }
 
       const localUpdatedAt = Date.parse(localSession.updatedAt);
