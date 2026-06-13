@@ -5,6 +5,7 @@ import { useMemo, useState } from "react";
 
 import { Button } from "@/components/ui/button";
 import { Card, CardTitle } from "@/components/ui/card";
+import { Segmented } from "@/components/ui/segmented";
 import { OwnRecipeEditor } from "@/components/workout/own-recipe-editor";
 import { useKeepScreenOnPreference, useWakeLock } from "@/lib/use-wake-lock";
 import {
@@ -179,30 +180,15 @@ export function NutritionView({
           ) : null}
         </div>
       ) : (
-        <div className="flex items-center justify-between gap-3">
-          <div className="grid w-full grid-cols-2 rounded-xl bg-[var(--surface-2)] p-1">
-            <button
-              type="button"
-              className={`rounded-lg px-3 py-2 text-sm font-semibold transition ${
-                seg === "day" ? "bg-[var(--surface)] text-[var(--text)] shadow-[0_1px_3px_var(--shadow-soft)]" : "text-[var(--text-muted)]"
-              }`}
-              aria-pressed={seg === "day"}
-              onClick={() => setSeg("day")}
-            >
-              Päivä
-            </button>
-            <button
-              type="button"
-              className={`rounded-lg px-3 py-2 text-sm font-semibold transition ${
-                seg === "recipes" ? "bg-[var(--surface)] text-[var(--text)] shadow-[0_1px_3px_var(--shadow-soft)]" : "text-[var(--text-muted)]"
-              }`}
-              aria-pressed={seg === "recipes"}
-              onClick={() => setSeg("recipes")}
-            >
-              Reseptit
-            </button>
-          </div>
-        </div>
+        <Segmented
+          ariaLabel="Päivä tai reseptit"
+          value={seg}
+          onChange={setSeg}
+          options={[
+            { value: "day", label: "Päivä" },
+            { value: "recipes", label: "Reseptit" },
+          ]}
+        />
       )}
 
       {dayOnly || seg === "day" ? (
@@ -379,7 +365,9 @@ export function NutritionView({
               className="min-w-0 flex-1 bg-transparent text-sm text-[var(--text)] outline-none placeholder:text-[var(--text-subtle)]"
             />
           </div>
-          <div className="mt-3 flex gap-1.5 overflow-x-auto pb-1 [scrollbar-width:none]">
+          {/* Full-bleed: chipit scrollaavat kortin reunaan asti (ei valkoista
+              padding-kaistaa päälle). Negatiivinen marginaali kumoaa kortin p-4/sm:p-5. */}
+          <div className="-mx-4 mt-3 flex gap-1.5 overflow-x-auto px-4 pb-1 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden sm:-mx-5 sm:px-5">
             {(["all", ...MEAL_TAG_ORDER] as const).map((tag) => {
               const active = filter === tag;
               return (
@@ -406,7 +394,13 @@ export function NutritionView({
                   className="flex flex-col gap-2 rounded-2xl bg-[var(--surface-2)] p-3 text-left"
                   onClick={() => setDetail({ recipeId: recipe.id })}
                 >
-                  <span className="grid h-16 place-items-center rounded-xl bg-[color-mix(in_srgb,var(--surface)_60%,var(--surface-2))] text-[10px] font-medium text-[var(--text-subtle)]">
+                  <span
+                    className="grid h-16 place-items-center rounded-xl text-[10px] font-medium text-[var(--text-subtle)]"
+                    style={{
+                      backgroundImage:
+                        "repeating-linear-gradient(-45deg, var(--surface-2) 0 8px, color-mix(in srgb, var(--surface-2) 55%, var(--surface)) 8px 16px)",
+                    }}
+                  >
                     ruokakuva
                   </span>
                   <span>

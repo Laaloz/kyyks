@@ -21,6 +21,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardDescription, CardTitle } from "@/components/ui/card";
 import { Input, Label, Select, Textarea } from "@/components/ui/field";
+import { Segmented } from "@/components/ui/segmented";
 import { ConversationPanel } from "@/components/workout/conversation-panel";
 import { InlineFeedback } from "@/components/workout/inline-feedback";
 import { CoachInvitePanel } from "@/components/workout/coach/invite-panel";
@@ -1278,34 +1279,15 @@ export function CoachDashboard({
 
       {view === PROGRAMS_WORKSPACE_VIEW && (
         <div className="grid gap-4">
-          <div className="grid w-full grid-cols-2 rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-1">
-            <button
-              type="button"
-              className={cn(
-                "min-w-0 rounded-xl px-4 py-2.5 text-sm font-semibold transition",
-                programWorkspaceTab === "library"
-                  ? "border border-[color:color-mix(in_srgb,var(--accent)_18%,var(--border))] bg-[color:color-mix(in_srgb,var(--accent)_10%,var(--surface))] text-[var(--accent)] shadow-[0_8px_18px_-20px_var(--accent)]"
-                  : "border border-transparent text-[var(--text-muted)] hover:bg-[var(--surface)] hover:text-[var(--text)]",
-              )}
-              aria-pressed={programWorkspaceTab === "library"}
-              onClick={() => setProgramWorkspaceTab("library")}
-            >
-              Ohjelmakirjasto
-            </button>
-            <button
-              type="button"
-              className={cn(
-                "min-w-0 rounded-xl px-4 py-2.5 text-sm font-semibold transition",
-                programWorkspaceTab === "builder"
-                  ? "border border-[color:color-mix(in_srgb,var(--accent)_18%,var(--border))] bg-[color:color-mix(in_srgb,var(--accent)_10%,var(--surface))] text-[var(--accent)] shadow-[0_8px_18px_-20px_var(--accent)]"
-                  : "border border-transparent text-[var(--text-muted)] hover:bg-[var(--surface)] hover:text-[var(--text)]",
-              )}
-              aria-pressed={programWorkspaceTab === "builder"}
-              onClick={() => setProgramWorkspaceTab("builder")}
-            >
-              Rakenna ohjelma
-            </button>
-          </div>
+          <Segmented
+            ariaLabel="Ohjelmakirjasto tai rakenna"
+            value={programWorkspaceTab}
+            onChange={setProgramWorkspaceTab}
+            options={[
+              { value: "library", label: "Ohjelmakirjasto" },
+              { value: "builder", label: "Rakenna ohjelma" },
+            ]}
+          />
 
           {programWorkspaceTab === "builder" ? (
           <div ref={composerCardRef}>
@@ -2725,24 +2707,15 @@ function CoachTeamView({
 
   return (
     <div className="grid w-full min-w-0 gap-2">
-      <div className="grid w-full grid-cols-2 rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-1">
-        {(["tiimi", "ohjelmat"] as const).map((value) => (
-          <button
-            key={value}
-            type="button"
-            className={cn(
-              "min-w-0 rounded-xl px-4 py-2.5 text-sm font-semibold transition",
-              segment === value
-                ? "border border-[color:color-mix(in_srgb,var(--accent)_18%,var(--border))] bg-[color:color-mix(in_srgb,var(--accent)_10%,var(--surface))] text-[var(--accent)] shadow-[0_8px_18px_-20px_var(--accent)]"
-                : "border border-transparent text-[var(--text-muted)] hover:bg-[var(--surface)] hover:text-[var(--text)]",
-            )}
-            aria-pressed={segment === value}
-            onClick={() => setSegment(value)}
-          >
-            {value === "tiimi" ? "Tiimi" : "Ohjelmat"}
-          </button>
-        ))}
-      </div>
+      <Segmented
+        ariaLabel="Tiimi tai ohjelmat"
+        value={segment}
+        onChange={setSegment}
+        options={[
+          { value: "tiimi", label: "Tiimi" },
+          { value: "ohjelmat", label: "Ohjelmat" },
+        ]}
+      />
 
       {segment === "tiimi" ? (
         <div>
@@ -2876,7 +2849,7 @@ function CoachTeamView({
                       {workoutCount} treeniä/vko · {assignedLabel}
                     </p>
                   </div>
-                  <Badge>Muokkaa</Badge>
+                  <Badge className="shrink-0">Muokkaa</Badge>
                 </button>
               ))}
             </Card>

@@ -43,6 +43,7 @@ import { InfoTooltip } from "@/components/ui/tooltip";
 import { AthleteSessionPanel } from "@/components/workout/athlete/session-panel";
 import { ConversationPanel } from "@/components/workout/conversation-panel";
 import { DragNumber } from "@/components/ui/drag-number";
+import { Segmented } from "@/components/ui/segmented";
 import { ExerciseProgressView } from "@/components/workout/exercise-progress-view";
 import { NutritionView } from "@/components/workout/nutrition-view";
 import { estimateStrengthCalories, getMeasurementsForUser, getWeightAtMoment } from "@/lib/body-metrics";
@@ -2141,60 +2142,17 @@ export function AthleteDashboard({
           </Card>
         ) : (
           <div className="space-y-4">
-            <div
-              role="tablist"
-              aria-label="Treeninäkymän välilehdet"
-              className="grid grid-cols-3 gap-1 rounded-[1.1rem] border border-[color-mix(in_srgb,var(--border)_88%,var(--surface))] bg-[color-mix(in_srgb,var(--surface)_78%,var(--surface-2))] p-1"
-            >
-              <button
-                type="button"
-                role="tab"
-                id="athlete-log-tab-training"
-                aria-selected={athleteLogTab === "training"}
-                aria-controls="athlete-log-panel-training"
-                className={cn(
-                  "inline-flex min-h-10 items-center justify-center rounded-xl px-3 py-2 text-sm font-semibold transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--background)]",
-                  athleteLogTab === "training"
-                    ? "border border-[color-mix(in_srgb,var(--accent)_22%,var(--border))] bg-[color-mix(in_srgb,var(--accent)_10%,var(--surface))] text-[var(--accent)] shadow-[0_8px_18px_-20px_var(--accent)]"
-                    : "border border-transparent bg-transparent text-[var(--text-muted)] hover:border-[var(--border-strong)] hover:bg-[var(--surface)] hover:text-[var(--text)]",
-                )}
-                onClick={() => setAthleteLogTab("training")}
-              >
-                Treeni
-              </button>
-              <button
-                type="button"
-                role="tab"
-                id="athlete-log-tab-history"
-                aria-selected={athleteLogTab === "history"}
-                aria-controls="athlete-log-panel-history"
-                className={cn(
-                  "inline-flex min-h-10 items-center justify-center rounded-xl px-3 py-2 text-sm font-semibold transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--background)]",
-                  athleteLogTab === "history"
-                    ? "border border-[color-mix(in_srgb,var(--accent)_22%,var(--border))] bg-[color-mix(in_srgb,var(--accent)_10%,var(--surface))] text-[var(--accent)] shadow-[0_8px_18px_-20px_var(--accent)]"
-                    : "border border-transparent bg-transparent text-[var(--text-muted)] hover:border-[var(--border-strong)] hover:bg-[var(--surface)] hover:text-[var(--text)]",
-                )}
-                onClick={() => setAthleteLogTab("history")}
-              >
-                Historia
-              </button>
-              <button
-                type="button"
-                role="tab"
-                id="athlete-log-tab-exercises"
-                aria-selected={athleteLogTab === "exercises"}
-                aria-controls="athlete-log-panel-exercises"
-                className={cn(
-                  "inline-flex min-h-10 items-center justify-center rounded-xl px-3 py-2 text-sm font-semibold transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--background)]",
-                  athleteLogTab === "exercises"
-                    ? "border border-[color-mix(in_srgb,var(--accent)_22%,var(--border))] bg-[color-mix(in_srgb,var(--accent)_10%,var(--surface))] text-[var(--accent)] shadow-[0_8px_18px_-20px_var(--accent)]"
-                    : "border border-transparent bg-transparent text-[var(--text-muted)] hover:border-[var(--border-strong)] hover:bg-[var(--surface)] hover:text-[var(--text)]",
-                )}
-                onClick={() => setAthleteLogTab("exercises")}
-              >
-                Liikkeet
-              </button>
-            </div>
+            <Segmented
+              ariaLabel="Treeninäkymän välilehdet"
+              idPrefix="athlete-log-tab"
+              value={athleteLogTab}
+              onChange={setAthleteLogTab}
+              options={[
+                { value: "training", label: "Treeni" },
+                { value: "history", label: "Historia" },
+                { value: "exercises", label: "Liikkeet" },
+              ]}
+            />
 
             {athleteLogTab === "exercises" ? (
               <div role="tabpanel" id="athlete-log-panel-exercises" aria-labelledby="athlete-log-tab-exercises">
