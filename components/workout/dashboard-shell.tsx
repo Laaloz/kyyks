@@ -23,8 +23,8 @@ function PanelSkeleton() {
 }
 
 // Admin-only panels are heavy and irrelevant to most sessions; load them on demand.
-const AdminDashboard = dynamic(
-  () => import("@/components/workout/admin-dashboard").then((module) => module.AdminDashboard),
+const AdminInvitesViewDynamic = dynamic(
+  () => import("@/components/workout/admin/invites-view").then((module) => module.AdminInvitesView),
   { ssr: false, loading: () => <PanelSkeleton /> },
 );
 const NutritionAdminPanel = dynamic(
@@ -774,15 +774,7 @@ export function DashboardShell() {
             ) : currentUser.role === "admin" && view === "ingredients" ? (
               <NutritionAdminPanel />
             ) : currentUser.role === "admin" && view === "invites" ? (
-              // Adminin Kutsut-näkymä = hallintakooste + sillat
-              // raaka-ainekatalogiin ja ohjelmiin. (Tiimi = CoachDashboard yllä.)
-              <AdminDashboard
-                view={view}
-                onOpenWorkoutLog={() => setView("athlete-log")}
-                onOpenSettings={() => setView("settings")}
-                onOpenIngredients={() => setView("ingredients")}
-                onOpenPrograms={() => setView(PROGRAMS_WORKSPACE_VIEW)}
-              />
+              <AdminInvitesViewDynamic />
             ) : (
               <AthleteDashboard
                 view={view}
