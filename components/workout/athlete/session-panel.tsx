@@ -1395,6 +1395,26 @@ export function AthleteSessionPanel({
     const isComplete = completedInExercise === logs.length && logs.length > 0;
     const isStarted = completedInExercise > 0 && !isComplete;
     const targetSummary = formatExerciseTargetSummary(logs);
+    // Progressiivinen ylikuormitus: jos liike käyttää toistohaarukoita ja kaikki sarjat
+    // on kuitattu haarukan ylärajaan asti, ehdota painon nostoa (vain haarukoilla).
+    const usesRepRange = logs.some(
+      (log) =>
+        log.targetRepsMin !== undefined &&
+        log.targetRepsMax !== undefined &&
+        log.targetRepsMax > log.targetRepsMin,
+    );
+    const shouldIncreaseLoad =
+      usesRepRange &&
+      isComplete &&
+      logs.every((log) => {
+        const repMax = log.targetRepsMax ?? log.targetReps;
+        return (
+          repMax !== undefined &&
+          log.actualReps !== undefined &&
+          log.actualReps !== null &&
+          log.actualReps >= repMax
+        );
+      });
     const previous = previousExerciseResults.get(logs[0]?.exerciseId ?? "");
     const instruction = exerciseInstructions.get(exerciseKey)?.trim();
     const isExpanded = getIsExpanded(group);
@@ -1499,6 +1519,11 @@ export function AthleteSessionPanel({
             {targetSummary ? (
               <span className="inline-flex max-w-full min-w-0 rounded-full border border-[var(--border)] bg-[var(--surface)] px-2.5 py-0.5 text-[11px] font-medium text-[var(--text-subtle)]">
                 <span className="truncate">{targetSummary}</span>
+              </span>
+            ) : null}
+            {shouldIncreaseLoad ? (
+              <span className="inline-flex min-w-0 items-center gap-1 rounded-full bg-[color-mix(in_srgb,var(--accent)_14%,var(--surface))] px-2.5 py-0.5 text-[11px] font-semibold text-[var(--accent)]">
+                Nosta painoa <span aria-hidden="true">↑</span>
               </span>
             ) : null}
           </div>
