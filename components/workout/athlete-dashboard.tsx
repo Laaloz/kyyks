@@ -1514,21 +1514,6 @@ export function AthleteDashboard({
               Ravinto
             </span>
           </div>
-
-          <p className="mt-4 border-t border-[var(--border)] pt-4 text-sm text-[var(--text-muted)]">
-            {weeklyInsights.targetCount <= 0
-              ? "Viikkotavoitetta ei ole vielä määritetty."
-              : weeklyInsights.completedCount >= weeklyInsights.targetCount
-                ? "Viikkotavoite saavutettu! 🔥"
-                : weeklyInsights.completedCount === 0
-                  ? "Viikko alkaa tästä — ensimmäinen treeni odottaa."
-                  : `Hyvä vauhti! Vielä ${weeklyInsights.targetCount - weeklyInsights.completedCount} ${
-                      weeklyInsights.targetCount - weeklyInsights.completedCount === 1 ? "treeni" : "treeniä"
-                    } tavoitteeseen.`}
-            {weeklyInsights.weeklyVolume > 0
-              ? ` Volyymi tällä viikolla ${formatLiftedKgValue(weeklyInsights.weeklyVolume)}.`
-              : ""}
-          </p>
         </Card>
       )}
 
