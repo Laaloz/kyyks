@@ -679,6 +679,7 @@ function getFloatingMenuStyle(anchor: AnchorRect, menuElement: HTMLElement): CSS
 
 export function AthleteDashboard({
   view,
+  readOnly = false,
   onOpenWorkoutLog,
   onOpenSettings,
   onOpenProgramEditor,
@@ -687,6 +688,9 @@ export function AthleteDashboard({
   onOverviewFocusHandled,
 }: {
   view: WorkspaceView;
+  // Esikatselu (vaihe 8): valmentaja/admin katselee urheilijan näkymää read-only.
+  // Piilottaa kaikki mutatoivat toiminnot (aloitus, kirjaus, ateriat, mittaukset).
+  readOnly?: boolean;
   onOpenWorkoutLog?: () => void;
   onOpenSettings?: () => void;
   onOpenProgramEditor?: () => void;
@@ -2019,7 +2023,7 @@ export function AthleteDashboard({
                 ? `${heroNextWorkout.exerciseCount} ${heroNextWorkout.exerciseCount === 1 ? "liike" : "liikettä"} · ${heroNextWorkout.setCount} ${heroNextWorkout.setCount === 1 ? "sarja" : "sarjaa"}`
                 : "Pyydä valmentajaa rakentamaan ensimmäinen ohjelma."}
           </p>
-          {highlightedWorkout ? (
+          {readOnly ? null : highlightedWorkout ? (
             <Button
               type="button"
               variant="primary"
@@ -2148,7 +2152,7 @@ export function AthleteDashboard({
         </Card>
       )}
 
-      {view === "overview" && currentUser ? <DayMealsCard user={currentUser} /> : null}
+      {view === "overview" && currentUser ? <DayMealsCard user={currentUser} readOnly={readOnly} /> : null}
 
       {view === "measurements" && canTrackOwnMeasurements ? (
         <div
@@ -2192,6 +2196,7 @@ export function AthleteDashboard({
               </div>
             </div>
           </div>
+          {readOnly ? null : (
           <div className="mt-4 overflow-hidden rounded-xl border border-[var(--border)] bg-[var(--surface-2)]">
             <div className="flex items-start gap-2 p-3">
               <button
@@ -2331,6 +2336,7 @@ export function AthleteDashboard({
               </div>
             ) : null}
           </div>
+          )}
           <div className="mt-4 rounded-xl border border-[var(--border)] bg-[var(--surface-2)] p-3">
             <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
               <div>
@@ -2431,10 +2437,14 @@ export function AthleteDashboard({
       ) : null}
 
       {view === "nutrition" && currentUser ? (
-        <PersonalNutritionSummaryCard state={state} user={currentUser} onOpenSettings={onOpenSettings} />
+        <PersonalNutritionSummaryCard
+          state={state}
+          user={currentUser}
+          onOpenSettings={readOnly ? undefined : onOpenSettings}
+        />
       ) : null}
 
-      {view === "nutrition" && currentUser ? <DayMealsCard user={currentUser} /> : null}
+      {view === "nutrition" && currentUser ? <DayMealsCard user={currentUser} readOnly={readOnly} /> : null}
 
       {view === "nutrition" && currentUser ? <NutritionAthleteCard state={state} user={currentUser} /> : null}
 
@@ -2556,6 +2566,7 @@ export function AthleteDashboard({
                 scheduledWorkoutGuidance={selectedProgramWorkout ? deriveProgramWorkoutGuidance(selectedProgramWorkout) : undefined}
                 scheduledDate={selectedWorkout.completedAt ?? selectedSession?.completedAt ?? selectedWorkout.scheduledDate}
                 isSessionSyncing={pendingStartWorkoutId === selectedWorkout.id}
+                forceReadOnly={readOnly}
                 onStart={async () => {
                   setSelectedWorkoutId(selectedWorkout.id);
                   setPendingStartWorkoutId(selectedWorkout.id);
@@ -2775,7 +2786,7 @@ export function AthleteDashboard({
             <Card>
               <div className="flex items-start justify-between gap-3">
                 <CardTitle>Valitse seuraava treeni</CardTitle>
-                {canManageOwnPrograms(currentUser?.role) && onOpenProgramEditor ? (
+                {!readOnly && canManageOwnPrograms(currentUser?.role) && onOpenProgramEditor ? (
                   <Button
                     type="button"
                     variant="secondary"
@@ -2975,7 +2986,7 @@ export function AthleteDashboard({
                                   >
                                     Avaa aktiivinen
                                   </Button>
-                                ) : (
+                                ) : readOnly ? null : (
                                   <Button
                                     type="button"
                                     variant="primary"
@@ -3026,18 +3037,20 @@ export function AthleteDashboard({
                       ? `${extraActivities.length} extra-treeniä historiassa`
                       : "Ei extra-treenejä vielä"}
                   </p>
-                  <div className="mt-3">
-                    <Button
-                      type="button"
-                      className="w-full sm:w-auto"
-                      onClick={() => {
-                        setEditingExtraActivityId(null);
-                        setIsExtraActivityDialogOpen(true);
-                      }}
-                    >
-                      Lisää extra-treeni
-                    </Button>
-                  </div>
+                  {!readOnly ? (
+                    <div className="mt-3">
+                      <Button
+                        type="button"
+                        className="w-full sm:w-auto"
+                        onClick={() => {
+                          setEditingExtraActivityId(null);
+                          setIsExtraActivityDialogOpen(true);
+                        }}
+                      >
+                        Lisää extra-treeni
+                      </Button>
+                    </div>
+                  ) : null}
                 </div>
               </div>
             </Card>
@@ -3448,6 +3461,7 @@ export function AthleteDashboard({
                                   <Badge className={statusTone(workoutStatus)}>{workoutStatusLabel(workoutStatus)}</Badge>
                                 </div>
                                 <div className="flex shrink-0 items-center gap-2">
+                                  {readOnly ? null : (
                                   <div className="relative" data-history-menu-root="true">
                                     <Button
                                       type="button"
@@ -3553,6 +3567,7 @@ export function AthleteDashboard({
                                       </div>
                                     ) : null}
                                   </div>
+                                  )}
                                   <span
                                     className="grid size-9 place-items-center rounded-full border border-[var(--border)] bg-[var(--surface)] text-[var(--text-subtle)]"
                                     aria-hidden="true"

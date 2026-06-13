@@ -581,6 +581,7 @@ export function AthleteSessionPanel({
   workoutMessage,
   isCompleting,
   isSessionSyncing,
+  forceReadOnly = false,
   loadIncrementKg,
   availableExercises,
   onExerciseStructureUpdate,
@@ -612,6 +613,8 @@ export function AthleteSessionPanel({
   workoutMessage: string;
   isCompleting: boolean;
   isSessionSyncing?: boolean;
+  // Esikatselu (vaihe 8): pakottaa koko paneelin read-only-tilaan tilasta riippumatta.
+  forceReadOnly?: boolean;
   loadIncrementKg: 1 | 2.5 | 5;
   availableExercises: Exercise[];
   onExerciseStructureUpdate: (
@@ -1196,7 +1199,7 @@ export function AthleteSessionPanel({
     });
   };
 
-  const readOnly = (status === "completed" && !correctionMode) || Boolean(isSessionSyncing);
+  const readOnly = forceReadOnly || (status === "completed" && !correctionMode) || Boolean(isSessionSyncing);
   // Pidä näyttö päällä aktiivisen kirjauksen ajan (laitekohtainen preferenssi).
   const [keepScreenOn] = useKeepScreenOnPreference();
   useWakeLock(keepScreenOn && !readOnly && status === "in_progress");
