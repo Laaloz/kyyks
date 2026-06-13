@@ -1,7 +1,7 @@
 "use client";
 
 import { zodResolver } from "@hookform/resolvers/zod";
-import { Bell, Ellipsis, HousePlus, KeyRound, LogOut, Mail, Ruler, Scale, Share, UserRound, Waves } from "lucide-react";
+import { Ellipsis, HousePlus, KeyRound, Ruler, Scale, Share, UserRound } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
@@ -12,13 +12,13 @@ import { Card, CardDescription, CardTitle } from "@/components/ui/card";
 import { Input, Label, Select } from "@/components/ui/field";
 import { AdminUserManagementPanel } from "@/components/workout/admin-user-management-panel";
 import { InlineFeedback } from "@/components/workout/inline-feedback";
+import type { ProfileSheetSection } from "@/components/workout/profile-sheet";
 import { bodyMeasurementSchema, userSettingsSchema } from "@/components/workout/schemas";
 import { roleLabel } from "@/components/workout/shared";
 import { getMeasurementsForUser } from "@/lib/body-metrics";
 import { withMinimumDelay } from "@/lib/min-delay";
 import { canTrackOwnTraining, getDashboardViewsForRole, getDefaultDashboardView, isAthleteRole } from "@/lib/role-access";
 import { PROGRAMS_DASHBOARD_VIEW, type DashboardHomeView, type ProfileSex, type Role, type ThemeMode } from "@/lib/types";
-import { useKeepScreenOnPreference } from "@/lib/use-wake-lock";
 import { useAppState } from "@/providers/app-state-provider";
 
 const dashboardViewLabel: Record<DashboardHomeView, string> = {
@@ -58,9 +58,15 @@ function parseLoadIncrement(value: string) {
   return parsed === 1 || parsed === 2.5 || parsed === 5 ? parsed : 2.5;
 }
 
-const SETTINGS_SAVE_MIN_LOADING_MS = 350;
 const PROFILE_IMAGE_HELPER_TEXT = "JPG, PNG, WebP tai AVIF. Maksimikoko 5 Mt.";
-type SettingsSection = "profile" | "preferences";
+type SettingsSection = ProfileSheetSection;
+
+const settingsSectionTabs: Array<{ section: SettingsSection; label: string }> = [
+  { section: "account", label: "Tili ja tiedot" },
+  { section: "appearance", label: "Teema ja ulkoasu" },
+  { section: "reminders", label: "Muistutukset" },
+  { section: "units", label: "Yksiköt ja kieli" },
+];
 
 type DeferredInstallPromptEvent = Event & {
   prompt: () => Promise<void>;
@@ -76,19 +82,23 @@ function resolveDefaultView(role: Role, value: DashboardHomeView | undefined): D
   return getDefaultDashboardView(role);
 }
 
-export function UserSettingsPanel({ adminOnly = false }: { adminOnly?: boolean }) {
+export function UserSettingsPanel({
+  adminOnly = false,
+  initialSection,
+}: {
+  adminOnly?: boolean;
+  initialSection?: SettingsSection;
+}) {
   const {
     currentUser,
     state,
     notify,
-    logout,
     updateCurrentUserSettings,
     uploadCurrentUserProfileImage,
     removeCurrentUserProfileImage,
     updateCurrentUserMeasurements,
     requestCurrentUserPasswordReset,
   } = useAppState();
-  const [keepScreenOn, setKeepScreenOn] = useKeepScreenOnPreference();
   const [message, setMessage] = useState<string>("");
   const [messageTone, setMessageTone] = useState<"success" | "danger" | null>(null);
   const [profileMessage, setProfileMessage] = useState<string>("");
@@ -98,7 +108,12 @@ export function UserSettingsPanel({ adminOnly = false }: { adminOnly?: boolean }
   const [isSendingOwnPasswordReset, setIsSendingOwnPasswordReset] = useState(false);
   const [isSavingProfile, setIsSavingProfile] = useState(false);
   const [isUploadingProfileImage, setIsUploadingProfileImage] = useState(false);
-  const [activeSection, setActiveSection] = useState<SettingsSection>("profile");
+  const [activeSection, setActiveSection] = useState<SettingsSection>(initialSection ?? "account");
+  useEffect(() => {
+    if (initialSection) {
+      setActiveSection(initialSection);
+    }
+  }, [initialSection]);
   const [deferredInstallPrompt, setDeferredInstallPrompt] = useState<DeferredInstallPromptEvent | null>(null);
   const [isInstalledToHomeScreen, setIsInstalledToHomeScreen] = useState(false);
   const latestOwnWeightKg = useMemo(
@@ -387,42 +402,30 @@ export function UserSettingsPanel({ adminOnly = false }: { adminOnly?: boolean }
       <div
         role="tablist"
         aria-label="Tilin asetusten osiot"
-        className="grid grid-cols-2 gap-1 rounded-[1.1rem] border border-[color-mix(in_srgb,var(--border)_88%,var(--surface))] bg-[color-mix(in_srgb,var(--surface)_78%,var(--surface-2))] p-1"
+        className="flex gap-1 overflow-x-auto rounded-[1.1rem] border border-[color-mix(in_srgb,var(--border)_88%,var(--surface))] bg-[color-mix(in_srgb,var(--surface)_78%,var(--surface-2))] p-1 [scrollbar-width:none]"
       >
-        <button
-          type="button"
-          role="tab"
-          id="settings-section-tab-profile"
-          aria-selected={activeSection === "profile"}
-          aria-controls="settings-section-panel-profile"
-          className={`inline-flex min-h-10 items-center justify-center rounded-xl px-3 py-2 text-sm font-semibold transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--background)] ${
-            activeSection === "profile"
-              ? "border border-[color-mix(in_srgb,var(--accent)_22%,var(--border))] bg-[color-mix(in_srgb,var(--accent)_10%,var(--surface))] text-[var(--accent)] shadow-[0_8px_18px_-20px_var(--accent)]"
-              : "border border-transparent bg-transparent text-[var(--text-muted)] hover:border-[var(--border-strong)] hover:bg-[var(--surface)] hover:text-[var(--text)]"
-          }`}
-          onClick={() => setActiveSection("profile")}
-        >
-          Profiili
-        </button>
-        <button
-          type="button"
-          role="tab"
-          id="settings-section-tab-preferences"
-          aria-selected={activeSection === "preferences"}
-          aria-controls="settings-section-panel-preferences"
-          className={`inline-flex min-h-10 items-center justify-center rounded-xl px-3 py-2 text-sm font-semibold transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--background)] ${
-            activeSection === "preferences"
-              ? "border border-[color-mix(in_srgb,var(--accent)_22%,var(--border))] bg-[color-mix(in_srgb,var(--accent)_10%,var(--surface))] text-[var(--accent)] shadow-[0_8px_18px_-20px_var(--accent)]"
-              : "border border-transparent bg-transparent text-[var(--text-muted)] hover:border-[var(--border-strong)] hover:bg-[var(--surface)] hover:text-[var(--text)]"
-          }`}
-          onClick={() => setActiveSection("preferences")}
-        >
-          Asetukset
-        </button>
+        {settingsSectionTabs.map((tab) => (
+          <button
+            key={tab.section}
+            type="button"
+            role="tab"
+            id={`settings-section-tab-${tab.section}`}
+            aria-selected={activeSection === tab.section}
+            aria-controls={`settings-section-panel-${tab.section}`}
+            className={`inline-flex min-h-10 shrink-0 items-center justify-center rounded-xl px-3 py-2 text-sm font-semibold transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--background)] ${
+              activeSection === tab.section
+                ? "border border-[color-mix(in_srgb,var(--accent)_22%,var(--border))] bg-[color-mix(in_srgb,var(--accent)_10%,var(--surface))] text-[var(--accent)] shadow-[0_8px_18px_-20px_var(--accent)]"
+                : "border border-transparent bg-transparent text-[var(--text-muted)] hover:border-[var(--border-strong)] hover:bg-[var(--surface)] hover:text-[var(--text)]"
+            }`}
+            onClick={() => setActiveSection(tab.section)}
+          >
+            {tab.label}
+          </button>
+        ))}
       </div>
 
-      {activeSection === "profile" ? (
-      <div role="tabpanel" id="settings-section-panel-profile" aria-labelledby="settings-section-tab-profile">
+      {activeSection === "account" ? (
+      <div role="tabpanel" id="settings-section-panel-account" aria-labelledby="settings-section-tab-account">
       <Card className="border-[var(--border-strong)]">
         <p className="text-xs font-semibold tracking-[0.04em] text-[var(--text-subtle)]">Tili</p>
         <CardTitle className="text-xl sm:text-2xl">Profiili</CardTitle>
@@ -688,15 +691,15 @@ export function UserSettingsPanel({ adminOnly = false }: { adminOnly?: boolean }
       </div>
       ) : null}
 
-      {activeSection === "preferences" ? (
-      <div role="tabpanel" id="settings-section-panel-preferences" aria-labelledby="settings-section-tab-preferences" className="grid gap-4">
+      {activeSection === "appearance" ? (
+      <div role="tabpanel" id="settings-section-panel-appearance" aria-labelledby="settings-section-tab-appearance" className="grid gap-4">
         <Card>
           <p className="text-xs font-semibold tracking-[0.04em] text-[var(--text-subtle)]">Asetukset</p>
-          <CardTitle className="text-xl sm:text-2xl">Sovelluksen asetukset</CardTitle>
+          <CardTitle className="text-xl sm:text-2xl">Teema ja ulkoasu</CardTitle>
           <CardDescription className="mt-1.5">
-            Muokkaa sitä, miten sovellus käyttäytyy sinulle päivittäisessä käytössä.
+            Valitse aloitussivu ja sovelluksen värimaailma.
           </CardDescription>
-          <form className="mt-4 space-y-3.5" noValidate onSubmit={submitSettings}>
+          <div className="mt-4 space-y-3.5">
             <div>
               <Label htmlFor="settings-default-view">Aloitussivu</Label>
               <Select id="settings-default-view" disabled={isSavingSettings} {...form.register("defaultDashboardView")}>
@@ -722,115 +725,14 @@ export function UserSettingsPanel({ adminOnly = false }: { adminOnly?: boolean }
               </p>
             </div>
 
-            <div>
-              <Label htmlFor="settings-load-increment">Kuorman säätöaskel</Label>
-              <Select
-                id="settings-load-increment"
-                disabled={isSavingSettings}
-                value={String(settingsLoadIncrementKg)}
-                onChange={(event) => form.setValue("loadIncrementKg", parseLoadIncrement(event.target.value), { shouldDirty: true })}
-              >
-                {loadIncrementOptions.map((option) => (
-                  <option key={option.value} value={option.value}>
-                    {option.label}
-                  </option>
-                ))}
-              </Select>
-              <p className="mt-2 text-xs text-[var(--text-subtle)]">
-                Tätä askelta käytetään treenitaulukon kuorman vetosäädössä ja näppäimistöohjauksessa.
-              </p>
-            </div>
-
-            <div className="space-y-1.5 rounded-xl border-2 border-[var(--border)] bg-[var(--surface-2)] p-2.5">
-              <label className="flex items-start justify-between gap-3 rounded-lg px-1 py-1">
-                <span className="min-w-0">
-                  <span
-                    id="settings-weekly-measurements-label"
-                    className="block text-sm font-semibold text-[var(--text)]"
-                  >
-                    Viikkomuistutus
-                  </span>
-                  <span className="mt-0.5 block text-xs leading-5 text-[var(--text-subtle)]">
-                    Näytä perjantain muistutus painon ja vyötärön päivittämiseen.
-                  </span>
-                </span>
-                <input
-                  type="checkbox"
-                  aria-labelledby="settings-weekly-measurements-label"
-                  className="mt-0.5 size-4 shrink-0 accent-[var(--accent)]"
-                  disabled={isSavingSettings}
-                  {...form.register("weeklyMeasurementReminders")}
-                />
-              </label>
-
-              <div className="border-t border-[var(--border)]" />
-
-              <label className="flex items-start justify-between gap-3 rounded-lg px-1 py-1">
-                <span className="min-w-0">
-                  <span
-                    id="settings-email-notifications-label"
-                    className="block text-sm font-semibold text-[var(--text)]"
-                  >
-                    Sähköposti-ilmoitukset
-                  </span>
-                  <span className="mt-0.5 block text-xs leading-5 text-[var(--text-subtle)]">
-                    Lähetä sähköposti uusista treeneistä ja ohjelmapäivityksistä.
-                  </span>
-                </span>
-                <input
-                  type="checkbox"
-                  aria-labelledby="settings-email-notifications-label"
-                  className="mt-0.5 size-4 shrink-0 accent-[var(--accent)]"
-                  disabled={isSavingSettings}
-                  {...form.register("emailNotifications")}
-                />
-              </label>
-
-              <div className="border-t border-[var(--border)]" />
-
-              <label className="flex items-start justify-between gap-3 rounded-lg px-1 py-1">
-                <span className="min-w-0">
-                  <span
-                    id="settings-keep-screen-on-label"
-                    className="block text-sm font-semibold text-[var(--text)]"
-                  >
-                    Pidä näyttö päällä
-                  </span>
-                  <span className="mt-0.5 block text-xs leading-5 text-[var(--text-subtle)]">
-                    Estä näytön sammuminen treenin kirjauksen ja reseptien aikana. Laitekohtainen asetus.
-                  </span>
-                </span>
-                <input
-                  type="checkbox"
-                  aria-labelledby="settings-keep-screen-on-label"
-                  className="mt-0.5 size-4 shrink-0 accent-[var(--accent)]"
-                  checked={keepScreenOn}
-                  onChange={(event) => setKeepScreenOn(event.target.checked)}
-                />
-              </label>
-            </div>
-
             {isSavingSettings || message ? (
-              <InlineFeedback
-                message={message}
-                tone={messageTone}
-                pendingMessage="Tallennetaan asetuksia..."
-                isPending={isSavingSettings}
-                className="text-sm"
-              />
+              <InlineFeedback message={message} tone={messageTone} pendingMessage="Tallennetaan asetuksia..." isPending={isSavingSettings} className="text-sm" />
             ) : null}
 
-            <Button
-              type="button"
-              className="w-full sm:w-auto"
-              disabled={isSavingSettings}
-              loading={isSavingSettings}
-              loadingText="Tallennetaan asetuksia..."
-              onClick={() => void submitSettings()}
-            >
+            <Button type="button" className="w-full sm:w-auto" disabled={isSavingSettings} loading={isSavingSettings} loadingText="Tallennetaan asetuksia..." onClick={() => void submitSettings()}>
               Tallenna asetukset
             </Button>
-          </form>
+          </div>
         </Card>
 
         <Card className="lg:hidden">
@@ -904,20 +806,112 @@ export function UserSettingsPanel({ adminOnly = false }: { adminOnly?: boolean }
             ) : null}
           </div>
         </Card>
+      </div>
+      ) : null}
 
-        <Card className="lg:hidden">
-          <CardTitle className="text-xl sm:text-2xl">Tili</CardTitle>
-          <div className="mt-4">
-            <Button
-              type="button"
-              variant="secondary"
-              className="w-full gap-2"
-              onClick={() => {
-                void logout();
-              }}
-            >
-              <LogOut className="size-4" aria-hidden="true" />
-              Kirjaudu ulos
+      {activeSection === "reminders" ? (
+      <div role="tabpanel" id="settings-section-panel-reminders" aria-labelledby="settings-section-tab-reminders" className="grid gap-4">
+        <Card>
+          <p className="text-xs font-semibold tracking-[0.04em] text-[var(--text-subtle)]">Asetukset</p>
+          <CardTitle className="text-xl sm:text-2xl">Muistutukset</CardTitle>
+          <CardDescription className="mt-1.5">
+            Valitse mistä sovellus muistuttaa sinua.
+          </CardDescription>
+          <div className="mt-4 space-y-3.5">
+            <div className="space-y-1.5 rounded-xl border-2 border-[var(--border)] bg-[var(--surface-2)] p-2.5">
+              <label className="flex items-start justify-between gap-3 rounded-lg px-1 py-1">
+                <span className="min-w-0">
+                  <span id="settings-weekly-measurements-label" className="block text-sm font-semibold text-[var(--text)]">
+                    Viikkomuistutus
+                  </span>
+                  <span className="mt-0.5 block text-xs leading-5 text-[var(--text-subtle)]">
+                    Näytä perjantain muistutus painon ja vyötärön päivittämiseen.
+                  </span>
+                </span>
+                <input
+                  type="checkbox"
+                  aria-labelledby="settings-weekly-measurements-label"
+                  className="mt-0.5 size-4 shrink-0 accent-[var(--accent)]"
+                  disabled={isSavingSettings}
+                  {...form.register("weeklyMeasurementReminders")}
+                />
+              </label>
+
+              <div className="border-t border-[var(--border)]" />
+
+              <label className="flex items-start justify-between gap-3 rounded-lg px-1 py-1">
+                <span className="min-w-0">
+                  <span id="settings-email-notifications-label" className="block text-sm font-semibold text-[var(--text)]">
+                    Sähköposti-ilmoitukset
+                  </span>
+                  <span className="mt-0.5 block text-xs leading-5 text-[var(--text-subtle)]">
+                    Lähetä sähköposti uusista treeneistä ja ohjelmapäivityksistä.
+                  </span>
+                </span>
+                <input
+                  type="checkbox"
+                  aria-labelledby="settings-email-notifications-label"
+                  className="mt-0.5 size-4 shrink-0 accent-[var(--accent)]"
+                  disabled={isSavingSettings}
+                  {...form.register("emailNotifications")}
+                />
+              </label>
+            </div>
+
+            {isSavingSettings || message ? (
+              <InlineFeedback message={message} tone={messageTone} pendingMessage="Tallennetaan asetuksia..." isPending={isSavingSettings} className="text-sm" />
+            ) : null}
+
+            <Button type="button" className="w-full sm:w-auto" disabled={isSavingSettings} loading={isSavingSettings} loadingText="Tallennetaan asetuksia..." onClick={() => void submitSettings()}>
+              Tallenna asetukset
+            </Button>
+          </div>
+        </Card>
+      </div>
+      ) : null}
+
+      {activeSection === "units" ? (
+      <div role="tabpanel" id="settings-section-panel-units" aria-labelledby="settings-section-tab-units" className="grid gap-4">
+        <Card>
+          <p className="text-xs font-semibold tracking-[0.04em] text-[var(--text-subtle)]">Asetukset</p>
+          <CardTitle className="text-xl sm:text-2xl">Yksiköt ja kieli</CardTitle>
+          <CardDescription className="mt-1.5">
+            Mittayksiköt ja sovelluksen kieli.
+          </CardDescription>
+          <div className="mt-4 space-y-3.5">
+            <div>
+              <Label htmlFor="settings-load-increment">Kuorman säätöaskel</Label>
+              <Select
+                id="settings-load-increment"
+                disabled={isSavingSettings}
+                value={String(settingsLoadIncrementKg)}
+                onChange={(event) => form.setValue("loadIncrementKg", parseLoadIncrement(event.target.value), { shouldDirty: true })}
+              >
+                {loadIncrementOptions.map((option) => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
+              </Select>
+              <p className="mt-2 text-xs text-[var(--text-subtle)]">
+                Tätä askelta käytetään treenitaulukon kuorman vetosäädössä ja näppäimistöohjauksessa.
+              </p>
+            </div>
+
+            <div>
+              <Label htmlFor="settings-language">Kieli</Label>
+              <Select id="settings-language" disabled value="fi">
+                <option value="fi">Suomi</option>
+              </Select>
+              <p className="mt-2 text-xs text-[var(--text-subtle)]">Sovellus on toistaiseksi vain suomeksi.</p>
+            </div>
+
+            {isSavingSettings || message ? (
+              <InlineFeedback message={message} tone={messageTone} pendingMessage="Tallennetaan asetuksia..." isPending={isSavingSettings} className="text-sm" />
+            ) : null}
+
+            <Button type="button" className="w-full sm:w-auto" disabled={isSavingSettings} loading={isSavingSettings} loadingText="Tallennetaan asetuksia..." onClick={() => void submitSettings()}>
+              Tallenna asetukset
             </Button>
           </div>
         </Card>

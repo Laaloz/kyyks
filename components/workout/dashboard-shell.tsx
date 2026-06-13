@@ -9,6 +9,7 @@ import { MeasurementReminderDialog } from "@/components/workout/athlete/measurem
 import { AthleteDashboard } from "@/components/workout/athlete-dashboard";
 import { CoachDashboard } from "@/components/workout/coach-dashboard";
 import { PanelErrorBoundary } from "@/components/workout/panel-error-boundary";
+import { ProfileSheet, type ProfileSheetSection } from "@/components/workout/profile-sheet";
 import { UserSettingsPanel } from "@/components/workout/user-settings-panel";
 
 function PanelSkeleton() {
@@ -124,6 +125,8 @@ export function DashboardShell() {
   const navButtonRefs = useRef<Record<string, HTMLButtonElement | null>>({});
   const skipNextAutoTopScrollRef = useRef(false);
   const [profileImageFailed, setProfileImageFailed] = useState(false);
+  const [isProfileSheetOpen, setIsProfileSheetOpen] = useState(false);
+  const [settingsSection, setSettingsSection] = useState<ProfileSheetSection>("account");
 
   if (!currentUser) {
     return null;
@@ -183,6 +186,12 @@ export function DashboardShell() {
   const profileImageSrc = currentUser.profileImageUrl
     ? `${currentUser.profileImageUrl}${currentUser.profileImageUrl.includes("?") ? "&" : "?"}v=${encodeURIComponent(currentUser.updatedAt)}`
     : null;
+  // Profiili-sheetin alaotsikkoon: treenaajan ensisijaisen valmentajan etunimi.
+  const coachFirstName = (() => {
+    const coachId = state.assignments.find((assignment) => assignment.athleteId === currentUser.id && assignment.active)?.coachId;
+    const coachName = coachId ? state.users.find((user) => user.id === coachId)?.fullName : undefined;
+    return coachName ? coachName.trim().split(/\s+/)[0] : undefined;
+  })();
   const adminConversationAthleteIds =
     currentUser.role === "admin"
       ? new Set(getCoachConversationAthletes(state, currentUser.id).map((athlete) => athlete.id))
@@ -496,15 +505,16 @@ export function DashboardShell() {
                   </Button>
                 ) : null}
                 <Button
-                  onClick={() => setView("settings")}
+                  onClick={() => setIsProfileSheetOpen(true)}
                   type="button"
                   variant="secondary"
                   className={`size-10 overflow-hidden !rounded-full !border-[var(--border-strong)] !bg-[var(--surface)] !px-0 !py-0 sm:size-11 ${
-                    view === "settings" ? "!border-[var(--accent)] !text-[var(--accent)]" : "!text-[var(--text)]"
+                    view === "settings" || isProfileSheetOpen ? "!border-[var(--accent)] !text-[var(--accent)]" : "!text-[var(--text)]"
                   }`}
-                  aria-label="Avaa tilin asetukset"
-                  aria-pressed={view === "settings"}
-                  title="Avaa tilin asetukset"
+                  aria-label="Avaa profiili ja asetukset"
+                  aria-haspopup="dialog"
+                  aria-expanded={isProfileSheetOpen}
+                  title="Avaa profiili ja asetukset"
                 >
                   {profileImageSrc && !profileImageFailed ? (
                     <img
@@ -516,7 +526,7 @@ export function DashboardShell() {
                   ) : (
                     <UserRound className="size-5" aria-hidden="true" />
                   )}
-                  <span className="sr-only">Avaa tilin asetukset</span>
+                  <span className="sr-only">Avaa profiili ja asetukset</span>
                 </Button>
                 <Button
                   onClick={() => {
@@ -664,7 +674,7 @@ export function DashboardShell() {
       <main id="main-content" className={view === "conversation" ? "flex min-h-0 min-w-0 flex-1 overflow-x-hidden" : "min-w-0 overflow-x-hidden"}>
         <PanelErrorBoundary key={view}>
         {view === "settings" ? (
-          <UserSettingsPanel />
+          <UserSettingsPanel initialSection={settingsSection} />
         ) : (
           <div
             role="tabpanel"
@@ -788,6 +798,24 @@ export function DashboardShell() {
           </div>
         </nav>
       </div>
+
+      {isProfileSheetOpen ? (
+        <ProfileSheet
+          user={currentUser}
+          coachFirstName={coachFirstName}
+          profileImageSrc={profileImageSrc && !profileImageFailed ? profileImageSrc : null}
+          onOpenSection={(section) => {
+            setSettingsSection(section);
+            setIsProfileSheetOpen(false);
+            setView("settings");
+          }}
+          onSignOut={() => {
+            setIsProfileSheetOpen(false);
+            void logout();
+          }}
+          onClose={() => setIsProfileSheetOpen(false)}
+        />
+      ) : null}
     </div>
   );
 }
