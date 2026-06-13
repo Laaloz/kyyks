@@ -467,10 +467,20 @@ export function DashboardShell() {
           <section className="min-w-0">
             <div className="flex items-center justify-between gap-3">
               <div className="min-w-0">
-                <p className="text-xs font-semibold uppercase tracking-[0.08em] text-[var(--text-subtle)]">{todayLabel}</p>
-                <h1 className="mt-1 truncate font-[family-name:var(--font-display)] text-2xl font-bold leading-tight text-[var(--text)] sm:pr-2 sm:text-[1.75rem] sm:leading-[1.02]">
-                  {currentUser.fullName}
-                </h1>
+                {/* Prototyyppi: iso nimi-hero vain Tänäänissä; muut näkymät näyttävät
+                    osion otsikon. Kello + profiili pysyvät pieninä ikoneina kaikkialla. */}
+                {view === "overview" ? (
+                  <>
+                    <p className="text-xs font-semibold uppercase tracking-[0.08em] text-[var(--text-subtle)]">{todayLabel}</p>
+                    <h1 className="mt-1 truncate font-[family-name:var(--font-display)] text-2xl font-bold leading-tight text-[var(--text)] sm:pr-2 sm:text-[1.75rem] sm:leading-[1.02]">
+                      {currentUser.fullName}
+                    </h1>
+                  </>
+                ) : (
+                  <h1 className="truncate font-[family-name:var(--font-display)] text-2xl font-bold leading-tight text-[var(--text)] sm:pr-2 sm:text-[1.75rem] sm:leading-[1.02]">
+                    {navLabelByView[view]}
+                  </h1>
+                )}
               </div>
               <div className="flex shrink-0 items-center gap-2">
                 {shouldShowMeasurementReminder ? (
