@@ -13,6 +13,10 @@ vi.mock("@/components/workout/nutrition-athlete-card", () => ({
   NutritionAthleteCard: () => <div>NutritionAthleteCard</div>,
 }));
 
+vi.mock("@/components/workout/nutrition-view", () => ({
+  NutritionView: () => <div>NutritionView</div>,
+}));
+
 vi.mock("@/components/workout/own-measurements-card", () => ({
   OwnMeasurementsCard: () => <div>OwnMeasurementsCard</div>,
 }));
@@ -77,7 +81,7 @@ function createBaseState() {
 }
 
 describe("personal nutrition summary overview wiring", () => {
-  it("renders in athlete nutrition view", () => {
+  it("renders the nutrition view in the athlete Ravinto tab", () => {
     const state = createBaseState();
     mockUseAppState.mockReturnValue({
       authenticatedUser: state.users[0],
@@ -98,7 +102,7 @@ describe("personal nutrition summary overview wiring", () => {
     });
 
     render(<AthleteDashboard view="nutrition" />);
-    expect(screen.getByText("PersonalNutritionSummaryCard")).toBeInTheDocument();
+    expect(screen.getByText("NutritionView")).toBeInTheDocument();
   });
 
   // Vaihe 8: valmentajan oma treeni renderöityy treenaajasovelluksesta (shell

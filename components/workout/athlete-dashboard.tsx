@@ -47,8 +47,7 @@ import { AthleteSessionPanel } from "@/components/workout/athlete/session-panel"
 import { ConversationPanel } from "@/components/workout/conversation-panel";
 import { MetricTrendChart } from "@/components/workout/metric-trend-chart";
 import { DayMealsCard } from "@/components/workout/day-meals-card";
-import { NutritionAthleteCard } from "@/components/workout/nutrition-athlete-card";
-import { PersonalNutritionSummaryCard } from "@/components/workout/personal-nutrition-summary-card";
+import { NutritionView } from "@/components/workout/nutrition-view";
 import { estimateStrengthCalories, getMeasurementsForUser, getWeightAtMoment } from "@/lib/body-metrics";
 import { calculateSessionDurationSeconds, getSessionProgress } from "@/lib/domain";
 import { buildExerciseProgressCatalog, type ExerciseProgressCatalog } from "@/lib/exercise-progress";
@@ -2436,17 +2435,7 @@ export function AthleteDashboard({
         </div>
       ) : null}
 
-      {view === "nutrition" && currentUser ? (
-        <PersonalNutritionSummaryCard
-          state={state}
-          user={currentUser}
-          onOpenSettings={readOnly ? undefined : onOpenSettings}
-        />
-      ) : null}
-
-      {view === "nutrition" && currentUser ? <DayMealsCard user={currentUser} readOnly={readOnly} /> : null}
-
-      {view === "nutrition" && currentUser ? <NutritionAthleteCard state={state} user={currentUser} /> : null}
+      {view === "nutrition" && currentUser ? <NutritionView user={currentUser} readOnly={readOnly} /> : null}
 
       {view === "conversation" && currentUser ? (
         <ConversationPanel
