@@ -311,21 +311,22 @@ export function NutritionView({
                           {m ? ` · ${m.kcal * entry.servings} kcal · P ${m.p * entry.servings} g` : ""}
                         </p>
                       </button>
-                      {!readOnly && !isEaten ? (
+                      {!readOnly ? (
                         <>
                           <button
                             type="button"
-                            className="grid size-8 shrink-0 place-items-center rounded-full bg-[var(--surface-2)] text-[var(--text-subtle)] transition hover:text-[var(--accent)]"
+                            className="grid size-8 shrink-0 place-items-center rounded-full bg-[var(--surface-2)] text-[var(--text-subtle)] transition hover:text-[var(--accent)] disabled:opacity-40 disabled:hover:text-[var(--text-subtle)]"
                             aria-label="Vaihda ateria"
+                            disabled={isEaten || isPending}
                             onClick={() => setSwapTarget({ entryId: entry.id, mealTag: entry.mealTag, currentRecipeId: entry.recipeId })}
                           >
                             <Repeat2 className="size-4" aria-hidden="true" />
                           </button>
                           <button
                             type="button"
-                            className="grid size-8 shrink-0 place-items-center rounded-full text-[var(--text-subtle)] transition hover:text-[var(--danger)]"
+                            className="grid size-8 shrink-0 place-items-center rounded-full text-[var(--text-subtle)] transition hover:text-[var(--danger)] disabled:opacity-40 disabled:hover:text-[var(--text-subtle)]"
                             aria-label="Poista ateria"
-                            disabled={isPending}
+                            disabled={isEaten || isPending}
                             onClick={async () => {
                               setPendingId(entry.id);
                               try {
