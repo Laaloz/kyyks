@@ -407,6 +407,27 @@ export interface ExtraActivity {
   updatedAt: string;
 }
 
+// Päiväkohtaisen ateriarivin lähde: pohjalistalta, vaihdettu, vai itse lisätty.
+export type DayMealSource = "plan" | "swapped" | "added";
+
+// Treenaajan oma päiväkohtainen ateriavalinta (vaihe 6). Pohja tulee suunnitelmasta,
+// mutta treenaaja kokoaa päivänsä itse näiden rivien kautta.
+export interface DayMealPlanEntry {
+  id: string;
+  athleteId: string;
+  // Paikallinen päiväavain muodossa YYYY-MM-DD.
+  planDate: string;
+  mealTag: MealTag;
+  recipeId: string;
+  source: DayMealSource;
+  servings: number;
+  // null/undefined = ei vielä syöty; aikaleima = merkitty syödyksi.
+  eatenAt?: string | null;
+  position: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
 export interface Invite {
   id: string;
   token: string;
@@ -447,6 +468,7 @@ export interface AppState {
   sessions: WorkoutSession[];
   notes: WorkoutNote[];
   extraActivities?: ExtraActivity[];
+  dayMealPlans?: DayMealPlanEntry[];
   conversationEntries: ConversationEntry[];
   invites: Invite[];
   passwordResetRequests: PasswordResetRequest[];
