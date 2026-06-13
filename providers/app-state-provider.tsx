@@ -4222,8 +4222,8 @@ function findResolvedUserIdInSnapshot(
         return { ok: true };
       },
       async saveNutritionProfile(input) {
-        if (!currentUser || !canActAsCoach(currentUser.role)) {
-          return { ok: false, message: "Vain admin tai valmentaja voi hallita ravintoprofiileja." };
+        if (!currentUser) {
+          return { ok: false, message: "Kirjaudu sisään ennen ravintoprofiilin tallennusta." };
         }
 
         const targetUser = state.users.find((user) => user.id === input.userId);
@@ -4231,6 +4231,8 @@ function findResolvedUserIdInSnapshot(
           return { ok: false, message: "Valitse käyttäjä ravintoprofiilille." };
         }
 
+        // Treenaaja saa hallita omaa profiiliaan (esim. tavoite); valmentaja/admin
+        // omiaan ja valmennettaviaan. RLS (038) sallii jo auth.uid() = user_id.
         const canManageSelf = input.userId === currentUser.id;
         const canManageAthleteTarget = isAthleteRole(targetUser.role) && canCoachManageAthlete(state, currentUser.id, input.userId);
 

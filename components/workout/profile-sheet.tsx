@@ -13,7 +13,7 @@ const SECTION_ROWS: Array<{ section: ProfileSheetSection; label: string }> = [
   { section: "account", label: "Tili ja tiedot" },
   { section: "appearance", label: "Teema ja ulkoasu" },
   { section: "reminders", label: "Muistutukset" },
-  { section: "units", label: "Yksiköt ja kieli" },
+  { section: "units", label: "Yksiköt" },
 ];
 
 function initialsFromName(name: string) {

@@ -1,7 +1,7 @@
 "use client";
 
 import { zodResolver } from "@hookform/resolvers/zod";
-import { Ellipsis, HousePlus, KeyRound, Ruler, Scale, Share, UserRound } from "lucide-react";
+import { Ellipsis, HousePlus, KeyRound, Share, UserRound } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
@@ -17,22 +17,10 @@ import { bodyMeasurementSchema, userSettingsSchema } from "@/components/workout/
 import { roleLabel } from "@/components/workout/shared";
 import { getMeasurementsForUser } from "@/lib/body-metrics";
 import { withMinimumDelay } from "@/lib/min-delay";
+import { calculateMacroTarget, getMissingMacroProfileFields } from "@/lib/nutrition";
 import { canTrackOwnTraining, getDashboardViewsForRole, getDefaultDashboardView, isAthleteRole } from "@/lib/role-access";
-import { PROGRAMS_DASHBOARD_VIEW, type DashboardHomeView, type ProfileSex, type Role, type ThemeMode } from "@/lib/types";
+import { type DashboardHomeView, type NutritionGoal, type ProfileSex, type Role, type ThemeMode } from "@/lib/types";
 import { useAppState } from "@/providers/app-state-provider";
-
-const dashboardViewLabel: Record<DashboardHomeView, string> = {
-  overview: "Tänään",
-  nutrition: "Ravinto",
-  measurements: "Keho",
-  athletes: "Tiimi",
-  users: "Hallinta",
-  [PROGRAMS_DASHBOARD_VIEW]: "Ohjelma",
-  invites: "Kutsut",
-  "athlete-log": "Treeni",
-  conversation: "Chat",
-  ingredients: "Raaka-aineet",
-};
 
 const themeModeLabel: Record<ThemeMode, string> = {
   light: "Vaalea",
@@ -65,7 +53,7 @@ const settingsSectionTabs: Array<{ section: SettingsSection; label: string }> = 
   { section: "account", label: "Tili ja tiedot" },
   { section: "appearance", label: "Teema ja ulkoasu" },
   { section: "reminders", label: "Muistutukset" },
-  { section: "units", label: "Yksiköt ja kieli" },
+  { section: "units", label: "Yksiköt" },
 ];
 
 type DeferredInstallPromptEvent = Event & {
@@ -93,6 +81,7 @@ export function UserSettingsPanel({
     currentUser,
     state,
     notify,
+    saveNutritionProfile,
     updateCurrentUserSettings,
     uploadCurrentUserProfileImage,
     removeCurrentUserProfileImage,
@@ -123,13 +112,71 @@ export function UserSettingsPanel({
         : undefined,
     [currentUser, state],
   );
-  const latestOwnWaistCm = useMemo(
-    () =>
-      currentUser
-        ? getMeasurementsForUser(state, currentUser.id).find((entry) => entry.waistCm !== undefined)?.waistCm ?? currentUser.waistCm
-        : undefined,
-    [currentUser, state],
+  // Tavoite (pudota/ylläpidä/kasvata): treenaaja säätää itse → laskee ja
+  // ylikirjoittaa ravinnon kcal/makrot (calculateMacroTarget, Mifflin–St Jeor).
+  const ownNutritionProfile = useMemo(
+    () => (currentUser ? state.nutritionProfiles.find((profile) => profile.userId === currentUser.id) ?? null : null),
+    [currentUser, state.nutritionProfiles],
   );
+  const [goalDraft, setGoalDraft] = useState<NutritionGoal>(ownNutritionProfile?.goal ?? "maintain");
+  const [isSavingGoal, setIsSavingGoal] = useState(false);
+  const [goalMessage, setGoalMessage] = useState("");
+  const [goalMessageTone, setGoalMessageTone] = useState<"success" | "danger" | null>(null);
+  useEffect(() => {
+    if (ownNutritionProfile?.goal) {
+      setGoalDraft(ownNutritionProfile.goal);
+    }
+  }, [ownNutritionProfile?.goal]);
+  const goalProfileBasis = currentUser
+    ? {
+        age: currentUser.age,
+        sex: currentUser.sex,
+        heightCm: currentUser.heightCm,
+        weightKg: currentUser.weightKg ?? latestOwnWeightKg,
+      }
+    : { age: undefined, sex: undefined, heightCm: undefined, weightKg: undefined };
+  const missingGoalFields = getMissingMacroProfileFields(goalProfileBasis);
+  const goalActivityLevel = ownNutritionProfile?.activityLevel ?? "moderate";
+  const computedGoalTarget = calculateMacroTarget({ ...goalProfileBasis, goal: goalDraft, activityLevel: goalActivityLevel });
+  const handleGoalChange = async (nextGoal: NutritionGoal) => {
+    setGoalDraft(nextGoal);
+    setGoalMessage("");
+    setGoalMessageTone(null);
+    if (!currentUser) {
+      return;
+    }
+    const target = calculateMacroTarget({ ...goalProfileBasis, goal: nextGoal, activityLevel: goalActivityLevel });
+    if (!target) {
+      setGoalMessage("Täytä ikä, sukupuoli, pituus ja paino, niin lasketaan kcal-tavoite.");
+      setGoalMessageTone("danger");
+      return;
+    }
+
+    setIsSavingGoal(true);
+    try {
+      const result = await withMinimumDelay(
+        saveNutritionProfile({
+          userId: currentUser.id,
+          goal: nextGoal,
+          activityLevel: goalActivityLevel,
+          mealsPerDay: ownNutritionProfile?.mealsPerDay ?? 4,
+          calculationMode: "auto",
+          targetKcal: target.kcal,
+          proteinG: target.proteinG,
+          carbsG: target.carbsG,
+          fatG: target.fatG,
+          coachNotes: ownNutritionProfile?.coachNotes,
+          dietaryFlags: ownNutritionProfile?.dietaryFlags,
+          allergies: ownNutritionProfile?.allergies,
+        }),
+      );
+      setGoalMessage(result.ok ? "Tavoite päivitetty." : result.message);
+      setGoalMessageTone(result.ok ? "success" : "danger");
+      notify({ tone: result.ok ? "success" : "danger", message: result.ok ? "Tavoite päivitetty." : result.message });
+    } finally {
+      setIsSavingGoal(false);
+    }
+  };
   const [isTriggeringInstallPrompt, setIsTriggeringInstallPrompt] = useState(false);
   const [ageDraft, setAgeDraft] = useState(currentUser?.age !== undefined ? String(currentUser.age) : "");
   const [sexDraft, setSexDraft] = useState<ProfileSex | "">(currentUser?.sex ?? "");
@@ -599,36 +646,36 @@ export function UserSettingsPanel({
             </p>
           </div>
 
-            <div className="sm:col-span-2">
-              <Label>Nykyiset mittatiedot</Label>
-            <div className="grid gap-2 sm:grid-cols-2">
-              <div className="flex items-center gap-2.5 rounded-xl border border-[var(--border)] bg-[var(--surface)] px-3 py-2.5">
-                <div className="flex h-9 w-9 items-center justify-center rounded-full bg-[color-mix(in_srgb,var(--accent)_14%,transparent)] text-[var(--accent)]">
-                  <Scale className="h-4 w-4" aria-hidden="true" />
-                </div>
-                <div className="min-w-0">
-                  <p className="text-[11px] font-semibold tracking-[0.04em] text-[var(--text-subtle)]">Paino</p>
-                  <p className="mt-0.5 text-base font-semibold text-[var(--text)]">
-                    {latestOwnWeightKg ?? "-"} <span className="text-sm font-medium text-[var(--text-muted)]">kg</span>
-                  </p>
-                </div>
-              </div>
-              <div className="flex items-center gap-2.5 rounded-xl border border-[var(--border)] bg-[var(--surface)] px-3 py-2.5">
-                <div className="flex h-9 w-9 items-center justify-center rounded-full bg-[color-mix(in_srgb,var(--accent)_14%,transparent)] text-[var(--accent)]">
-                  <Ruler className="h-4 w-4" aria-hidden="true" />
-                </div>
-                <div className="min-w-0">
-                  <p className="text-[11px] font-semibold tracking-[0.04em] text-[var(--text-subtle)]">Vyötärö</p>
-                  <p className="mt-0.5 text-base font-semibold text-[var(--text)]">
-                    {latestOwnWaistCm ?? "-"} <span className="text-sm font-medium text-[var(--text-muted)]">cm</span>
-                  </p>
-                </div>
-              </div>
+          {canTrackOwnTraining(currentUser.role) ? (
+            <div>
+              <Label htmlFor="account-goal">Tavoite</Label>
+              <Select
+                id="account-goal"
+                value={goalDraft}
+                disabled={isSavingGoal}
+                onChange={(event) => void handleGoalChange(event.target.value as NutritionGoal)}
+              >
+                <option value="lose">Pudota painoa</option>
+                <option value="maintain">Ylläpidä</option>
+                <option value="gain">Kasvata</option>
+              </Select>
+              {missingGoalFields.length > 0 ? (
+                <p className="mt-2 text-xs text-[var(--warning)]">
+                  Täytä ikä, sukupuoli, pituus ja paino, niin laskemme kcal-tavoitteen automaattisesti.
+                </p>
+              ) : computedGoalTarget ? (
+                <p className="mt-2 text-xs text-[var(--text-subtle)]">
+                  Laskettu kcal-tavoite:{" "}
+                  <span className="font-semibold text-[var(--text)]">{computedGoalTarget.kcal} kcal</span>
+                  {" · "}P {computedGoalTarget.proteinG} / H {computedGoalTarget.carbsG} / R {computedGoalTarget.fatG} g.
+                  Tavoite laskee ja korvaa ravinnon kcal- ja makrotavoitteet.
+                </p>
+              ) : null}
+              {goalMessage ? (
+                <InlineFeedback message={goalMessage} tone={goalMessageTone} className="mt-2 text-sm" />
+              ) : null}
             </div>
-            <p className="mt-2 text-xs text-[var(--text-subtle)]">
-              Paino ja vyötärö päivittyvät mittaseurannan kautta, eivät tästä profiilin perustieto-osiosta.
-            </p>
-          </div>
+          ) : null}
 
           {isSavingProfile || profileMessage ? (
             <InlineFeedback
@@ -700,17 +747,6 @@ export function UserSettingsPanel({
             Valitse aloitussivu ja sovelluksen värimaailma.
           </CardDescription>
           <div className="mt-4 space-y-3.5">
-            <div>
-              <Label htmlFor="settings-default-view">Aloitussivu</Label>
-              <Select id="settings-default-view" disabled={isSavingSettings} {...form.register("defaultDashboardView")}>
-                {allowedViewOptions.map((view) => (
-                  <option key={view} value={view}>
-                    {dashboardViewLabel[view]}
-                  </option>
-                ))}
-              </Select>
-            </div>
-
             <div>
               <Label htmlFor="settings-theme-mode">Teema</Label>
               <Select id="settings-theme-mode" disabled={isSavingSettings} {...form.register("themeMode")}>
@@ -874,9 +910,9 @@ export function UserSettingsPanel({
       <div role="tabpanel" id="settings-section-panel-units" aria-labelledby="settings-section-tab-units" className="grid gap-4">
         <Card>
           <p className="text-xs font-semibold tracking-[0.04em] text-[var(--text-subtle)]">Asetukset</p>
-          <CardTitle className="text-xl sm:text-2xl">Yksiköt ja kieli</CardTitle>
+          <CardTitle className="text-xl sm:text-2xl">Yksiköt</CardTitle>
           <CardDescription className="mt-1.5">
-            Mittayksiköt ja sovelluksen kieli.
+            Mittayksiköt treenin kirjauksessa.
           </CardDescription>
           <div className="mt-4 space-y-3.5">
             <div>
@@ -896,14 +932,6 @@ export function UserSettingsPanel({
               <p className="mt-2 text-xs text-[var(--text-subtle)]">
                 Tätä askelta käytetään treenitaulukon kuorman vetosäädössä ja näppäimistöohjauksessa.
               </p>
-            </div>
-
-            <div>
-              <Label htmlFor="settings-language">Kieli</Label>
-              <Select id="settings-language" disabled value="fi">
-                <option value="fi">Suomi</option>
-              </Select>
-              <p className="mt-2 text-xs text-[var(--text-subtle)]">Sovellus on toistaiseksi vain suomeksi.</p>
             </div>
 
             {isSavingSettings || message ? (

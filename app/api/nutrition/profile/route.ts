@@ -2,7 +2,6 @@ import { NextResponse } from "next/server";
 
 import { nutritionProfileSchema } from "@/components/workout/schemas";
 import {
-  ensureNutritionManagerRequester,
   getNutritionRequester,
   saveNutritionProfileOnServer,
 } from "@/lib/server/nutrition";
@@ -51,11 +50,9 @@ export async function PATCH(request: Request) {
     return requesterResult.error;
   }
 
-  const forbidden = ensureNutritionManagerRequester(requesterResult.requester);
-  if (forbidden) {
-    return forbidden;
-  }
-
+  // Treenaaja saa tallentaa oman profiilinsa (esim. tavoite); kohdekohtainen
+  // oikeus (admin / oma / valmennettava) tarkistetaan saveNutritionProfileOnServer-
+  // funktiossa (canRequesterManageAthlete). RLS 038 sallii jo auth.uid() = user_id.
   const body = await request.json().catch(() => ({}));
   const parsed = nutritionProfileSchema.safeParse(body);
   if (!parsed.success) {
