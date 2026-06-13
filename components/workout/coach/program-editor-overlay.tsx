@@ -265,6 +265,12 @@ export function ProgramEditorOverlay({
       .sort((a, b) => a.name.localeCompare(b.name, "fi"));
   }, [exercises, pickerForWorkout, pickerQuery, workouts]);
 
+  const instructionTarget = openInstructionUid
+    ? workouts
+        .flatMap((workout) => workout.exercises.map((exercise) => ({ workoutUid: workout.uid, exercise })))
+        .find((entry) => entry.exercise.uid === openInstructionUid) ?? null
+    : null;
+
   const handleSave = async () => {
     if (!assigned.length) {
       setError("Valitse vähintään yksi urheilija.");
@@ -459,15 +465,6 @@ export function ProgramEditorOverlay({
                     </button>
                   </div>
                 </div>
-                {openInstructionUid === exercise.uid ? (
-                  <textarea
-                    className="mt-1.5 w-full rounded-xl border border-[var(--border)] bg-[var(--surface-2)] px-3 py-2 text-sm text-[var(--text)] outline-none focus-visible:border-[var(--accent)]"
-                    rows={2}
-                    placeholder="Ohje urheilijalle — esim. tekniikkavinkki tai tempo."
-                    value={exercise.instruction ?? ""}
-                    onChange={(event) => updateExercise(workout.uid, exercise.uid, { instruction: event.target.value })}
-                  />
-                ) : null}
                 <div className="mt-1 grid grid-cols-[1fr_16px_1fr_16px_1fr] items-center gap-2">
                   <DragNumber
                     value={exercise.sets}
@@ -600,6 +597,43 @@ export function ProgramEditorOverlay({
                 <p className="py-3 text-[13.5px] text-[var(--text-subtle)]">Ei liikkeitä tällä haulla.</p>
               ) : null}
             </div>
+          </div>
+        </div>
+      ) : null}
+
+      {instructionTarget ? (
+        <div className="absolute inset-0 z-10 flex flex-col justify-end bg-[color:color-mix(in_srgb,var(--text)_45%,transparent)]">
+          <button type="button" className="flex-1" aria-label="Sulje" onClick={() => setOpenInstructionUid(null)} />
+          <div className="rounded-t-3xl bg-[var(--surface)] p-4 pb-[calc(env(safe-area-inset-bottom)+1rem)]">
+            <div className="flex items-start justify-between gap-3">
+              <div className="min-w-0">
+                <p className="text-xs font-semibold uppercase tracking-[0.05em] text-[var(--text-subtle)]">Liikkeen ohje</p>
+                <h2 className="truncate font-[family-name:var(--font-display)] text-xl font-bold text-[var(--text)]">
+                  {instructionTarget.exercise.name}
+                </h2>
+              </div>
+              <button
+                type="button"
+                className="grid size-9 shrink-0 place-items-center rounded-full text-[var(--text-subtle)] transition hover:bg-[var(--surface-2)]"
+                aria-label="Sulje"
+                onClick={() => setOpenInstructionUid(null)}
+              >
+                <X className="size-5" aria-hidden="true" />
+              </button>
+            </div>
+            <textarea
+              autoFocus
+              className="mt-3 w-full rounded-xl border border-[var(--border)] bg-[var(--surface-2)] px-3 py-2.5 text-sm text-[var(--text)] outline-none focus-visible:border-[var(--accent)]"
+              rows={4}
+              placeholder="Ohje urheilijalle — esim. tekniikkavinkki tai tempo."
+              value={instructionTarget.exercise.instruction ?? ""}
+              onChange={(event) =>
+                updateExercise(instructionTarget.workoutUid, instructionTarget.exercise.uid, { instruction: event.target.value })
+              }
+            />
+            <Button type="button" variant="primary" className="mt-3 w-full" onClick={() => setOpenInstructionUid(null)}>
+              Valmis
+            </Button>
           </div>
         </div>
       ) : null}
