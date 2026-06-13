@@ -1,6 +1,6 @@
 "use client";
 
-import { ChevronLeft, Plus, Search, Trash2, X } from "lucide-react";
+import { BookOpen, ChevronLeft, Plus, Search, Trash2, X } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { createPortal } from "react-dom";
 
@@ -19,6 +19,8 @@ type DraftExercise = {
   sets: number;
   repsMin: number;
   repsMax: number;
+  /** Liikkeen ohje (cue) urheilijalle — näkyy treenissä. */
+  instruction?: string;
   /** Pankista puuttuva oma liike — luodaan coach_custom-liikkeeksi tallennettaessa. */
   isCustom?: boolean;
   muscleGroup?: MuscleGroupKey;
@@ -60,6 +62,7 @@ function planWorkoutsToDraft(plan: TrainingPlan | null): DraftWorkout[] {
         uid: makeUid("e"),
         exerciseId: exercise.exerciseId,
         name: exercise.exerciseName,
+        instruction: exercise.instruction,
         sets: Math.max(1, exercise.sets.length || 3),
         repsMin: min,
         repsMax: Math.max(min, max),
@@ -77,7 +80,7 @@ function draftToWorkoutInputs(workouts: DraftWorkout[]): ProgramWorkoutInput[] {
     exercises: workout.exercises.map((exercise) => {
       const base = {
         exerciseName: exercise.name,
-        instruction: "",
+        instruction: exercise.instruction?.trim() ?? "",
         repMode: "range" as const,
         setCount: exercise.sets,
         targetReps: exercise.repsMin,
@@ -137,6 +140,7 @@ export function ProgramEditorOverlay({
   const [pickerForWorkout, setPickerForWorkout] = useState<string | null>(null);
   const [pickerQuery, setPickerQuery] = useState("");
   const [newMuscle, setNewMuscle] = useState<MuscleGroupKey | "">("");
+  const [openInstructionUid, setOpenInstructionUid] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [mounted, setMounted] = useState(false);
@@ -427,15 +431,40 @@ export function ProgramEditorOverlay({
                       </span>
                     ) : null}
                   </span>
-                  <button
-                    type="button"
-                    className="grid size-8 shrink-0 place-items-center rounded-full text-[var(--text-subtle)] transition hover:text-[var(--danger)]"
-                    aria-label={`Poista ${exercise.name}`}
-                    onClick={() => removeExercise(workout.uid, exercise.uid)}
-                  >
-                    <Trash2 className="size-4" aria-hidden="true" />
-                  </button>
+                  <div className="flex shrink-0 items-center gap-0.5">
+                    <button
+                      type="button"
+                      className={cn(
+                        "grid size-8 place-items-center rounded-full transition",
+                        openInstructionUid === exercise.uid || exercise.instruction?.trim()
+                          ? "text-[var(--accent)]"
+                          : "text-[var(--text-subtle)] hover:text-[var(--text)]",
+                      )}
+                      aria-label={`Ohje: ${exercise.name}`}
+                      aria-expanded={openInstructionUid === exercise.uid}
+                      onClick={() => setOpenInstructionUid((current) => (current === exercise.uid ? null : exercise.uid))}
+                    >
+                      <BookOpen className="size-4" aria-hidden="true" />
+                    </button>
+                    <button
+                      type="button"
+                      className="grid size-8 place-items-center rounded-full text-[var(--text-subtle)] transition hover:text-[var(--danger)]"
+                      aria-label={`Poista ${exercise.name}`}
+                      onClick={() => removeExercise(workout.uid, exercise.uid)}
+                    >
+                      <Trash2 className="size-4" aria-hidden="true" />
+                    </button>
+                  </div>
                 </div>
+                {openInstructionUid === exercise.uid ? (
+                  <textarea
+                    className="mt-1.5 w-full rounded-xl border border-[var(--border)] bg-[var(--surface-2)] px-3 py-2 text-sm text-[var(--text)] outline-none focus-visible:border-[var(--accent)]"
+                    rows={2}
+                    placeholder="Ohje urheilijalle — esim. tekniikkavinkki tai tempo."
+                    value={exercise.instruction ?? ""}
+                    onChange={(event) => updateExercise(workout.uid, exercise.uid, { instruction: event.target.value })}
+                  />
+                ) : null}
                 <div className="mt-1 grid grid-cols-[1fr_16px_1fr_16px_1fr] items-center gap-2">
                   <DragNumber
                     value={exercise.sets}
