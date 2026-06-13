@@ -442,10 +442,12 @@ export function DashboardShell() {
 
   return (
     <div
-      className={`mx-auto flex max-w-7xl flex-col overflow-x-hidden px-4 py-4 sm:px-6 lg:px-8 ${
-        view === "conversation"
-          ? "min-h-[100dvh] overflow-hidden gap-4 pb-28 lg:gap-4 lg:pb-4"
-          : "min-h-[100dvh] gap-4 pb-28 lg:gap-6 lg:pb-4"
+      className={`mx-auto flex max-w-7xl flex-col overflow-x-hidden px-4 py-4 sm:px-6 lg:px-8 min-h-[100dvh] ${
+        view === "conversation" ? "overflow-hidden gap-4 lg:gap-4" : "gap-4 lg:gap-6"
+      } ${
+        // Alanavin tila vain kun navi näkyy; aktiivitreenissä/näppäimistöllä navi on
+        // piilossa, joten varataan vain turva-alue + pieni pehmuste.
+        shouldHideMobileBottomNav ? "pb-[calc(1rem+env(safe-area-inset-bottom))] lg:pb-4" : "pb-28 lg:pb-4"
       }`}
     >
       {shouldShowMeasurementReminder && isMeasurementReminderOpen ? (

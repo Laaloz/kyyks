@@ -2303,20 +2303,20 @@ export function AthleteSessionPanel({
             <Button
               type="button"
               variant="ghost"
-              aria-label="Keskeytä treeni"
-              title="Keskeytä treeni"
+              aria-label="Poista treeni"
+              title="Poista treeni"
               className="size-12 shrink-0 rounded-2xl border border-[var(--border)] p-0 text-[var(--danger)]"
-              loading={isCancellingWorkout}
+              loading={isDeletingWorkout}
               onClick={async () => {
-                setIsCancellingWorkout(true);
+                setIsDeletingWorkout(true);
                 try {
-                  await onCancel();
+                  await onDelete();
                 } finally {
-                  setIsCancellingWorkout(false);
+                  setIsDeletingWorkout(false);
                 }
               }}
             >
-              {isCancellingWorkout ? null : <Trash2 className="size-5" aria-hidden="true" />}
+              {isDeletingWorkout ? null : <Trash2 className="size-5" aria-hidden="true" />}
             </Button>
             <Button
               type="button"
