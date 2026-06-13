@@ -4,6 +4,7 @@ import {
   ArrowLeft,
   Bike,
   BookOpen,
+  Check,
   CircleDot,
   ChevronDown,
   ChevronLeft,
@@ -18,6 +19,7 @@ import {
   Music,
   MoreHorizontal,
   PersonStanding,
+  Plus,
   Snowflake,
   Swords,
   Trash2,
@@ -2795,277 +2797,158 @@ export function AthleteDashboard({
 
             {athleteLogTab === "training" ? (
             <div role="tabpanel" id="athlete-log-panel-training" aria-labelledby="athlete-log-tab-training">
-            <Card>
-              <div className="flex items-start justify-between gap-3">
-                <CardTitle>Valitse seuraava treeni</CardTitle>
-                {!readOnly && canManageOwnPrograms(currentUser?.role) && onOpenProgramEditor ? (
-                  <Button
-                    type="button"
-                    variant="secondary"
-                    className="h-9 shrink-0 px-3 text-sm"
-                    onClick={onOpenProgramEditor}
-                  >
-                    Muokkaa ohjelmaa
-                  </Button>
-                ) : null}
-              </div>
-              {blockingWorkout && !selectionTransitionMessage ? (
-                <div
-                  className={`mt-4 rounded-2xl border px-4 py-4 text-sm text-[var(--text)] ${
-                    blockingWorkout.status === "cancelled"
-                      ? "border-[var(--danger)] bg-[color:color-mix(in_srgb,var(--danger)_10%,var(--surface))] shadow-[0_10px_24px_-22px_var(--danger)]"
-                      : "border-[var(--warning)] bg-[color:color-mix(in_srgb,var(--warning)_10%,var(--surface))] shadow-[0_10px_24px_-22px_var(--warning)]"
-                  }`}
-                >
-                  <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between sm:gap-4">
-                    <div className="min-w-0">
-                      <p
-                        className={`text-xs font-semibold tracking-[0.04em] ${
-                          blockingWorkout.status === "cancelled" ? "text-[var(--danger)]" : "text-[var(--warning)]"
-                        }`}
-                      >
-                        {blockingWorkout.status === "cancelled" ? "Keskeytetty treeni" : "Aktiivinen treeni kesken"}
-                      </p>
-                      <p className="mt-1 max-w-2xl leading-6 text-[var(--text-muted)]">
-                        {blockingWorkout.status === "cancelled"
-                          ? "Jatka ensin keskeytetty treeni loppuun ennen uuden aloitusta. Sama treeni odottaa alempana valmiina jatkettavaksi."
-                          : "Sinulla on jo treeni kesken. Palaa siihen ennen kuin aloitat uuden treenin."}
-                      </p>
-                      <p className="mt-2 text-base font-semibold text-[var(--text)]">
-                        {normalizeWorkoutHistoryTitle(blockingWorkout.title)}
-                      </p>
-                    </div>
-                  </div>
-                  <div className="mt-3">
-                    <Button
-                      type="button"
-                      variant="primary"
-                      className="w-full sm:w-auto"
-                      disabled={isTransitionLoading(`blocking-${blockingWorkout.id}`)}
-                      onClick={() => {
-                        void openOrResumeWorkout(blockingWorkout.id, `blocking-${blockingWorkout.id}`);
-                      }}
-                    >
-                      {blockingWorkout.status === "cancelled" ? "Jatka treeniä" : "Siirry treeniin"}
-                    </Button>
-                  </div>
-                </div>
-              ) : null}
-              {selectionTransitionMessage ? (
-                <p className="mt-4 flex items-center gap-3 rounded-2xl border border-[var(--border-strong)] bg-[color:color-mix(in_srgb,var(--surface-2)_84%,var(--surface))] px-4 py-3 text-sm text-[var(--text)] shadow-[0_12px_28px_-24px_var(--shadow)]">
-                  <span
-                    aria-hidden="true"
-                    className="size-4 animate-spin rounded-full border-2 border-current border-r-transparent text-[var(--accent)]"
-                  />
-                  <span>{selectionTransitionMessage}</span>
-                </p>
-              ) : pendingWorkoutTransition ? (
-                <p className="mt-4 flex items-center gap-3 rounded-2xl border border-[var(--border-strong)] bg-[color:color-mix(in_srgb,var(--surface-2)_84%,var(--surface))] px-4 py-3 text-sm text-[var(--text)] shadow-[0_12px_28px_-24px_var(--shadow)]">
-                  <span
-                    aria-hidden="true"
-                    className="size-4 animate-spin rounded-full border-2 border-current border-r-transparent text-[var(--accent)]"
-                  />
+              {selectionTransitionMessage || pendingWorkoutTransition ? (
+                <p className="mb-4 flex items-center gap-3 rounded-2xl bg-[var(--surface-2)] px-4 py-3 text-sm text-[var(--text)]">
+                  <span aria-hidden="true" className="size-4 animate-spin rounded-full border-2 border-current border-r-transparent text-[var(--accent)]" />
                   <span>
-                    {pendingWorkoutTransition.type === "complete"
+                    {selectionTransitionMessage
+                      ? selectionTransitionMessage
+                      : pendingWorkoutTransition?.type === "complete"
                         ? "Tallennetaan treeni ja päivitetään näkymä..."
-                      : pendingWorkoutTransition.type === "cancel"
-                        ? "Palataan treenilistaan ja päivitetään keskeytetty tila..."
-                        : "Poistetaan treeniä ja päivitetään näkymä..."}
+                        : pendingWorkoutTransition?.type === "cancel"
+                          ? "Palataan treenilistaan ja päivitetään keskeytetty tila..."
+                          : "Poistetaan treeniä ja päivitetään näkymä..."}
                   </span>
                 </p>
               ) : null}
+
               {athletePrograms.length ? (
-                <div className="mt-5 grid gap-4">
-                  {athletePrograms.map((program) => (
-                    <div key={program.id} className="border-t border-[var(--border)] pt-4 first:border-t-0 first:pt-0">
-                      <p className="text-[11px] font-semibold tracking-[0.08em] text-[var(--text-subtle)]">Aktiivinen ohjelma</p>
-                      <p className="mt-1 text-lg font-semibold text-[var(--text)]">{program.title}</p>
-                      {program.description ? (
-                        <p className="mt-2 max-w-3xl text-sm text-[var(--text-muted)]">{program.description}</p>
-                      ) : null}
-                      <div className="mt-4 grid gap-3 md:grid-cols-2 2xl:grid-cols-3">
-                        {(program.workouts ?? []).map((workout) => {
-                          const setCount = workout.exercises.reduce((sum, exercise) => sum + exercise.sets.length, 0);
-                          const completionCount =
-                            currentUser
-                              ? countWorkoutCompletions(state, currentUser.id, {
-                                  programWorkoutId: workout.id,
-                                })
-                              : 0;
-                          const activeScheduled = activeScheduledByProgramWorkoutKey.get(`${program.id}::${workout.id}`);
-                          const activeScheduledStatus =
-                            activeScheduled ? resolveWorkoutStatus(activeScheduled) : undefined;
-                          const activeScheduledId =
-                            activeScheduledStatus === "in_progress" ? activeScheduled?.id : undefined;
-                          const resumableScheduledId =
-                            activeScheduled &&
-                            activeScheduledStatus === "cancelled" &&
-                            scheduledWithSessionIds.has(activeScheduled.id)
-                              ? activeScheduled.id
-                              : undefined;
-                          const latestCompletionDate =
-                            currentUser
-                              ? getLatestWorkoutCompletionDate(state, currentUser.id, {
-                                  programWorkoutId: workout.id,
-                                })
-                              : undefined;
-                          const latestCompletionLabel = latestCompletionDate
-                            ? formatRelativeDate(latestCompletionDate)
-                            : undefined;
-                          const showLatestCompletionBadge =
-                            latestCompletionLabel !== undefined &&
-                            !resumableScheduledId &&
-                            !activeScheduledId &&
-                            !["Tänään", "Eilen", "Huomenna"].includes(latestCompletionLabel);
-                          const isLockedByAnotherWorkout = Boolean(
-                            blockingWorkout && blockingWorkout.programWorkoutId !== workout.id,
-                          );
-                          const workoutSummary =
-                            resumableScheduledId
-                              ? "Kesken. Voit jatkaa samasta kohdasta."
-                              : activeScheduledId
-                                ? "Treeni on parhaillaan käynnissä."
-                                : isLockedByAnotherWorkout
-                                  ? "Jatka kesken oleva treeni ensin."
-                                : latestCompletionLabel
-                                  ? `Viimeksi ${latestCompletionLabel.toLowerCase()}`
-                                  : "Ei vielä toteutuksia.";
-                          const workoutGuidance = deriveProgramWorkoutGuidance(workout);
+                (() => {
+                  const weekdayShort = ["Su", "Ma", "Ti", "Ke", "To", "Pe", "La"];
+                  const weekStart = new Date();
+                  weekStart.setHours(0, 0, 0, 0);
+                  weekStart.setDate(weekStart.getDate() - ((weekStart.getDay() + 6) % 7));
+                  return athletePrograms.map((program) => {
+                    const workouts = program.workouts ?? [];
+                    const nextWorkoutId = workouts.find((workout) => {
+                      const completion = currentUser
+                        ? getLatestWorkoutCompletionDate(state, currentUser.id, { programWorkoutId: workout.id })
+                        : undefined;
+                      const doneThisWeek = completion ? new Date(completion) >= weekStart : false;
+                      const active = activeScheduledByProgramWorkoutKey.get(`${program.id}::${workout.id}`);
+                      return !doneThisWeek && !active;
+                    })?.id;
+                    return (
+                      <div key={program.id} className="mb-4">
+                        <div className="flex items-baseline justify-between px-1">
+                          <p className="font-[family-name:var(--font-display)] text-xs font-semibold uppercase tracking-[0.05em] text-[var(--text-subtle)]">
+                            {program.title}
+                            {program.weekCount ? ` · ${program.weekCount} vk` : ""}
+                          </p>
+                          {weeklyInsights.targetCount > 0 ? (
+                            <p className="font-[family-name:var(--font-display)] text-xs font-semibold tabular-nums text-[var(--text-subtle)]">
+                              {weeklyInsights.completedCount}/{weeklyInsights.targetCount} tällä viikolla
+                            </p>
+                          ) : null}
+                        </div>
+                        <Card className="mt-2">
+                          <div className="divide-y divide-[var(--border)]">
+                            {workouts.map((workout) => {
+                              const setCount = workout.exercises.reduce((sum, exercise) => sum + exercise.sets.length, 0);
+                              const estMin = Math.max(15, Math.round(setCount * 3.5));
+                              const activeScheduled = activeScheduledByProgramWorkoutKey.get(`${program.id}::${workout.id}`);
+                              const activeScheduledStatus = activeScheduled ? resolveWorkoutStatus(activeScheduled) : undefined;
+                              const activeScheduledId = activeScheduledStatus === "in_progress" ? activeScheduled?.id : undefined;
+                              const resumableScheduledId =
+                                activeScheduled && activeScheduledStatus === "cancelled" && scheduledWithSessionIds.has(activeScheduled.id)
+                                  ? activeScheduled.id
+                                  : undefined;
+                              const completion = currentUser
+                                ? getLatestWorkoutCompletionDate(state, currentUser.id, { programWorkoutId: workout.id })
+                                : undefined;
+                              const doneThisWeek = completion ? new Date(completion) >= weekStart : false;
+                              const doneWeekday = doneThisWeek && completion ? weekdayShort[new Date(completion).getDay()] : null;
+                              const isActiveRow = Boolean(activeScheduledId || resumableScheduledId);
+                              const isNext = workout.id === nextWorkoutId;
+                              const isLockedByAnotherWorkout = Boolean(blockingWorkout && blockingWorkout.programWorkoutId !== workout.id);
 
-                          return (
-                            <div
-                              key={workout.id}
-                              className="flex h-full w-full flex-col rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-4 shadow-[0_1px_0_0_var(--shadow-soft),0_10px_24px_-20px_var(--shadow)]"
-                            >
-                              <div className="flex items-start justify-between gap-3.5">
-                                <div className="min-w-0">
-                                  <p className="text-base font-semibold text-[var(--text)]">{workout.name}</p>
-                                  <p className="mt-1 text-xs text-[var(--text-subtle)]">
-                                    {workout.exercises.length} liikettä · {setCount} sarjaa
-                                  </p>
-                                </div>
-                                <div className="flex shrink-0 items-center gap-2">
-                                  <button
-                                    type="button"
-                                    aria-label={`${workout.name} esikatselu`}
-                                    title="Esikatselu"
-                                    className="inline-flex size-8.5 items-center justify-center rounded-full border border-[color-mix(in_srgb,var(--accent)_22%,var(--border))] bg-[color-mix(in_srgb,var(--accent)_7%,var(--surface))] text-[var(--accent)] shadow-[0_4px_12px_-14px_var(--accent)] transition hover:border-[color-mix(in_srgb,var(--accent)_36%,var(--border))] hover:bg-[color-mix(in_srgb,var(--accent)_10%,var(--surface))] hover:opacity-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--background)]"
-                                    onClick={() => setOpenWorkoutPreview(workout)}
-                                  >
-                                    <Info className="size-3.5" aria-hidden="true" />
-                                  </button>
-                                  <button
-                                    type="button"
-                                    aria-label={`${workout.name} ohje`}
-                                    title="Ohje"
-                                    className="inline-flex size-8.5 items-center justify-center rounded-full border border-[color-mix(in_srgb,var(--accent)_22%,var(--border))] bg-[color-mix(in_srgb,var(--accent)_7%,var(--surface))] text-[var(--accent)] shadow-[0_4px_12px_-14px_var(--accent)] transition hover:border-[color-mix(in_srgb,var(--accent)_36%,var(--border))] hover:bg-[color-mix(in_srgb,var(--accent)_10%,var(--surface))] hover:opacity-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--background)]"
-                                    onClick={() => setOpenWorkoutInstruction({ exerciseName: workout.name, instruction: workoutGuidance })}
-                                  >
-                                    <BookOpen className="size-3.5" aria-hidden="true" />
-                                  </button>
-                                </div>
-                              </div>
-                              <p className="mt-3 text-sm text-[var(--text-muted)]">{workoutSummary}</p>
-                              <div className="mt-3 flex flex-wrap gap-2">
-                                {activeScheduled ? (
-                                  <Badge className={statusTone(activeScheduledStatus ?? activeScheduled.status)}>
-                                    {workoutStatusLabel(activeScheduledStatus ?? activeScheduled.status)}
-                                  </Badge>
-                                ) : null}
-                                {completionCount > 0 ? (
-                                  <Badge className="border-[var(--border)] bg-[var(--surface-2)] text-[11px] text-[var(--text-subtle)] sm:text-xs">
-                                    {completionCount} toteutusta
-                                  </Badge>
-                                ) : (
-                                  <Badge className="border-[var(--border)] bg-[var(--surface-2)] text-[11px] text-[var(--text-subtle)] sm:text-xs">
-                                    Ensimmäinen kerta
-                                  </Badge>
-                                )}
-                                {showLatestCompletionBadge ? (
-                                  <Badge className="border-[var(--border)] bg-[var(--surface-2)] text-[11px] text-[var(--text-subtle)] sm:text-xs">
-                                    {latestCompletionLabel}
-                                  </Badge>
-                                ) : null}
-                              </div>
-                              <div className="mt-auto flex flex-wrap gap-2 pt-4">
-                                {activeScheduledId ? (
-                                  <Button
-                                    type="button"
-                                    variant="ghost"
-                                    className="w-full justify-center sm:w-auto"
-                                    loading={false}
-                                    onClick={() => openWorkoutView(activeScheduledId)}
-                                  >
-                                    Avaa aktiivinen
-                                  </Button>
-                                ) : readOnly ? null : (
-                                  <Button
-                                    type="button"
-                                    variant="primary"
-                                    className="w-full justify-center sm:w-auto"
-                                    disabled={
-                                      isLockedByAnotherWorkout ||
-                                      isTransitionLoading(`program-${program.id}-workout-${workout.id}`) ||
-                                      (!resumableScheduledId && pendingWorkoutTransition?.type === "start")
-                                    }
-                                    onClick={() => {
-                                      if (resumableScheduledId) {
-                                        void openOrResumeWorkout(resumableScheduledId, `program-${program.id}-workout-${workout.id}`);
-                                        return;
+                              return (
+                                <div key={workout.id} className="flex items-center gap-3 py-3">
+                                  <div className="min-w-0 flex-1">
+                                    <div className="flex items-center gap-2">
+                                      <span className="truncate font-semibold text-[var(--text)]">{workout.name}</span>
+                                      {isActiveRow ? (
+                                        <span className="shrink-0 rounded-full bg-[var(--accent-soft)] px-2 py-0.5 text-[11px] font-semibold text-[var(--accent)]">Kesken</span>
+                                      ) : isNext && !doneThisWeek ? (
+                                        <span className="shrink-0 rounded-full bg-[var(--accent-soft)] px-2 py-0.5 text-[11px] font-semibold text-[var(--accent)]">Seuraava</span>
+                                      ) : null}
+                                    </div>
+                                    <p className="mt-0.5 text-xs text-[var(--text-subtle)]">
+                                      {workout.exercises.length} liikettä · ~{estMin} min{doneWeekday ? ` · Tehty ${doneWeekday}` : ""}
+                                    </p>
+                                  </div>
+                                  {doneThisWeek && !isActiveRow ? (
+                                    <Check className="size-5 shrink-0 text-[var(--success)]" aria-label="Tehty tällä viikolla" />
+                                  ) : readOnly ? (
+                                    <span className="shrink-0 rounded-full bg-[var(--surface-2)] px-2.5 py-0.5 text-xs font-semibold text-[var(--text-muted)]">Tulossa</span>
+                                  ) : activeScheduledId ? (
+                                    <Button type="button" variant="primary" className="h-9 shrink-0 px-4 text-sm" onClick={() => openWorkoutView(activeScheduledId)}>
+                                      Jatka
+                                    </Button>
+                                  ) : (
+                                    <Button
+                                      type="button"
+                                      variant={isNext || resumableScheduledId ? "primary" : "secondary"}
+                                      className="h-9 shrink-0 px-4 text-sm"
+                                      disabled={
+                                        isLockedByAnotherWorkout ||
+                                        isTransitionLoading(`program-${program.id}-workout-${workout.id}`) ||
+                                        (!resumableScheduledId && pendingWorkoutTransition?.type === "start")
                                       }
-
-                                      void startWorkoutFromProgram(
-                                        program.id,
-                                        workout.id,
-                                        workout.name,
-                                        `program-${program.id}-workout-${workout.id}`,
-                                      );
-                                    }}
-                                  >
-                                    {resumableScheduledId ? "Jatka treeniä" : "Aloita treeni"}
-                                  </Button>
-                                )}
-                              </div>
-                            </div>
-                          );
-                        })}
+                                      onClick={() => {
+                                        if (resumableScheduledId) {
+                                          void openOrResumeWorkout(resumableScheduledId, `program-${program.id}-workout-${workout.id}`);
+                                          return;
+                                        }
+                                        void startWorkoutFromProgram(program.id, workout.id, workout.name, `program-${program.id}-workout-${workout.id}`);
+                                      }}
+                                    >
+                                      {resumableScheduledId ? "Jatka" : "Aloita"}
+                                    </Button>
+                                  )}
+                                </div>
+                              );
+                            })}
+                          </div>
+                        </Card>
                       </div>
-                    </div>
-                  ))}
-                </div>
+                    );
+                  });
+                })()
               ) : (
-                <p className="mt-5 rounded-2xl border border-[var(--border)] bg-[var(--surface-2)] px-4 py-3 text-sm text-[var(--text-muted)]">
-                  Sinulle ei ole vielä luotu ohjelmia. Pyydä valmentajaa lisäämään ensimmäinen ohjelma.
-                </p>
+                <Card>
+                  <p className="text-sm text-[var(--text-muted)]">
+                    Sinulle ei ole vielä luotu ohjelmia. Pyydä valmentajaa lisäämään ensimmäinen ohjelma.
+                  </p>
+                </Card>
               )}
-              <div className="mt-5 rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-4 shadow-[0_1px_0_0_var(--shadow-soft),0_10px_24px_-20px_var(--shadow)]">
-                <div>
-                  <p className="text-base font-semibold text-[var(--text)]">Extra-treeni</p>
-                  <p className="mt-1 text-sm text-[var(--text-muted)]">
-                    Lisää esimerkiksi juoksu, kävely tai muu harjoitus historiaan.
-                  </p>
-                  <p className="mt-2 text-xs text-[var(--text-subtle)]">
-                    {extraActivities.length > 0
-                      ? `${extraActivities.length} extra-treeniä historiassa`
-                      : "Ei extra-treenejä vielä"}
-                  </p>
-                  {!readOnly ? (
-                    <div className="mt-3">
-                      <Button
-                        type="button"
-                        className="w-full sm:w-auto"
-                        onClick={() => {
-                          setEditingExtraActivityId(null);
-                          setIsExtraActivityDialogOpen(true);
-                        }}
-                      >
-                        Lisää extra-treeni
-                      </Button>
-                    </div>
-                  ) : null}
-                </div>
-              </div>
-            </Card>
+
+              {!readOnly ? (
+                <Button
+                  type="button"
+                  variant="secondary"
+                  className="mt-1 w-full gap-2"
+                  onClick={() => {
+                    setEditingExtraActivityId(null);
+                    setIsExtraActivityDialogOpen(true);
+                  }}
+                >
+                  <Plus className="size-4" aria-hidden="true" />
+                  Lisää extra-treeni
+                </Button>
+              ) : null}
+
+              {!readOnly && canManageOwnPrograms(currentUser?.role) && onOpenProgramEditor ? (
+                <Button type="button" variant="ghost" className="mt-2 w-full" onClick={onOpenProgramEditor}>
+                  Muokkaa ohjelmaa
+                </Button>
+              ) : null}
+
+              {!readOnly ? (
+                <p className="mt-3 px-1 text-sm text-[var(--text-subtle)]">
+                  Sarjapainot esitäytetään viime kerrasta — tavoitteena voittaa ne.
+                </p>
+              ) : null}
             </div>
             ) : null}
 
