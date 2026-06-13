@@ -606,18 +606,12 @@ export function AthleteDashboard({
     onWorkoutDetailModeChange?.(view === "athlete-log" && athleteLogMode === "workout");
   }, [athleteLogMode, onWorkoutDetailModeChange, view]);
   useEffect(() => {
-    if (view !== "overview" || overviewFocusTarget !== "measurements") {
+    if (view !== "measurements" || overviewFocusTarget !== "measurements") {
       return;
     }
 
+    // Muistutuksen "Avaa kehon seuranta" avaa Uusi mittaus -sheetin heti.
     setIsMeasurementSheetOpen(true);
-
-    const node = measurementsSectionRef.current;
-    if (!node) {
-      return;
-    }
-
-    node.scrollIntoView({ behavior: "smooth", block: "start" });
     onOverviewFocusHandled?.();
   }, [view, overviewFocusTarget, onOverviewFocusHandled]);
   const athletePrograms = state.plans.filter(

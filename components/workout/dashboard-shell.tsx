@@ -234,8 +234,9 @@ export function DashboardShell() {
   };
 
   const openMeasurementsOverview = () => {
-    // Keho on oma näkymänsä — riittää vaihtaa siihen (ei scrollIntoView-kikkailua).
+    // Keho on oma näkymänsä; focus-signaali avaa "Uusi mittaus" -sheetin heti.
     setIsMeasurementReminderOpen(false);
+    setAthleteOverviewFocusTarget("measurements");
     setView("measurements");
   };
 
