@@ -568,7 +568,7 @@ export function UserSettingsPanel({
                   });
               }}
             />
-            <div className="flex flex-wrap items-center gap-2.5 rounded-xl border-2 border-[var(--border)] bg-[var(--surface-2)] p-2.5">
+            <div className="mt-1 flex flex-wrap items-center gap-2.5">
               <div className="flex size-12 shrink-0 items-center justify-center overflow-hidden rounded-full border border-[var(--border-strong)] bg-[var(--surface)]">
                 {profileImageSrc ? (
                   <img
@@ -712,10 +712,12 @@ export function UserSettingsPanel({
         </div>
 
         {canTrackOwnTraining(currentUser.role) ? (
-          <div className="mt-4 rounded-xl border border-[color-mix(in_srgb,var(--accent)_30%,var(--border))] bg-[color-mix(in_srgb,var(--accent)_7%,var(--surface))] p-3">
-            <Label htmlFor="account-goal" className="mb-1.5">Tavoite</Label>
+          <div className="mt-4 border-t border-[var(--border)] pt-4">
+            <p className="text-[11px] font-semibold uppercase tracking-[0.05em] text-[var(--text-subtle)]">Tavoite</p>
+            <p className="mb-2 mt-0.5 text-xs text-[var(--text-muted)]">Säätää ravinnon kcal- ja makrotavoitteet. Tallentuu heti.</p>
             <Select
               id="account-goal"
+              aria-label="Tavoite"
               value={goalDraft}
               disabled={isSavingGoal}
               onChange={(event) => void handleGoalChange(event.target.value as NutritionGoal)}
@@ -730,19 +732,18 @@ export function UserSettingsPanel({
               </p>
             ) : computedGoalTarget ? (
               <p className="mt-2 text-xs text-[var(--text-muted)]">
-                Laskettu kcal-tavoite:{" "}
+                Laskettu tavoite:{" "}
                 <span className="font-semibold text-[var(--text)]">{computedGoalTarget.kcal} kcal</span>
                 {" · "}P {computedGoalTarget.proteinG} / H {computedGoalTarget.carbsG} / R {computedGoalTarget.fatG} g.
-                Tavoite laskee ja korvaa ravinnon kcal- ja makrotavoitteet.
               </p>
             ) : null}
             {goalMessage ? <InlineFeedback message={goalMessage} tone={goalMessageTone} className="mt-2 text-sm" /> : null}
           </div>
         ) : null}
 
-        <div className="mt-4 rounded-xl border border-[var(--border)] bg-[var(--surface-2)] px-3 py-2.5">
-          <p className="text-[11px] font-semibold tracking-[0.04em] text-[var(--text-subtle)]">Turvallisuus</p>
-          <div className="mt-1.5 flex flex-col gap-2.5 sm:flex-row sm:items-center sm:justify-between">
+        <div className="mt-4 border-t border-[var(--border)] pt-4">
+          <p className="text-[11px] font-semibold uppercase tracking-[0.05em] text-[var(--text-subtle)]">Turvallisuus</p>
+          <div className="mt-2 flex flex-col gap-2.5 sm:flex-row sm:items-center sm:justify-between">
             <div className="min-w-0">
               <p className="text-sm font-semibold text-[var(--text)]">Salasanan nollaus</p>
               <p className="mt-1 text-xs leading-5 text-[var(--text-muted)]">
