@@ -143,7 +143,7 @@ function CoachInstructionDialog({
 
   return (
     <div
-      className="fixed inset-0 z-40 flex items-end justify-center bg-[color:color-mix(in_srgb,var(--background)_54%,transparent)] p-4 sm:items-center"
+      className="fixed inset-0 z-50 flex items-end justify-center bg-[color:color-mix(in_srgb,var(--background)_48%,transparent)] p-0 sm:items-center sm:p-4"
       role="presentation"
       onClick={onClose}
     >
@@ -152,7 +152,7 @@ function CoachInstructionDialog({
         aria-modal="true"
         aria-labelledby="coach-instruction-title"
         aria-describedby="coach-instruction-description"
-        className="w-full max-w-lg rounded-3xl border border-[var(--border-strong)] bg-[var(--surface)] p-4 shadow-[0_24px_60px_-24px_var(--shadow)]"
+        className="w-full max-w-lg rounded-t-3xl bg-[var(--surface)] p-5 shadow-[0_24px_60px_-24px_var(--shadow)] sm:rounded-3xl"
         onClick={(event) => event.stopPropagation()}
       >
         <p className="text-[11px] font-semibold tracking-[0.06em] text-[var(--accent)]">Valmentajan ohje</p>
@@ -226,14 +226,14 @@ function ExerciseStructureDialog({
 
   return (
     <div
-      className="fixed inset-0 z-40 flex items-end justify-center bg-[color:color-mix(in_srgb,var(--background)_54%,transparent)] p-4 sm:items-center"
+      className="fixed inset-0 z-50 flex items-end justify-center bg-[color:color-mix(in_srgb,var(--background)_48%,transparent)] p-0 sm:items-center sm:p-4"
       role="presentation"
       onClick={onClose}
     >
       <div
         role="dialog"
         aria-modal="true"
-        className="flex max-h-[88svh] w-full max-w-lg flex-col overflow-hidden rounded-3xl border border-[var(--border-strong)] bg-[var(--surface)] p-4 shadow-[0_24px_60px_-24px_var(--shadow)]"
+        className="flex max-h-[88svh] w-full max-w-lg flex-col overflow-hidden rounded-t-3xl bg-[var(--surface)] p-5 shadow-[0_24px_60px_-24px_var(--shadow)] sm:rounded-3xl"
         onClick={(event) => event.stopPropagation()}
       >
         <p className="text-[11px] font-semibold tracking-[0.06em] text-[var(--accent)]">
