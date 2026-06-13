@@ -720,7 +720,6 @@ export function DashboardShell() {
                 onOpenConversation={() => setView("conversation")}
                 onOpenWorkoutLog={() => setView("athlete-log")}
                 onOpenSettings={() => setView("settings")}
-                onOpenPrograms={() => setView(PROGRAMS_WORKSPACE_VIEW)}
                 onOpenInvites={currentUser.role === "admin" ? () => setView("invites") : undefined}
                 onOpenUsers={currentUser.role === "admin" ? () => setView("users") : undefined}
                 onOpenIngredients={currentUser.role === "admin" ? () => setView("ingredients") : undefined}

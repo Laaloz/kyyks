@@ -25,6 +25,7 @@ import { ConversationPanel } from "@/components/workout/conversation-panel";
 import { InlineFeedback } from "@/components/workout/inline-feedback";
 import { CoachInvitePanel } from "@/components/workout/coach/invite-panel";
 import { ProgramWorkoutEditor } from "@/components/workout/coach/program-workout-editor";
+import { ProgramEditorOverlay } from "@/components/workout/coach/program-editor-overlay";
 import {
   type ProgramComposerExerciseFormValues,
   type ProgramComposerFormValues,
@@ -37,7 +38,7 @@ import { withMinimumDelay } from "@/lib/min-delay";
 import { deriveProgramWorkoutGuidance } from "@/lib/program-workout-guidance";
 import { getProgramStatus, isProgramActive } from "@/lib/program-status";
 import { isAdminRole } from "@/lib/role-access";
-import type { AppState, Role, TrainingPlan, UserProfile } from "@/lib/types";
+import type { AppState, Exercise, ProgramWorkoutInput, Role, TrainingPlan, UserProfile } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import { canDeleteProgramFromState, useAppState } from "@/providers/app-state-provider";
 
@@ -780,7 +781,6 @@ export function CoachDashboard({
   onOpenConversation,
   onOpenWorkoutLog,
   onOpenSettings,
-  onOpenPrograms,
   onOpenInvites,
   onOpenUsers,
   onOpenIngredients,
@@ -789,7 +789,6 @@ export function CoachDashboard({
   onOpenConversation?: () => void;
   onOpenWorkoutLog?: () => void;
   onOpenSettings?: () => void;
-  onOpenPrograms?: () => void;
   onOpenInvites?: () => void;
   onOpenUsers?: () => void;
   onOpenIngredients?: () => void;
@@ -1254,9 +1253,9 @@ export function CoachDashboard({
         <CoachTeamView
           athletes={athletes}
           programs={coachPrograms}
+          exercises={exerciseOptions}
           state={state}
           currentUser={currentUser}
-          onOpenPrograms={onOpenPrograms}
           onOpenInvites={onOpenInvites}
           onOpenUsers={onOpenUsers}
           onOpenIngredients={onOpenIngredients}
@@ -2593,25 +2592,73 @@ function SectionLabel({ label, meta }: { label: string; meta?: string }) {
 function CoachTeamView({
   athletes,
   programs,
+  exercises,
   state,
   currentUser,
-  onOpenPrograms,
   onOpenInvites,
   onOpenUsers,
   onOpenIngredients,
 }: {
   athletes: Array<{ id: string; fullName: string }>;
   programs: TrainingPlan[];
+  exercises: Exercise[];
   state: AppState;
   currentUser: UserProfile;
-  onOpenPrograms?: () => void;
   onOpenInvites?: () => void;
   onOpenUsers?: () => void;
   onOpenIngredients?: () => void;
 }) {
-  const { startAthletePreview, notify } = useAppState();
+  const { startAthletePreview, notify, createProgram, updateProgram, setProgramStatus } = useAppState();
   const [segment, setSegment] = useState<"tiimi" | "ohjelmat">("tiimi");
+  const [editorGroup, setEditorGroup] = useState<TrainingPlan[] | null>(null);
   const isAdmin = isAdminRole(currentUser.role);
+
+  // Editorin urheilijavalinnat: itse + valmennettavat.
+  const programTargets = useMemo(
+    () => [{ id: currentUser.id, fullName: currentUser.fullName }, ...athletes.filter((a) => a.id !== currentUser.id)],
+    [athletes, currentUser.fullName, currentUser.id],
+  );
+
+  const handleSaveProgram = async ({
+    groupId,
+    title,
+    weekCount,
+    workouts,
+    assignedAthleteIds,
+    groupPlans,
+  }: {
+    groupId: string;
+    title: string;
+    weekCount: number;
+    workouts: ProgramWorkoutInput[];
+    assignedAthleteIds: string[];
+    groupPlans: TrainingPlan[];
+  }): Promise<{ ok: boolean; message?: string }> => {
+    const selected = new Set(assignedAthleteIds);
+    const planByAthlete = new Map(groupPlans.map((plan) => [plan.athleteId, plan]));
+
+    for (const athleteId of assignedAthleteIds) {
+      const existing = planByAthlete.get(athleteId);
+      const result = existing
+        ? await updateProgram(existing.id, { title, workouts, programGroupId: groupId })
+        : await createProgram({ title, athleteId, workouts, programGroupId: groupId, weekCount });
+      if (!result.ok) {
+        return result;
+      }
+    }
+
+    for (const plan of groupPlans) {
+      if (!selected.has(plan.athleteId)) {
+        const result = await setProgramStatus(plan.id, "removed");
+        if (!result.ok) {
+          return result;
+        }
+      }
+    }
+
+    notify({ tone: "success", message: `Ohjelma "${title}" tallennettiin.` });
+    return { ok: true };
+  };
 
   const statusById = useMemo(
     () => new Map(state.users.map((user) => [user.id, user.status])),
@@ -2644,24 +2691,30 @@ function CoachTeamView({
   }, [currentUser.id, isAdmin, state.plans, state.users]);
 
   const userNameById = useMemo(() => new Map(state.users.map((user) => [user.id, user.fullName])), [state.users]);
-  const programRows = useMemo(
-    () =>
-      programs
-        .filter((plan) => isProgramActive(plan))
-        .map((plan) => {
-          const assignedName =
-            plan.athleteId === currentUser.id
-              ? "Sinä"
-              : (userNameById.get(plan.athleteId) ?? "Ei urheilijaa").split(/\s+/)[0];
-          return {
-            plan,
-            weekLabel: programWeekLabel(plan),
-            workoutCount: plan.workouts?.length ?? 0,
-            assignedName,
-          };
-        }),
-    [currentUser.id, programs, userNameById],
-  );
+  // Saman program_group_id:n rivit = yksi ohjelma monelle urheilijalle.
+  const programRows = useMemo(() => {
+    const activePlans = programs.filter((plan) => isProgramActive(plan));
+    const groups = new Map<string, TrainingPlan[]>();
+    activePlans.forEach((plan) => {
+      const key = plan.programGroupId ?? plan.id;
+      groups.set(key, [...(groups.get(key) ?? []), plan]);
+    });
+
+    return Array.from(groups.values()).map((groupPlans) => {
+      const base = groupPlans[0];
+      const assignedNames = groupPlans.map((plan) =>
+        plan.athleteId === currentUser.id ? "Sinä" : (userNameById.get(plan.athleteId) ?? "?").split(/\s+/)[0],
+      );
+      return {
+        key: base.programGroupId ?? base.id,
+        groupPlans,
+        title: base.title,
+        weekLabel: programWeekLabel(base),
+        workoutCount: base.workouts?.length ?? 0,
+        assignedLabel: assignedNames.length ? assignedNames.join(", ") : "Ei urheilijoita",
+      };
+    });
+  }, [currentUser.id, programs, userNameById]);
 
   const handlePreview = (athleteId: string) => {
     const result = startAthletePreview(athleteId);
@@ -2806,21 +2859,21 @@ function CoachTeamView({
           <SectionLabel label="Aktiiviset ohjelmat" />
           {programRows.length ? (
             <Card className="divide-y divide-[var(--border)] p-0">
-              {programRows.map(({ plan, weekLabel, workoutCount, assignedName }) => (
+              {programRows.map(({ key, groupPlans, title, weekLabel, workoutCount, assignedLabel }) => (
                 <button
-                  key={plan.id}
+                  key={key}
                   type="button"
                   className="flex w-full items-center justify-between gap-3 p-4 text-left transition hover:bg-[var(--surface-2)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--surface)]"
-                  aria-label={`Muokkaa: ${plan.title}`}
-                  onClick={onOpenPrograms}
+                  aria-label={`Muokkaa: ${title}`}
+                  onClick={() => setEditorGroup(groupPlans)}
                 >
                   <div className="min-w-0">
                     <p className="truncate font-[family-name:var(--font-display)] text-[15.5px] font-bold text-[var(--text)]">
-                      {plan.title}
+                      {title}
                       {weekLabel ? <span className="text-[var(--text-subtle)]"> · {weekLabel}</span> : null}
                     </p>
-                    <p className="text-[12.5px] text-[var(--text-subtle)]">
-                      {workoutCount} treeniä/vko · {assignedName}
+                    <p className="truncate text-[12.5px] text-[var(--text-subtle)]">
+                      {workoutCount} treeniä/vko · {assignedLabel}
                     </p>
                   </div>
                   <Badge>Muokkaa</Badge>
@@ -2832,7 +2885,7 @@ function CoachTeamView({
               <CardDescription>Ei vielä aktiivisia ohjelmia. Luo ensimmäinen ohjelma alta.</CardDescription>
             </Card>
           )}
-          <Button type="button" variant="secondary" className="mt-3 w-full gap-2" onClick={onOpenPrograms}>
+          <Button type="button" variant="secondary" className="mt-3 w-full gap-2" onClick={() => setEditorGroup([])}>
             <Plus className="size-4" aria-hidden="true" />
             Uusi ohjelma
           </Button>
@@ -2841,6 +2894,17 @@ function CoachTeamView({
           </p>
         </div>
       )}
+
+      {editorGroup ? (
+        <ProgramEditorOverlay
+          groupPlans={editorGroup}
+          athletes={programTargets}
+          exercises={exercises}
+          currentUserId={currentUser.id}
+          onClose={() => setEditorGroup(null)}
+          onSave={handleSaveProgram}
+        />
+      ) : null}
     </div>
   );
 }
