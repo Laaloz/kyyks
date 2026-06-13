@@ -170,7 +170,14 @@ export function NutritionView({
   return (
     <Card className="max-w-full overflow-x-clip [contain:inline-size]">
       {dayOnly ? (
-        <CardTitle>Ravinto tänään</CardTitle>
+        <div className="flex items-baseline justify-between gap-3">
+          <CardTitle>Päivän ateriat</CardTitle>
+          {hasDay ? (
+            <span className="shrink-0 font-[family-name:var(--font-display)] text-sm font-semibold tabular-nums text-[var(--accent)]">
+              {eatenRows.length}/{dayRows.length} syöty
+            </span>
+          ) : null}
+        </div>
       ) : (
         <div className="flex items-center justify-between gap-3">
           <div className="grid w-full grid-cols-2 rounded-xl bg-[var(--surface-2)] p-1">
@@ -214,11 +221,13 @@ export function NutritionView({
             </div>
           ) : null}
 
-          <div className="mt-5 flex items-baseline justify-between gap-3">
-            <p className="font-[family-name:var(--font-display)] text-xs font-semibold uppercase tracking-[0.05em] text-[var(--text-subtle)]">
-              Päivän ateriat
-            </p>
-            {hasDay ? (
+          <div className={`flex items-baseline justify-between gap-3 ${dayOnly ? "mt-1" : "mt-5"}`}>
+            {dayOnly ? null : (
+              <p className="font-[family-name:var(--font-display)] text-xs font-semibold uppercase tracking-[0.05em] text-[var(--text-subtle)]">
+                Päivän ateriat
+              </p>
+            )}
+            {!dayOnly && hasDay ? (
               <p className="font-[family-name:var(--font-display)] text-sm font-semibold tabular-nums text-[var(--text-subtle)]">
                 {eatenRows.length}/{dayRows.length} syöty
               </p>
