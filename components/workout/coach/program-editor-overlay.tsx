@@ -526,11 +526,11 @@ export function ProgramEditorOverlay({
               <div className="mt-2 flex items-center gap-2">
                 <Select
                   aria-label="Oman liikkeen lihasryhmä"
-                  className="!h-9 w-24 shrink-0 !py-1 text-sm"
+                  className="h-10 min-w-0 flex-1"
                   value={newMuscle}
                   onChange={(event) => setNewMuscle(event.target.value as MuscleGroupKey | "")}
                 >
-                  <option value="">Ryhmä</option>
+                  <option value="">Lihasryhmä…</option>
                   {CUSTOM_MUSCLE_GROUP_OPTIONS.map((group) => (
                     <option key={group} value={group}>
                       {customMuscleGroupLabels[group]}
@@ -540,11 +540,11 @@ export function ProgramEditorOverlay({
                 <Button
                   type="button"
                   variant="secondary"
-                  className="h-9 min-w-0 flex-1 justify-start gap-1.5 !border-[var(--accent)] !bg-[color-mix(in_srgb,var(--accent)_12%,var(--surface))] !text-[var(--accent)]"
+                  className="h-10 shrink-0 gap-1.5 !border-[var(--accent)] !bg-[color-mix(in_srgb,var(--accent)_12%,var(--surface))] !text-[var(--accent)]"
                   onClick={addCustomExercise}
                 >
-                  <Plus className="size-4 shrink-0" aria-hidden="true" />
-                  <span className="truncate">Luo “{pickerQuery.trim()}”</span>
+                  <Plus className="size-4" aria-hidden="true" />
+                  Luo liike
                 </Button>
               </div>
             ) : null}
