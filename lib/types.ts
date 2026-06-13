@@ -308,6 +308,12 @@ export interface TrainingPlan {
   id: string;
   coachId: string;
   athleteId: string;
+  /**
+   * Sama ohjelma voi olla osoitettu monelle urheilijalle: jokainen urheilija saa
+   * oman TrainingPlan-rivin (oma athleteId + aikataulu), mutta saman ohjelman rivit
+   * jakavat tämän ryhmätunnisteen. Ohjelmaeditori muokkaa koko ryhmää kerralla.
+   */
+  programGroupId?: string;
   title: string;
   description?: string;
   status?: ProgramStatus;
@@ -501,6 +507,7 @@ export interface ProgramBuilderInput {
   description?: string;
   athleteId: string;
   athleteEmail?: string;
+  programGroupId?: string;
   workouts: ProgramWorkoutInput[];
   startDate?: string;
   weekCount?: number;
@@ -537,6 +544,7 @@ export interface ProgramUpdateInput {
   description?: string;
   athleteId?: string;
   athleteEmail?: string;
+  programGroupId?: string;
   workouts?: ProgramWorkoutInput[];
 }
 

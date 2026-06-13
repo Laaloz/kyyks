@@ -78,6 +78,7 @@ type PlanRow = {
   id: string;
   coach_id: string;
   athlete_id: string;
+  program_group_id: string | null;
   title: string;
   description: string | null;
   status: ProgramStatus | null;
@@ -237,6 +238,7 @@ function mapPlanRow(row: PlanRow): TrainingPlan {
     id: row.id,
     coachId: row.coach_id,
     athleteId: row.athlete_id,
+    programGroupId: row.program_group_id ?? undefined,
     title: row.title,
     description: row.description ?? undefined,
     status: row.status ?? "active",
@@ -1077,6 +1079,7 @@ export async function createProgramOnServer({
     .insert({
       coach_id: requester.id,
       athlete_id: targetResult.athlete.id,
+      program_group_id: createdProgram.programGroupId ?? null,
       title: createdProgram.title,
       description: createdProgram.description ?? null,
       status: createdProgram.status ?? "active",
@@ -1121,7 +1124,7 @@ export async function updateProgramOnServer({
 
   const { data: programRow } = await admin
     .from("training_plans")
-    .select("id, coach_id, athlete_id, title, description, status, start_date, week_count, workouts, created_at, updated_at")
+    .select("id, coach_id, athlete_id, program_group_id, title, description, status, start_date, week_count, workouts, created_at, updated_at")
     .eq("id", programId)
     .maybeSingle<PlanRow>();
 
@@ -1171,6 +1174,7 @@ export async function updateProgramOnServer({
     .from("training_plans")
     .update({
       athlete_id: updatedProgram.athleteId,
+      program_group_id: updatedProgram.programGroupId ?? null,
       title: updatedProgram.title,
       description: updatedProgram.description ?? null,
       workouts: updatedProgram.workouts ?? [],
@@ -1299,7 +1303,7 @@ export async function startProgramWorkoutOnServer({
 
   const { data: planRow } = await admin
     .from("training_plans")
-    .select("id, coach_id, athlete_id, title, description, status, start_date, week_count, workouts, created_at, updated_at")
+    .select("id, coach_id, athlete_id, program_group_id, title, description, status, start_date, week_count, workouts, created_at, updated_at")
     .eq("id", programId)
     .maybeSingle<PlanRow>();
   timer.checkpoint("plan-query");
@@ -1507,7 +1511,7 @@ export async function startScheduledWorkoutOnServer({
   if (workout.training_plan_id && workout.program_workout_id) {
     const { data: planRow } = await admin
       .from("training_plans")
-      .select("id, coach_id, athlete_id, title, description, status, start_date, week_count, workouts, created_at, updated_at")
+      .select("id, coach_id, athlete_id, program_group_id, title, description, status, start_date, week_count, workouts, created_at, updated_at")
       .eq("id", workout.training_plan_id)
       .maybeSingle<PlanRow>();
 

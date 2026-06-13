@@ -113,6 +113,7 @@ type TrainingPlanRow = {
   id: string;
   coach_id: string;
   athlete_id: string;
+  program_group_id: string | null;
   title: string;
   description: string | null;
   status: TrainingPlan["status"];
@@ -526,6 +527,7 @@ function mapPlanRow(entry: TrainingPlanRow): TrainingPlan {
     id: entry.id,
     coachId: entry.coach_id,
     athleteId: entry.athlete_id,
+    programGroupId: entry.program_group_id ?? undefined,
     title: entry.title,
     description: entry.description ?? undefined,
     status: entry.status ?? "active",
@@ -729,7 +731,7 @@ export async function loadVisibleSupabaseAppState(
     mode === "full" || mode === "workouts"
       ? supabase
           .from("training_plans")
-          .select("id, coach_id, athlete_id, title, description, status, start_date, week_count, workouts, created_at, updated_at")
+          .select("id, coach_id, athlete_id, program_group_id, title, description, status, start_date, week_count, workouts, created_at, updated_at")
           .order("created_at", { ascending: false })
       : Promise.resolve({ data: [] as TrainingPlanRow[], error: null }),
     supabase

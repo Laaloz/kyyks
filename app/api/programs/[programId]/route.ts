@@ -45,6 +45,7 @@ const patchSchema = z.object({
   description: z.string().optional(),
   athleteId: z.string().optional(),
   athleteEmail: z.string().email().optional(),
+  programGroupId: z.string().optional(),
   workouts: z.array(workoutSchema).optional(),
   customExercises: z.array(customExerciseSchema).optional(),
 });
@@ -97,6 +98,7 @@ export async function PATCH(request: Request, context: { params: Promise<{ progr
       description: parsed.data.description,
       athleteId: parsed.data.athleteId,
       athleteEmail: parsed.data.athleteEmail,
+      programGroupId: parsed.data.programGroupId,
       workouts: parsed.data.workouts,
     },
     customExercises: parsed.data.customExercises,

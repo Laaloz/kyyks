@@ -283,6 +283,7 @@ export function createProgram(input: ProgramBuilderInput, coachId: string): Trai
     id: makeId("plan"),
     coachId,
     athleteId: input.athleteId,
+    programGroupId: input.programGroupId,
     title: input.title,
     description: description || undefined,
     status: "active",
@@ -306,6 +307,7 @@ export function updateProgram(plan: TrainingPlan, patch: ProgramUpdateInput): Tr
     title: patch.title?.trim() || plan.title,
     description,
     athleteId: patch.athleteId ?? plan.athleteId,
+    programGroupId: patch.programGroupId ?? plan.programGroupId,
     workouts: patch.workouts
       ? buildProgramWorkouts(patch.workouts, plan.workouts ?? [])
       : plan.workouts,
