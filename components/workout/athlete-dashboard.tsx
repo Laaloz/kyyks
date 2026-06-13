@@ -42,7 +42,6 @@ import { AthleteSessionPanel } from "@/components/workout/athlete/session-panel"
 import { ConversationPanel } from "@/components/workout/conversation-panel";
 import { MetricTrendChart } from "@/components/workout/metric-trend-chart";
 import { DragNumber } from "@/components/ui/drag-number";
-import { DayMealsCard } from "@/components/workout/day-meals-card";
 import { ExerciseProgressView } from "@/components/workout/exercise-progress-view";
 import { NutritionView } from "@/components/workout/nutrition-view";
 import { estimateStrengthCalories, getMeasurementsForUser, getWeightAtMoment } from "@/lib/body-metrics";
@@ -1533,7 +1532,7 @@ export function AthleteDashboard({
         </Card>
       )}
 
-      {view === "overview" && currentUser ? <DayMealsCard user={currentUser} readOnly={readOnly} /> : null}
+      {view === "overview" && currentUser ? <NutritionView user={currentUser} readOnly={readOnly} dayOnly /> : null}
 
       {view === "measurements" && canTrackOwnMeasurements ? (
         <div

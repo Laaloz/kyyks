@@ -4,8 +4,9 @@ import { Check, ChevronRight, Plus, Repeat2, Search, Trash2, X } from "lucide-re
 import { useMemo, useState } from "react";
 
 import { Button } from "@/components/ui/button";
-import { Card } from "@/components/ui/card";
+import { Card, CardTitle } from "@/components/ui/card";
 import { OwnRecipeEditor } from "@/components/workout/own-recipe-editor";
+import { useKeepScreenOnPreference, useWakeLock } from "@/lib/use-wake-lock";
 import {
   getActiveMealPlanForAthlete,
   getMealPlanRecipes,
@@ -86,7 +87,16 @@ function EnergySplit({ macros }: { macros: Macros }) {
   );
 }
 
-export function NutritionView({ user, readOnly = false }: { user: UserProfile; readOnly?: boolean }) {
+export function NutritionView({
+  user,
+  readOnly = false,
+  dayOnly = false,
+}: {
+  user: UserProfile;
+  readOnly?: boolean;
+  // Tänään-näkymä: vain Päivä-osio (sama komponentti kuin Ravinto-välilehdellä).
+  dayOnly?: boolean;
+}) {
   const { state, addDayMeal, swapDayMeal, removeDayMeal, setDayMealEaten } = useAppState();
   const [seg, setSeg] = useState<"day" | "recipes">("day");
   const [filter, setFilter] = useState<MealTag | "all">("all");
@@ -159,32 +169,36 @@ export function NutritionView({ user, readOnly = false }: { user: UserProfile; r
 
   return (
     <Card className="max-w-full overflow-x-clip [contain:inline-size]">
-      <div className="flex items-center justify-between gap-3">
-        <div className="grid w-full grid-cols-2 rounded-xl bg-[var(--surface-2)] p-1">
-          <button
-            type="button"
-            className={`rounded-lg px-3 py-2 text-sm font-semibold transition ${
-              seg === "day" ? "bg-[var(--surface)] text-[var(--text)] shadow-[0_1px_3px_var(--shadow-soft)]" : "text-[var(--text-muted)]"
-            }`}
-            aria-pressed={seg === "day"}
-            onClick={() => setSeg("day")}
-          >
-            Päivä
-          </button>
-          <button
-            type="button"
-            className={`rounded-lg px-3 py-2 text-sm font-semibold transition ${
-              seg === "recipes" ? "bg-[var(--surface)] text-[var(--text)] shadow-[0_1px_3px_var(--shadow-soft)]" : "text-[var(--text-muted)]"
-            }`}
-            aria-pressed={seg === "recipes"}
-            onClick={() => setSeg("recipes")}
-          >
-            Reseptit
-          </button>
+      {dayOnly ? (
+        <CardTitle>Ravinto tänään</CardTitle>
+      ) : (
+        <div className="flex items-center justify-between gap-3">
+          <div className="grid w-full grid-cols-2 rounded-xl bg-[var(--surface-2)] p-1">
+            <button
+              type="button"
+              className={`rounded-lg px-3 py-2 text-sm font-semibold transition ${
+                seg === "day" ? "bg-[var(--surface)] text-[var(--text)] shadow-[0_1px_3px_var(--shadow-soft)]" : "text-[var(--text-muted)]"
+              }`}
+              aria-pressed={seg === "day"}
+              onClick={() => setSeg("day")}
+            >
+              Päivä
+            </button>
+            <button
+              type="button"
+              className={`rounded-lg px-3 py-2 text-sm font-semibold transition ${
+                seg === "recipes" ? "bg-[var(--surface)] text-[var(--text)] shadow-[0_1px_3px_var(--shadow-soft)]" : "text-[var(--text-muted)]"
+              }`}
+              aria-pressed={seg === "recipes"}
+              onClick={() => setSeg("recipes")}
+            >
+              Reseptit
+            </button>
+          </div>
         </div>
-      </div>
+      )}
 
-      {seg === "day" ? (
+      {dayOnly || seg === "day" ? (
         <div className="mt-5">
           {nutritionProfile ? (
             <div className="rounded-2xl bg-[var(--surface-2)] p-4">
@@ -316,7 +330,14 @@ export function NutritionView({ user, readOnly = false }: { user: UserProfile; r
                           </button>
                         </>
                       ) : null}
-                      <ChevronRight className="size-4 shrink-0 text-[var(--text-subtle)]" aria-hidden="true" />
+                      <button
+                        type="button"
+                        className="grid size-8 shrink-0 place-items-center rounded-full text-[var(--text-subtle)] transition hover:text-[var(--text)]"
+                        aria-label={`Avaa resepti: ${recipe?.name ?? "resepti"}`}
+                        onClick={() => setDetail({ recipeId: entry.recipeId, entryId: entry.id })}
+                      >
+                        <ChevronRight className="size-4" aria-hidden="true" />
+                      </button>
                     </div>
                   );
                 })}
@@ -479,6 +500,10 @@ function RecipeDetailSheet({
 }) {
   const [servings, setServings] = useState(recipe?.defaultServings ?? 1);
   const [isPending, setIsPending] = useState(false);
+  // Pidä näyttö päällä reseptiä lukiessa (laitekohtainen preferenssi, sama kuin
+  // treenin kirjauksessa). Sheet on mountattuna vain kun resepti on auki.
+  const [keepScreenOn] = useKeepScreenOnPreference();
+  useWakeLock(keepScreenOn);
   if (!recipe) {
     return null;
   }
