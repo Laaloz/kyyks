@@ -1,7 +1,7 @@
 "use client";
 
 import { zodResolver } from "@hookform/resolvers/zod";
-import { Bell, Ellipsis, HousePlus, KeyRound, Mail, Ruler, Scale, Share, UserRound, Waves } from "lucide-react";
+import { Bell, Ellipsis, HousePlus, KeyRound, LogOut, Mail, Ruler, Scale, Share, UserRound, Waves } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
@@ -21,8 +21,9 @@ import { PROGRAMS_DASHBOARD_VIEW, type DashboardHomeView, type ProfileSex, type 
 import { useAppState } from "@/providers/app-state-provider";
 
 const dashboardViewLabel: Record<DashboardHomeView, string> = {
-  overview: "Koti",
+  overview: "Tänään",
   nutrition: "Ravinto",
+  measurements: "Keho",
   athletes: "Tiimi",
   users: "Hallinta",
   [PROGRAMS_DASHBOARD_VIEW]: "Ohjelma",
@@ -78,6 +79,7 @@ export function UserSettingsPanel({ adminOnly = false }: { adminOnly?: boolean }
     currentUser,
     state,
     notify,
+    logout,
     updateCurrentUserSettings,
     uploadCurrentUserProfileImage,
     removeCurrentUserProfileImage,
@@ -874,6 +876,23 @@ export function UserSettingsPanel({ adminOnly = false }: { adminOnly?: boolean }
                 Suora painike näkyy vain selaimissa, jotka tarjoavat asennuskehotteen automaattisesti.
               </p>
             ) : null}
+          </div>
+        </Card>
+
+        <Card className="lg:hidden">
+          <CardTitle className="text-xl sm:text-2xl">Tili</CardTitle>
+          <div className="mt-4">
+            <Button
+              type="button"
+              variant="secondary"
+              className="w-full gap-2"
+              onClick={() => {
+                void logout();
+              }}
+            >
+              <LogOut className="size-4" aria-hidden="true" />
+              Kirjaudu ulos
+            </Button>
           </div>
         </Card>
       </div>

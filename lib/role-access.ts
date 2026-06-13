@@ -19,8 +19,11 @@ const adminWorkspaceViews: DashboardHomeView[] = [
   "users",
 ];
 
-const athleteWorkspaceViews: DashboardHomeView[] = ["athlete-log", "overview", "nutrition", "conversation"];
-const independentAthleteWorkspaceViews: DashboardHomeView[] = ["athlete-log", "overview", "nutrition", PROGRAMS_DASHBOARD_VIEW];
+// Treenaajaroolien alapalkki: Tänään / Treeni / Ravinto / Keho (4 tasakokoista).
+// Chat siirtyy yläpalkin ikoniksi; itsenäisen ohjelmamuokkaus avataan Treeni-näkymästä
+// (vaiheen 9 sisäinen editori — siihen asti Treeni-näkymän silta).
+const athleteWorkspaceViews: DashboardHomeView[] = ["overview", "athlete-log", "nutrition", "measurements"];
+const independentAthleteWorkspaceViews: DashboardHomeView[] = ["overview", "athlete-log", "nutrition", "measurements"];
 
 export function isAthleteRole(role: Role | null | undefined): role is AthleteRole {
   return role === "athlete" || role === "independent_athlete";
@@ -63,10 +66,8 @@ export function getDashboardViewsForRole(role: Role): DashboardHomeView[] {
 }
 
 export function getDefaultDashboardView(role: Role): DashboardHomeView {
-  if (role === "athlete") {
-    return "athlete-log";
-  }
-
+  // Tänään (overview) on kaikkien roolien kotinäkymä — myös orpoon tabiin
+  // joutuneen roolinvaihdon turvalasku.
   return "overview";
 }
 

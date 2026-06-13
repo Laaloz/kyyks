@@ -50,7 +50,7 @@ export const userSettingsSchema = z.object({
   profileImageUrl: z.union([z.string().trim().url("Anna kelvollinen kuvan URL-osoite."), z.literal("")]).transform((value) =>
     value === "" ? undefined : value,
   ),
-  defaultDashboardView: z.enum(["overview", "nutrition", "templates", "invites", "athlete-log", "conversation", "athletes", "users"]),
+  defaultDashboardView: z.enum(["overview", "nutrition", "measurements", "templates", "invites", "athlete-log", "conversation", "athletes", "users"]),
   emailNotifications: z.boolean(),
   weeklyMeasurementReminders: z.boolean(),
   themeMode: z.enum(["light", "dark", "mallu", "camel"]),

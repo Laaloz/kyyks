@@ -38,6 +38,7 @@ export const PROGRAMS_DASHBOARD_VIEW = "templates";
 export type DashboardHomeView =
   | "overview"
   | "nutrition"
+  | "measurements"
   | typeof PROGRAMS_DASHBOARD_VIEW
   | "invites"
   | "athlete-log"

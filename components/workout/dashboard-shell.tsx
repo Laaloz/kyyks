@@ -1,6 +1,6 @@
 "use client";
 
-import { BellRing, Dumbbell, Home, LogOut, MessageSquare, MoreHorizontal, ScrollText, UserPlus, UserRound, UserRoundCog, Users, UtensilsCrossed, type LucideIcon } from "lucide-react";
+import { BellRing, Dumbbell, HeartPulse, Home, LogOut, MessageSquare, MoreHorizontal, ScrollText, UserPlus, UserRound, UserRoundCog, Users, UtensilsCrossed, type LucideIcon } from "lucide-react";
 import { useEffect, useRef, useState, type KeyboardEvent } from "react";
 
 import dynamic from "next/dynamic";
@@ -43,38 +43,11 @@ type PrimaryWorkspaceView = Exclude<WorkspaceView, "settings">;
 type AthleteOverviewFocusTarget = "measurements";
 const MEASUREMENT_REMINDER_STORAGE_VERSION = "v2";
 const WORKSPACE_VIEW_STORAGE_VERSION = "v1";
-const MEASUREMENTS_SECTION_ID = "overview-measurements";
-const MOBILE_PRIMARY_NAV_MAX_ITEMS = 4;
-
-function ensureWorkoutNavItemVisible(items: PrimaryWorkspaceView[]): PrimaryWorkspaceView[] {
-  if (!items.includes("athlete-log")) {
-    return items.slice(0, MOBILE_PRIMARY_NAV_MAX_ITEMS);
-  }
-
-  const limitedItems = items.slice(0, MOBILE_PRIMARY_NAV_MAX_ITEMS);
-  const withoutWorkout: PrimaryWorkspaceView[] = limitedItems.filter((item) => item !== "athlete-log");
-  const fallbackWithWorkout: PrimaryWorkspaceView[] = withoutWorkout
-    .slice(0, Math.max(MOBILE_PRIMARY_NAV_MAX_ITEMS - 1, 0))
-    .concat("athlete-log");
-
-  if (!fallbackWithWorkout.includes("athlete-log")) {
-    return limitedItems;
-  }
-
-  const workoutMiddleIndex = Math.floor(MOBILE_PRIMARY_NAV_MAX_ITEMS / 2);
-  const clampedWorkoutIndex = Math.min(workoutMiddleIndex, Math.max(fallbackWithWorkout.length - 1, 0));
-  const reorderedItems: PrimaryWorkspaceView[] = fallbackWithWorkout.filter((item) => item !== "athlete-log");
-  reorderedItems.splice(clampedWorkoutIndex, 0, "athlete-log");
-  return reorderedItems.slice(0, MOBILE_PRIMARY_NAV_MAX_ITEMS);
-}
-
 function mobilePrimaryNavItemsForRole(role: Role): PrimaryWorkspaceView[] {
-  if (role === "athlete") {
-    return ["overview", "nutrition", "athlete-log", "conversation"];
-  }
-
-  if (role === "independent_athlete") {
-    return ["overview", "nutrition", "athlete-log", PROGRAMS_WORKSPACE_VIEW];
+  // Treenaajaroolit: Tänään / Treeni / Ravinto / Keho. Treeni keskelle painottuu
+  // korostetulla pillerillä; chat on yläpalkin ikoni.
+  if (role === "athlete" || role === "independent_athlete") {
+    return ["overview", "athlete-log", "nutrition", "measurements"];
   }
 
   if (role === "admin") {
@@ -160,8 +133,9 @@ export function DashboardShell() {
 
   const navItems = navItemsForRole(currentUser.role);
   const navLabelByView: Record<WorkspaceView, string> = {
-    overview: "Koti",
+    overview: "Tänään",
     nutrition: "Ravinto",
+    measurements: "Keho",
     athletes: "Tiimi",
     users: "Hallinta",
     [PROGRAMS_WORKSPACE_VIEW]: "Ohjelma",
@@ -174,6 +148,7 @@ export function DashboardShell() {
   const navIconByView: Record<PrimaryWorkspaceView, LucideIcon> = {
     overview: Home,
     nutrition: UtensilsCrossed,
+    measurements: HeartPulse,
     athletes: Users,
     users: UserRoundCog,
     [PROGRAMS_WORKSPACE_VIEW]: ScrollText,
@@ -181,10 +156,9 @@ export function DashboardShell() {
     "athlete-log": Dumbbell,
     conversation: MessageSquare,
   };
-  const preferredMobilePrimaryNavItems = mobilePrimaryNavItemsForRole(currentUser.role).filter((item) => navItems.includes(item));
-  const mobilePrimaryNavItems = ensureWorkoutNavItemVisible(preferredMobilePrimaryNavItems);
+  const mobilePrimaryNavItems = mobilePrimaryNavItemsForRole(currentUser.role).filter((item) => navItems.includes(item));
   const mobileOverflowNavItems = navItems.filter((item) => !mobilePrimaryNavItems.includes(item));
-  const mobileNavSlotCount = mobilePrimaryNavItems.length + 1;
+  const hasMobileOverflow = mobileOverflowNavItems.length > 0;
   const activePrimaryView =
     view === "settings" ? resolveInitialView(currentUser.role, currentUser.settings?.defaultDashboardView) : view;
   const activeTabId = `workspace-tab-${activePrimaryView}`;
@@ -250,33 +224,9 @@ export function DashboardShell() {
   };
 
   const openMeasurementsOverview = () => {
-    const scrollToMeasurements = (attemptsLeft = 10) => {
-      if (typeof window === "undefined") {
-        return;
-      }
-
-      const node = window.document.getElementById(MEASUREMENTS_SECTION_ID);
-      if (node) {
-        node.scrollIntoView({ behavior: "smooth", block: "start" });
-        return;
-      }
-
-      if (attemptsLeft <= 0) {
-        return;
-      }
-
-      window.setTimeout(() => scrollToMeasurements(attemptsLeft - 1), 50);
-    };
-
-    if (typeof window !== "undefined") {
-      window.location.hash = MEASUREMENTS_SECTION_ID;
-    }
-
-    skipNextAutoTopScrollRef.current = true;
+    // Keho on oma näkymänsä — riittää vaihtaa siihen (ei scrollIntoView-kikkailua).
     setIsMeasurementReminderOpen(false);
-    setAthleteOverviewFocusTarget("measurements");
-    setView("overview");
-    scrollToMeasurements();
+    setView("measurements");
   };
 
   useEffect(() => {
@@ -514,6 +464,27 @@ export function DashboardShell() {
                     <span className="sr-only">Avaa kehon seurannan muistutus</span>
                   </Button>
                 ) : null}
+                {currentUser.role === "athlete" ? (
+                  <Button
+                    onClick={() => setView("conversation")}
+                    type="button"
+                    variant="secondary"
+                    className={`relative size-10 !rounded-full !border-[var(--border-strong)] !bg-[var(--surface)] !px-0 !py-0 sm:size-11 ${
+                      view === "conversation" ? "!border-[var(--accent)] !text-[var(--accent)]" : "!text-[var(--text)]"
+                    }`}
+                    aria-label={`Avaa chat${unreadConversationCount > 0 ? `, ${unreadConversationCount} lukematonta viestiä` : ""}`}
+                    aria-pressed={view === "conversation"}
+                    title="Avaa chat valmentajan kanssa"
+                  >
+                    <MessageSquare className="size-5" aria-hidden="true" />
+                    {unreadConversationCount > 0 ? (
+                      <span className="absolute -right-0.5 -top-0.5 inline-flex min-w-4 items-center justify-center rounded-full bg-[var(--accent)] px-1 text-[9px] font-bold text-[var(--accent-contrast)]">
+                        {unreadConversationCount}
+                      </span>
+                    ) : null}
+                    <span className="sr-only">Avaa chat valmentajan kanssa</span>
+                  </Button>
+                ) : null}
                 <Button
                   onClick={() => setView("settings")}
                   type="button"
@@ -678,6 +649,7 @@ export function DashboardShell() {
                 view={view}
                 onOpenWorkoutLog={() => setView("athlete-log")}
                 onOpenSettings={() => setView("settings")}
+                onOpenProgramEditor={() => setView(PROGRAMS_WORKSPACE_VIEW)}
                 onWorkoutDetailModeChange={setIsMobileWorkoutDetailOpen}
                 overviewFocusTarget={athleteOverviewFocusTarget}
                 onOverviewFocusHandled={() => setAthleteOverviewFocusTarget(null)}
@@ -690,6 +662,7 @@ export function DashboardShell() {
                   view={view}
                   onOpenWorkoutLog={() => setView("athlete-log")}
                   onOpenSettings={() => setView("settings")}
+                  onOpenProgramEditor={() => setView(PROGRAMS_WORKSPACE_VIEW)}
                   onWorkoutDetailModeChange={setIsMobileWorkoutDetailOpen}
                   overviewFocusTarget={athleteOverviewFocusTarget}
                   onOverviewFocusHandled={() => setAthleteOverviewFocusTarget(null)}
@@ -717,6 +690,7 @@ export function DashboardShell() {
                 view={view}
                 onOpenWorkoutLog={() => setView("athlete-log")}
                 onOpenSettings={() => setView("settings")}
+                onOpenProgramEditor={() => setView(PROGRAMS_WORKSPACE_VIEW)}
                 onWorkoutDetailModeChange={setIsMobileWorkoutDetailOpen}
                 overviewFocusTarget={athleteOverviewFocusTarget}
                 onOverviewFocusHandled={() => setAthleteOverviewFocusTarget(null)}
@@ -729,66 +703,57 @@ export function DashboardShell() {
 
       <div className={`${shouldHideMobileBottomNav ? "hidden" : "fixed"} inset-x-0 bottom-0 z-30 border-t border-[color-mix(in_srgb,var(--border)_90%,var(--surface))] bg-[var(--surface)] px-1 py-1 pb-[calc(0.75rem+env(safe-area-inset-bottom))] shadow-[0_-8px_18px_-24px_var(--shadow)] backdrop-blur lg:hidden`}>
         <nav aria-label="Mobiilinavigaatio">
-          <div
-            className="grid gap-1"
-            style={{
-              gridTemplateColumns: `repeat(${Math.max(mobileNavSlotCount, 1)}, minmax(0, 1fr))`,
-            }}
-          >
-            <div className="grid min-w-0 grid-flow-col auto-cols-fr gap-1 rounded-[1.02rem] bg-transparent" style={{ gridColumn: `span ${Math.max(mobileNavSlotCount, 1)} / span ${Math.max(mobileNavSlotCount, 1)}` }}>
-              {mobilePrimaryNavItems.map((item) => {
-                const Icon = navIconByView[item];
-                const isActive = view === item;
-                const tabLabel = mobileNavLabelByView[item];
-                const isWorkoutItem = item === "athlete-log";
+          {/* grid-auto-flow: column + auto-cols 1fr — ei kovakoodattua sarakemäärää,
+              joten 5. välilehti (Tiimi) ei rivity. */}
+          <div className="grid min-w-0 grid-flow-col auto-cols-fr gap-1">
+            {mobilePrimaryNavItems.map((item) => {
+              const Icon = navIconByView[item];
+              const isActive = view === item;
+              const tabLabel = mobileNavLabelByView[item];
+              const isWorkoutItem = item === "athlete-log";
 
-                return (
-                  <button
-                    key={item}
-                    type="button"
-                    className={`relative flex min-w-0 flex-col items-center justify-center gap-0.5 rounded-[1.02rem] px-1 py-1.5 text-[14px] font-normal leading-none transition ${
-                      isActive
-                        ? "bg-[var(--nav-active-bg)] text-[var(--accent)]"
-                        : isWorkoutItem
-                          ? "bg-[var(--nav-workout-bg)] text-[var(--text)]"
-                          : "bg-transparent text-[var(--text-muted)]"
-                    }`}
-                    aria-current={isActive ? "page" : undefined}
-                    onClick={() => setView(item)}
-                  >
-                    {isActive ? (
-                      <span className="absolute bottom-0 left-1/2 h-0.5 w-5 -translate-x-1/2 rounded-full bg-[var(--accent)]" aria-hidden="true" />
-                    ) : null}
-                    <span
-                      className={`relative flex size-6.5 items-center justify-center rounded-full ${
-                        isActive
+              return (
+                <button
+                  key={item}
+                  type="button"
+                  className={`relative flex min-w-0 flex-col items-center justify-center gap-0.5 rounded-[1.02rem] px-1 py-1.5 text-[14px] font-normal leading-none transition ${
+                    isActive ? "text-[var(--accent)]" : "text-[var(--text-muted)]"
+                  }`}
+                  aria-current={isActive ? "page" : undefined}
+                  onClick={() => setView(item)}
+                >
+                  {isActive ? (
+                    <span className="absolute bottom-0 left-1/2 h-0.5 w-5 -translate-x-1/2 rounded-full bg-[var(--accent)]" aria-hidden="true" />
+                  ) : null}
+                  <span
+                    className={`relative flex size-6.5 items-center justify-center rounded-full transition ${
+                      isWorkoutItem
+                        ? // Treeni-päätoiminto: täytetty neutraali pilleri levossa, aksentti vasta valittuna.
+                          isActive
+                          ? "bg-[var(--accent)] text-[var(--accent-contrast)]"
+                          : "bg-[var(--text)] text-[var(--background)]"
+                        : isActive
                           ? "bg-[var(--nav-group-icon-active-bg)] text-[var(--accent)]"
-                          : isWorkoutItem
-                            ? "bg-[var(--nav-workout-icon-bg)] text-[var(--text)]"
-                            : "bg-[var(--nav-group-icon-bg)] text-[var(--text)]"
-                      }`}
-                      aria-hidden="true"
-                    >
-                      <Icon className="size-[0.95rem]" aria-hidden="true" />
-                      {item === "conversation" && unreadConversationCount > 0 ? (
-                        <span className="absolute -right-1 -top-1 inline-flex min-w-4 items-center justify-center rounded-full bg-[var(--accent)] px-1 text-[8px] font-bold text-[var(--accent-contrast)]">
-                          {unreadConversationCount}
-                        </span>
-                      ) : null}
-                    </span>
-                    <span className="max-w-full truncate text-[14px] font-normal">
-                      {tabLabel}
-                    </span>
-                  </button>
-                );
-              })}
+                          : "text-[var(--text-muted)]"
+                    }`}
+                    aria-hidden="true"
+                  >
+                    <Icon className="size-[0.95rem]" aria-hidden="true" />
+                  </span>
+                  <span className="max-w-full truncate text-[14px] font-normal">
+                    {tabLabel}
+                  </span>
+                </button>
+              );
+            })}
 
+            {hasMobileOverflow ? (
               <button
                 type="button"
                 className={`relative flex min-w-0 flex-col items-center justify-center gap-0.5 rounded-[1.02rem] px-1 py-1.5 text-[14px] font-normal leading-none transition ${
                   isMobileNavSheetOpen || view === "settings" || mobileOverflowNavItems.includes(view as PrimaryWorkspaceView)
-                    ? "bg-[var(--nav-active-bg)] text-[var(--accent)]"
-                    : "bg-transparent text-[var(--text-muted)]"
+                    ? "text-[var(--accent)]"
+                    : "text-[var(--text-muted)]"
                 }`}
                 aria-expanded={isMobileNavSheetOpen}
                 aria-haspopup="dialog"
@@ -801,7 +766,7 @@ export function DashboardShell() {
                   className={`flex size-6.5 items-center justify-center rounded-full ${
                     isMobileNavSheetOpen || view === "settings" || mobileOverflowNavItems.includes(view as PrimaryWorkspaceView)
                       ? "bg-[var(--nav-group-icon-active-bg)] text-[var(--accent)]"
-                      : "bg-[var(--nav-group-icon-bg)] text-[var(--text)]"
+                      : "text-[var(--text-muted)]"
                   }`}
                   aria-hidden="true"
                 >
@@ -809,7 +774,7 @@ export function DashboardShell() {
                 </span>
                 <span className="max-w-full truncate text-[14px] font-normal">Lisää</span>
               </button>
-            </div>
+            ) : null}
           </div>
         </nav>
       </div>

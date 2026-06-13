@@ -64,9 +64,19 @@ describe("role access helpers", () => {
     expect(getDashboardViewsForRole("admin")).toContain("templates");
     expect(getDashboardViewsForRole("admin")).toContain("nutrition");
     expect(getDashboardViewsForRole("coach")).not.toContain("conversation");
-    expect(getDashboardViewsForRole("independent_athlete")).toContain("templates");
     expect(getDashboardViewsForRole("independent_athlete")).not.toContain("invites");
     expect(getDefaultDashboardView("admin")).toBe("overview");
+  });
+
+  it("gives both athlete roles the same four-tab workspace (Tänään/Treeni/Ravinto/Keho)", () => {
+    const expected = ["overview", "athlete-log", "nutrition", "measurements"];
+    expect(getDashboardViewsForRole("athlete")).toEqual(expected);
+    expect(getDashboardViewsForRole("independent_athlete")).toEqual(expected);
+    // Chat moves to the top bar; program editing is reached from the Treeni view.
+    expect(getDashboardViewsForRole("athlete")).not.toContain("conversation");
+    expect(getDashboardViewsForRole("independent_athlete")).not.toContain("templates");
+    expect(getDefaultDashboardView("athlete")).toBe("overview");
+    expect(getDefaultDashboardView("independent_athlete")).toBe("overview");
   });
 
   it("includes admin users in coach-capable roster lists", () => {

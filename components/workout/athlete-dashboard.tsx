@@ -54,7 +54,7 @@ import { buildExerciseProgressCatalog, type ExerciseProgressCatalog } from "@/li
 import { withMinimumDelay } from "@/lib/min-delay";
 import { deriveProgramWorkoutGuidance } from "@/lib/program-workout-guidance";
 import { isProgramActive } from "@/lib/program-status";
-import { canTrackOwnTraining } from "@/lib/role-access";
+import { canManageOwnPrograms, canTrackOwnTraining } from "@/lib/role-access";
 import { buildScheduledWorkoutExerciseOrder } from "@/lib/workout-exercise-order";
 import { buildWorkoutHistoryTitleMap, normalizeWorkoutHistoryTitle } from "@/lib/workout-history-title";
 import { cn } from "@/lib/utils";
@@ -680,6 +680,7 @@ export function AthleteDashboard({
   view,
   onOpenWorkoutLog,
   onOpenSettings,
+  onOpenProgramEditor,
   onWorkoutDetailModeChange,
   overviewFocusTarget,
   onOverviewFocusHandled,
@@ -687,6 +688,7 @@ export function AthleteDashboard({
   view: WorkspaceView;
   onOpenWorkoutLog?: () => void;
   onOpenSettings?: () => void;
+  onOpenProgramEditor?: () => void;
   onWorkoutDetailModeChange?: (isOpen: boolean) => void;
   overviewFocusTarget?: AthleteOverviewFocusTarget | null;
   onOverviewFocusHandled?: () => void;
@@ -2112,7 +2114,7 @@ export function AthleteDashboard({
         </Card>
       )}
 
-      {view === "overview" && canTrackOwnMeasurements ? (
+      {view === "measurements" && canTrackOwnMeasurements ? (
         <div
           ref={measurementsSectionRef}
           id="overview-measurements"
@@ -2733,11 +2735,19 @@ export function AthleteDashboard({
             {athleteLogTab === "training" ? (
             <div role="tabpanel" id="athlete-log-panel-training" aria-labelledby="athlete-log-tab-training">
             <Card>
-              <p className="text-xs font-semibold tracking-[0.04em] text-[var(--text-subtle)]">Ohjelman treenit</p>
-              <CardTitle className="text-2xl">Valitse seuraava treeni</CardTitle>
-              <CardDescription className="mt-2">
-                 Aloita treeni ohjelmastasi. Aiempien toteutusten tiedot löydät historiasta.
-              </CardDescription>
+              <div className="flex items-start justify-between gap-3">
+                <CardTitle>Valitse seuraava treeni</CardTitle>
+                {canManageOwnPrograms(currentUser?.role) && onOpenProgramEditor ? (
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    className="h-9 shrink-0 px-3 text-sm"
+                    onClick={onOpenProgramEditor}
+                  >
+                    Muokkaa ohjelmaa
+                  </Button>
+                ) : null}
+              </div>
               {blockingWorkout && !selectionTransitionMessage ? (
                 <div
                   className={`mt-4 rounded-2xl border px-4 py-4 text-sm text-[var(--text)] ${
