@@ -15,6 +15,7 @@ import { InlineFeedback } from "@/components/workout/inline-feedback";
 import type { ProfileSheetSection } from "@/components/workout/profile-sheet";
 import { bodyMeasurementSchema, userSettingsSchema } from "@/components/workout/schemas";
 import { roleLabel } from "@/components/workout/shared";
+import { useAccentColorPreference, type AccentColor } from "@/lib/use-accent-color";
 import { getMeasurementsForUser } from "@/lib/body-metrics";
 import { withMinimumDelay } from "@/lib/min-delay";
 import { calculateMacroTarget, getMissingMacroProfileFields } from "@/lib/nutrition";
@@ -130,6 +131,7 @@ export function UserSettingsPanel({
   const [isSendingOwnPasswordReset, setIsSendingOwnPasswordReset] = useState(false);
   const [isSavingProfile, setIsSavingProfile] = useState(false);
   const [isUploadingProfileImage, setIsUploadingProfileImage] = useState(false);
+  const [accentColor, setAccentColor] = useAccentColorPreference();
   const [activeSection, setActiveSection] = useState<SettingsSection>(initialSection ?? "account");
   useEffect(() => {
     if (initialSection) {
@@ -802,6 +804,21 @@ export function UserSettingsPanel({
                 ))}
               </Select>
             </div>
+
+            {settingsThemeMode === "light" || settingsThemeMode === "dark" ? (
+              <div>
+                <Label htmlFor="settings-accent">Aksenttiväri</Label>
+                <Select
+                  id="settings-accent"
+                  value={accentColor}
+                  onChange={(event) => setAccentColor(event.target.value as AccentColor)}
+                >
+                  <option value="green">Vihreä</option>
+                  <option value="blue">Sininen</option>
+                  <option value="copper">Kupari</option>
+                </Select>
+              </div>
+            ) : null}
 
             {message ? <InlineFeedback message={message} tone={messageTone} className="text-sm" /> : null}
           </div>

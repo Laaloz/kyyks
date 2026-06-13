@@ -40,6 +40,17 @@ const themeInitScript = `
     }
   };
 
+  // Aksenttiväri on laitekohtainen (localStorage). Sovella ennen hydraatiota.
+  try {
+    const accent = window.localStorage.getItem("accent-color");
+    const dataAccent = accent === "blue" ? "sini" : accent === "copper" ? "kupari" : null;
+    if (dataAccent) {
+      document.documentElement.dataset.accent = dataAccent;
+    } else {
+      delete document.documentElement.dataset.accent;
+    }
+  } catch {}
+
   try {
     const rawState = window.localStorage.getItem(stateKey);
     const rawSession = window.localStorage.getItem(sessionKey);
