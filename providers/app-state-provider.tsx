@@ -59,9 +59,11 @@ import type {
   ConversationEntry,
   ConversationEntryType,
   DashboardHomeView,
+  DayMealSource,
   Exercise,
   ExtraActivityType,
   IngredientInput,
+  MealTag,
   InviteInput,
   MealPlanTemplateInput,
   NutritionProfileInput,
@@ -744,6 +746,7 @@ function normalizeState(raw: AppState): AppState {
     mealPlanTemplates: raw.mealPlanTemplates ?? [],
     assignedMealPlans: raw.assignedMealPlans ?? [],
     extraActivities: raw.extraActivities ?? [],
+    dayMealPlans: raw.dayMealPlans ?? [],
     users: normalizedUsers,
     exercises: Array.from(mergedExerciseById.values()),
     passwordResetRequests: (raw.passwordResetRequests ?? []).filter(
@@ -1198,6 +1201,7 @@ function createEmptyAppState(): AppState {
     sessions: [],
     notes: [],
     extraActivities: [],
+    dayMealPlans: [],
     conversationEntries: [],
     invites: [],
     passwordResetRequests: [],
@@ -1607,6 +1611,7 @@ type SupabaseVisibleAppStateSnapshot = Partial<Pick<
   | "sessions"
   | "notes"
   | "extraActivities"
+  | "dayMealPlans"
   | "conversationEntries"
 >>;
 
@@ -1901,6 +1906,7 @@ export function reconcileSupabaseVisibleState(
       return mergedNotes;
     })(),
     extraActivities: filteredSnapshot.extraActivities ?? previous.extraActivities ?? [],
+    dayMealPlans: filteredSnapshot.dayMealPlans ?? previous.dayMealPlans ?? [],
     conversationEntries: filteredSnapshot.conversationEntries ?? previous.conversationEntries,
   });
 }
@@ -2356,6 +2362,17 @@ interface AppStateContextValue {
     notes?: string;
   }) => Promise<ActionResult>;
   deleteExtraActivity: (activityId: string) => Promise<ActionResult>;
+  addDayMeal: (input: {
+    planDate: string;
+    mealTag: MealTag;
+    recipeId: string;
+    servings?: number;
+    position?: number;
+    source?: DayMealSource;
+  }) => Promise<ActionResult>;
+  swapDayMeal: (entryId: string, recipeId: string) => Promise<ActionResult>;
+  removeDayMeal: (entryId: string) => Promise<ActionResult>;
+  setDayMealEaten: (entryId: string, eaten: boolean) => Promise<ActionResult>;
   updateWorkoutSet: (scheduledWorkoutId: string, logId: string, patch: WorkoutUpdateInput) => Promise<void>;
   updateWorkoutExerciseStructure: (
     scheduledWorkoutId: string,
@@ -6253,6 +6270,178 @@ function findResolvedUserIdInSnapshot(
         }
 
         await refreshSupabaseVisibleState({ mode: "workouts" });
+        return { ok: true };
+      },
+      async addDayMeal(input) {
+        if (!currentUser) {
+          return { ok: false, message: "Kirjaudu sisään ennen aterian lisäystä." };
+        }
+
+        const now = new Date().toISOString();
+        const optimisticId = makeId("day_meal");
+        const servings = input.servings && input.servings > 0 ? input.servings : 1;
+        const source = input.source ?? "added";
+        const optimisticEntry = {
+          id: optimisticId,
+          athleteId: currentUser.id,
+          planDate: input.planDate,
+          mealTag: input.mealTag,
+          recipeId: input.recipeId,
+          source,
+          servings,
+          eatenAt: null,
+          position: input.position ?? 0,
+          createdAt: now,
+          updatedAt: now,
+        };
+
+        setState((previous) => ({
+          ...previous,
+          dayMealPlans: [...(previous.dayMealPlans ?? []), optimisticEntry],
+        }));
+
+        if (!supabase) {
+          return { ok: true };
+        }
+
+        const response = await fetch("/api/day-meal-plans", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            planDate: input.planDate,
+            mealTag: input.mealTag,
+            recipeId: input.recipeId,
+            source,
+            servings,
+            position: input.position ?? 0,
+          }),
+        }).catch(() => null);
+        const payload = (response ? await response.json().catch(() => null) : null) as { message?: string } | null;
+
+        if (!response?.ok) {
+          setState((previous) => ({
+            ...previous,
+            dayMealPlans: (previous.dayMealPlans ?? []).filter((entry) => entry.id !== optimisticId),
+          }));
+          return { ok: false, message: payload?.message ?? "Aterian lisäys epäonnistui." };
+        }
+
+        await refreshSupabaseVisibleState({ mode: "full" });
+        return { ok: true };
+      },
+      async swapDayMeal(entryId, recipeId) {
+        if (!currentUser) {
+          return { ok: false, message: "Kirjaudu sisään ennen aterian vaihtoa." };
+        }
+
+        const target = (stateRef.current.dayMealPlans ?? []).find((entry) => entry.id === entryId);
+        if (!target) {
+          return { ok: false, message: "Ateriaa ei löytynyt." };
+        }
+        if (target.eatenAt) {
+          return { ok: false, message: "Syötyä ateriaa ei voi vaihtaa." };
+        }
+
+        const previousState = stateRef.current;
+        const updatedAt = new Date().toISOString();
+        setState((previous) => ({
+          ...previous,
+          dayMealPlans: (previous.dayMealPlans ?? []).map((entry) =>
+            entry.id === entryId ? { ...entry, recipeId, source: "swapped" as const, updatedAt } : entry,
+          ),
+        }));
+
+        if (!supabase) {
+          return { ok: true };
+        }
+
+        const response = await fetch(`/api/day-meal-plans/${encodeURIComponent(entryId)}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ recipeId, source: "swapped" }),
+        }).catch(() => null);
+        const payload = (response ? await response.json().catch(() => null) : null) as { message?: string } | null;
+
+        if (!response?.ok) {
+          setState(previousState);
+          return { ok: false, message: payload?.message ?? "Aterian vaihto epäonnistui." };
+        }
+
+        await refreshSupabaseVisibleState({ mode: "full" });
+        return { ok: true };
+      },
+      async removeDayMeal(entryId) {
+        if (!currentUser) {
+          return { ok: false, message: "Kirjaudu sisään ennen aterian poistoa." };
+        }
+
+        const target = (stateRef.current.dayMealPlans ?? []).find((entry) => entry.id === entryId);
+        if (!target) {
+          return { ok: false, message: "Ateriaa ei löytynyt." };
+        }
+        if (target.eatenAt) {
+          return { ok: false, message: "Syötyä ateriaa ei voi poistaa." };
+        }
+
+        const previousState = stateRef.current;
+        setState((previous) => ({
+          ...previous,
+          dayMealPlans: (previous.dayMealPlans ?? []).filter((entry) => entry.id !== entryId),
+        }));
+
+        if (!supabase) {
+          return { ok: true };
+        }
+
+        const response = await fetch(`/api/day-meal-plans/${encodeURIComponent(entryId)}`, {
+          method: "DELETE",
+        }).catch(() => null);
+        const payload = (response ? await response.json().catch(() => null) : null) as { message?: string } | null;
+
+        if (!response?.ok) {
+          setState(previousState);
+          return { ok: false, message: payload?.message ?? "Aterian poisto epäonnistui." };
+        }
+
+        await refreshSupabaseVisibleState({ mode: "full" });
+        return { ok: true };
+      },
+      async setDayMealEaten(entryId, eaten) {
+        if (!currentUser) {
+          return { ok: false, message: "Kirjaudu sisään ennen aterian merkintää." };
+        }
+
+        const target = (stateRef.current.dayMealPlans ?? []).find((entry) => entry.id === entryId);
+        if (!target) {
+          return { ok: false, message: "Ateriaa ei löytynyt." };
+        }
+
+        const previousState = stateRef.current;
+        const eatenAt = eaten ? new Date().toISOString() : null;
+        setState((previous) => ({
+          ...previous,
+          dayMealPlans: (previous.dayMealPlans ?? []).map((entry) =>
+            entry.id === entryId ? { ...entry, eatenAt, updatedAt: new Date().toISOString() } : entry,
+          ),
+        }));
+
+        if (!supabase) {
+          return { ok: true };
+        }
+
+        const response = await fetch(`/api/day-meal-plans/${encodeURIComponent(entryId)}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ eatenAt }),
+        }).catch(() => null);
+        const payload = (response ? await response.json().catch(() => null) : null) as { message?: string } | null;
+
+        if (!response?.ok) {
+          setState(previousState);
+          return { ok: false, message: payload?.message ?? "Aterian merkintä epäonnistui." };
+        }
+
+        await refreshSupabaseVisibleState({ mode: "full" });
         return { ok: true };
       },
       async updateWorkoutSet(scheduledWorkoutId, logId, patch) {

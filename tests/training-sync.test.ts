@@ -228,6 +228,10 @@ function createSupabaseMock(options?: { omitFirstExerciseFromPlan?: boolean }) {
       return { data: [], error: null };
     }
 
+    if (state.table === "day_meal_plans") {
+      return { data: [], error: null };
+    }
+
     throw new Error(`Unhandled table in test mock: ${state.table}`);
   };
 

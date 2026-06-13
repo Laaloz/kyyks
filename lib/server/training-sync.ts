@@ -13,6 +13,7 @@ import {
   type ConversationEntry,
   type Exercise,
   type ExtraActivity,
+  type DayMealPlanEntry,
   type Ingredient,
   type MealPlanTemplate,
   type NutritionProfile,
@@ -188,6 +189,20 @@ type ExtraActivityRow = {
   estimated_kcal: number;
   occurred_at: string;
   notes: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+type DayMealPlanRow = {
+  id: string;
+  athlete_id: string;
+  plan_date: string;
+  meal_tag: DayMealPlanEntry["mealTag"];
+  recipe_id: string;
+  source: DayMealPlanEntry["source"];
+  servings: number;
+  eaten_at: string | null;
+  position: number;
   created_at: string;
   updated_at: string;
 };
@@ -381,6 +396,7 @@ export type SupabaseVisibleAppStateSnapshot = Partial<Pick<
   | "sessions"
   | "notes"
   | "extraActivities"
+  | "dayMealPlans"
   | "conversationEntries"
 >> & { mode?: "full" | "workouts" };
 
@@ -563,6 +579,22 @@ function mapExtraActivityRow(entry: ExtraActivityRow): ExtraActivity {
   };
 }
 
+function mapDayMealPlanRow(entry: DayMealPlanRow): DayMealPlanEntry {
+  return {
+    id: entry.id,
+    athleteId: entry.athlete_id,
+    planDate: entry.plan_date,
+    mealTag: entry.meal_tag,
+    recipeId: entry.recipe_id,
+    source: entry.source,
+    servings: Number(entry.servings),
+    eatenAt: entry.eaten_at,
+    position: entry.position,
+    createdAt: entry.created_at,
+    updatedAt: entry.updated_at,
+  };
+}
+
 function throwIfQueryFailed(
   label: string,
   result: {
@@ -618,6 +650,7 @@ export async function loadVisibleSupabaseAppState(
     sessionsResult,
     notesResult,
     extraActivitiesResult,
+    dayMealPlansResult,
     conversationEntriesResult,
   ] = await Promise.all([
     mode === "full" || mode === "workouts"
@@ -721,6 +754,13 @@ export async function loadVisibleSupabaseAppState(
       .order("occurred_at", { ascending: false }),
     mode === "full"
       ? supabase
+          .from("day_meal_plans")
+          .select("id, athlete_id, plan_date, meal_tag, recipe_id, source, servings, eaten_at, position, created_at, updated_at")
+          .limit(lite ? 120 : isAdminViewer ? 1000 : 500)
+          .order("plan_date", { ascending: false })
+      : Promise.resolve({ data: [] as DayMealPlanRow[], error: null }),
+    mode === "full"
+      ? supabase
           .from("conversation_entries")
           .select("id, athlete_id, coach_id, author_user_id, author_role, type, body, context_type, context_id, context_label, read_by_user_ids, created_at")
           .limit(lite ? 80 : isAdminViewer ? 1000 : 400)
@@ -746,6 +786,7 @@ export async function loadVisibleSupabaseAppState(
   throwIfQueryFailed("Workout sessions", sessionsResult);
   throwIfQueryFailed("Workout notes", notesResult);
   throwIfQueryFailed("Extra activities", extraActivitiesResult);
+  throwIfQueryFailed("Day meal plans", dayMealPlansResult);
   throwIfQueryFailed("Conversation entries", conversationEntriesResult);
 
   const visibleSessionIds = ((sessionsResult.data ?? []) as WorkoutSessionRow[]).map((entry) => entry.id);
@@ -946,6 +987,9 @@ export async function loadVisibleSupabaseAppState(
   const extraActivities = ((extraActivitiesResult.data ?? []) as ExtraActivityRow[]).map((entry) =>
     mapExtraActivityRow(entry),
   );
+  const dayMealPlans = ((dayMealPlansResult.data ?? []) as DayMealPlanRow[]).map((entry) =>
+    mapDayMealPlanRow(entry),
+  );
   const conversationEntries = ((conversationEntriesResult.data ?? []) as ConversationEntryRow[]).map((entry) => ({
     id: entry.id,
     athleteId: entry.athlete_id,
@@ -980,6 +1024,7 @@ export async function loadVisibleSupabaseAppState(
     sessions,
     notes,
     extraActivities,
+    dayMealPlans,
     conversationEntries,
   };
 }
