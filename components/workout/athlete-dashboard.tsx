@@ -2982,12 +2982,21 @@ export function AthleteDashboard({
                         const shortDate = Number.isFinite(dateObj.getTime())
                           ? `${weekdayShort[dateObj.getDay()]} ${dateObj.getDate()}.${dateObj.getMonth() + 1}.`
                           : formatDateWithWeekday(completedAt);
-                        const exerciseGroups: Array<{ name: string; sets: Array<{ load: number; reps: number; missed: boolean }> }> = [];
+                        const exerciseGroups: Array<{
+                          name: string;
+                          target: string;
+                          sets: Array<{ load: number; reps: number; missed: boolean }>;
+                        }> = [];
                         (session?.setLogs ?? [])
                           .filter((log) => log.done)
                           .forEach((log) => {
                             const name = log.exerciseName?.trim() || "Liike";
                             const repMin = log.targetRepsMin ?? log.targetReps;
+                            const repMax = log.targetRepsMax ?? log.targetReps;
+                            const repsLabel =
+                              repMin !== undefined && repMax !== undefined && repMax > repMin
+                                ? `${repMin}-${repMax}`
+                                : `${repMin ?? log.targetReps ?? ""}`;
                             const missed =
                               repMin !== undefined && log.actualReps !== undefined && log.actualReps !== null && log.actualReps < repMin;
                             const group = exerciseGroups.find((item) => item.name === name);
@@ -2995,9 +3004,10 @@ export function AthleteDashboard({
                             if (group) {
                               group.sets.push(entry);
                             } else {
-                              exerciseGroups.push({ name, sets: [entry] });
+                              exerciseGroups.push({ name, target: repsLabel, sets: [entry] });
                             }
                           });
+                        const hasMissedSet = exerciseGroups.some((group) => group.sets.some((set) => set.missed));
 
                         return (
                           <div key={workout.id} className="py-3">
@@ -3045,7 +3055,12 @@ export function AthleteDashboard({
                                   <div className="mt-3 space-y-2.5">
                                     {exerciseGroups.map((group) => (
                                       <div key={group.name}>
-                                        <p className="text-sm font-semibold text-[var(--text)]">{group.name}</p>
+                                        <div className="flex items-baseline justify-between gap-2">
+                                          <p className="text-sm font-semibold text-[var(--text)]">{group.name}</p>
+                                          <p className="shrink-0 font-[family-name:var(--font-display)] text-xs font-semibold tabular-nums text-[var(--text-subtle)]">
+                                            {group.sets.length} × {group.target}
+                                          </p>
+                                        </div>
                                         <div className="mt-1.5 flex flex-wrap gap-1.5">
                                           {group.sets.map((set, index) => (
                                             <span
@@ -3057,12 +3072,15 @@ export function AthleteDashboard({
                                                   : "bg-[var(--surface-2)] text-[var(--text-muted)]",
                                               )}
                                             >
-                                              {formatLoadValue(set.load)} × {set.reps}
+                                              {formatLoadValue(set.load)}×{set.reps}
                                             </span>
                                           ))}
                                         </div>
                                       </div>
                                     ))}
+                                    {hasMissedSet ? (
+                                      <p className="text-xs text-[var(--text-subtle)]">Korostettu sarja jäi tavoitetoistoista.</p>
+                                    ) : null}
                                   </div>
                                 ) : null}
                                 {!readOnly ? (
@@ -3101,7 +3119,7 @@ export function AthleteDashboard({
                                         }}
                                       >
                                         <Trash2 className="size-4" aria-hidden="true" />
-                                        Poista
+                                        Poista merkintä
                                       </Button>
                                     ) : null}
                                   </div>
