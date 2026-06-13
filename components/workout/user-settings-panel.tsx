@@ -516,9 +516,6 @@ export function UserSettingsPanel({
       <Card className="border-[var(--border-strong)]">
         <p className="text-xs font-semibold tracking-[0.04em] text-[var(--text-subtle)]">Tili</p>
         <CardTitle className="text-xl sm:text-2xl">Profiili</CardTitle>
-        <CardDescription className="mt-1.5">
-          Hallitse pysyviä profiilitietojasi erillään sovelluksen asetuksista.
-        </CardDescription>
 
         <div className="mt-4 space-y-3.5">
           <div>
@@ -615,7 +612,7 @@ export function UserSettingsPanel({
               </Button>
             </div>
             <p className="mt-2 text-xs text-[var(--text-subtle)]">
-              Lataa kuva suoraan laitteelta. Jos kuvaa ei ole asetettu, näytämme profiili-ikonin. {PROFILE_IMAGE_HELPER_TEXT}
+              {PROFILE_IMAGE_HELPER_TEXT}
             </p>
           </div>
 
@@ -714,7 +711,7 @@ export function UserSettingsPanel({
         {canTrackOwnTraining(currentUser.role) ? (
           <div className="mt-4 border-t border-[var(--border)] pt-4">
             <p className="text-[11px] font-semibold uppercase tracking-[0.05em] text-[var(--text-subtle)]">Tavoite</p>
-            <p className="mb-2 mt-0.5 text-xs text-[var(--text-muted)]">Säätää ravinnon kcal- ja makrotavoitteet. Tallentuu heti.</p>
+            <p className="mb-2 mt-0.5 text-xs text-[var(--text-muted)]">Säätää ravinnon kcal- ja makrotavoitteet.</p>
             <Select
               id="account-goal"
               aria-label="Tavoite"
@@ -783,11 +780,7 @@ export function UserSettingsPanel({
       {activeSection === "appearance" ? (
       <div role="tabpanel" id="settings-section-panel-appearance" aria-labelledby="settings-section-tab-appearance" className="grid gap-4">
         <Card>
-          <p className="text-xs font-semibold tracking-[0.04em] text-[var(--text-subtle)]">Asetukset</p>
           <CardTitle className="text-xl sm:text-2xl">Teema ja ulkoasu</CardTitle>
-          <CardDescription className="mt-1.5">
-            Valitse sovelluksen värimaailma. Muutos tallentuu heti.
-          </CardDescription>
           <div className="mt-4 space-y-3.5">
             <div>
               <Label htmlFor="settings-theme-mode">Teema</Label>
@@ -805,9 +798,6 @@ export function UserSettingsPanel({
                   </option>
                 ))}
               </Select>
-              <p className="mt-2 text-xs text-[var(--text-subtle)]">
-                Tumma tila vaihtaa koko sovelluksen värimaailman rauhallisemmaksi hämärässä käytössä.
-              </p>
             </div>
 
             {message ? <InlineFeedback message={message} tone={messageTone} className="text-sm" /> : null}
@@ -891,11 +881,7 @@ export function UserSettingsPanel({
       {activeSection === "reminders" ? (
       <div role="tabpanel" id="settings-section-panel-reminders" aria-labelledby="settings-section-tab-reminders" className="grid gap-4">
         <Card>
-          <p className="text-xs font-semibold tracking-[0.04em] text-[var(--text-subtle)]">Asetukset</p>
           <CardTitle className="text-xl sm:text-2xl">Muistutukset</CardTitle>
-          <CardDescription className="mt-1.5">
-            Valitse mistä sovellus muistuttaa sinua. Muutos tallentuu heti.
-          </CardDescription>
           <div className="mt-4 space-y-3.5">
             <div className="divide-y divide-[var(--border)] rounded-xl border-2 border-[var(--border)] bg-[var(--surface-2)] px-2.5">
               <div className="flex items-start justify-between gap-3 py-3">
@@ -946,11 +932,7 @@ export function UserSettingsPanel({
       {activeSection === "units" ? (
       <div role="tabpanel" id="settings-section-panel-units" aria-labelledby="settings-section-tab-units" className="grid gap-4">
         <Card>
-          <p className="text-xs font-semibold tracking-[0.04em] text-[var(--text-subtle)]">Asetukset</p>
           <CardTitle className="text-xl sm:text-2xl">Yksiköt</CardTitle>
-          <CardDescription className="mt-1.5">
-            Mittayksiköt treenin kirjauksessa.
-          </CardDescription>
           <div className="mt-4 space-y-3.5">
             <div>
               <Label htmlFor="settings-load-increment">Kuorman säätöaskel</Label>
@@ -968,9 +950,6 @@ export function UserSettingsPanel({
                   </option>
                 ))}
               </Select>
-              <p className="mt-2 text-xs text-[var(--text-subtle)]">
-                Tätä askelta käytetään treenitaulukon kuorman vetosäädössä ja näppäimistöohjauksessa. Muutos tallentuu heti.
-              </p>
             </div>
 
             {message ? <InlineFeedback message={message} tone={messageTone} className="text-sm" /> : null}
