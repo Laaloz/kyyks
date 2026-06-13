@@ -70,6 +70,39 @@ function resolveDefaultView(role: Role, value: DashboardHomeView | undefined): D
   return getDefaultDashboardView(role);
 }
 
+// Toggle-kytkin (sama tyyli kuin profiilisheetin "Pidä näyttö päällä").
+function SettingToggle({
+  checked,
+  disabled,
+  labelledBy,
+  onChange,
+}: {
+  checked: boolean;
+  disabled?: boolean;
+  labelledBy: string;
+  onChange: (next: boolean) => void;
+}) {
+  return (
+    <button
+      type="button"
+      role="switch"
+      aria-checked={checked}
+      aria-labelledby={labelledBy}
+      disabled={disabled}
+      className={`relative mt-0.5 inline-flex h-6 w-11 shrink-0 items-center rounded-full border transition disabled:opacity-60 ${
+        checked ? "border-[var(--accent)] bg-[var(--accent)]" : "border-[var(--border)] bg-[var(--surface-3)]"
+      }`}
+      onClick={() => onChange(!checked)}
+    >
+      <span
+        className={`pointer-events-none inline-block size-5 rounded-full bg-[var(--surface)] shadow-[0_1px_4px_-2px_var(--shadow)] transition-transform ${
+          checked ? "translate-x-5" : "translate-x-0.5"
+        }`}
+      />
+    </button>
+  );
+}
+
 export function UserSettingsPanel({
   adminOnly = false,
   initialSection,
@@ -241,11 +274,18 @@ export function UserSettingsPanel({
     }
 
     const result = await withMinimumDelay(updateCurrentUserSettings(values));
-    setMessage(result.ok ? "Asetukset tallennettiin." : result.message);
+    setMessage(result.ok ? "Tallennettu." : result.message);
     setMessageTone(result.ok ? "success" : "danger");
-    notify({ tone: result.ok ? "success" : "danger", message: result.ok ? "Asetukset tallennettiin." : result.message });
+    if (!result.ok) {
+      notify({ tone: "danger", message: result.message });
+    }
   });
   const isSavingSettings = form.formState.isSubmitting;
+  // Asetukset tallentuvat heti muutoksesta (handoff: instant-toggle/-valinta).
+  const autoSaveSettings = (apply: () => void) => {
+    apply();
+    void submitSettings();
+  };
   const profileName = form.watch("fullName");
   const settingsDefaultView = form.watch("defaultDashboardView");
   const settingsThemeMode = form.watch("themeMode");
@@ -744,12 +784,19 @@ export function UserSettingsPanel({
           <p className="text-xs font-semibold tracking-[0.04em] text-[var(--text-subtle)]">Asetukset</p>
           <CardTitle className="text-xl sm:text-2xl">Teema ja ulkoasu</CardTitle>
           <CardDescription className="mt-1.5">
-            Valitse aloitussivu ja sovelluksen värimaailma.
+            Valitse sovelluksen värimaailma. Muutos tallentuu heti.
           </CardDescription>
           <div className="mt-4 space-y-3.5">
             <div>
               <Label htmlFor="settings-theme-mode">Teema</Label>
-              <Select id="settings-theme-mode" disabled={isSavingSettings} {...form.register("themeMode")}>
+              <Select
+                id="settings-theme-mode"
+                disabled={isSavingSettings}
+                value={settingsThemeMode}
+                onChange={(event) =>
+                  autoSaveSettings(() => form.setValue("themeMode", event.target.value as ThemeMode, { shouldDirty: true }))
+                }
+              >
                 {Object.entries(themeModeLabel).map(([value, label]) => (
                   <option key={value} value={value}>
                     {label}
@@ -761,13 +808,7 @@ export function UserSettingsPanel({
               </p>
             </div>
 
-            {isSavingSettings || message ? (
-              <InlineFeedback message={message} tone={messageTone} pendingMessage="Tallennetaan asetuksia..." isPending={isSavingSettings} className="text-sm" />
-            ) : null}
-
-            <Button type="button" className="w-full sm:w-auto" disabled={isSavingSettings} loading={isSavingSettings} loadingText="Tallennetaan asetuksia..." onClick={() => void submitSettings()}>
-              Tallenna asetukset
-            </Button>
+            {message ? <InlineFeedback message={message} tone={messageTone} className="text-sm" /> : null}
           </div>
         </Card>
 
@@ -851,11 +892,11 @@ export function UserSettingsPanel({
           <p className="text-xs font-semibold tracking-[0.04em] text-[var(--text-subtle)]">Asetukset</p>
           <CardTitle className="text-xl sm:text-2xl">Muistutukset</CardTitle>
           <CardDescription className="mt-1.5">
-            Valitse mistä sovellus muistuttaa sinua.
+            Valitse mistä sovellus muistuttaa sinua. Muutos tallentuu heti.
           </CardDescription>
           <div className="mt-4 space-y-3.5">
-            <div className="space-y-1.5 rounded-xl border-2 border-[var(--border)] bg-[var(--surface-2)] p-2.5">
-              <label className="flex items-start justify-between gap-3 rounded-lg px-1 py-1">
+            <div className="divide-y divide-[var(--border)] rounded-xl border-2 border-[var(--border)] bg-[var(--surface-2)] px-2.5">
+              <div className="flex items-start justify-between gap-3 py-3">
                 <span className="min-w-0">
                   <span id="settings-weekly-measurements-label" className="block text-sm font-semibold text-[var(--text)]">
                     Viikkomuistutus
@@ -864,18 +905,17 @@ export function UserSettingsPanel({
                     Näytä perjantain muistutus painon ja vyötärön päivittämiseen.
                   </span>
                 </span>
-                <input
-                  type="checkbox"
-                  aria-labelledby="settings-weekly-measurements-label"
-                  className="mt-0.5 size-4 shrink-0 accent-[var(--accent)]"
+                <SettingToggle
+                  labelledBy="settings-weekly-measurements-label"
+                  checked={settingsWeeklyMeasurementReminders}
                   disabled={isSavingSettings}
-                  {...form.register("weeklyMeasurementReminders")}
+                  onChange={(next) =>
+                    autoSaveSettings(() => form.setValue("weeklyMeasurementReminders", next, { shouldDirty: true }))
+                  }
                 />
-              </label>
+              </div>
 
-              <div className="border-t border-[var(--border)]" />
-
-              <label className="flex items-start justify-between gap-3 rounded-lg px-1 py-1">
+              <div className="flex items-start justify-between gap-3 py-3">
                 <span className="min-w-0">
                   <span id="settings-email-notifications-label" className="block text-sm font-semibold text-[var(--text)]">
                     Sähköposti-ilmoitukset
@@ -884,23 +924,18 @@ export function UserSettingsPanel({
                     Lähetä sähköposti uusista treeneistä ja ohjelmapäivityksistä.
                   </span>
                 </span>
-                <input
-                  type="checkbox"
-                  aria-labelledby="settings-email-notifications-label"
-                  className="mt-0.5 size-4 shrink-0 accent-[var(--accent)]"
+                <SettingToggle
+                  labelledBy="settings-email-notifications-label"
+                  checked={settingsEmailNotifications}
                   disabled={isSavingSettings}
-                  {...form.register("emailNotifications")}
+                  onChange={(next) =>
+                    autoSaveSettings(() => form.setValue("emailNotifications", next, { shouldDirty: true }))
+                  }
                 />
-              </label>
+              </div>
             </div>
 
-            {isSavingSettings || message ? (
-              <InlineFeedback message={message} tone={messageTone} pendingMessage="Tallennetaan asetuksia..." isPending={isSavingSettings} className="text-sm" />
-            ) : null}
-
-            <Button type="button" className="w-full sm:w-auto" disabled={isSavingSettings} loading={isSavingSettings} loadingText="Tallennetaan asetuksia..." onClick={() => void submitSettings()}>
-              Tallenna asetukset
-            </Button>
+            {message ? <InlineFeedback message={message} tone={messageTone} className="text-sm" /> : null}
           </div>
         </Card>
       </div>
@@ -921,7 +956,9 @@ export function UserSettingsPanel({
                 id="settings-load-increment"
                 disabled={isSavingSettings}
                 value={String(settingsLoadIncrementKg)}
-                onChange={(event) => form.setValue("loadIncrementKg", parseLoadIncrement(event.target.value), { shouldDirty: true })}
+                onChange={(event) =>
+                  autoSaveSettings(() => form.setValue("loadIncrementKg", parseLoadIncrement(event.target.value), { shouldDirty: true }))
+                }
               >
                 {loadIncrementOptions.map((option) => (
                   <option key={option.value} value={option.value}>
@@ -930,17 +967,11 @@ export function UserSettingsPanel({
                 ))}
               </Select>
               <p className="mt-2 text-xs text-[var(--text-subtle)]">
-                Tätä askelta käytetään treenitaulukon kuorman vetosäädössä ja näppäimistöohjauksessa.
+                Tätä askelta käytetään treenitaulukon kuorman vetosäädössä ja näppäimistöohjauksessa. Muutos tallentuu heti.
               </p>
             </div>
 
-            {isSavingSettings || message ? (
-              <InlineFeedback message={message} tone={messageTone} pendingMessage="Tallennetaan asetuksia..." isPending={isSavingSettings} className="text-sm" />
-            ) : null}
-
-            <Button type="button" className="w-full sm:w-auto" disabled={isSavingSettings} loading={isSavingSettings} loadingText="Tallennetaan asetuksia..." onClick={() => void submitSettings()}>
-              Tallenna asetukset
-            </Button>
+            {message ? <InlineFeedback message={message} tone={messageTone} className="text-sm" /> : null}
           </div>
         </Card>
       </div>
