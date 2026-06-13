@@ -62,19 +62,6 @@ export function workoutStatusBadgeClass(status: string) {
   }
 }
 
-export function roleHeadline(role: Role) {
-  switch (role) {
-    case "admin":
-      return "Hallinnoi rosteria ja seuraa valmennusta omassa nakymassaan.";
-    case "coach":
-      return "Rakenna ohjelmat nopeasti ja seuraa kuka oikeasti etenee.";
-    case "athlete":
-      return "Pidä fokus toistoissa, voimassa ja jatkuvassa progressissa.";
-    case "independent_athlete":
-      return "Rakenna omat ohjelmat ja seuraa progressia ilman turhaa kitkaa.";
-  }
-}
-
 export function MetricGrid({
   metrics,
   role,

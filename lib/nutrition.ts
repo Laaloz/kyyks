@@ -264,10 +264,6 @@ export function getMealSlotGroupForTag(mealTag: MealTag) {
   return mealSlotGroups.find((group) => group.tags.includes(mealTag)) ?? mealSlotGroups[2];
 }
 
-export function mealSlotGroupLabel(groupId: MealSlotGroupId) {
-  return mealSlotGroups.find((group) => group.id === groupId)?.label ?? "Ateriaryhmä";
-}
-
 export function getMealSlotGroupKcalRange(groupId: MealSlotGroupId, targetKcal?: number) {
   if (!targetKcal || targetKcal <= 0) {
     return null;

@@ -61,9 +61,3 @@ export function makeId(prefix: string) {
       : Math.random().toString(36).slice(2, 10);
   return `${prefix}_${random}`;
 }
-
-export function startOfTodayIso() {
-  const now = new Date();
-  now.setHours(8, 0, 0, 0);
-  return now.toISOString();
-}

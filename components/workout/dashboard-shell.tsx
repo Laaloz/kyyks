@@ -1,6 +1,6 @@
 "use client";
 
-import { BellRing, Carrot, Dumbbell, HeartPulse, Home, LogOut, MessageSquare, MoreHorizontal, ScrollText, UserPlus, UserRound, UserRoundCog, Users, UtensilsCrossed, type LucideIcon } from "lucide-react";
+import { BellRing, Carrot, Dumbbell, HeartPulse, Home, LogOut, MessageSquare, ScrollText, UserPlus, UserRound, UserRoundCog, Users, UtensilsCrossed, type LucideIcon } from "lucide-react";
 import { useEffect, useRef, useState, type KeyboardEvent } from "react";
 
 import dynamic from "next/dynamic";
@@ -117,7 +117,6 @@ export function DashboardShell() {
   );
   const [isMeasurementReminderOpen, setIsMeasurementReminderOpen] = useState(false);
   const [isReminderPreviewMode, setIsReminderPreviewMode] = useState(false);
-  const [isMobileNavSheetOpen, setIsMobileNavSheetOpen] = useState(false);
   const [isMobileWorkoutDetailOpen, setIsMobileWorkoutDetailOpen] = useState(false);
   const [isMobileKeyboardOpen, setIsMobileKeyboardOpen] = useState(false);
   const [athleteOverviewFocusTarget, setAthleteOverviewFocusTarget] = useState<AthleteOverviewFocusTarget | null>(null);
@@ -161,8 +160,6 @@ export function DashboardShell() {
     ingredients: Carrot,
   };
   const mobilePrimaryNavItems = mobilePrimaryNavItemsForRole(currentUser.role).filter((item) => navItems.includes(item));
-  const mobileOverflowNavItems = navItems.filter((item) => !mobilePrimaryNavItems.includes(item));
-  const hasMobileOverflow = mobileOverflowNavItems.length > 0;
   const activePrimaryView =
     view === "settings" ? resolveInitialView(currentUser.role, currentUser.settings?.defaultDashboardView) : view;
   const activeTabId = `workspace-tab-${activePrimaryView}`;
@@ -301,10 +298,6 @@ export function DashboardShell() {
       markConversationRead();
     }
   }, [currentUser.role, markConversationRead, view]);
-
-  useEffect(() => {
-    setIsMobileNavSheetOpen(false);
-  }, [view]);
 
   useEffect(() => {
     if (typeof window === "undefined") {
@@ -792,119 +785,9 @@ export function DashboardShell() {
                 </button>
               );
             })}
-
-            {hasMobileOverflow ? (
-              <button
-                type="button"
-                className={`relative flex min-w-0 flex-col items-center justify-center gap-0.5 rounded-[1.02rem] px-1 py-1.5 text-[14px] font-normal leading-none transition ${
-                  isMobileNavSheetOpen || view === "settings" || mobileOverflowNavItems.includes(view as PrimaryWorkspaceView)
-                    ? "text-[var(--accent)]"
-                    : "text-[var(--text-muted)]"
-                }`}
-                aria-expanded={isMobileNavSheetOpen}
-                aria-haspopup="dialog"
-                onClick={() => setIsMobileNavSheetOpen((current) => !current)}
-              >
-                {isMobileNavSheetOpen || view === "settings" || mobileOverflowNavItems.includes(view as PrimaryWorkspaceView) ? (
-                  <span className="absolute bottom-0 left-1/2 h-0.5 w-5 -translate-x-1/2 rounded-full bg-[var(--accent)]" aria-hidden="true" />
-                ) : null}
-                <span
-                  className={`flex size-6.5 items-center justify-center rounded-full ${
-                    isMobileNavSheetOpen || view === "settings" || mobileOverflowNavItems.includes(view as PrimaryWorkspaceView)
-                      ? "bg-[var(--nav-group-icon-active-bg)] text-[var(--accent)]"
-                      : "text-[var(--text-muted)]"
-                  }`}
-                  aria-hidden="true"
-                >
-                  <MoreHorizontal className="size-[0.95rem]" aria-hidden="true" />
-                </span>
-                <span className="max-w-full truncate text-[14px] font-normal">Lisää</span>
-              </button>
-            ) : null}
           </div>
         </nav>
       </div>
-
-      {isMobileNavSheetOpen ? (
-        <div className="fixed inset-0 z-40 lg:hidden" aria-hidden="true">
-          <button
-            type="button"
-            className="absolute inset-0 bg-[rgba(8,17,31,0.36)]"
-            onClick={() => setIsMobileNavSheetOpen(false)}
-          />
-          <div
-            role="dialog"
-            aria-modal="true"
-            aria-label="Lisää näkymiä"
-            className="absolute inset-x-0 bottom-0 rounded-t-[2rem] border border-[var(--border-strong)] bg-[var(--surface)] px-4 pb-[calc(1rem+env(safe-area-inset-bottom))] pt-4 shadow-[0_-24px_40px_-28px_var(--shadow)]"
-          >
-            <div className="mx-auto mb-4 h-1.5 w-12 rounded-full bg-[var(--border)]" />
-            <div className="space-y-2">
-              {mobileOverflowNavItems.map((item) => {
-                const Icon = navIconByView[item];
-                const isActive = view === item;
-
-                return (
-                  <button
-                    key={item}
-                    type="button"
-                    className={`flex w-full items-center justify-between rounded-2xl border px-4 py-3 text-left transition ${
-                      isActive
-                        ? "border-[var(--accent)] bg-[var(--surface-2)] text-[var(--accent)]"
-                        : "border-[var(--border)] bg-[var(--surface)] text-[var(--text)]"
-                    }`}
-                    onClick={() => setView(item)}
-                  >
-                    <span className="flex items-center gap-3">
-                      <span className="flex size-9 items-center justify-center rounded-full bg-[var(--surface-2)]" aria-hidden="true">
-                        <Icon className="size-4" aria-hidden="true" />
-                      </span>
-                      <span className="font-medium">{navLabelByView[item]}</span>
-                    </span>
-                    {item === "conversation" && unreadConversationCount > 0 ? (
-                      <span className="rounded-full bg-[var(--accent)] px-2 py-1 text-xs font-semibold text-[var(--accent-contrast)]">
-                        {unreadConversationCount}
-                      </span>
-                    ) : null}
-                  </button>
-                );
-              })}
-
-              <button
-                type="button"
-                className={`flex w-full items-center justify-between rounded-2xl border px-4 py-3 text-left transition ${
-                  view === "settings"
-                    ? "border-[var(--accent)] bg-[var(--surface-2)] text-[var(--accent)]"
-                    : "border-[var(--border)] bg-[var(--surface)] text-[var(--text)]"
-                }`}
-                onClick={() => setView("settings")}
-              >
-                <span className="flex items-center gap-3">
-                  <span className="flex size-9 items-center justify-center rounded-full bg-[var(--surface-2)]" aria-hidden="true">
-                    <UserRoundCog className="size-4" aria-hidden="true" />
-                  </span>
-                  <span className="font-medium">Tili</span>
-                </span>
-              </button>
-
-              <button
-                type="button"
-                className="flex w-full items-center justify-between rounded-2xl border border-[var(--border)] bg-[var(--surface)] px-4 py-3 text-left text-[var(--text)] transition"
-                onClick={() => {
-                  void handleLogout();
-                }}
-              >
-                <span className="flex items-center gap-3">
-                  <span className="flex size-9 items-center justify-center rounded-full bg-[var(--surface-2)]" aria-hidden="true">
-                    <LogOut className="size-4" aria-hidden="true" />
-                  </span>
-                  <span className="font-medium">Kirjaudu ulos</span>
-                </span>
-              </button>
-            </div>
-          </div>
-        </div>
-      ) : null}
     </div>
   );
 }

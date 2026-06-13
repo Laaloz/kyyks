@@ -18,11 +18,6 @@ function getEmailConfig() {
   };
 }
 
-export function isTransactionalEmailConfigured() {
-  const config = getEmailConfig();
-  return Boolean(config.apiKey && config.from);
-}
-
 export async function sendTransactionalEmail(input: TransactionalEmailInput): Promise<TransactionalEmailResult> {
   const config = getEmailConfig();
 

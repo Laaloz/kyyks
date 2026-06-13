@@ -636,10 +636,6 @@ export interface WorkoutSetDraftPatch {
   done?: boolean;
 }
 
-export interface WorkoutBatchSetSyncInput {
-  sets: WorkoutSetDraftPatch[];
-}
-
 export interface WorkoutBatchSetSyncResult {
   updatedAt: string;
   setLogs: Array<{
