@@ -3351,6 +3351,36 @@ export function AthleteDashboard({
                             valueLabel="e1RM"
                             unit="kg"
                           />
+                          {selectedExerciseProgress.repRecords.length > 0 ? (
+                            <div className="grid gap-4 border-t border-[var(--border)] pt-3 sm:grid-cols-2">
+                              <div>
+                                <p className="text-xs font-semibold tracking-[0.04em] text-[var(--text-subtle)]">Toistoennätykset</p>
+                                <div className="mt-2 divide-y divide-[var(--border)]">
+                                  {selectedExerciseProgress.repRecords.map((record) => (
+                                    <div key={`rep-${record.reps}`} className="flex items-center justify-between py-1.5 text-sm">
+                                      <span className="text-[var(--text-muted)]">{record.reps} toistoa</span>
+                                      <span className="font-[family-name:var(--font-display)] font-semibold tabular-nums text-[var(--text)]">
+                                        {formatLoadValue(record.weight)} kg
+                                      </span>
+                                    </div>
+                                  ))}
+                                </div>
+                              </div>
+                              <div>
+                                <p className="text-xs font-semibold tracking-[0.04em] text-[var(--text-subtle)]">Painoennätykset</p>
+                                <div className="mt-2 divide-y divide-[var(--border)]">
+                                  {selectedExerciseProgress.weightRecords.map((record) => (
+                                    <div key={`weight-${record.weight}`} className="flex items-center justify-between py-1.5 text-sm">
+                                      <span className="text-[var(--text-muted)]">{formatLoadValue(record.weight)} kg</span>
+                                      <span className="font-[family-name:var(--font-display)] font-semibold tabular-nums text-[var(--text)]">
+                                        {record.reps} toistoa
+                                      </span>
+                                    </div>
+                                  ))}
+                                </div>
+                              </div>
+                            </div>
+                          ) : null}
                         </div>
                       ) : null}
                     </>

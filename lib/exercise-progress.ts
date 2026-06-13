@@ -19,6 +19,11 @@ export type ExerciseProgressSetSummary = {
   completedAt: string;
 };
 
+// Toistoennätys: paras paino tietyllä toistomäärällä.
+export type ExerciseRepRecord = { reps: number; weight: number; completedAt: string };
+// Painoennätys: eniten toistoja tietyllä painolla.
+export type ExerciseWeightRecord = { weight: number; reps: number; completedAt: string };
+
 export type ExerciseProgressSummary = {
   exerciseKey: string;
   exerciseId?: string;
@@ -29,6 +34,8 @@ export type ExerciseProgressSummary = {
   trendPoints: ExerciseProgressPoint[];
   bestSet?: ExerciseProgressSetSummary;
   latestSet?: ExerciseProgressSetSummary;
+  repRecords: ExerciseRepRecord[];
+  weightRecords: ExerciseWeightRecord[];
   hasWeightedData: boolean;
 };
 
@@ -125,6 +132,8 @@ export function buildExerciseProgressCatalog(state: AppState, athleteId: string)
       trendPoints,
       bestSet,
       latestSet,
+      repRecords: buildRepRecords(entry.weightedSets),
+      weightRecords: buildWeightRecords(entry.weightedSets),
       hasWeightedData: trendPoints.length > 0,
     };
 
@@ -157,6 +166,36 @@ export function buildExerciseProgressCatalog(state: AppState, athleteId: string)
 
 export function calculateEstimatedOneRepMax(load: number, reps: number) {
   return load * (1 + reps / 30);
+}
+
+// Toistoennätykset: paras (raskain) paino per toistomäärä, nousevassa toistojärjestyksessä.
+function buildRepRecords(weightedSets: WeightedExerciseSet[]): ExerciseRepRecord[] {
+  const bestByReps = new Map<number, WeightedExerciseSet>();
+  weightedSets.forEach((set) => {
+    const current = bestByReps.get(set.actualReps);
+    if (!current || set.actualLoad > current.actualLoad) {
+      bestByReps.set(set.actualReps, set);
+    }
+  });
+
+  return Array.from(bestByReps.entries())
+    .map(([reps, set]) => ({ reps, weight: set.actualLoad, completedAt: set.completedAt }))
+    .sort((left, right) => left.reps - right.reps);
+}
+
+// Painoennätykset: eniten toistoja per paino, laskevassa painojärjestyksessä.
+function buildWeightRecords(weightedSets: WeightedExerciseSet[]): ExerciseWeightRecord[] {
+  const bestByWeight = new Map<number, WeightedExerciseSet>();
+  weightedSets.forEach((set) => {
+    const current = bestByWeight.get(set.actualLoad);
+    if (!current || set.actualReps > current.actualReps) {
+      bestByWeight.set(set.actualLoad, set);
+    }
+  });
+
+  return Array.from(bestByWeight.entries())
+    .map(([weight, set]) => ({ weight, reps: set.actualReps, completedAt: set.completedAt }))
+    .sort((left, right) => right.weight - left.weight);
 }
 
 function buildTrendPoints(weightedSets: WeightedExerciseSet[]): ExerciseProgressPoint[] {

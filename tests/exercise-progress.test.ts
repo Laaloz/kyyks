@@ -203,4 +203,39 @@ describe("exercise progress helpers", () => {
     expect(summary?.exerciseName).toBe("leuanveto");
     expect(summary?.trendPoints).toHaveLength(2);
   });
+
+  it("builds rep records (best weight per reps) and weight records (most reps per weight)", () => {
+    const state = createBaseState();
+    state.scheduledWorkouts = [
+      createWorkout("workout_1", { programWorkoutId: "program_1", completedAt: "2026-04-10T09:00:00.000Z" }),
+      createWorkout("workout_2", { programWorkoutId: "program_1", completedAt: "2026-04-14T09:00:00.000Z" }),
+    ];
+    state.sessions = [
+      createSession("session_1", "workout_1", "2026-04-10T09:00:00.000Z", [
+        createLog("1", { scheduledWorkoutId: "workout_1", actualLoad: 100, actualReps: 5 }),
+        createLog("2", { scheduledWorkoutId: "workout_1", actualLoad: 90, actualReps: 5 }),
+        createLog("3", { scheduledWorkoutId: "workout_1", actualLoad: 100, actualReps: 8 }),
+      ]),
+      createSession("session_2", "workout_2", "2026-04-14T09:00:00.000Z", [
+        createLog("4", { scheduledWorkoutId: "workout_2", actualLoad: 110, actualReps: 5 }),
+        createLog("5", { scheduledWorkoutId: "workout_2", actualLoad: 100, actualReps: 10 }),
+      ]),
+    ];
+
+    const result = buildExerciseProgressCatalog(state, "athlete_1");
+    const summary = result.summaries.get("id:exercise_bench");
+
+    // Toistoennätykset: paras paino per toistomäärä, toistot nousevasti.
+    expect(summary?.repRecords).toEqual([
+      { reps: 5, weight: 110, completedAt: "2026-04-14T09:00:00.000Z" },
+      { reps: 8, weight: 100, completedAt: "2026-04-10T09:00:00.000Z" },
+      { reps: 10, weight: 100, completedAt: "2026-04-14T09:00:00.000Z" },
+    ]);
+    // Painoennätykset: eniten toistoja per paino, paino laskevasti.
+    expect(summary?.weightRecords).toEqual([
+      { weight: 110, reps: 5, completedAt: "2026-04-14T09:00:00.000Z" },
+      { weight: 100, reps: 10, completedAt: "2026-04-14T09:00:00.000Z" },
+      { weight: 90, reps: 5, completedAt: "2026-04-10T09:00:00.000Z" },
+    ]);
+  });
 });
