@@ -10,6 +10,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardDescription, CardTitle } from "@/components/ui/card";
 import { Input, Label, Select } from "@/components/ui/field";
+import { Segmented } from "@/components/ui/segmented";
 import { AdminUserManagementPanel } from "@/components/workout/admin-user-management-panel";
 import { InlineFeedback } from "@/components/workout/inline-feedback";
 import type { ProfileSheetSection } from "@/components/workout/profile-sheet";
@@ -488,30 +489,15 @@ export function UserSettingsPanel({
 
   return (
     <div className="space-y-4">
-      <div
-        role="tablist"
-        aria-label="Tilin asetusten osiot"
-        className="flex gap-1 overflow-x-auto rounded-[1.1rem] border border-[color-mix(in_srgb,var(--border)_88%,var(--surface))] bg-[color-mix(in_srgb,var(--surface)_78%,var(--surface-2))] p-1 [scrollbar-width:none]"
-      >
-        {settingsSectionTabs.map((tab) => (
-          <button
-            key={tab.section}
-            type="button"
-            role="tab"
-            id={`settings-section-tab-${tab.section}`}
-            aria-selected={activeSection === tab.section}
-            aria-controls={`settings-section-panel-${tab.section}`}
-            className={`inline-flex min-h-10 shrink-0 items-center justify-center rounded-xl px-3 py-2 text-sm font-semibold transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--background)] ${
-              activeSection === tab.section
-                ? "border border-[color-mix(in_srgb,var(--accent)_22%,var(--border))] bg-[color-mix(in_srgb,var(--accent)_10%,var(--surface))] text-[var(--accent)] shadow-[0_8px_18px_-20px_var(--accent)]"
-                : "border border-transparent bg-transparent text-[var(--text-muted)] hover:border-[var(--border-strong)] hover:bg-[var(--surface)] hover:text-[var(--text)]"
-            }`}
-            onClick={() => setActiveSection(tab.section)}
-          >
-            {tab.label}
-          </button>
-        ))}
-      </div>
+      <Segmented
+        scrollable
+        ariaLabel="Tilin asetusten osiot"
+        idPrefix="settings-section-tab"
+        controlsPrefix="settings-section-panel"
+        value={activeSection}
+        onChange={setActiveSection}
+        options={settingsSectionTabs.map((tab) => ({ value: tab.section, label: tab.label }))}
+      />
 
       {activeSection === "account" ? (
       <div role="tabpanel" id="settings-section-panel-account" aria-labelledby="settings-section-tab-account">

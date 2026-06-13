@@ -6,8 +6,11 @@ import { createPortal } from "react-dom";
 
 import { Button } from "@/components/ui/button";
 import { DragNumber } from "@/components/ui/drag-number";
+import { Select } from "@/components/ui/field";
+import { customMuscleGroupLabels } from "@/components/workout/coach/program-composer";
+import { CUSTOM_EXERCISE_VALUE, CUSTOM_MUSCLE_GROUP_OPTIONS } from "@/components/workout/schemas";
 import { cn } from "@/lib/utils";
-import type { Exercise, ProgramWorkoutInput, TrainingPlan } from "@/lib/types";
+import type { Exercise, MuscleGroupKey, ProgramWorkoutInput, TrainingPlan } from "@/lib/types";
 
 type DraftExercise = {
   uid: string;
@@ -16,6 +19,9 @@ type DraftExercise = {
   sets: number;
   repsMin: number;
   repsMax: number;
+  /** Pankista puuttuva oma liike — luodaan coach_custom-liikkeeksi tallennettaessa. */
+  isCustom?: boolean;
+  muscleGroup?: MuscleGroupKey;
 };
 
 type DraftWorkout = {
@@ -68,16 +74,27 @@ function draftToWorkoutInputs(workouts: DraftWorkout[]): ProgramWorkoutInput[] {
     splitType: "custom",
     nameOverride: workout.title.trim() || "Treeni",
     defaultRestSeconds: 90,
-    exercises: workout.exercises.map((exercise) => ({
-      exerciseId: exercise.exerciseId,
-      exerciseName: exercise.name,
-      instruction: "",
-      repMode: "range",
-      setCount: exercise.sets,
-      targetReps: exercise.repsMin,
-      targetRepsMin: exercise.repsMin,
-      targetRepsMax: exercise.repsMax,
-    })),
+    exercises: workout.exercises.map((exercise) => {
+      const base = {
+        exerciseName: exercise.name,
+        instruction: "",
+        repMode: "range" as const,
+        setCount: exercise.sets,
+        targetReps: exercise.repsMin,
+        targetRepsMin: exercise.repsMin,
+        targetRepsMax: exercise.repsMax,
+      };
+      // Oma liike: ei exerciseId:tä → provider (resolveProgramWorkouts) luo coach_custom.
+      if (exercise.isCustom || !exercise.exerciseId) {
+        return {
+          ...base,
+          exerciseId: CUSTOM_EXERCISE_VALUE,
+          customExerciseName: exercise.name,
+          customMuscleGroup: exercise.muscleGroup,
+        };
+      }
+      return { ...base, exerciseId: exercise.exerciseId };
+    }),
   }));
 }
 
@@ -119,6 +136,7 @@ export function ProgramEditorOverlay({
   const [workouts, setWorkouts] = useState<DraftWorkout[]>(() => planWorkoutsToDraft(basePlan));
   const [pickerForWorkout, setPickerForWorkout] = useState<string | null>(null);
   const [pickerQuery, setPickerQuery] = useState("");
+  const [newMuscle, setNewMuscle] = useState<MuscleGroupKey | "">("");
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [mounted, setMounted] = useState(false);
@@ -188,25 +206,42 @@ export function ProgramEditorOverlay({
     });
   };
 
-  const addExerciseFromBank = (exercise: Exercise) => {
+  const closePicker = () => {
+    setPickerForWorkout(null);
+    setPickerQuery("");
+    setNewMuscle("");
+  };
+
+  const appendExercise = (draft: Omit<DraftExercise, "uid">) => {
     if (!pickerForWorkout) {
       return;
     }
     setWorkouts((current) =>
       current.map((workout) =>
         workout.uid === pickerForWorkout
-          ? {
-              ...workout,
-              exercises: [
-                ...workout.exercises,
-                { uid: makeUid("e"), exerciseId: exercise.id, name: exercise.name, sets: 3, repsMin: 8, repsMax: 8 },
-              ],
-            }
+          ? { ...workout, exercises: [...workout.exercises, { uid: makeUid("e"), ...draft }] }
           : workout,
       ),
     );
-    setPickerForWorkout(null);
-    setPickerQuery("");
+    closePicker();
+  };
+
+  const addExerciseFromBank = (exercise: Exercise) =>
+    appendExercise({ exerciseId: exercise.id, name: exercise.name, sets: 3, repsMin: 8, repsMax: 8 });
+
+  const addCustomExercise = () => {
+    const name = pickerQuery.trim();
+    if (!name) {
+      return;
+    }
+    appendExercise({
+      name,
+      sets: 3,
+      repsMin: 8,
+      repsMax: 8,
+      isCustom: true,
+      muscleGroup: newMuscle || undefined,
+    });
   };
 
   const bankResults = useMemo(() => {
@@ -384,7 +419,14 @@ export function ProgramEditorOverlay({
                 className={cn("py-2.5", index < workout.exercises.length - 1 ? "border-b border-[var(--border)]" : null)}
               >
                 <div className="flex items-center justify-between gap-2">
-                  <span className="min-w-0 flex-1 truncate text-sm font-bold text-[var(--text)]">{exercise.name}</span>
+                  <span className="flex min-w-0 flex-1 items-center gap-1.5">
+                    <span className="truncate text-sm font-bold text-[var(--text)]">{exercise.name}</span>
+                    {exercise.isCustom ? (
+                      <span className="shrink-0 rounded-full bg-[var(--accent-soft)] px-2 py-0.5 text-[11px] font-semibold text-[var(--accent)]">
+                        Oma
+                      </span>
+                    ) : null}
+                  </span>
                   <button
                     type="button"
                     className="grid size-8 shrink-0 place-items-center rounded-full text-[var(--text-subtle)] transition hover:text-[var(--danger)]"
@@ -456,7 +498,7 @@ export function ProgramEditorOverlay({
 
       {pickerForWorkout ? (
         <div className="absolute inset-0 z-10 flex flex-col justify-end bg-[color:color-mix(in_srgb,var(--text)_45%,transparent)]">
-          <button type="button" className="flex-1" aria-label="Sulje" onClick={() => setPickerForWorkout(null)} />
+          <button type="button" className="flex-1" aria-label="Sulje" onClick={closePicker} />
           <div className="max-h-[70%] overflow-y-auto rounded-t-3xl bg-[var(--surface)] p-4 pb-[calc(env(safe-area-inset-bottom)+1rem)]">
             <div className="flex items-center justify-between gap-3">
               <h2 className="font-[family-name:var(--font-display)] text-xl font-bold text-[var(--text)]">Lisää liike</h2>
@@ -464,7 +506,7 @@ export function ProgramEditorOverlay({
                 type="button"
                 className="grid size-9 place-items-center rounded-full text-[var(--text-subtle)] transition hover:bg-[var(--surface-2)]"
                 aria-label="Sulje"
-                onClick={() => setPickerForWorkout(null)}
+                onClick={closePicker}
               >
                 <X className="size-5" aria-hidden="true" />
               </button>
@@ -473,11 +515,46 @@ export function ProgramEditorOverlay({
               <Search className="pointer-events-none absolute left-3.5 top-1/2 size-[18px] -translate-y-1/2 text-[var(--text-subtle)]" aria-hidden="true" />
               <input
                 className="w-full rounded-xl border border-[var(--border)] bg-[var(--surface-2)] py-2.5 pl-10 pr-3 text-[15px] text-[var(--text)] outline-none focus-visible:border-[var(--accent)]"
-                placeholder="Hae liikettä…"
+                placeholder="Hae tai nimeä uusi liike…"
                 value={pickerQuery}
                 onChange={(event) => setPickerQuery(event.target.value)}
               />
             </div>
+
+            {/* Luo oma liike — ylimmäksi: jos pankista ei löydy, kirjoita nimi ja luo. */}
+            <div className="mt-2 rounded-xl border border-dashed border-[var(--border-strong)] bg-[var(--surface-2)] p-2.5">
+              <div className="flex items-center gap-2">
+                <Select
+                  aria-label="Oman liikkeen lihasryhmä"
+                  className="!h-9 min-w-0 flex-1 !py-1 text-sm"
+                  value={newMuscle}
+                  onChange={(event) => setNewMuscle(event.target.value as MuscleGroupKey | "")}
+                >
+                  <option value="">Lihasryhmä</option>
+                  {CUSTOM_MUSCLE_GROUP_OPTIONS.map((group) => (
+                    <option key={group} value={group}>
+                      {customMuscleGroupLabels[group]}
+                    </option>
+                  ))}
+                </Select>
+                <Button
+                  type="button"
+                  variant="secondary"
+                  className="h-9 shrink-0 gap-1.5 !border-[var(--accent)] !bg-[color-mix(in_srgb,var(--accent)_12%,var(--surface))] !text-[var(--accent)]"
+                  disabled={!pickerQuery.trim()}
+                  onClick={addCustomExercise}
+                >
+                  <Plus className="size-4" aria-hidden="true" />
+                  Luo oma liike
+                </Button>
+              </div>
+              {pickerQuery.trim() ? (
+                <p className="mt-1.5 truncate text-[12px] text-[var(--text-subtle)]">Luodaan: “{pickerQuery.trim()}”</p>
+              ) : (
+                <p className="mt-1.5 text-[12px] text-[var(--text-subtle)]">Kirjoita liikkeen nimi hakukenttään.</p>
+              )}
+            </div>
+
             <div className="mt-2 divide-y divide-[var(--border)]">
               {bankResults.map((exercise) => (
                 <button
