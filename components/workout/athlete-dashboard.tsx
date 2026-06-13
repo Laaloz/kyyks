@@ -2953,537 +2953,166 @@ export function AthleteDashboard({
             ) : null}
 
             {athleteLogTab === "history" ? (
-            <div ref={historySectionRef} role="tabpanel" id="athlete-log-panel-history" aria-labelledby="athlete-log-tab-history">
-              <Card>
-                <p className="text-xs font-semibold tracking-[0.04em] text-[var(--text-subtle)]">Treenihistoria</p>
-                <CardTitle className="text-2xl">Historia</CardTitle>
-                <CardDescription className="mt-2">
-                  Valitse päivä nähdäksesi tehdyt treenit.
-                </CardDescription>
-                <div className="mt-5 max-w-full overflow-hidden rounded-2xl border border-[var(--border)] bg-[var(--surface-2)] p-3 sm:p-4">
-                  <p className="text-sm font-semibold text-[var(--text)]">Treenikalenteri</p>
-                  <div className="mt-2 flex items-center gap-1.5 text-[11px]">
-                    <span className="inline-flex items-center gap-1 rounded-full border border-[var(--border)] bg-[var(--surface)] px-2 py-1 text-[var(--text-subtle)]">
-                      <span>Viikko</span>
-                      <span className="font-semibold text-[var(--text)]">
-                        {weeklyInsights.completedCount}/{weeklyInsights.targetCount || 0}
-                      </span>
-                    </span>
-                    <span className="inline-flex items-center gap-1 rounded-full border border-[var(--border)] bg-[var(--surface)] px-2 py-1 text-[var(--text-subtle)]">
-                      <span>Aktiiviset (kk)</span>
-                      <span className="font-semibold text-[var(--text)]">{historyCalendarStats.monthActiveDays}</span>
-                    </span>
-                  </div>
-                  <div className="mt-3 grid w-full grid-cols-[1.75rem_minmax(0,1fr)_1.75rem] items-center gap-1 sm:w-auto sm:grid-cols-[2rem_auto_2rem] sm:gap-2">
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      className="size-7 rounded-full p-0 sm:size-8"
-                      aria-label="Edellinen kuukausi"
-                      onClick={() => setHistoryCalendarMonth((current) => addMonthsToCalendarMonth(current, -1))}
-                    >
-                      <ChevronLeft className="size-4" aria-hidden="true" />
-                    </Button>
-                    <p className="truncate text-center text-sm text-[var(--text-muted)] sm:max-w-none">
-                      {historyCalendarMonthLabel}
-                    </p>
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      className="size-7 rounded-full p-0 sm:size-8"
-                      aria-label="Seuraava kuukausi"
-                      onClick={() => setHistoryCalendarMonth((current) => addMonthsToCalendarMonth(current, 1))}
-                    >
-                      <ChevronRight className="size-4" aria-hidden="true" />
-                    </Button>
-                  </div>
-                  <div className="mt-3 grid grid-cols-7 gap-1 text-center text-[10px] text-[var(--text-subtle)] sm:text-[11px]">
-                    {["Ma", "Ti", "Ke", "To", "Pe", "La", "Su"].map((label) => (
-                      <p key={label}>{label}</p>
-                    ))}
-                  </div>
-                  <div className="mt-1 grid grid-cols-7 gap-1.5">
-                    {historyCalendarCells.map((cell) => {
-                      const hasActivity = cell.activityCount > 0;
-                      const isSelected = selectedCalendarDayKey === cell.key;
-                      const isToday = cell.key === todayCalendarKey;
-                      const iconKeys = Object.keys(cell.activityByType).filter(
-                        (key) => (cell.activityByType[key] ?? 0) > 0,
-                      );
-                      const visibleIconKeys = iconKeys.slice(0, 1);
-                      const extraTypeCount = Math.max(0, iconKeys.length - visibleIconKeys.length);
-
-                      return (
-                        <button
-                          type="button"
-                          key={cell.key}
-                          disabled={!hasActivity}
-                          className={cn(
-                            "relative z-0 aspect-square w-full max-w-11 min-h-0 min-w-0 justify-self-center appearance-none overflow-hidden rounded-full border p-0 text-left transition",
-                            cell.isCurrentMonth
-                              ? "border-[var(--border)] bg-[var(--surface)]"
-                              : "border-[var(--border)] bg-[color:color-mix(in_srgb,var(--surface-2)_86%,var(--surface))] opacity-70",
-                            isToday ? "border-[var(--accent)] bg-[var(--accent)]" : null,
-                            hasActivity ? "cursor-pointer hover:border-[var(--accent)]" : "cursor-default",
-                            isSelected && isToday
-                              ? "z-10 border-[var(--accent-contrast)] bg-[var(--accent)] shadow-[0_0_0_2px_var(--accent-contrast)]"
-                              : isSelected
-                                ? "z-10 border-[var(--accent)] bg-[color:color-mix(in_srgb,var(--accent)_10%,var(--surface))] shadow-[0_0_0_1.5px_var(--accent)]"
-                                : null,
-                          )}
-                          onClick={() => {
-                            if (!hasActivity) {
-                              return;
-                            }
-                            setSelectedCalendarDayKey(cell.key);
-                            setSelectedCalendarWorkoutId(null);
-                            setSelectedCalendarExtraActivityId(null);
-                          }}
-                          aria-label={
-                            hasActivity
-                              ? `${formatCalendarDate(cell.date)}: ${cell.activityCount} treeni${cell.activityCount > 1 ? "ä" : ""}`
-                              : `${formatCalendarDate(cell.date)}: ei treenejä`
-                          }
-                        >
-                          {hasActivity ? (
-                            <div className="flex h-full w-full flex-col items-center justify-center">
-                              <div
-                                className={cn(
-                                  "flex h-full w-full min-h-0 flex-1 items-center justify-center gap-1 rounded-[50%]",
-                                  isToday
-                                    ? "bg-[var(--accent)] text-[var(--accent-contrast)]"
-                                    : "bg-[color:color-mix(in_srgb,var(--accent)_16%,var(--surface))] text-[var(--accent-strong)]",
-                                )}
-                              >
-                                {visibleIconKeys.map((iconKey) => (
-                                  <span key={iconKey} className="grid size-8 place-items-center">
-                                    {renderCalendarActivityIcon(iconKey)}
-                                  </span>
-                                ))}
-                              </div>
-                            </div>
-                          ) : (
-                            <div className="flex h-full w-full items-center justify-center">
-                              <span className={cn("text-xs", isToday ? "text-[var(--accent-contrast)]" : "text-[var(--text-subtle)]")}>
-                                {cell.date.getDate()}
-                              </span>
-                            </div>
-                          )}
-                          {extraTypeCount > 0 ? (
-                            <span className="absolute -bottom-1 -right-1 grid min-h-4 min-w-4 place-items-center rounded-full border border-[color-mix(in_srgb,var(--accent)_35%,var(--border))] bg-[var(--surface)] px-1 text-[9px] font-semibold leading-4 text-[var(--accent)] shadow-[0_2px_8px_-6px_var(--shadow)]">
-                              +{extraTypeCount}
-                            </span>
-                          ) : null}
-                        </button>
-                      );
-                    })}
-                  </div>
-                  {selectedCalendarDayKey ? (
-                    <div className="mt-3 rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-2 shadow-[0_12px_28px_-24px_var(--shadow)]">
-                      <div className="flex items-center justify-between gap-2">
-                        <p className="text-sm font-semibold text-[var(--text)]">
-                          {formatCalendarDate(parseLocalDateKey(selectedCalendarDayKey))}
-                        </p>
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          className="grid size-8 place-items-center rounded-full border border-[var(--border)] bg-[var(--surface-2)] p-0 text-[var(--text-subtle)] hover:text-[var(--text)]"
-                          onClick={() => {
-                            setSelectedCalendarDayKey(null);
-                            setSelectedCalendarWorkoutId(null);
-                            setSelectedCalendarExtraActivityId(null);
-                          }}
-                          aria-label="Sulje päivän tiedot"
-                        >
-                          <X className="size-4" aria-hidden="true" />
-                        </Button>
-                      </div>
-                      <div className="mt-2 space-y-2">
-                        {(calendarDayDetails.get(selectedCalendarDayKey) ?? []).map((item) => (
-                          <div key={item.id} className="rounded-xl border border-[var(--border)] bg-[var(--surface-2)] px-3 py-2.5">
-                            {item.kind === "strength" ? (
-                              <>
-                                <div className="grid grid-cols-[auto_minmax(0,1fr)_auto] items-start gap-2">
-                                  <span className="mt-0.5 grid size-7 shrink-0 place-items-center rounded-full bg-[color:color-mix(in_srgb,var(--accent)_13%,var(--surface))] text-[var(--accent)]">
-                                    <Dumbbell className="size-3.5" aria-hidden="true" />
-                                  </span>
-                                  <div className="min-w-0 flex-1">
-                                    <p className="text-sm font-medium text-[var(--text)]">{item.title}</p>
-                                    <p className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-[var(--text-subtle)]">
-                                      <span className="inline-flex items-center gap-1"><Clock3 className="size-3" aria-hidden="true" />{formatWorkoutDuration(item.durationSeconds)}</span>
-                                      <span>·</span>
-                                      <span>{item.completedSets}/{item.totalSets} sarjaa</span>
-                                      <span>·</span>
-                                      <span>{formatLiftedKgValue(item.liftedKg)}</span>
-                                    </p>
-                                  </div>
-                                  <Button
-                                    type="button"
-                                    variant="ghost"
-                                    className="size-8 shrink-0 self-center rounded-full p-0"
-                                    aria-label="Avaa treenin tiedot"
-                                    onClick={() => setSelectedCalendarWorkoutId(item.workoutId)}
-                                  >
-                                    <Info className="size-4" aria-hidden="true" />
-                                  </Button>
-                                </div>
-                              </>
-                            ) : (
-                              <>
-                                <div className="grid grid-cols-[auto_minmax(0,1fr)_auto] items-start gap-2">
-                                  <span className="mt-0.5 grid size-7 shrink-0 place-items-center rounded-full bg-[color:color-mix(in_srgb,var(--accent)_13%,var(--surface))] text-[var(--accent)]">
-                                    {renderCalendarActivityIcon(item.activityType)}
-                                  </span>
-                                  <div className="min-w-0 flex-1">
-                                    <p className="text-sm font-medium text-[var(--text)]">{item.label}</p>
-                                    <p className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-[var(--text-subtle)]">
-                                      <span className="inline-flex items-center gap-1"><Clock3 className="size-3" aria-hidden="true" />{item.durationMinutes} min</span>
-                                      <span>·</span>
-                                      <span>{item.estimatedKcal} kcal</span>
-                                    </p>
-                                  </div>
-                                  {item.notes ? (
-                                    <Button
-                                      type="button"
-                                      variant="ghost"
-                                      className="size-8 shrink-0 self-center rounded-full p-0"
-                                      aria-label="Avaa extra-treenin tiedot"
-                                      onClick={() => setSelectedCalendarExtraActivityId(item.activityId)}
-                                    >
-                                      <Info className="size-4" aria-hidden="true" />
-                                    </Button>
-                                  ) : null}
-                                </div>
-                              </>
-                            )}
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  ) : null}
-                </div>
+            <div ref={historySectionRef} role="tabpanel" id="athlete-log-panel-history" aria-labelledby="athlete-log-tab-history" className="space-y-4">
                 {workoutHistory.length === 0 ? (
                   <p className="mt-5 rounded-2xl border border-[var(--border)] bg-[var(--surface-2)] px-4 py-3 text-sm text-[var(--text-muted)]">
                     Historia on vielä tyhjä. Käynnistä ensimmäinen treeni ohjelmakorteista.
                   </p>
                 ) : (
-                  <>
-                    <div className="mt-5 space-y-3">
-                      {groupedWorkoutHistory.map((group, index) => {
-                        const selectedHistoryWorkout =
-                          group.workouts.find((item) => item.workout.id === selectedHistoryWorkoutByGroup[group.key]) ??
-                          group.workouts[0];
-                        if (!selectedHistoryWorkout) {
-                          return null;
-                        }
-
-                        const {
-                          workout,
-                          insight,
-                          noteBody,
-                          workoutStatus,
-                          historyDateLabel,
-                          canResumeHistoryWorkout,
-                          canDeleteHistoryWorkout,
-                          occurrenceLabel,
-                          programTitle,
-                        } = selectedHistoryWorkout;
-                        const isFocusedHistoryItem = historyFocusWorkoutId === workout.id;
-                        const isActionMenuOpen = openHistoryMenuWorkoutId === workout.id;
-                        const isGroupExpanded = expandedHistoryGroups[group.key] ?? false;
+                  <Card className="mt-1">
+                    <div className="divide-y divide-[var(--border)]">
+                      {workoutHistory.map((workout) => {
+                        const insight = workoutInsights.get(workout.id);
+                        const session = sessionByWorkoutId.get(workout.id);
+                        const status = resolveWorkoutStatus(workout);
+                        const completedAt =
+                          workout.completedAt ??
+                          session?.completedAt ??
+                          getWorkoutOrderMetadata(workout).primaryTimestamp ??
+                          workout.scheduledDate;
+                        const title = workoutHistoryTitles.get(workout.id)?.title ?? normalizeWorkoutHistoryTitle(workout.title);
+                        const bestSet = insight?.bestSet ?? null;
+                        const durationSeconds = insight?.durationSeconds ?? 0;
+                        const liftedKg = insight?.liftedKg ?? 0;
+                        const canResume = status === "cancelled" && scheduledWithSessionIds.has(workout.id);
+                        const canDelete = Boolean(workout.programWorkoutId);
+                        const expanded = expandedHistoryGroups[workout.id] ?? false;
+                        const weekdayShort = ["Su", "Ma", "Ti", "Ke", "To", "Pe", "La"];
+                        const dateObj = new Date(completedAt);
+                        const shortDate = Number.isFinite(dateObj.getTime())
+                          ? `${weekdayShort[dateObj.getDay()]} ${dateObj.getDate()}.${dateObj.getMonth() + 1}.`
+                          : formatDateWithWeekday(completedAt);
+                        const exerciseGroups: Array<{ name: string; sets: Array<{ load: number; reps: number; missed: boolean }> }> = [];
+                        (session?.setLogs ?? [])
+                          .filter((log) => log.done)
+                          .forEach((log) => {
+                            const name = log.exerciseName?.trim() || "Liike";
+                            const repMin = log.targetRepsMin ?? log.targetReps;
+                            const missed =
+                              repMin !== undefined && log.actualReps !== undefined && log.actualReps !== null && log.actualReps < repMin;
+                            const group = exerciseGroups.find((item) => item.name === name);
+                            const entry = { load: log.actualLoad ?? 0, reps: log.actualReps ?? 0, missed: Boolean(missed) };
+                            if (group) {
+                              group.sets.push(entry);
+                            } else {
+                              exerciseGroups.push({ name, sets: [entry] });
+                            }
+                          });
 
                         return (
-                          <section
-                            key={group.key}
-                            className={cn(
-                              "overflow-hidden rounded-3xl border bg-[var(--surface-2)] transition",
-                              isFocusedHistoryItem
-                                ? "border-[var(--accent)] shadow-[0_0_0_1px_var(--accent)]"
-                                : "border-[var(--border)] hover:border-[var(--border-strong)]",
-                            )}
-                          >
-                            <div
-                              role="button"
-                              tabIndex={0}
-                              className="cursor-pointer p-3 text-left outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--surface-2)] sm:p-4"
-                              aria-expanded={isGroupExpanded}
-                              aria-controls={`athlete-history-panel-${group.key}`}
-                              onClick={() => toggleHistoryGroup(group.key, !isGroupExpanded)}
-                              onKeyDown={(event) => {
-                                if (event.key === "Enter" || event.key === " ") {
-                                  event.preventDefault();
-                                  toggleHistoryGroup(group.key, !isGroupExpanded);
-                                }
-                              }}
+                          <div key={workout.id} className="py-3">
+                            <button
+                              type="button"
+                              className="flex w-full items-center gap-3 text-left"
+                              aria-expanded={expanded}
+                              onClick={() => toggleHistoryGroup(workout.id, !expanded)}
                             >
-                              <div className="flex items-center justify-between gap-3">
-                                <div className="flex min-w-0 flex-wrap items-center gap-2">
-                                  <span className="text-sm font-semibold text-[var(--text)] sm:text-base">
-                                    {group.title}
-                                  </span>
-                                  <Badge className={statusTone(workoutStatus)}>{workoutStatusLabel(workoutStatus)}</Badge>
-                                </div>
-                                <div className="flex shrink-0 items-center gap-2">
-                                  {readOnly ? null : (
-                                  <div className="relative" data-history-menu-root="true">
-                                    <Button
-                                      type="button"
-                                      variant="ghost"
-                                      className="size-9 rounded-full p-0"
-                                      data-history-menu-trigger-id={workout.id}
-                                      aria-expanded={isActionMenuOpen}
-                                      aria-haspopup="menu"
-                                      aria-label="Avaa treenin toiminnot"
-                                      onClick={(event) => {
-                                        event.stopPropagation();
-                                        if (isActionMenuOpen) {
-                                          setOpenHistoryMenuWorkoutId(null);
-                                          setHistoryMenuAnchorRect(null);
-                                          setHistoryMenuStyle(null);
-                                          return;
-                                        }
+                              <span className="min-w-0 flex-1">
+                                <span className="flex items-center gap-2">
+                                  <span className="truncate font-semibold text-[var(--text)]">{title}</span>
+                                  {status !== "completed" ? (
+                                    <Badge className={statusTone(status)}>{workoutStatusLabel(status)}</Badge>
+                                  ) : null}
+                                </span>
+                                <span className="mt-0.5 block text-xs text-[var(--text-subtle)]">
+                                  {shortDate} · {Math.round(durationSeconds / 60)} min
+                                </span>
+                              </span>
+                              {bestSet ? (
+                                <span className="shrink-0 rounded-full bg-[var(--surface-2)] px-2.5 py-1 text-xs font-semibold tabular-nums text-[var(--text-muted)]">
+                                  {bestSet.exerciseName.split(" ")[0]} {formatLoadValue(bestSet.load)} kg × {bestSet.reps}
+                                </span>
+                              ) : null}
+                            </button>
 
-                                        setHistoryMenuAnchorRect(toAnchorRect(event.currentTarget.getBoundingClientRect()));
-                                        setOpenHistoryMenuWorkoutId(workout.id);
-                                      }}
-                                      onKeyDown={(event) => event.stopPropagation()}
-                                    >
-                                      <MoreHorizontal className="size-4" aria-hidden="true" />
-                                    </Button>
-                                    {isActionMenuOpen ? (
-                                      <div
-                                        ref={historyMenuRef}
-                                        role="menu"
-                                        className="z-20 min-w-36 max-w-[calc(100vw-1rem)] rounded-xl border border-[var(--border)] bg-[var(--surface)] p-1 shadow-[0_12px_30px_-20px_var(--shadow)]"
-                                        style={
-                                          historyMenuStyle ??
-                                          (historyMenuAnchorRect
-                                            ? getHiddenFloatingMenuStyle(historyMenuAnchorRect)
-                                            : undefined)
-                                        }
-                                      >
-                                        {canResumeHistoryWorkout ? (
-                                          <button
-                                            type="button"
-                                            role="menuitem"
-                                            className="w-full rounded-lg px-3 py-2 text-left text-sm text-[var(--accent)] hover:bg-[var(--surface-3)]"
-                                            onClick={async () => {
-                                              setOpenHistoryMenuWorkoutId(null);
-                                              setHistoryMenuAnchorRect(null);
-                                              setHistoryMenuStyle(null);
-                                              void openOrResumeWorkout(workout.id, `history-menu-${workout.id}`, {
-                                                returnTab: "history",
-                                              });
-                                            }}
-                                          >
-                                            Jatka treeniä
-                                          </button>
-                                        ) : null}
-                                        {!canResumeHistoryWorkout ? (
-                                          <button
-                                            type="button"
-                                            role="menuitem"
-                                            className="w-full rounded-lg px-3 py-2 text-left text-sm text-[var(--text)] hover:bg-[var(--surface-3)]"
-                                            onClick={async () => {
-                                              setOpenHistoryMenuWorkoutId(null);
-                                              setHistoryMenuAnchorRect(null);
-                                              setHistoryMenuStyle(null);
-                                              openWorkoutView(workout.id, {
-                                                correctionMode: true,
-                                                returnTab: "history",
-                                              });
-                                            }}
-                                          >
-                                            Muokkaa
-                                          </button>
-                                        ) : null}
-                                        {canDeleteHistoryWorkout ? (
-                                          <button
-                                            type="button"
-                                            role="menuitem"
-                                            className="w-full rounded-lg px-3 py-2 text-left text-sm text-[var(--danger)] hover:bg-[var(--surface-3)]"
-                                            onClick={async () => {
-                                              setOpenHistoryMenuWorkoutId(null);
-                                              setHistoryMenuAnchorRect(null);
-                                              setHistoryMenuStyle(null);
-                                              const confirmed = window.confirm(
-                                                `Poistetaanko historiasta vain toteutus "${group.title} · ${historyDateLabel} · ${occurrenceLabel}"? Muut saman treenialueen toteutukset säilyvät. Toimintoa ei voi kumota.`,
-                                              );
-                                              if (!confirmed) {
-                                                return;
-                                              }
-
-                                              const result = await deleteWorkout(workout.id);
-                                              setWorkoutMessage(result.ok ? "Treeni poistettiin historiasta." : result.message);
-                                              if (result.ok) {
-                                                if (selectedWorkoutId === workout.id) {
-                                                  setSelectedWorkoutId(null);
-                                                }
-                                                setHistoryFocusWorkoutId(null);
-                                                setCorrectionModeWorkoutId(null);
-                                              }
-                                            }}
-                                          >
-                                            Poista
-                                          </button>
-                                        ) : null}
-                                      </div>
-                                    ) : null}
+                            {expanded ? (
+                              <div className="mt-3">
+                                <div className="grid grid-cols-2 gap-3">
+                                  <div className="rounded-xl bg-[var(--surface-2)] px-3 py-2.5">
+                                    <p className="font-[family-name:var(--font-display)] text-lg font-bold tabular-nums text-[var(--text)]">
+                                      {formatLiftedKgValue(liftedKg)}
+                                    </p>
+                                    <p className="text-[11px] font-semibold text-[var(--text-subtle)]">Volyymi</p>
                                   </div>
-                                  )}
-                                  <span
-                                    className="grid size-9 place-items-center rounded-full border border-[var(--border)] bg-[var(--surface)] text-[var(--text-subtle)]"
-                                    aria-hidden="true"
-                                  >
-                                    {isGroupExpanded ? (
-                                      <ChevronUp className="size-4" aria-hidden="true" />
-                                    ) : (
-                                      <ChevronDown className="size-4" aria-hidden="true" />
-                                    )}
-                                  </span>
+                                  <div className="rounded-xl bg-[var(--surface-2)] px-3 py-2.5">
+                                    <p className="font-[family-name:var(--font-display)] text-lg font-bold tabular-nums text-[var(--text)]">
+                                      {Math.round(durationSeconds / 60)} min
+                                    </p>
+                                    <p className="text-[11px] font-semibold text-[var(--text-subtle)]">Kesto</p>
+                                  </div>
                                 </div>
-                              </div>
-                              <div className="mt-3 min-w-0">
-                                {programTitle ? (
-                                  <p className="text-xs text-[var(--text-subtle)]">Ohjelma: {programTitle}</p>
-                                ) : null}
-                                <p className="text-sm text-[var(--text-muted)]">
-                                  Toteutus: {historyDateLabel} · {occurrenceLabel}
-                                </p>
-                                <div className="mt-2 flex flex-wrap gap-2 text-[11px] text-[var(--text-subtle)] sm:text-xs">
-                                  <span className="rounded-full border border-[var(--border)] bg-[var(--surface)] px-2 py-1">
-                                    {group.workouts.length} toteutusta
-                                  </span>
-                                  <span className="rounded-full border border-[var(--border)] bg-[var(--surface)] px-2 py-1">
-                                    {insight.exerciseCount} liikettä
-                                  </span>
-                                  <span className="rounded-full border border-[var(--border)] bg-[var(--surface)] px-2 py-1">
-                                    {insight.completedSetCount}/{insight.setCount} sarjaa
-                                  </span>
-                                  <span className="rounded-full border border-[var(--border)] bg-[var(--surface)] px-2 py-1">
-                                    {formatLiftedKgValue(insight.liftedKg)}
-                                  </span>
-                                  {insight.durationSeconds > 0 ? (
-                                    <span className="rounded-full border border-[var(--border)] bg-[var(--surface)] px-2 py-1">
-                                      {formatWorkoutDuration(insight.durationSeconds)}
-                                    </span>
-                                  ) : null}
-                                  {insight.estimatedCalories > 0 ? (
-                                    <span className="rounded-full border border-[var(--border)] bg-[var(--surface)] px-2 py-1">
-                                      {formatEstimatedCaloriesValue(insight.estimatedCalories)}
-                                    </span>
-                                  ) : null}
-                                  {insight.bestSet ? (
-                                    <span className="rounded-full border border-[color-mix(in_srgb,var(--accent)_30%,var(--border))] bg-[color-mix(in_srgb,var(--accent)_8%,var(--surface))] px-2 py-1 font-semibold text-[var(--accent)]">
-                                      Paras: {insight.bestSet.exerciseName} {formatLoadValue(insight.bestSet.load)} kg × {insight.bestSet.reps}
-                                    </span>
-                                  ) : null}
-                                </div>
-                              </div>
-                            </div>
-
-                            {isGroupExpanded ? (
-                              <div
-                                id={`athlete-history-panel-${group.key}`}
-                                className="border-t border-[var(--border)] bg-[var(--surface)] px-3 py-3 sm:px-4 sm:py-4"
-                              >
-                                {group.workouts.length > 1 ? (
-                                  <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface-2)] px-3 py-3">
-                                    <Label htmlFor={`athlete-history-group-${group.key}`} className="text-xs">
-                                      Valitse toteutus
-                                    </Label>
-                                    <Select
-                                      id={`athlete-history-group-${group.key}`}
-                                      value={workout.id}
-                                      className="mt-2"
-                                      onChange={(event) =>
-                                        setSelectedHistoryWorkoutByGroup((current) => ({
-                                          ...current,
-                                          [group.key]: event.target.value,
-                                        }))
-                                      }
-                                    >
-                                      {group.workouts.map((item) => (
-                                        <option key={item.workout.id} value={item.workout.id}>
-                                          {item.historyDateLabel} · {item.occurrenceLabel}
-                                        </option>
-                                      ))}
-                                    </Select>
-                                    {(() => {
-                                      const occurrenceIndex = group.workouts.findIndex(
-                                        (item) => item.workout.id === workout.id,
-                                      );
-                                      const newerWorkout = occurrenceIndex > 0 ? group.workouts[occurrenceIndex - 1] : undefined;
-                                      const olderWorkout =
-                                        occurrenceIndex >= 0 && occurrenceIndex < group.workouts.length - 1
-                                          ? group.workouts[occurrenceIndex + 1]
-                                          : undefined;
-                                      const selectOccurrence = (workoutId: string) =>
-                                        setSelectedHistoryWorkoutByGroup((current) => ({
-                                          ...current,
-                                          [group.key]: workoutId,
-                                        }));
-
-                                      return (
-                                        <div className="mt-2 flex items-center justify-between gap-2">
-                                          <Button
-                                            type="button"
-                                            variant="ghost"
-                                            className="h-9 flex-1 justify-center gap-1 rounded-xl px-2 text-xs"
-                                            disabled={!olderWorkout}
-                                            onClick={() => olderWorkout && selectOccurrence(olderWorkout.workout.id)}
-                                          >
-                                            <ChevronLeft className="size-3.5" aria-hidden="true" />
-                                            Vanhempi
-                                          </Button>
-                                          <Button
-                                            type="button"
-                                            variant="ghost"
-                                            className="h-9 flex-1 justify-center gap-1 rounded-xl px-2 text-xs"
-                                            disabled={!newerWorkout}
-                                            onClick={() => newerWorkout && selectOccurrence(newerWorkout.workout.id)}
-                                          >
-                                            Uudempi
-                                            <ChevronRight className="size-3.5" aria-hidden="true" />
-                                          </Button>
+                                {exerciseGroups.length > 0 ? (
+                                  <div className="mt-3 space-y-2.5">
+                                    {exerciseGroups.map((group) => (
+                                      <div key={group.name}>
+                                        <p className="text-sm font-semibold text-[var(--text)]">{group.name}</p>
+                                        <div className="mt-1.5 flex flex-wrap gap-1.5">
+                                          {group.sets.map((set, index) => (
+                                            <span
+                                              key={index}
+                                              className={cn(
+                                                "rounded-full px-2.5 py-0.5 text-xs font-semibold tabular-nums",
+                                                set.missed
+                                                  ? "bg-[color:color-mix(in_srgb,var(--warning)_16%,var(--surface))] text-[var(--warning)]"
+                                                  : "bg-[var(--surface-2)] text-[var(--text-muted)]",
+                                              )}
+                                            >
+                                              {formatLoadValue(set.load)} × {set.reps}
+                                            </span>
+                                          ))}
                                         </div>
-                                      );
-                                    })()}
-                                  </div>
-                                ) : null}
-
-                                {noteBody ? (
-                                  <div className="mt-3 rounded-2xl border border-[var(--border)] bg-[var(--surface-2)] px-3 py-3">
-                                    <p className="text-[11px] font-semibold tracking-[0.04em] text-[var(--text-subtle)]">
-                                      Oma muistiinpano
-                                    </p>
-                                    <p className="mt-1 whitespace-pre-line text-xs leading-5 text-[var(--text-muted)]">
-                                      {noteBody}
-                                    </p>
-                                  </div>
-                                ) : null}
-
-                                <div className="mt-3 rounded-2xl border border-[var(--border)] bg-[var(--surface-2)] px-3 py-3">
-                                  <p className="text-[11px] font-semibold tracking-[0.04em] text-[var(--text-subtle)]">
-                                    Lihasryhmät
-                                  </p>
-                                  <div className="mt-2 grid grid-cols-2 gap-1.5 sm:grid-cols-3 xl:grid-cols-4">
-                                    {historyMuscleGroups.map((muscleGroup) => (
-                                      <p key={muscleGroup.key} className="text-[11px] text-[var(--text-muted)]">
-                                        {muscleGroup.label}: {formatLiftedKgValue(insight.muscleGroupLiftedKg[muscleGroup.key])}
-                                      </p>
+                                      </div>
                                     ))}
                                   </div>
-                                </div>
-
-                                <WorkoutMiniProgress workoutId={workout.id} />
+                                ) : null}
+                                {!readOnly ? (
+                                  <div className="mt-3 flex flex-wrap gap-2">
+                                    {canResume ? (
+                                      <Button
+                                        type="button"
+                                        variant="secondary"
+                                        className="h-9 px-3 text-sm"
+                                        onClick={() => void openOrResumeWorkout(workout.id, `history-${workout.id}`, { returnTab: "history" })}
+                                      >
+                                        Jatka treeniä
+                                      </Button>
+                                    ) : (
+                                      <Button
+                                        type="button"
+                                        variant="secondary"
+                                        className="h-9 px-3 text-sm"
+                                        onClick={() => openWorkoutView(workout.id, { correctionMode: true, returnTab: "history" })}
+                                      >
+                                        Muokkaa
+                                      </Button>
+                                    )}
+                                    {canDelete ? (
+                                      <Button
+                                        type="button"
+                                        variant="ghost"
+                                        className="h-9 gap-1.5 px-3 text-sm text-[var(--danger)]"
+                                        onClick={async () => {
+                                          const confirmed = window.confirm(`Poistetaanko ${title} (${shortDate})? Toimintoa ei voi kumota.`);
+                                          if (!confirmed) {
+                                            return;
+                                          }
+                                          const result = await deleteWorkout(workout.id);
+                                          setWorkoutMessage(result.ok ? "Treeni poistettiin historiasta." : result.message);
+                                        }}
+                                      >
+                                        <Trash2 className="size-4" aria-hidden="true" />
+                                        Poista
+                                      </Button>
+                                    ) : null}
+                                  </div>
+                                ) : null}
                               </div>
                             ) : null}
-                          </section>
+                          </div>
                         );
                       })}
                     </div>
-                  </>
+                  </Card>
                 )}
                 <div className="mt-5 rounded-2xl border border-[var(--border)] bg-[var(--surface-2)] p-4">
                   <p className="text-sm font-semibold text-[var(--text)]">Extra-treenien historia</p>
@@ -3574,7 +3203,6 @@ export function AthleteDashboard({
                     </div>
                   )}
                 </div>
-              </Card>
             </div>
             ) : null}
           </div>
