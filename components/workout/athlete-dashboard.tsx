@@ -764,6 +764,9 @@ export function AthleteDashboard({
   );
   const workoutInsights = useMemo(() => buildWorkoutInsights(state), [state]);
   const selectedWorkoutStatus = selectedWorkout ? resolveWorkoutStatus(selectedWorkout) : undefined;
+  // Aktiivinen kirjaus: paneli renderöi prototyypin oman headerin (takaisin +
+  // KÄYNNISSÄ·aika + otsikko + x/y), joten emon raskas Card-header piilotetaan.
+  const isActiveWorkoutLogging = Boolean(selectedWorkout) && selectedWorkoutStatus === "in_progress" && !readOnly;
   const selectedWorkoutInsight = selectedWorkout ? workoutInsights.get(selectedWorkout.id) : undefined;
   const bodyMeasurements = useMemo(
     () => (currentUser ? getMeasurementsForUser(state, currentUser.id) : []),
@@ -1824,6 +1827,8 @@ export function AthleteDashboard({
       {view === "athlete-log" && (
         athleteLogMode === "workout" ? (
           <Card className="border-[var(--border-strong)] max-md:rounded-none max-md:border-0 max-md:bg-transparent max-md:p-0 max-md:shadow-none">
+            {!isActiveWorkoutLogging ? (
+            <>
             <div className="flex items-start justify-between gap-4">
               <div className="min-w-0 flex-1">
                 <p className="text-xs font-semibold tracking-[0.04em] text-[var(--text-subtle)]">Treeni</p>
@@ -1910,6 +1915,8 @@ export function AthleteDashboard({
                   <div className="h-full rounded-full bg-[var(--accent)]" style={{ width: `${progress.percent}%` }} />
                 </div>
               </div>
+            ) : null}
+            </>
             ) : null}
             {selectedWorkout ? (
               <AthleteSessionPanel

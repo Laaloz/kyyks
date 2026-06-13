@@ -1,6 +1,6 @@
 "use client";
 
-import { BookOpen, Check, ChevronDown, ChevronUp, Clock3, GripVertical, MoreHorizontal, Plus, Search, Settings2, Trash2, X } from "lucide-react";
+import { BookOpen, Check, ChevronDown, ChevronLeft, ChevronUp, Clock3, GripVertical, MoreHorizontal, Plus, Search, Settings2, Trash2, X } from "lucide-react";
 import {
   useEffect,
   useLayoutEffect,
@@ -1497,6 +1497,9 @@ export function AthleteSessionPanel({
             const targetMinimum = log.targetRepsMin ?? log.targetReps;
             const missed =
               log.actualReps !== undefined && log.actualReps !== null && targetMinimum !== undefined && log.actualReps < targetMinimum;
+            // Kuitatun sarjan sävy: vihreä kun tavoite täyttyi, amber kun toistot
+            // jäi alle tavoitteen (sama logiikka kentissä ja kuittausnapissa).
+            const rowTone = log.done ? (missed ? "warn" : "success") : undefined;
             return (
               <div key={log.id} className="grid grid-cols-[1.25rem_1fr_0.75rem_1fr_2.75rem] items-center gap-2">
                 <span className="text-center font-[family-name:var(--font-display)] text-sm font-semibold text-[var(--text-subtle)]">
@@ -1505,6 +1508,7 @@ export function AthleteSessionPanel({
                 <DragNumber
                   value={log.actualLoad ?? 0}
                   step={loadIncrementKg}
+                  tone={rowTone}
                   ariaLabel={`${exerciseName} sarja ${log.setLabel} paino`}
                   disabled={readOnly}
                   onChange={(next) => handleLogUpdate(log, { actualLoad: next })}
@@ -1513,7 +1517,7 @@ export function AthleteSessionPanel({
                 <DragNumber
                   value={log.actualReps ?? 0}
                   step={1}
-                  tone={missed ? "warn" : undefined}
+                  tone={rowTone}
                   ariaLabel={`${exerciseName} sarja ${log.setLabel} toistot`}
                   disabled={readOnly}
                   onChange={(next) => handleLogUpdate(log, { actualReps: next })}
@@ -1525,7 +1529,9 @@ export function AthleteSessionPanel({
                   aria-label={log.done ? `Kumoa sarja ${log.setLabel}` : `Kuittaa sarja ${log.setLabel}${missed ? ", toistot alle tavoitteen" : ""}`}
                   className={`grid size-11 place-items-center rounded-full border transition ${
                     log.done
-                      ? "border-[var(--success)] bg-[var(--success)] text-white"
+                      ? missed
+                        ? "border-[var(--warning)] bg-[var(--warning)] text-white"
+                        : "border-[var(--success)] bg-[var(--success)] text-white"
                       : "border-[var(--border-strong)] bg-[var(--surface)] text-[var(--text-subtle)] hover:border-[var(--accent)] hover:text-[var(--accent)]"
                   }`}
                   onClick={() => handleDoneUpdate(log, !log.done)}
@@ -1922,9 +1928,29 @@ export function AthleteSessionPanel({
   return (
     <div className="mt-6 min-w-0 max-w-full space-y-5 overflow-x-clip [contain:inline-size]">
       {activeLoggingView ? (
-        <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-[var(--text-subtle)]">
-          Käynnissä · {formatWorkoutDuration(elapsedSeconds)}
-        </p>
+        <div className="flex items-center gap-3">
+          <button
+            type="button"
+            onClick={onBackToList}
+            aria-label="Takaisin treenilistaan"
+            className="grid size-10 shrink-0 place-items-center rounded-full border border-[var(--border)] bg-[var(--surface)] text-[var(--text)] transition hover:border-[var(--border-strong)]"
+          >
+            <ChevronLeft className="size-5" aria-hidden="true" />
+          </button>
+          <div className="min-w-0 flex-1">
+            <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-[var(--text-subtle)]">
+              Käynnissä · {formatWorkoutDuration(elapsedSeconds)}
+            </p>
+            <h2 className="truncate font-[family-name:var(--font-display)] text-2xl font-bold leading-tight text-[var(--text)]">
+              {scheduledWorkoutTitle}
+            </h2>
+          </div>
+          {progress ? (
+            <span className="shrink-0 rounded-full bg-[color-mix(in_srgb,var(--success)_18%,var(--surface))] px-3 py-1 text-sm font-semibold tabular-nums text-[var(--success)]">
+              {progress.completedSets}/{progress.totalSets}
+            </span>
+          ) : null}
+        </div>
       ) : (
         <div className="flex min-w-0 flex-wrap items-center gap-3">
           <Badge className={workoutStatusBadgeClass(status)}>{workoutStatusLabel(status)}</Badge>

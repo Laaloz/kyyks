@@ -23,7 +23,7 @@ export function DragNumber({
   step?: number;
   min?: number;
   ariaLabel: string;
-  tone?: "warn";
+  tone?: "warn" | "success";
   disabled?: boolean;
 }) {
   const dragRef = useRef<{ pointerId: number; startY: number; lastStep: number; value: number } | null>(null);
@@ -91,7 +91,11 @@ export function DragNumber({
     <span
       className={cn(
         "relative flex h-11 items-center rounded-xl pr-7 transition",
-        tone === "warn" ? "bg-[color:color-mix(in_srgb,var(--warning)_16%,var(--surface-2))]" : "bg-[var(--surface-2)]",
+        tone === "warn"
+          ? "bg-[color:color-mix(in_srgb,var(--warning)_16%,var(--surface-2))]"
+          : tone === "success"
+            ? "bg-[color:color-mix(in_srgb,var(--success)_16%,var(--surface-2))]"
+            : "bg-[var(--surface-2)]",
         active ? "shadow-[inset_0_0_0_1.5px_var(--accent)]" : null,
       )}
     >
@@ -103,7 +107,7 @@ export function DragNumber({
         disabled={disabled}
         className={cn(
           "w-full min-w-0 bg-transparent px-2 text-center font-[family-name:var(--font-display)] text-base font-semibold tabular-nums outline-none",
-          tone === "warn" ? "text-[var(--warning)]" : "text-[var(--text)]",
+          tone === "warn" ? "text-[var(--warning)]" : tone === "success" ? "text-[var(--success)]" : "text-[var(--text)]",
         )}
         onChange={(event) => {
           const raw = event.target.value.trim().replace(",", ".");
@@ -125,7 +129,13 @@ export function DragNumber({
         disabled={disabled}
         className={cn(
           "absolute right-1 grid h-9 w-6 place-items-center rounded-lg",
-          active ? "text-[var(--accent)]" : tone === "warn" ? "text-[var(--warning)]" : "text-[var(--text-subtle)]",
+          active
+            ? "text-[var(--accent)]"
+            : tone === "warn"
+              ? "text-[var(--warning)]"
+              : tone === "success"
+                ? "text-[var(--success)]"
+                : "text-[var(--text-subtle)]",
         )}
         style={{ touchAction: "none", cursor: "ns-resize" }}
         onPointerDown={handlePointerDown}
