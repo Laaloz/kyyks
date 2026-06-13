@@ -46,6 +46,7 @@ import { InfoTooltip } from "@/components/ui/tooltip";
 import { AthleteSessionPanel } from "@/components/workout/athlete/session-panel";
 import { ConversationPanel } from "@/components/workout/conversation-panel";
 import { MetricTrendChart } from "@/components/workout/metric-trend-chart";
+import { DayMealsCard } from "@/components/workout/day-meals-card";
 import { NutritionAthleteCard } from "@/components/workout/nutrition-athlete-card";
 import { PersonalNutritionSummaryCard } from "@/components/workout/personal-nutrition-summary-card";
 import { estimateStrengthCalories, getMeasurementsForUser, getWeightAtMoment } from "@/lib/body-metrics";
@@ -2397,6 +2398,8 @@ export function AthleteDashboard({
       {view === "nutrition" && currentUser ? (
         <PersonalNutritionSummaryCard state={state} user={currentUser} onOpenSettings={onOpenSettings} />
       ) : null}
+
+      {view === "nutrition" && currentUser ? <DayMealsCard user={currentUser} /> : null}
 
       {view === "nutrition" && currentUser ? <NutritionAthleteCard state={state} user={currentUser} /> : null}
 
