@@ -316,6 +316,10 @@ export function DashboardShell() {
     if (view === "conversation" && role !== "independent_athlete") {
       return;
     }
+    // Adminin Tiimi-näkymän Hallinta-sillat (eivät välilehtipalkissa).
+    if (isAdminRole(role) && (view === "invites" || view === "users" || view === "ingredients")) {
+      return;
+    }
 
     setView(resolveInitialView(role, currentUser.settings?.defaultDashboardView));
   }, [currentUser, view]);
