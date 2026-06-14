@@ -8,7 +8,7 @@ import { Button } from "@/components/ui/button";
 import { DragNumber } from "@/components/ui/drag-number";
 import { Select } from "@/components/ui/field";
 import { customMuscleGroupLabels } from "@/components/workout/coach/program-composer";
-import { CUSTOM_EXERCISE_VALUE, CUSTOM_MUSCLE_GROUP_OPTIONS } from "@/components/workout/schemas";
+import { CUSTOM_EXERCISE_VALUE, CUSTOM_MUSCLE_GROUP_OPTIONS, SUPERSET_GROUP_OPTIONS } from "@/components/workout/schemas";
 import { cn } from "@/lib/utils";
 import type { Exercise, MuscleGroupKey, ProgramWorkoutInput, TrainingPlan } from "@/lib/types";
 
@@ -24,6 +24,7 @@ type DraftExercise = {
   /** Pankista puuttuva oma liike — luodaan coach_custom-liikkeeksi tallennettaessa. */
   isCustom?: boolean;
   muscleGroup?: MuscleGroupKey;
+  supersetGroup?: "" | (typeof SUPERSET_GROUP_OPTIONS)[number];
 };
 
 type DraftWorkout = {
@@ -68,6 +69,7 @@ function planWorkoutsToDraft(plan: TrainingPlan | null, exercises: Exercise[]): 
         sets: Math.max(1, exercise.sets.length || 3),
         repsMin: min,
         repsMax: Math.max(min, max),
+        supersetGroup: (exercise.supersetGroup ?? "") as DraftExercise["supersetGroup"],
       };
     }),
   }));
@@ -88,6 +90,7 @@ function draftToWorkoutInputs(workouts: DraftWorkout[]): ProgramWorkoutInput[] {
         targetReps: exercise.repsMin,
         targetRepsMin: exercise.repsMin,
         targetRepsMax: exercise.repsMax,
+        supersetGroup: exercise.supersetGroup || undefined,
       };
       // Oma liike: ei exerciseId:tä → provider (resolveProgramWorkouts) luo coach_custom.
       if (exercise.isCustom || !exercise.exerciseId) {
@@ -234,7 +237,7 @@ export function ProgramEditorOverlay({
 
   const addExerciseFromBank = (exercise: Exercise) =>
     // Tuo liikkeen oma vakio-ohje (cue) valmiiksi kenttään — muokattavissa.
-    appendExercise({ exerciseId: exercise.id, name: exercise.name, instruction: exercise.cue, sets: 3, repsMin: 8, repsMax: 8 });
+    appendExercise({ exerciseId: exercise.id, name: exercise.name, instruction: exercise.cue, sets: 3, repsMin: 8, repsMax: 8, supersetGroup: "" });
 
   const addCustomExercise = () => {
     const name = pickerQuery.trim();
@@ -248,6 +251,7 @@ export function ProgramEditorOverlay({
       repsMax: 8,
       isCustom: true,
       muscleGroup: newMuscle || undefined,
+      supersetGroup: "",
     });
   };
 
@@ -492,6 +496,30 @@ export function ProgramEditorOverlay({
                       updateExercise(workout.uid, exercise.uid, { repsMax: max, repsMin: Math.min(max, exercise.repsMin) });
                     }}
                   />
+                </div>
+                <div className="mt-2 flex items-center gap-2 overflow-x-auto pb-0.5 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+                  <span className="shrink-0 text-[11px] font-semibold uppercase tracking-[0.05em] text-[var(--text-subtle)]">Superset</span>
+                  <div className="flex shrink-0 gap-1.5">
+                    {(["", ...SUPERSET_GROUP_OPTIONS] as DraftExercise["supersetGroup"][]).map((group) => {
+                      const active = (exercise.supersetGroup ?? "") === group;
+                      return (
+                        <button
+                          key={group || "none"}
+                          type="button"
+                          aria-pressed={active}
+                          className={cn(
+                            "grid h-7 min-w-8 place-items-center rounded-full px-2.5 text-xs font-bold transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)]",
+                            active
+                              ? "bg-[var(--text)] text-[var(--background)]"
+                              : "bg-[var(--surface-2)] text-[var(--text-muted)] hover:text-[var(--text)]",
+                          )}
+                          onClick={() => updateExercise(workout.uid, exercise.uid, { supersetGroup: group })}
+                        >
+                          {group || "Ei"}
+                        </button>
+                      );
+                    })}
+                  </div>
                 </div>
               </div>
             ))}
