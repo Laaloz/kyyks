@@ -11,13 +11,12 @@ import {
   type PointerEvent as ReactPointerEvent,
   type CSSProperties,
 } from "react";
-import { createPortal } from "react-dom";
-
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { DragNumber } from "@/components/ui/drag-number";
 import { calculateEstimatedOneRepMax } from "@/lib/exercise-progress";
 import { Input, Label, Textarea } from "@/components/ui/field";
+import { Sheet } from "@/components/ui/sheet";
 import { InfoTooltip } from "@/components/ui/tooltip";
 import { InlineFeedback } from "@/components/workout/inline-feedback";
 import { withMinimumDelay } from "@/lib/min-delay";
@@ -131,36 +130,9 @@ function CoachInstructionDialog({
   instruction: string;
   onClose: () => void;
 }) {
-  useEffect(() => {
-    const handleKeyDown = (event: globalThis.KeyboardEvent) => {
-      if (event.key === "Escape") {
-        onClose();
-      }
-    };
-
-    window.addEventListener("keydown", handleKeyDown);
-    return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [onClose]);
-
-  if (typeof document === "undefined") {
-    return null;
-  }
-
-  return createPortal(
-    <div
-      className="fixed inset-0 z-50 flex items-end justify-center bg-[color:color-mix(in_srgb,var(--background)_48%,transparent)] p-0"
-      role="presentation"
-      onClick={onClose}
-    >
-      <div
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="coach-instruction-title"
-        aria-describedby="coach-instruction-description"
-        className="w-full max-w-lg rounded-t-3xl bg-[var(--surface)] p-5 pb-[max(env(safe-area-inset-bottom),1.25rem)] shadow-[0_24px_60px_-24px_var(--shadow)]"
-        onClick={(event) => event.stopPropagation()}
-      >
-        <p className="text-[11px] font-semibold tracking-[0.06em] text-[var(--accent)]">Valmentajan ohje</p>
+  return (
+    <Sheet onClose={onClose} ariaLabelledby="coach-instruction-title" ariaDescribedby="coach-instruction-description">
+        <p className="text-sm font-semibold text-[var(--accent)]">Valmentajan ohje</p>
         <h3
           id="coach-instruction-title"
           className="mt-2 font-[family-name:var(--font-display)] text-2xl font-semibold text-[var(--text)]"
@@ -178,9 +150,7 @@ function CoachInstructionDialog({
             Sulje
           </Button>
         </div>
-      </div>
-    </div>,
-    document.body,
+    </Sheet>
   );
 }
 
@@ -249,17 +219,6 @@ function ExerciseStructureDialog({
     ? customExerciseName.trim() || "Luo oma liike"
     : selectedExercise?.name ?? "Valitse liike";
 
-  useEffect(() => {
-    const handleKeyDown = (event: globalThis.KeyboardEvent) => {
-      if (event.key === "Escape") {
-        onClose();
-      }
-    };
-
-    window.addEventListener("keydown", handleKeyDown);
-    return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [onClose]);
-
   const buildPayload = () => {
     const nextSetCount = Math.min(8, Math.max(1, Number(setCount) || 3));
     const nextRestSeconds = Math.min(900, Math.max(15, Number(restSeconds) || 120));
@@ -291,24 +250,12 @@ function ExerciseStructureDialog({
     };
   };
 
-  if (typeof document === "undefined") {
-    return null;
-  }
-
-  return createPortal(
-    <div
-      className="fixed inset-0 z-50 flex items-end justify-center bg-[color:color-mix(in_srgb,var(--background)_54%,transparent)] p-0 sm:items-center sm:p-4"
-      role="presentation"
-      onClick={onClose}
+  return (
+    <Sheet
+      onClose={onClose}
+      ariaLabelledby="exercise-structure-title"
+      className="max-w-none overflow-hidden sm:max-w-lg"
     >
-      <div
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="exercise-structure-title"
-        className="flex max-h-[88svh] w-full max-w-none flex-col overflow-hidden rounded-t-3xl bg-[var(--surface)] p-5 pb-[max(env(safe-area-inset-bottom),1.25rem)] shadow-[0_24px_60px_-24px_var(--shadow)] sm:max-w-lg sm:rounded-3xl"
-        onClick={(event) => event.stopPropagation()}
-      >
-        <span className="mx-auto mb-3 block h-1 w-10 rounded-full bg-[var(--border-strong)]" aria-hidden="true" />
         <p className="text-sm font-medium text-[var(--accent)]">
           {mode === "edit" ? "Muokkaa liikettä" : "Lisää extra-liike"}
         </p>
@@ -463,9 +410,7 @@ function ExerciseStructureDialog({
             </button>
           ) : null}
         </div>
-      </div>
-    </div>,
-    document.body,
+    </Sheet>
   );
 }
 
