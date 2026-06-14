@@ -159,6 +159,23 @@ export function NutritionView({
         : [],
     [assignedPlan, recipeById],
   );
+  // Jaettu ateriapohja on valikko, ei valmis päivä: yhdellä ateriatyypillä voi
+  // olla useita reseptejä. Esikatselu ja "Kokoa" käyttävät tästä yhtä reseptiä
+  // per ateriatyyppi (ensimmäinen sortOrderin mukaan), ateriatyyppijärjestyksessä.
+  const plannedDay = useMemo(() => {
+    const seen = new Set<MealTag>();
+    const picked: { mealTag: MealTag; recipe: Recipe }[] = [];
+    for (const item of basePlan) {
+      if (seen.has(item.mealTag)) {
+        continue;
+      }
+      seen.add(item.mealTag);
+      picked.push(item);
+    }
+    return picked.sort(
+      (left, right) => MEAL_TAG_ORDER.indexOf(left.mealTag) - MEAL_TAG_ORDER.indexOf(right.mealTag),
+    );
+  }, [basePlan]);
   const nutritionProfile = state.nutritionProfiles.find((profile) => profile.userId === user.id) ?? null;
   const nutritionComparison = buildPersonalNutritionGoalComparison(user, nutritionProfile);
   const macroTarget = nutritionComparison?.activeTarget ?? null;
@@ -211,7 +228,7 @@ export function NutritionView({
   const materializeFromPlan = async () => {
     setIsMaterializing(true);
     try {
-      for (const [index, item] of basePlan.entries()) {
+      for (const [index, item] of plannedDay.entries()) {
         await addDayMeal({ planDate: todayKey, mealTag: item.mealTag, recipeId: item.recipe.id, source: "plan", position: index });
       }
     } finally {
@@ -305,10 +322,10 @@ export function NutritionView({
 
           {!hasDay ? (
             <div className="mt-3">
-              {basePlan.length > 0 ? (
+              {plannedDay.length > 0 ? (
                 <>
                   <div className="divide-y divide-[var(--border)]">
-                    {basePlan.map((item, index) => (
+                    {plannedDay.map((item, index) => (
                       <div key={`${item.recipe.id}-${index}`} className="flex items-center justify-between gap-3 py-2.5">
                         <div className="min-w-0">
                           <p className="truncate text-sm font-semibold text-[var(--text)]">{item.recipe.name}</p>

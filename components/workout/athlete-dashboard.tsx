@@ -523,6 +523,13 @@ export function AthleteDashboard({
     setManualExtraActivityKcal("");
   }, [currentUser?.id]);
   useEffect(() => {
+    // Esitäytä lomake vain kun mittaus-sheet avataan. EI saa riippua
+    // state.bodyMeasurements/weightKg:sta — muuten taustasynkka uudelleen-
+    // initialisoisi kentät kesken kirjoittamisen ja pyyhkisi syötetyt arvot.
+    if (!isMeasurementSheetOpen) {
+      return;
+    }
+
     const latestWaistValue =
       currentUser
         ? getMeasurementsForUser(state, currentUser.id).find((entry) => entry.waistCm !== undefined)?.waistCm
@@ -532,7 +539,8 @@ export function AthleteDashboard({
       weightKg: currentUser?.weightKg !== undefined ? String(currentUser.weightKg) : "",
       waistCm: latestWaistValue !== undefined ? String(latestWaistValue) : "",
     });
-  }, [currentUser?.id, currentUser?.weightKg, state.bodyMeasurements]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isMeasurementSheetOpen, currentUser?.id]);
   useEffect(() => {
     setMeasurementMessage("");
     setMeasurementMessageTone("info");
