@@ -57,6 +57,26 @@ export async function POST(request: Request) {
     return NextResponse.json({ message: "Annoskoon on oltava suurempi kuin 0." }, { status: 400 });
   }
 
+  if (source === "plan") {
+    const { data: existing, error: existingError } = await supabase
+      .from("day_meal_plans")
+      .select("id")
+      .eq("athlete_id", user.id)
+      .eq("plan_date", planDate)
+      .eq("meal_tag", mealTag)
+      .eq("source", "plan")
+      .limit(1)
+      .returns<Array<{ id: string }>>();
+
+    if (existingError) {
+      return NextResponse.json({ message: "Aterian lisäys epäonnistui." }, { status: 500 });
+    }
+
+    if (existing?.[0]?.id) {
+      return NextResponse.json({ ok: true, id: existing[0].id });
+    }
+  }
+
   const { data, error } = await supabase
     .from("day_meal_plans")
     .insert({

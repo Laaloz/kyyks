@@ -1,7 +1,7 @@
 "use client";
 
 import { Check, ChevronRight, Plus, Repeat2, Search, Trash2 } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 
 import { Button } from "@/components/ui/button";
 import { Card, CardTitle } from "@/components/ui/card";
@@ -139,6 +139,7 @@ export function NutritionView({
       : null,
   );
   const [isMaterializing, setIsMaterializing] = useState(false);
+  const isMaterializingRef = useRef(false);
   const [materializeMessage, setMaterializeMessage] = useState("");
   const [pendingId, setPendingId] = useState<string | null>(null);
 
@@ -227,12 +228,29 @@ export function NutritionView({
   );
 
   const materializeFromPlan = async () => {
+    if (isMaterializingRef.current) {
+      return;
+    }
+
+    isMaterializingRef.current = true;
     setIsMaterializing(true);
     setMaterializeMessage("");
     try {
+      const existingPlanMealTags = new Set(
+        dayRows
+          .filter((entry) => entry.source === "plan")
+          .map((entry) => entry.mealTag),
+      );
+      const rowsToAdd = plannedDay
+        .map((item, index) => ({ item, position: index }))
+        .filter(({ item }) => !existingPlanMealTags.has(item.mealTag));
+      if (rowsToAdd.length === 0) {
+        return;
+      }
+
       const results = await Promise.all(
-        plannedDay.map((item, index) =>
-          addDayMeal({ planDate: todayKey, mealTag: item.mealTag, recipeId: item.recipe.id, source: "plan", position: index }),
+        rowsToAdd.map(({ item, position }) =>
+          addDayMeal({ planDate: todayKey, mealTag: item.mealTag, recipeId: item.recipe.id, source: "plan", position }),
         ),
       );
       const failed = results.find((result) => !result.ok);
@@ -240,6 +258,7 @@ export function NutritionView({
         setMaterializeMessage(failed.message);
       }
     } finally {
+      isMaterializingRef.current = false;
       setIsMaterializing(false);
     }
   };
