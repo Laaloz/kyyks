@@ -67,11 +67,8 @@ export function LoginScreen() {
       <header className="space-y-3">
         <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[var(--accent)]">rooki.fit</p>
         <h1 className="font-[family-name:var(--font-display)] text-3xl font-bold leading-tight text-[var(--text)]">
-          Kirjaudu treenityötilaasi
+          Kirjaudu sisään
         </h1>
-        <p className="text-base leading-7 text-[var(--text-muted)]">
-          Käytä samaa sähköpostia, jolla tilisi aktivoitiin. Uusi käyttäjä aktivoi tunnuksen kutsulinkistä.
-        </p>
       </header>
 
       <Card className="space-y-5">
@@ -223,7 +220,6 @@ export function LoginScreen() {
           >
             Unohditko salasanasi?
           </Button>
-          <p className="text-xs text-[var(--text-subtle)]">Syötä sähköposti yllä ennen nollauslinkin tilaamista.</p>
           {resetMessage ? (
             <InlineFeedback message={resetMessage} tone={resetMessageTone === "success" ? "success" : "danger"} className="text-sm" />
           ) : null}
@@ -235,7 +231,6 @@ export function LoginScreen() {
           <div className="flex items-start justify-between gap-3">
             <div className="min-w-0">
               <p className="font-[family-name:var(--font-display)] text-base font-bold text-[var(--text)]">Demotunnukset</p>
-              <p className="mt-0.5 text-sm text-[var(--text-subtle)]">Näkyy vain localhostissa nopeaan roolitestaukseen.</p>
             </div>
             <Badge className="shrink-0 border-[var(--border)] bg-[var(--surface-2)] text-[var(--text)]">vain lokaalissa</Badge>
           </div>

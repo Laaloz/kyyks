@@ -431,8 +431,13 @@ export function NutritionView({
                 {dayRows.map((entry) => {
                   const recipe = entry.recipeId ? recipeById.get(entry.recipeId) : undefined;
                   const isAdHoc = !entry.recipeId;
-                  const aiPending = entry.aiStatus === "pending";
-                  const aiFailed = entry.aiStatus === "failed";
+                  // Jumiin jäänyt "pending" (esim. AI ei vastannut, sessio katkesi) merkitään
+                  // vanhentumisen jälkeen muokattavaksi, ettei se jää ikuisesti "arvioidaan"-tilaan.
+                  const updatedMs = Date.parse(entry.updatedAt);
+                  const isStalePending =
+                    entry.aiStatus === "pending" && Number.isFinite(updatedMs) && Date.now() - updatedMs > 120_000;
+                  const aiPending = entry.aiStatus === "pending" && !isStalePending;
+                  const aiFailed = entry.aiStatus === "failed" || isStalePending;
                   const isEaten = Boolean(entry.eatenAt);
                   const isPending = pendingId === entry.id;
                   const m = entryMacros(entry);
@@ -486,7 +491,7 @@ export function NutritionView({
                           <p className={`truncate text-sm font-semibold ${isEaten ? "text-[var(--text-subtle)]" : "text-[var(--text)]"}`}>
                             {title}
                           </p>
-                          <p className={cn("truncate text-xs text-[var(--text-subtle)]", aiPending && "animate-pulse")}>{subtitle}</p>
+                          <p className="truncate text-xs text-[var(--text-subtle)]">{subtitle}</p>
                         </button>
                       )}
                       {!readOnly ? (
