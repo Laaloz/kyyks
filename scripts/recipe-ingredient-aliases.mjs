@@ -3,6 +3,22 @@ export const ingredientAliases = {
     "100% kauraleipä",
     "kauraleipä",
   ],
+  "kreikkalainen jogurtti": [
+    "kreikkalainen jogurtti 2%",
+    "kreikkalainen jogurtti 0%",
+  ],
+  "kaurajauho": [
+    "kaurahiutale",
+  ],
+  "vaniljaproteiinijauhe": [
+    "heraproteiinijauhe",
+  ],
+  "suklaaproteiinijauhe": [
+    "heraproteiinijauhe",
+  ],
+  "maapahkinaproteiinijauhe": [
+    "heraproteiinijauhe",
+  ],
   "aamupala kevyenraikas 5 sulatejuustoviipale": [
     "aamupala kevyenraikas 5% sulatejuustoviipale",
     "sulatejuustoviipale",
