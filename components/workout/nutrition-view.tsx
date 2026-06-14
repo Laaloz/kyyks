@@ -633,6 +633,21 @@ function RecipeDetailSheet({
     : recipe;
   const macros = servingMacros(effectiveRecipe, catalog);
   const steps = splitRecipeInstructions(recipe.instructions).filter(Boolean);
+
+  // Ryhmittele ainekset osioittain (Pohja, Kastike, ...) ensiesiintymisjärjestyksessä;
+  // ryhmättömät renderöidään ilman otsikkoa (back-compat resepteille ilman osioita).
+  const ingredientGroups: { label: string; items: typeof recipe.ingredients }[] = [];
+  const ingredientGroupIndexByLabel = new Map<string, number>();
+  for (const ing of recipe.ingredients) {
+    const label = ing.groupLabel?.trim() ?? "";
+    let groupIndex = ingredientGroupIndexByLabel.get(label);
+    if (groupIndex === undefined) {
+      groupIndex = ingredientGroups.length;
+      ingredientGroupIndexByLabel.set(label, groupIndex);
+      ingredientGroups.push({ label, items: [] });
+    }
+    ingredientGroups[groupIndex]!.items.push(ing);
+  }
   const perServingScale = recipe.defaultServings > 0 ? servings / recipe.defaultServings : servings;
   const isEaten = Boolean(entry?.eatenAt);
 
@@ -667,8 +682,16 @@ function RecipeDetailSheet({
               </div>
             </div>
           </div>
-          <div className="mt-2 divide-y divide-[var(--border)]">
-            {recipe.ingredients.map((ing) => {
+          <div className="mt-2 space-y-3">
+            {ingredientGroups.map((group) => (
+              <div key={group.label || "__ungrouped"}>
+                {group.label ? (
+                  <p className="mb-1 font-[family-name:var(--font-display)] text-xs font-semibold uppercase tracking-[0.05em] text-[var(--text-subtle)]">
+                    {group.label}
+                  </p>
+                ) : null}
+                <div className="divide-y divide-[var(--border)]">
+                  {group.items.map((ing) => {
               const options = ing.alternativeOptions ?? [];
               const selectedIndex = altByIngredient[ing.id] ?? -1;
               const activeName = selectedIndex >= 0 ? options[selectedIndex]?.ingredientName ?? ing.ingredientName : ing.ingredientName;
@@ -727,7 +750,10 @@ function RecipeDetailSheet({
                   ) : null}
                 </div>
               );
-            })}
+                  })}
+                </div>
+              </div>
+            ))}
           </div>
 
           {steps.length > 0 ? (

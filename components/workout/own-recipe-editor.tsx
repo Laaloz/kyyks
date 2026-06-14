@@ -5,7 +5,7 @@ import { useMemo, useState } from "react";
 
 import { Button } from "@/components/ui/button";
 import { CardTitle } from "@/components/ui/card";
-import { Input, Label } from "@/components/ui/field";
+import { Input, Label, Textarea } from "@/components/ui/field";
 import { FullScreenOverlay } from "@/components/ui/sheet";
 import {
   mealTagLabel,
@@ -24,6 +24,7 @@ type DraftRow = {
   ingredientId: string;
   ingredientName: string;
   grams: string;
+  groupLabel: string;
   alternatives: DraftAlt[];
 };
 
@@ -40,9 +41,16 @@ export function OwnRecipeEditor({
   const [name, setName] = useState("");
   const [mealTag, setMealTag] = useState<MealTag>(initialMealTag);
   const [rows, setRows] = useState<DraftRow[]>([]);
+  const [instructions, setInstructions] = useState("");
   const [query, setQuery] = useState("");
   const [altSearchRowKey, setAltSearchRowKey] = useState<string | null>(null);
   const [altQuery, setAltQuery] = useState("");
+
+  // Reseptin osiot ehdotuksina (Pohja, Kastike, ...) — datalist-pohjaiset.
+  const groupSuggestions = useMemo(
+    () => Array.from(new Set(rows.map((row) => row.groupLabel.trim()).filter(Boolean))),
+    [rows],
+  );
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState("");
 
@@ -118,7 +126,7 @@ export function OwnRecipeEditor({
     try {
       const input: RecipeInput = {
         name: name.trim(),
-        instructions: "",
+        instructions: instructions.trim(),
         mealTag,
         defaultServings: 1,
         minServings: 1,
@@ -128,6 +136,7 @@ export function OwnRecipeEditor({
           .map((row) => ({
             ingredientId: row.ingredientId,
             ingredientName: row.ingredientName,
+            groupLabel: row.groupLabel.trim() || undefined,
             quantity: Number(row.grams),
             unit: "g" as const,
             ingredientRole: "main" as const,
@@ -226,6 +235,19 @@ export function OwnRecipeEditor({
                     </button>
                   </div>
 
+                  <input
+                    list="own-recipe-group-options"
+                    value={row.groupLabel}
+                    onChange={(event) =>
+                      setRows((previous) =>
+                        previous.map((item) => (item.key === row.key ? { ...item, groupLabel: event.target.value } : item)),
+                      )
+                    }
+                    placeholder="Osio (valinnainen, esim. Pohja)"
+                    aria-label={`${row.ingredientName} osio`}
+                    className="mt-1.5 w-full rounded-lg bg-[var(--surface-2)] px-3 py-1.5 text-xs text-[var(--text)] outline-none placeholder:text-[var(--text-subtle)] focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--accent)]"
+                  />
+
                   {row.alternatives.length > 0 ? (
                     <div className="mt-1.5 space-y-1.5 border-l-2 border-[var(--border)] pl-3">
                       {row.alternatives.map((alt) => (
@@ -289,14 +311,15 @@ export function OwnRecipeEditor({
                   </div>
 
                   {altSearchRowKey === row.key ? (
-                    <div className="mt-2 rounded-xl bg-[var(--surface-2)] p-2">
-                      <div className="flex items-center gap-2 rounded-lg bg-[var(--surface)] px-3 py-2">
+                    <div className="mt-2 pl-3">
+                      <div className="flex items-center gap-2 rounded-xl bg-[var(--surface-2)] px-3 py-2.5 focus-within:ring-2 focus-within:ring-inset focus-within:ring-[var(--accent)]">
                         <Search className="size-4 shrink-0 text-[var(--text-subtle)]" aria-hidden="true" />
                         <input
                           type="search"
                           value={altQuery}
                           onChange={(event) => setAltQuery(event.target.value)}
                           placeholder="Hae vaihtoehtoinen raaka-aine..."
+                          autoFocus
                           className="min-w-0 flex-1 bg-transparent text-sm text-[var(--text)] outline-none placeholder:text-[var(--text-subtle)]"
                         />
                       </div>
@@ -364,7 +387,7 @@ export function OwnRecipeEditor({
                       setRows((previous) =>
                         previous.some((row) => row.ingredientId === item.id)
                           ? previous
-                          : [...previous, { key: `${item.id}-${Date.now()}`, ingredientId: item.id, ingredientName: item.name, grams: "100", alternatives: [] }],
+                          : [...previous, { key: `${item.id}-${Date.now()}`, ingredientId: item.id, ingredientName: item.name, grams: "100", groupLabel: "", alternatives: [] }],
                       );
                       setQuery("");
                     }}
@@ -376,6 +399,24 @@ export function OwnRecipeEditor({
               </div>
             ) : null}
           </div>
+        </div>
+
+        <datalist id="own-recipe-group-options">
+          {groupSuggestions.map((group) => (
+            <option key={group} value={group} />
+          ))}
+        </datalist>
+
+        <div>
+          <Label htmlFor="own-recipe-instructions">Valmistus</Label>
+          <Textarea
+            id="own-recipe-instructions"
+            value={instructions}
+            onChange={(event) => setInstructions(event.target.value)}
+            placeholder={"Yksi vaihe per rivi, esim.\nKeitä kaurahiutaleet 5 min.\nLisää marjat ja tarjoile."}
+            rows={4}
+          />
+          <p className="mt-1.5 text-xs text-[var(--text-subtle)]">Kirjoita yksi vaihe per rivi.</p>
         </div>
 
         {preview ? (
