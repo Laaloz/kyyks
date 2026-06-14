@@ -82,7 +82,7 @@ export const ingredientSchema = z.object({
   id: z.string().optional(),
   name: z.string().trim().min(2, "Anna raaka-aineelle nimi."),
   displayName: z.string().trim().max(120).optional(),
-  source: z.enum(["fineli", "open_food_facts", "manual"]),
+  source: z.enum(["fineli", "open_food_facts", "manual", "ai"]),
   sourceExternalId: z.string().optional(),
   defaultPurchaseUnit: z.enum(["g", "kg", "ml", "l", "pcs", "pack"]).optional(),
   gramsPerUnit: optionalNumberField(z.number().min(1).max(100000)),
@@ -91,6 +91,38 @@ export const ingredientSchema = z.object({
   carbsPer100: z.coerce.number().min(0).max(100),
   fatPer100: z.coerce.number().min(0).max(100),
 });
+
+// Yksittäisen ruoan lisäys päivän aterioihin (haku/käsin/AI). Makrot per 100 g, annos
+// grammoina. saveToMyFoods = tallennetaanko oma tuote katalogiin uudelleenkäyttöä varten.
+export const addFoodFormSchema = z.object({
+  name: z.string().trim().min(2, "Anna ruoalle nimi."),
+  grams: z.coerce.number().min(1, "Annoskoon on oltava vähintään 1 g.").max(5000),
+  kcalPer100: z.coerce.number().min(0).max(1000),
+  proteinPer100: z.coerce.number().min(0).max(100),
+  carbsPer100: z.coerce.number().min(0).max(100),
+  fatPer100: z.coerce.number().min(0).max(100),
+  saveToMyFoods: z.boolean().default(true),
+});
+
+export type AddFoodFormValues = z.infer<typeof addFoodFormSchema>;
+
+/**
+ * Karkea järkevyystarkistus: 4·P + 4·C + 9·F pitäisi olla lähellä ilmoitettua
+ * kcal-arvoa. Palauttaa varoitustekstin jos ero on yli ~20 %, muuten null.
+ * Tämä on varoitus (ei esto) — pyöristykset ja kuitu/polyolit aiheuttavat pientä eroa.
+ */
+export function macroEnergyWarning(kcalPer100: number, proteinPer100: number, carbsPer100: number, fatPer100: number): string | null {
+  const computed = 4 * proteinPer100 + 4 * carbsPer100 + 9 * fatPer100;
+  if (kcalPer100 <= 0 && computed <= 0) {
+    return null;
+  }
+  const reference = Math.max(kcalPer100, computed, 1);
+  const diffRatio = Math.abs(computed - kcalPer100) / reference;
+  if (diffRatio > 0.2) {
+    return `Makrot ja energia eivät täsmää (laskennallinen ${Math.round(computed)} kcal vs. ilmoitettu ${Math.round(kcalPer100)} kcal / 100 g). Tarkista arvot.`;
+  }
+  return null;
+}
 
 export const recipeIngredientSchema = z.object({
   ingredientId: z.string().optional(),

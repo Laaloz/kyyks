@@ -61,6 +61,7 @@ import type {
   ConversationEntryType,
   DashboardHomeView,
   DayMealPlanEntry,
+  DayMealFoodSource,
   DayMealSource,
   Exercise,
   ExtraActivityType,
@@ -2584,17 +2585,54 @@ interface AppStateContextValue {
     notes?: string;
   }) => Promise<ActionResult>;
   deleteExtraActivity: (activityId: string) => Promise<ActionResult>;
-  addDayMeal: (input: {
-    planDate: string;
-    mealTag: MealTag;
-    recipeId: string;
-    servings?: number;
-    position?: number;
-    source?: DayMealSource;
-  }) => Promise<ActionResult>;
+  addDayMeal: (
+    input: {
+      planDate: string;
+      mealTag: MealTag;
+      servings?: number;
+      position?: number;
+      source?: DayMealSource;
+    } & (
+      | { recipeId: string }
+      | { ingredientId: string; grams: number }
+      | {
+          grams: number;
+          food: {
+            name: string;
+            kcalPer100: number;
+            proteinPer100: number;
+            carbsPer100: number;
+            fatPer100: number;
+            source?: DayMealFoodSource;
+          };
+        }
+    ),
+  ) => Promise<ActionResult>;
   swapDayMeal: (entryId: string, recipeId: string) => Promise<ActionResult>;
   removeDayMeal: (entryId: string) => Promise<ActionResult>;
   setDayMealEaten: (entryId: string, eaten: boolean) => Promise<ActionResult>;
+  // Pikalisäys: luo "arvioidaan"-kortti heti ja täydennä AI:lla taustalla.
+  quickAddAiFood: (input: {
+    planDate: string;
+    mealTag: MealTag;
+    position?: number;
+    name: string;
+    imageBase64?: string;
+    mimeType?: string;
+  }) => Promise<ActionResult>;
+  // Ad hoc -ruoan muokkaus (muokkausnäkymä).
+  saveDayMealFood: (
+    entryId: string,
+    input: {
+      name: string;
+      grams: number;
+      kcalPer100: number;
+      proteinPer100: number;
+      carbsPer100: number;
+      fatPer100: number;
+      saveToMyFoods?: boolean;
+    },
+  ) => Promise<ActionResult>;
   updateWorkoutSet: (scheduledWorkoutId: string, logId: string, patch: WorkoutUpdateInput) => Promise<void>;
   updateWorkoutExerciseStructure: (
     scheduledWorkoutId: string,
@@ -2658,6 +2696,10 @@ export function AppStateProvider({ children }: PropsWithChildren) {
   const backgroundRefreshTimeoutRef = useRef<number | null>(null);
   const backgroundRefreshModeRef = useRef<"full" | "workouts" | null>(null);
   const backgroundRefreshSettledCallbacksRef = useRef<Array<() => void>>([]);
+  // Kevyt aterioiden synkka (vain day_meal_plans), erillään raskaasta full-refreshistä.
+  const dayMealRefreshTimeoutRef = useRef<number | null>(null);
+  const dayMealRefreshSettledCallbacksRef = useRef<Array<() => void>>([]);
+  const refreshDayMealsPromiseRef = useRef<Promise<void> | null>(null);
   const lastFullSnapshotSyncAtRef = useRef(0);
   const workoutMutationQueueRef = useRef<Map<string, WorkoutMutationQueueState>>(new Map());
   const workoutMutationRunnerRef = useRef<Map<string, Promise<void>>>(new Map());
@@ -3272,6 +3314,145 @@ function findResolvedUserIdInSnapshot(
     }, 150);
   }
 
+  // Kevyt aterioiden reconciliaatio: hakee vain kirjautuneen käyttäjän day_meal_plans-rivit
+  // ja mergeää ne paikalliseen tilaan (sama suojauslogiikka kuin full-synkassa). Ei koske
+  // katalogiin, resepteihin tai profiileihin → ei tuhansien rivien uudelleenlatausta.
+  async function refreshDayMeals() {
+    if (!supabase) {
+      return;
+    }
+    const meId = currentUser?.id;
+    if (!meId) {
+      return;
+    }
+    if (refreshDayMealsPromiseRef.current) {
+      return refreshDayMealsPromiseRef.current;
+    }
+
+    const promise = (async () => {
+      const response = await fetch("/api/day-meal-plans").catch(() => null);
+      if (!response?.ok) {
+        return;
+      }
+      const payload = (await response.json().catch(() => null)) as { dayMealPlans?: AppState["dayMealPlans"] } | null;
+      const serverMine = payload?.dayMealPlans;
+      if (!serverMine) {
+        return;
+      }
+
+      // Vapauta vanhentunut paikallinen suojaus palvelimen tilan perusteella (sama kuin
+      // refreshSupabaseVisibleStatessa, mutta vain aterioille).
+      const now = Date.now();
+      recentlyRemovedDayMealIdsRef.current.forEach((removedAt, entryId) => {
+        if (now - removedAt >= LOCAL_SYNC_PROTECTION_MS) {
+          recentlyRemovedDayMealIdsRef.current.delete(entryId);
+        }
+      });
+      const nextPendingMutations = new Map(pendingDayMealMutationsRef.current);
+      serverMine.forEach((entry) => {
+        const pending = nextPendingMutations.get(entry.id);
+        if (!pending) {
+          return;
+        }
+        const serverUpdatedAt = Date.parse(entry.updatedAt);
+        const pendingUpdatedAt = Date.parse(pending.updatedAt);
+        if (
+          (Number.isFinite(serverUpdatedAt) && Number.isFinite(pendingUpdatedAt) && serverUpdatedAt >= pendingUpdatedAt) ||
+          (Number.isFinite(pendingUpdatedAt) && now - pendingUpdatedAt >= LOCAL_SYNC_PROTECTION_MS)
+        ) {
+          nextPendingMutations.delete(entry.id);
+        }
+      });
+      nextPendingMutations.forEach((pending, entryId) => {
+        const pendingUpdatedAt = Date.parse(pending.updatedAt);
+        if (Number.isFinite(pendingUpdatedAt) && now - pendingUpdatedAt >= LOCAL_SYNC_PROTECTION_MS) {
+          nextPendingMutations.delete(entryId);
+        }
+      });
+      pendingDayMealMutationsRef.current = nextPendingMutations;
+
+      setState((previous) => {
+        const all = previous.dayMealPlans ?? [];
+        // Säilytä muiden athletejen rivit (esim. valmentajan näkymä) koskemattomina.
+        const others = all.filter((entry) => entry.athleteId !== meId);
+        const prevMine = all.filter((entry) => entry.athleteId === meId);
+        const mergedMine = mergeServerDayMealPlansWithLocalState(
+          serverMine,
+          prevMine,
+          pendingDayMealCreatesRef.current,
+          recentlyRemovedDayMealIdsRef.current,
+          pendingDayMealMutationsRef.current,
+        );
+        return { ...previous, dayMealPlans: [...others, ...mergedMine] };
+      });
+    })();
+
+    refreshDayMealsPromiseRef.current = promise;
+    try {
+      await promise;
+    } finally {
+      if (refreshDayMealsPromiseRef.current === promise) {
+        refreshDayMealsPromiseRef.current = null;
+      }
+    }
+  }
+
+  // Debouncattu kevyt aterioiden refresh — korvaa aterioiden mutaatioiden full-refetchin.
+  function scheduleDayMealRefresh(options?: { onSettled?: () => void }) {
+    if (!supabase) {
+      options?.onSettled?.();
+      return;
+    }
+
+    if (options?.onSettled) {
+      dayMealRefreshSettledCallbacksRef.current.push(options.onSettled);
+    }
+
+    if (dayMealRefreshTimeoutRef.current) {
+      window.clearTimeout(dayMealRefreshTimeoutRef.current);
+    }
+
+    dayMealRefreshTimeoutRef.current = window.setTimeout(() => {
+      dayMealRefreshTimeoutRef.current = null;
+      const callbacks = dayMealRefreshSettledCallbacksRef.current.splice(0);
+      void refreshDayMeals().finally(() => {
+        callbacks.forEach((callback) => callback());
+      });
+    }, 150);
+  }
+
+  // Tallenna ruoka käyttäjän omiin tuotteisiin uudelleenkäyttöä varten (dedup nimellä).
+  // Best effort: epäonnistuminen ei estä aterian kirjausta.
+  async function ensureOwnFood(
+    name: string,
+    source: "manual" | "ai",
+    kcalPer100: number,
+    proteinPer100: number,
+    carbsPer100: number,
+    fatPer100: number,
+  ) {
+    if (!supabase || !currentUser) {
+      return;
+    }
+    const trimmed = name.trim();
+    if (!trimmed) {
+      return;
+    }
+    const exists = (stateRef.current.ingredientsCatalog ?? []).some(
+      (item) =>
+        item.ownerUserId === currentUser.id &&
+        (item.displayName || item.name).trim().toLowerCase() === trimmed.toLowerCase(),
+    );
+    if (exists) {
+      return;
+    }
+    await fetch("/api/nutrition/ingredients", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name: trimmed, source, kcalPer100, proteinPer100, carbsPer100, fatPer100 }),
+    }).catch(() => null);
+  }
+
   function queueDayMealEatenSync(entryId: string, mutation: QueuedDayMealEatenMutation) {
     dayMealEatenMutationQueueRef.current.set(entryId, mutation);
     void flushQueuedDayMealEatenSync(entryId);
@@ -3313,7 +3494,7 @@ function findResolvedUserIdInSnapshot(
         return;
       }
 
-      scheduleSupabaseVisibleStateRefresh({ mode: "full" });
+      scheduleDayMealRefresh();
     } finally {
       dayMealEatenMutationInFlightRef.current.delete(entryId);
       if (dayMealEatenMutationQueueRef.current.has(entryId)) {
@@ -6728,21 +6909,107 @@ function findResolvedUserIdInSnapshot(
 
         const now = new Date().toISOString();
         const optimisticId = makeId("day_meal");
-        const servings = input.servings && input.servings > 0 ? input.servings : 1;
         const source = input.source ?? "added";
-        const optimisticEntry = {
-          id: optimisticId,
-          athleteId: currentUser.id,
-          planDate: input.planDate,
-          mealTag: input.mealTag,
-          recipeId: input.recipeId,
-          source,
-          servings,
-          eatenAt: null,
-          position: input.position ?? 0,
-          createdAt: now,
-          updatedAt: now,
-        };
+        const position = input.position ?? 0;
+
+        // Rivi on joko resepti tai ad hoc -ruoka (haku/käsin/AI). Ad hoc -rivi kantaa
+        // makro-snapshotin, jotta päivän summat ja historia toimivat ilman reseptiä.
+        let optimisticEntry: DayMealPlanEntry;
+        let requestBody: Record<string, unknown>;
+
+        if ("recipeId" in input && input.recipeId) {
+          const servings = input.servings && input.servings > 0 ? input.servings : 1;
+          optimisticEntry = {
+            id: optimisticId,
+            athleteId: currentUser.id,
+            planDate: input.planDate,
+            mealTag: input.mealTag,
+            recipeId: input.recipeId,
+            source,
+            servings,
+            eatenAt: null,
+            position,
+            createdAt: now,
+            updatedAt: now,
+          };
+          requestBody = {
+            planDate: input.planDate,
+            mealTag: input.mealTag,
+            recipeId: input.recipeId,
+            source,
+            servings,
+            position,
+          };
+        } else {
+          let ingredientId: string | null = null;
+          let grams = 0;
+          let foodName = "Ruoka";
+          let kcalPer100 = 0;
+          let proteinPer100 = 0;
+          let carbsPer100 = 0;
+          let fatPer100 = 0;
+          let foodSource: DayMealFoodSource = "manual";
+
+          if ("ingredientId" in input && input.ingredientId) {
+            const ingredient = (stateRef.current.ingredientsCatalog ?? []).find((item) => item.id === input.ingredientId);
+            ingredientId = input.ingredientId;
+            grams = input.grams;
+            foodName = ingredient?.displayName?.trim() || ingredient?.name || "Ruoka";
+            kcalPer100 = ingredient?.kcalPer100 ?? 0;
+            proteinPer100 = ingredient?.proteinPer100 ?? 0;
+            carbsPer100 = ingredient?.carbsPer100 ?? 0;
+            fatPer100 = ingredient?.fatPer100 ?? 0;
+            foodSource = ingredient?.source === "fineli" ? "fineli" : ingredient?.source === "ai" ? "ai" : "manual";
+            requestBody = {
+              planDate: input.planDate,
+              mealTag: input.mealTag,
+              source: "added",
+              position,
+              ingredientId: input.ingredientId,
+              grams,
+            };
+          } else if ("food" in input && input.food) {
+            grams = input.grams;
+            foodName = input.food.name;
+            kcalPer100 = input.food.kcalPer100;
+            proteinPer100 = input.food.proteinPer100;
+            carbsPer100 = input.food.carbsPer100;
+            fatPer100 = input.food.fatPer100;
+            foodSource = input.food.source ?? "manual";
+            requestBody = {
+              planDate: input.planDate,
+              mealTag: input.mealTag,
+              source: "added",
+              position,
+              grams,
+              food: input.food,
+            };
+          } else {
+            return { ok: false, message: "Valitse resepti tai ruoka." };
+          }
+
+          optimisticEntry = {
+            id: optimisticId,
+            athleteId: currentUser.id,
+            planDate: input.planDate,
+            mealTag: input.mealTag,
+            recipeId: null,
+            source: "added",
+            servings: 1,
+            eatenAt: null,
+            position,
+            ingredientId,
+            grams,
+            foodName,
+            kcalPer100,
+            proteinPer100,
+            carbsPer100,
+            fatPer100,
+            foodSource,
+            createdAt: now,
+            updatedAt: now,
+          };
+        }
 
         pendingDayMealCreatesRef.current.set(optimisticId, { canceled: false });
         setState((previous) => ({
@@ -6758,14 +7025,7 @@ function findResolvedUserIdInSnapshot(
         const response = await fetch("/api/day-meal-plans", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            planDate: input.planDate,
-            mealTag: input.mealTag,
-            recipeId: input.recipeId,
-            source,
-            servings,
-            position: input.position ?? 0,
-          }),
+          body: JSON.stringify(requestBody),
         }).catch(() => null);
         const payload = (response ? await response.json().catch(() => null) : null) as { id?: string; message?: string } | null;
 
@@ -6792,7 +7052,7 @@ function findResolvedUserIdInSnapshot(
               method: "DELETE",
             }).catch(() => null);
           }
-          scheduleSupabaseVisibleStateRefresh({ mode: "full" });
+          scheduleDayMealRefresh();
           return { ok: true };
         }
 
@@ -6805,8 +7065,7 @@ function findResolvedUserIdInSnapshot(
           }));
         }
 
-        scheduleSupabaseVisibleStateRefresh({
-          mode: "full",
+        scheduleDayMealRefresh({
           onSettled: () => pendingDayMealCreatesRef.current.delete(optimisticId),
         });
         return { ok: true };
@@ -6855,7 +7114,7 @@ function findResolvedUserIdInSnapshot(
           return { ok: false, message: payload?.message ?? "Aterian vaihto epäonnistui." };
         }
 
-        scheduleSupabaseVisibleStateRefresh({ mode: "full" });
+        scheduleDayMealRefresh();
         return { ok: true };
       },
       async removeDayMeal(entryId) {
@@ -6900,7 +7159,7 @@ function findResolvedUserIdInSnapshot(
           return { ok: false, message: payload?.message ?? "Aterian poisto epäonnistui." };
         }
 
-        scheduleSupabaseVisibleStateRefresh({ mode: "full" });
+        scheduleDayMealRefresh();
         return { ok: true };
       },
       async setDayMealEaten(entryId, eaten) {
@@ -6912,26 +7171,33 @@ function findResolvedUserIdInSnapshot(
         if (!target) {
           return { ok: false, message: "Ateriaa ei löytynyt." };
         }
+
+        const eatenAt = eaten ? new Date().toISOString() : null;
+        const updatedAt = new Date().toISOString();
+        const applyOptimistic = () =>
+          setState((previous) => ({
+            ...previous,
+            dayMealPlans: (previous.dayMealPlans ?? []).map((entry) =>
+              entry.id === entryId ? { ...entry, eatenAt, updatedAt } : entry,
+            ),
+          }));
+
+        // Demo / ei taustapalvelua: pelkkä optimistinen päivitys riittää.
+        if (!supabase) {
+          applyOptimistic();
+          return { ok: true };
+        }
+
+        // Juuri lisätty rivi (ei vielä palvelimen UUID:ta) — ei voi synkata vielä. Estä
+        // optimistinen merkintä, jotta taustasynkka ei kumoa sitä; serverId valmistuu hetkessä.
         if (!SUPABASE_UUID_PATTERN.test(entryId)) {
           return { ok: false, message: "Odota hetki, aterian tallennus on vielä kesken." };
         }
 
-        const eatenAt = eaten ? new Date().toISOString() : null;
-        const updatedAt = new Date().toISOString();
         const version = (dayMealEatenMutationVersionRef.current.get(entryId) ?? 0) + 1;
         dayMealEatenMutationVersionRef.current.set(entryId, version);
         pendingDayMealMutationsRef.current.set(entryId, { updatedAt });
-        setState((previous) => ({
-          ...previous,
-          dayMealPlans: (previous.dayMealPlans ?? []).map((entry) =>
-            entry.id === entryId ? { ...entry, eatenAt, updatedAt } : entry,
-          ),
-        }));
-
-        if (!supabase) {
-          pendingDayMealMutationsRef.current.delete(entryId);
-          return { ok: true };
-        }
+        applyOptimistic();
 
         queueDayMealEatenSync(entryId, {
           eatenAt,
@@ -6939,6 +7205,226 @@ function findResolvedUserIdInSnapshot(
           updatedAt,
           version,
         });
+        return { ok: true };
+      },
+      async quickAddAiFood(input) {
+        if (!currentUser) {
+          return { ok: false, message: "Kirjaudu sisään ennen ruoan lisäystä." };
+        }
+
+        const now = new Date().toISOString();
+        const optimisticId = makeId("day_meal");
+        const position = input.position ?? 0;
+        const initialName = input.name.trim() || "Ruoka";
+
+        const baseEntry: DayMealPlanEntry = {
+          id: optimisticId,
+          athleteId: currentUser.id,
+          planDate: input.planDate,
+          mealTag: input.mealTag,
+          recipeId: null,
+          source: "added",
+          servings: 1,
+          eatenAt: null,
+          position,
+          ingredientId: null,
+          grams: 100,
+          foodName: initialName,
+          kcalPer100: 0,
+          proteinPer100: 0,
+          carbsPer100: 0,
+          fatPer100: 0,
+          foodSource: "ai",
+          aiStatus: "pending",
+          createdAt: now,
+          updatedAt: now,
+        };
+
+        pendingDayMealCreatesRef.current.set(optimisticId, { canceled: false });
+        setState((previous) => ({ ...previous, dayMealPlans: [...(previous.dayMealPlans ?? []), baseEntry] }));
+
+        // Demo / ei taustapalvelua: ei AI:ta — jätä kortti muokattavaksi.
+        if (!supabase) {
+          pendingDayMealCreatesRef.current.delete(optimisticId);
+          setState((previous) => ({
+            ...previous,
+            dayMealPlans: (previous.dayMealPlans ?? []).map((entry) =>
+              entry.id === optimisticId ? { ...entry, aiStatus: "failed" as const } : entry,
+            ),
+          }));
+          return { ok: true };
+        }
+
+        // 1) Tallenna keskeneräinen rivi palvelimelle.
+        const createResponse = await fetch("/api/day-meal-plans", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ pending: true, foodName: initialName, planDate: input.planDate, mealTag: input.mealTag, position }),
+        }).catch(() => null);
+        const createPayload = (createResponse ? await createResponse.json().catch(() => null) : null) as { id?: string; message?: string } | null;
+
+        if (!createResponse?.ok || !createPayload?.id) {
+          pendingDayMealCreatesRef.current.delete(optimisticId);
+          setState((previous) => ({
+            ...previous,
+            dayMealPlans: (previous.dayMealPlans ?? []).filter((entry) => entry.id !== optimisticId),
+          }));
+          return { ok: false, message: createPayload?.message ?? "Ruoan lisäys epäonnistui." };
+        }
+
+        const serverId = createPayload.id;
+        setState((previous) => ({
+          ...previous,
+          dayMealPlans: (previous.dayMealPlans ?? []).map((entry) => (entry.id === optimisticId ? { ...entry, id: serverId } : entry)),
+        }));
+        const pendingCreate = pendingDayMealCreatesRef.current.get(optimisticId);
+        pendingDayMealCreatesRef.current.delete(optimisticId);
+
+        // Jos rivi ehdittiin perua ennen kuin id valmistui → siivoa palvelin.
+        if (pendingCreate?.canceled) {
+          recentlyRemovedDayMealIdsRef.current.set(serverId, Date.now());
+          await fetch(`/api/day-meal-plans/${encodeURIComponent(serverId)}`, { method: "DELETE" }).catch(() => null);
+          return { ok: true };
+        }
+
+        // 2) Aja AI-arvio (teksti tai kuva).
+        const aiBody =
+          input.imageBase64 && input.mimeType
+            ? { imageBase64: input.imageBase64, mimeType: input.mimeType }
+            : { query: initialName };
+        const aiResponse = await fetch("/api/nutrition/ai-estimate", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(aiBody),
+        }).catch(() => null);
+        const aiPayload = (aiResponse ? await aiResponse.json().catch(() => null) : null) as
+          | {
+              estimate?: {
+                name: string;
+                grams: number;
+                kcalPer100: number;
+                proteinPer100: number;
+                carbsPer100: number;
+                fatPer100: number;
+              };
+              message?: string;
+            }
+          | null;
+
+        if (!aiResponse?.ok || !aiPayload?.estimate) {
+          await fetch(`/api/day-meal-plans/${encodeURIComponent(serverId)}`, {
+            method: "PATCH",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ aiStatus: "failed" }),
+          }).catch(() => null);
+          setState((previous) => ({
+            ...previous,
+            dayMealPlans: (previous.dayMealPlans ?? []).map((entry) =>
+              entry.id === serverId ? { ...entry, aiStatus: "failed" as const } : entry,
+            ),
+          }));
+          return { ok: true };
+        }
+
+        const estimate = aiPayload.estimate;
+        await fetch(`/api/day-meal-plans/${encodeURIComponent(serverId)}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            foodName: estimate.name,
+            grams: estimate.grams,
+            kcalPer100: estimate.kcalPer100,
+            proteinPer100: estimate.proteinPer100,
+            carbsPer100: estimate.carbsPer100,
+            fatPer100: estimate.fatPer100,
+            aiStatus: null,
+          }),
+        }).catch(() => null);
+        setState((previous) => ({
+          ...previous,
+          dayMealPlans: (previous.dayMealPlans ?? []).map((entry) =>
+            entry.id === serverId
+              ? {
+                  ...entry,
+                  foodName: estimate.name,
+                  grams: estimate.grams,
+                  kcalPer100: estimate.kcalPer100,
+                  proteinPer100: estimate.proteinPer100,
+                  carbsPer100: estimate.carbsPer100,
+                  fatPer100: estimate.fatPer100,
+                  aiStatus: null,
+                }
+              : entry,
+          ),
+        }));
+
+        void ensureOwnFood(estimate.name, "ai", estimate.kcalPer100, estimate.proteinPer100, estimate.carbsPer100, estimate.fatPer100);
+        return { ok: true };
+      },
+      async saveDayMealFood(entryId, input) {
+        if (!currentUser) {
+          return { ok: false, message: "Kirjaudu sisään ennen muokkausta." };
+        }
+        const target = (stateRef.current.dayMealPlans ?? []).find((entry) => entry.id === entryId);
+        if (!target) {
+          return { ok: false, message: "Ateriaa ei löytynyt." };
+        }
+
+        const updatedAt = new Date().toISOString();
+        setState((previous) => ({
+          ...previous,
+          dayMealPlans: (previous.dayMealPlans ?? []).map((entry) =>
+            entry.id === entryId
+              ? {
+                  ...entry,
+                  foodName: input.name,
+                  grams: input.grams,
+                  kcalPer100: input.kcalPer100,
+                  proteinPer100: input.proteinPer100,
+                  carbsPer100: input.carbsPer100,
+                  fatPer100: input.fatPer100,
+                  aiStatus: null,
+                  updatedAt,
+                }
+              : entry,
+          ),
+        }));
+
+        if (!supabase) {
+          if (input.saveToMyFoods) {
+            void ensureOwnFood(input.name, "manual", input.kcalPer100, input.proteinPer100, input.carbsPer100, input.fatPer100);
+          }
+          return { ok: true };
+        }
+
+        if (!SUPABASE_UUID_PATTERN.test(entryId)) {
+          return { ok: false, message: "Odota hetki, tallennus on vielä kesken." };
+        }
+
+        pendingDayMealMutationsRef.current.set(entryId, { updatedAt });
+        const response = await fetch(`/api/day-meal-plans/${encodeURIComponent(entryId)}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            foodName: input.name,
+            grams: input.grams,
+            kcalPer100: input.kcalPer100,
+            proteinPer100: input.proteinPer100,
+            carbsPer100: input.carbsPer100,
+            fatPer100: input.fatPer100,
+            aiStatus: null,
+          }),
+        }).catch(() => null);
+        const payload = (response ? await response.json().catch(() => null) : null) as { message?: string } | null;
+        if (!response?.ok) {
+          pendingDayMealMutationsRef.current.delete(entryId);
+          return { ok: false, message: payload?.message ?? "Tallennus epäonnistui." };
+        }
+
+        if (input.saveToMyFoods) {
+          void ensureOwnFood(input.name, "manual", input.kcalPer100, input.proteinPer100, input.carbsPer100, input.fatPer100);
+        }
+        scheduleDayMealRefresh();
         return { ok: true };
       },
       async updateWorkoutSet(scheduledWorkoutId, logId, patch) {

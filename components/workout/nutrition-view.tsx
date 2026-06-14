@@ -7,20 +7,24 @@ import { Button } from "@/components/ui/button";
 import { Card, CardTitle } from "@/components/ui/card";
 import { Segmented } from "@/components/ui/segmented";
 import { Sheet } from "@/components/ui/sheet";
+import { AddFoodSheet, FoodEntryEditSheet } from "@/components/workout/add-food-sheet";
 import { useHeaderAction } from "@/components/workout/header-action";
 import { OwnRecipeEditor } from "@/components/workout/own-recipe-editor";
 import { useKeepScreenOnPreference, useWakeLock } from "@/lib/use-wake-lock";
 import { cn } from "@/lib/utils";
 import {
+  adHocEntryMacros,
   buildPersonalNutritionGoalComparison,
   getActiveMealPlanForAthlete,
   getMissingMacroProfileFields,
   getVisibleRecipesForUser,
+  inferMealTagForTime,
   mealTagLabel,
   resolveRecipeNutritionPreview,
   splitRecipeInstructions,
 } from "@/lib/nutrition";
 import type { AppState, DayMealPlanEntry, MealTag, Recipe, UserProfile } from "@/lib/types";
+import { isSupabaseConfigured } from "@/lib/config";
 import { useAppState } from "@/providers/app-state-provider";
 
 const MEAL_TAG_ORDER: MealTag[] = ["breakfast", "lunch", "snack", "dinner", "evening_snack"];
@@ -114,7 +118,7 @@ export function NutritionView({
   onOpenSettings?: () => void;
   onOpenMeasurements?: () => void;
 }) {
-  const { state, addDayMeal, swapDayMeal, removeDayMeal, setDayMealEaten } = useAppState();
+  const { state, addDayMeal, swapDayMeal, removeDayMeal, setDayMealEaten, quickAddAiFood, saveDayMealFood } = useAppState();
   const [seg, setSeg] = useState<"day" | "recipes">("day");
   const [filter, setFilter] = useState<MealTag | "all">("all");
   const [query, setQuery] = useState("");
@@ -123,6 +127,8 @@ export function NutritionView({
   const [detail, setDetail] = useState<{ recipeId: string; entryId?: string } | null>(null);
   const [swapTarget, setSwapTarget] = useState<{ entryId: string; mealTag: MealTag; currentRecipeId: string } | null>(null);
   const [addTag, setAddTag] = useState<MealTag | null>(null);
+  const [addFoodOpen, setAddFoodOpen] = useState(false);
+  const [editFoodEntry, setEditFoodEntry] = useState<DayMealPlanEntry | null>(null);
   // Ravinto-välilehden "+ Oma resepti" nostetaan yläpalkkiin (ei Tänään-dayOnly-tilassa).
   useHeaderAction(
     "nutrition",
@@ -198,19 +204,29 @@ export function NutritionView({
   );
   const hasDay = dayRows.length > 0;
   const eatenRows = dayRows.filter((entry) => entry.eatenAt);
-  const consumed = eatenRows.reduce<Macros>(
-    (acc, entry) => {
+  // Päiväkirjarivin makrot: resepti (reseptin ainekset × annokset) tai ad hoc -ruoka
+  // (snapshot per 100 g × grammat). Palauttaa null jos reseptiä ei löydy.
+  const entryMacros = (entry: DayMealPlanEntry): Macros | null => {
+    if (entry.recipeId) {
       const recipe = recipeById.get(entry.recipeId);
       if (!recipe) {
-        return acc;
+        return null;
       }
       const m = servingMacros(recipe, catalog);
-      return {
-        kcal: acc.kcal + m.kcal * entry.servings,
-        p: acc.p + m.p * entry.servings,
-        c: acc.c + m.c * entry.servings,
-        f: acc.f + m.f * entry.servings,
-      };
+      return { kcal: m.kcal * entry.servings, p: m.p * entry.servings, c: m.c * entry.servings, f: m.f * entry.servings };
+    }
+    if (entry.foodName) {
+      return adHocEntryMacros(entry);
+    }
+    return null;
+  };
+  const consumed = eatenRows.reduce<Macros>(
+    (acc, entry) => {
+      const m = entryMacros(entry);
+      if (!m) {
+        return acc;
+      }
+      return { kcal: acc.kcal + m.kcal, p: acc.p + m.p, c: acc.c + m.c, f: acc.f + m.f };
     },
     { kcal: 0, p: 0, c: 0, f: 0 },
   );
@@ -382,7 +398,11 @@ export function NutritionView({
                       ) : null}
                       <Button type="button" variant="secondary" className="w-full gap-2" onClick={() => setAddTag("breakfast")}>
                         <Plus className="size-4" aria-hidden="true" />
-                        Lisää ateria
+                        Lisää resepti
+                      </Button>
+                      <Button type="button" variant="secondary" className="w-full gap-2" onClick={() => setAddFoodOpen(true)}>
+                        <Plus className="size-4" aria-hidden="true" />
+                        Lisää ruoka
                       </Button>
                     </div>
                   ) : null}
@@ -391,10 +411,16 @@ export function NutritionView({
                 <div className="rounded-2xl border border-dashed border-[var(--border)] bg-[var(--surface-2)] px-4 py-5 text-center">
                   <p className="text-sm text-[var(--text-subtle)]">Ei vielä aterioita tälle päivälle.</p>
                   {!readOnly ? (
-                    <Button type="button" variant="secondary" className="mt-4 w-full gap-2" onClick={() => setAddTag("breakfast")}>
-                      <Plus className="size-4" aria-hidden="true" />
-                      Lisää ateria
-                    </Button>
+                    <div className="mt-4 grid gap-2">
+                      <Button type="button" variant="secondary" className="w-full gap-2" onClick={() => setAddTag("breakfast")}>
+                        <Plus className="size-4" aria-hidden="true" />
+                        Lisää resepti
+                      </Button>
+                      <Button type="button" variant="secondary" className="w-full gap-2" onClick={() => setAddFoodOpen(true)}>
+                        <Plus className="size-4" aria-hidden="true" />
+                        Lisää ruoka
+                      </Button>
+                    </div>
                   ) : null}
                 </div>
               )}
@@ -403,10 +429,20 @@ export function NutritionView({
             <>
               <div className="mt-3 divide-y divide-[var(--border)]">
                 {dayRows.map((entry) => {
-                  const recipe = recipeById.get(entry.recipeId);
+                  const recipe = entry.recipeId ? recipeById.get(entry.recipeId) : undefined;
+                  const isAdHoc = !entry.recipeId;
+                  const aiPending = entry.aiStatus === "pending";
+                  const aiFailed = entry.aiStatus === "failed";
                   const isEaten = Boolean(entry.eatenAt);
                   const isPending = pendingId === entry.id;
-                  const m = recipe ? servingMacros(recipe, catalog) : null;
+                  const m = entryMacros(entry);
+                  const title = recipe?.name ?? entry.foodName ?? "Tuntematon ateria";
+                  const macroLine = `${mealTagLabel(entry.mealTag)}${isAdHoc && entry.grams ? ` · ${Math.round(entry.grams)} g` : ""}${m ? ` · ${Math.round(m.kcal)} kcal · P ${Math.round(m.p)} g` : ""}`;
+                  const subtitle = aiPending
+                    ? "Arvioidaan tekoälyllä…"
+                    : aiFailed
+                      ? `${mealTagLabel(entry.mealTag)} · arvio ei onnistunut — muokkaa`
+                      : macroLine;
                   return (
                     <div key={entry.id} className="flex items-center gap-3 py-3">
                       {!readOnly ? (
@@ -430,30 +466,42 @@ export function NutritionView({
                           <Check className="size-4 stroke-[2.5]" aria-hidden="true" />
                         </button>
                       ) : null}
-                      <button
-                        type="button"
-                        className="min-w-0 flex-1 text-left"
-                        onClick={() => setDetail({ recipeId: entry.recipeId, entryId: entry.id })}
-                      >
-                        <p className={`truncate text-sm font-semibold ${isEaten ? "text-[var(--text-subtle)]" : "text-[var(--text)]"}`}>
-                          {recipe?.name ?? "Tuntematon resepti"}
-                        </p>
-                        <p className="truncate text-xs text-[var(--text-subtle)]">
-                          {mealTagLabel(entry.mealTag)}
-                          {m ? ` · ${m.kcal * entry.servings} kcal · P ${m.p * entry.servings} g` : ""}
-                        </p>
-                      </button>
+                      {recipe ? (
+                        <button
+                          type="button"
+                          className="min-w-0 flex-1 text-left"
+                          onClick={() => setDetail({ recipeId: recipe.id, entryId: entry.id })}
+                        >
+                          <p className={`truncate text-sm font-semibold ${isEaten ? "text-[var(--text-subtle)]" : "text-[var(--text)]"}`}>
+                            {title}
+                          </p>
+                          <p className="truncate text-xs text-[var(--text-subtle)]">{subtitle}</p>
+                        </button>
+                      ) : (
+                        <button
+                          type="button"
+                          className="min-w-0 flex-1 text-left"
+                          onClick={() => setEditFoodEntry(entry)}
+                        >
+                          <p className={`truncate text-sm font-semibold ${isEaten ? "text-[var(--text-subtle)]" : "text-[var(--text)]"}`}>
+                            {title}
+                          </p>
+                          <p className={cn("truncate text-xs text-[var(--text-subtle)]", aiPending && "animate-pulse")}>{subtitle}</p>
+                        </button>
+                      )}
                       {!readOnly ? (
                         <>
-                          <button
-                            type="button"
-                            className="grid size-8 shrink-0 place-items-center rounded-full bg-[var(--surface-2)] text-[var(--text-subtle)] transition hover:text-[var(--accent)] disabled:opacity-40 disabled:hover:text-[var(--text-subtle)]"
-                            aria-label="Vaihda ateria"
-                            disabled={isEaten || isPending}
-                            onClick={() => setSwapTarget({ entryId: entry.id, mealTag: entry.mealTag, currentRecipeId: entry.recipeId })}
-                          >
-                            <Repeat2 className="size-4" aria-hidden="true" />
-                          </button>
+                          {recipe ? (
+                            <button
+                              type="button"
+                              className="grid size-8 shrink-0 place-items-center rounded-full bg-[var(--surface-2)] text-[var(--text-subtle)] transition hover:text-[var(--accent)] disabled:opacity-40 disabled:hover:text-[var(--text-subtle)]"
+                              aria-label="Vaihda ateria"
+                              disabled={isEaten || isPending}
+                              onClick={() => setSwapTarget({ entryId: entry.id, mealTag: entry.mealTag, currentRecipeId: recipe.id })}
+                            >
+                              <Repeat2 className="size-4" aria-hidden="true" />
+                            </button>
+                          ) : null}
                           <button
                             type="button"
                             className="grid size-8 shrink-0 place-items-center rounded-full text-[var(--text-subtle)] transition hover:text-[var(--danger)] disabled:cursor-not-allowed disabled:opacity-35 disabled:hover:text-[var(--text-subtle)]"
@@ -472,23 +520,40 @@ export function NutritionView({
                           </button>
                         </>
                       ) : null}
-                      <button
-                        type="button"
-                        className="grid size-8 shrink-0 place-items-center rounded-full text-[var(--text-subtle)] transition hover:text-[var(--text)]"
-                        aria-label={`Avaa resepti: ${recipe?.name ?? "resepti"}`}
-                        onClick={() => setDetail({ recipeId: entry.recipeId, entryId: entry.id })}
-                      >
-                        <ChevronRight className="size-4" aria-hidden="true" />
-                      </button>
+                      {recipe ? (
+                        <button
+                          type="button"
+                          className="grid size-8 shrink-0 place-items-center rounded-full text-[var(--text-subtle)] transition hover:text-[var(--text)]"
+                          aria-label={`Avaa resepti: ${recipe.name}`}
+                          onClick={() => setDetail({ recipeId: recipe.id, entryId: entry.id })}
+                        >
+                          <ChevronRight className="size-4" aria-hidden="true" />
+                        </button>
+                      ) : (
+                        <button
+                          type="button"
+                          className="grid size-8 shrink-0 place-items-center rounded-full text-[var(--text-subtle)] transition hover:text-[var(--text)]"
+                          aria-label={`Muokkaa: ${title}`}
+                          onClick={() => setEditFoodEntry(entry)}
+                        >
+                          <ChevronRight className="size-4" aria-hidden="true" />
+                        </button>
+                      )}
                     </div>
                   );
                 })}
               </div>
               {!readOnly ? (
-                <Button type="button" variant="secondary" className="mt-4 w-full gap-2" onClick={() => setAddTag("breakfast")}>
-                  <Plus className="size-4" aria-hidden="true" />
-                  Lisää ateria
-                </Button>
+                <div className="mt-4 grid gap-2">
+                  <Button type="button" variant="secondary" className="w-full gap-2" onClick={() => setAddTag("breakfast")}>
+                    <Plus className="size-4" aria-hidden="true" />
+                    Lisää resepti
+                  </Button>
+                  <Button type="button" variant="secondary" className="w-full gap-2" onClick={() => setAddFoodOpen(true)}>
+                    <Plus className="size-4" aria-hidden="true" />
+                    Lisää ruoka
+                  </Button>
+                </div>
               ) : null}
             </>
           )}
@@ -615,7 +680,7 @@ export function NutritionView({
 
       {addTag ? (
         <MealPickerSheet
-          title="Lisää ateria"
+          title="Lisää resepti"
           mealTag={addTag}
           onChangeMealTag={setAddTag}
           recipes={visibleRecipeSource
@@ -629,6 +694,50 @@ export function NutritionView({
             const position = dayRows.filter((entry) => entry.mealTag === tag).length;
             await addDayMeal({ planDate: todayKey, mealTag: tag, recipeId, source: "added", position });
           }}
+        />
+      ) : null}
+
+      {addFoodOpen ? (
+        <AddFoodSheet
+          userId={user.id}
+          catalog={catalog}
+          aiEnabled={isSupabaseConfigured}
+          onClose={() => setAddFoodOpen(false)}
+          onLogOwnFood={async (ingredientId, grams) => {
+            // Ateriapaikka päätellään kellonajasta (ei valitsinta lisäysnäkymässä).
+            const mealTag = inferMealTagForTime(new Date());
+            const position = dayRows.filter((entry) => entry.mealTag === mealTag).length;
+            return addDayMeal({ planDate: todayKey, mealTag, position, ingredientId, grams });
+          }}
+          onQuickAdd={async (name) => {
+            const mealTag = inferMealTagForTime(new Date());
+            const position = dayRows.filter((entry) => entry.mealTag === mealTag).length;
+            return quickAddAiFood({ planDate: todayKey, mealTag, position, name });
+          }}
+          onQuickAddPhoto={async ({ imageBase64, mimeType }) => {
+            const mealTag = inferMealTagForTime(new Date());
+            const position = dayRows.filter((entry) => entry.mealTag === mealTag).length;
+            return quickAddAiFood({ planDate: todayKey, mealTag, position, name: "Kuva-arvio", imageBase64, mimeType });
+          }}
+        />
+      ) : null}
+
+      {editFoodEntry ? (
+        <FoodEntryEditSheet
+          entry={editFoodEntry}
+          aiEnabled={isSupabaseConfigured}
+          onClose={() => setEditFoodEntry(null)}
+          onSave={async (values) =>
+            saveDayMealFood(editFoodEntry.id, {
+              name: values.name,
+              grams: values.grams,
+              kcalPer100: values.kcalPer100,
+              proteinPer100: values.proteinPer100,
+              carbsPer100: values.carbsPer100,
+              fatPer100: values.fatPer100,
+              saveToMyFoods: values.saveToMyFoods,
+            })
+          }
         />
       ) : null}
 

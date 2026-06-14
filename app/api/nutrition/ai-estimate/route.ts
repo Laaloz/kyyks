@@ -1,0 +1,71 @@
+import { NextResponse } from "next/server";
+
+import { estimateFoodFromImage, estimateFoodFromText } from "@/lib/server/ai-food";
+import { getNutritionRequester } from "@/lib/server/nutrition";
+
+// Base64-katto: ~6 MB kuva (kerroin 4/3). Asiakas pienentää kuvan ennen lähetystä.
+const MAX_BASE64_LENGTH = 8_000_000;
+const ALLOWED_MIME = /^image\/(jpeg|png|webp|heic|heif)$/i;
+
+type BodyPayload = {
+  imageBase64?: string;
+  mimeType?: string;
+  query?: string;
+};
+
+export async function POST(request: Request) {
+  const requesterResult = await getNutritionRequester();
+  if ("error" in requesterResult) {
+    return requesterResult.error;
+  }
+
+  const body = (await request.json().catch(() => null)) as BodyPayload | null;
+  const query = typeof body?.query === "string" ? body.query.trim() : "";
+  const imageBase64 = typeof body?.imageBase64 === "string" ? body.imageBase64 : "";
+  const mimeType = typeof body?.mimeType === "string" ? body.mimeType : "";
+
+  // Tekstihaku: arvioi makrot ruoan nimen perusteella (haun "ei löytynyt" -polku).
+  if (query) {
+    if (query.length < 2 || query.length > 120) {
+      return NextResponse.json({ message: "Anna ruoan nimi." }, { status: 400 });
+    }
+
+    const result = await estimateFoodFromText({
+      supabase: requesterResult.supabase,
+      userId: requesterResult.requester.id,
+      query,
+    });
+
+    if (!result.ok) {
+      return NextResponse.json({ message: result.message }, { status: result.status });
+    }
+
+    return NextResponse.json({ estimate: result.estimate });
+  }
+
+  // Kuvahaku.
+  if (!imageBase64 || !mimeType) {
+    return NextResponse.json({ message: "Anna kuva tai ruoan nimi." }, { status: 400 });
+  }
+
+  if (!ALLOWED_MIME.test(mimeType)) {
+    return NextResponse.json({ message: "Tukematon kuvamuoto." }, { status: 400 });
+  }
+
+  if (imageBase64.length > MAX_BASE64_LENGTH) {
+    return NextResponse.json({ message: "Kuva on liian suuri. Kokeile pienempää." }, { status: 413 });
+  }
+
+  const result = await estimateFoodFromImage({
+    supabase: requesterResult.supabase,
+    userId: requesterResult.requester.id,
+    imageBase64,
+    mimeType,
+  });
+
+  if (!result.ok) {
+    return NextResponse.json({ message: result.message }, { status: result.status });
+  }
+
+  return NextResponse.json({ estimate: result.estimate });
+}

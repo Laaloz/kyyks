@@ -53,7 +53,7 @@ export type ProfileSex = "female" | "male" | "other";
 export type NutritionGoal = "maintain" | "gain" | "lose";
 export type NutritionActivityLevel = "low" | "moderate" | "high";
 export type NutritionOwnerRole = "admin" | "coach" | "athlete";
-export type IngredientSource = "fineli" | "open_food_facts" | "manual";
+export type IngredientSource = "fineli" | "open_food_facts" | "manual" | "ai";
 export type IngredientUnit = "g" | "ml" | "pcs";
 export type IngredientRole = "main" | "spice" | "garnish";
 export type IngredientScalingMode = "linear" | "gentle" | "fixed" | "text_only";
@@ -130,6 +130,8 @@ export interface Ingredient {
   source: IngredientSource;
   sourceExternalId?: string;
   ownerRole: NutritionOwnerRole;
+  /** Yksityisen oman tuotteen omistaja. null/undefined = globaali (Fineli/admin). */
+  ownerUserId?: string | null;
   createdBy: string;
   defaultPurchaseUnit?: PurchaseUnit;
   gramsPerUnit?: number;
@@ -429,18 +431,33 @@ export type DayMealSource = "plan" | "swapped" | "added";
 
 // Treenaajan oma päiväkohtainen ateriavalinta (vaihe 6). Pohja tulee suunnitelmasta,
 // mutta treenaaja kokoaa päivänsä itse näiden rivien kautta.
+export type DayMealFoodSource = "manual" | "ai" | "fineli";
+export type DayMealAiStatus = "pending" | "failed";
+
 export interface DayMealPlanEntry {
   id: string;
   athleteId: string;
   // Paikallinen päiväavain muodossa YYYY-MM-DD.
   planDate: string;
   mealTag: MealTag;
-  recipeId: string;
+  // Rivi on joko resepti (recipeId) TAI yksittäinen ruoka (foodName + makro-snapshot).
+  recipeId: string | null;
   source: DayMealSource;
   servings: number;
   // null/undefined = ei vielä syöty; aikaleima = merkitty syödyksi.
   eatenAt?: string | null;
   position: number;
+  // Ad hoc -ruoka (haku/käsin/AI): snapshot loggaushetkellä, jotta historia säilyy.
+  ingredientId?: string | null;
+  grams?: number | null;
+  foodName?: string | null;
+  kcalPer100?: number | null;
+  proteinPer100?: number | null;
+  carbsPer100?: number | null;
+  fatPer100?: number | null;
+  foodSource?: DayMealFoodSource | null;
+  // null/undefined = valmis; 'pending' = AI arvioi taustalla; 'failed' = arvio ei onnistunut.
+  aiStatus?: DayMealAiStatus | null;
   createdAt: string;
   updatedAt: string;
 }

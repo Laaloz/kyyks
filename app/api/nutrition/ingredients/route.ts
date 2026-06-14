@@ -3,7 +3,6 @@ import { NextResponse } from "next/server";
 import { ingredientSchema } from "@/components/workout/schemas";
 import {
   deleteIngredientOnServer,
-  ensureAdminRequester,
   getNutritionRequester,
   saveIngredientOnServer,
 } from "@/lib/server/nutrition";
@@ -29,11 +28,8 @@ async function saveIngredient(request: Request) {
     return requesterResult.error;
   }
 
-  const forbidden = ensureAdminRequester(requesterResult.requester);
-  if (forbidden) {
-    return forbidden;
-  }
-
+  // Admin tallentaa globaaleja tuotteita; muut käyttäjät vain omia (omistus + lähde
+  // pakotetaan saveIngredientOnServerissä ja RLS:ssä).
   const body = await request.json().catch(() => ({}));
   const parsed = ingredientSchema.safeParse(body);
   if (!parsed.success) {
@@ -67,18 +63,13 @@ export async function DELETE(request: Request) {
     return requesterResult.error;
   }
 
-  const forbidden = ensureAdminRequester(requesterResult.requester);
-  if (forbidden) {
-    return forbidden;
-  }
-
   const body = (await request.json().catch(() => ({}))) as { id?: unknown };
   const ingredientId = typeof body.id === "string" ? body.id : "";
   if (!ingredientId) {
     return NextResponse.json({ message: "Raaka-aineen tunniste puuttuu." }, { status: 400 });
   }
 
-  const result = await deleteIngredientOnServer(ingredientId);
+  const result = await deleteIngredientOnServer(requesterResult.requester, ingredientId);
   if (!result.ok) {
     return NextResponse.json({ message: result.message }, { status: 400 });
   }

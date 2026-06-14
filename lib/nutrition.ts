@@ -3,6 +3,7 @@ import type {
   AssignedMealPlan,
   AssignedMealPlanInput,
   AppState,
+  DayMealPlanEntry,
   Ingredient,
   IngredientInput,
   IngredientUnit,
@@ -940,6 +941,35 @@ export function getActiveMealPlanForAthlete(state: AppState, athleteId: string) 
   return state.assignedMealPlans.find((plan) => plan.athleteId === athleteId && plan.active) ?? null;
 }
 
+/**
+ * Päättele ateriapaikka kellonajasta ad hoc -ruoan pikalisäystä varten (ei valitsinta UI:ssa).
+ * Karkea suomalainen ateriarytmi; käyttäjä näkee rivin silti järkevässä lokerossa.
+ */
+export function inferMealTagForTime(date: Date): MealTag {
+  const hour = date.getHours();
+  if (hour < 10) return "breakfast";
+  if (hour < 14) return "lunch";
+  if (hour < 17) return "snack";
+  if (hour < 21) return "dinner";
+  return "evening_snack";
+}
+
+export type DayEntryMacros = { kcal: number; p: number; c: number; f: number };
+
+/**
+ * Ad hoc -päiväkirjamerkinnän (haku/käsin/AI) makrot snapshotista: per-100g × grammat / 100.
+ * Reseptirivit lasketaan erikseen reseptin ainesosista (servingMacros).
+ */
+export function adHocEntryMacros(entry: DayMealPlanEntry): DayEntryMacros {
+  const factor = (entry.grams ?? 0) / 100;
+  return {
+    kcal: (entry.kcalPer100 ?? 0) * factor,
+    p: (entry.proteinPer100 ?? 0) * factor,
+    c: (entry.carbsPer100 ?? 0) * factor,
+    f: (entry.fatPer100 ?? 0) * factor,
+  };
+}
+
 export function getVisibleRecipesForUser(state: AppState, user: Pick<UserProfile, "id" | "role"> | null | undefined) {
   if (!user) {
     return [];
@@ -951,7 +981,7 @@ export function getVisibleRecipesForUser(state: AppState, user: Pick<UserProfile
 
   const referencedRecipeIds = new Set<string>();
   for (const entry of state.dayMealPlans ?? []) {
-    if (entry.athleteId === user.id) {
+    if (entry.athleteId === user.id && entry.recipeId) {
       referencedRecipeIds.add(entry.recipeId);
     }
   }

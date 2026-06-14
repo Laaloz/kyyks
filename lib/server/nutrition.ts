@@ -153,13 +153,35 @@ export async function saveIngredientOnServer(requester: Requester, input: Ingred
     return { ok: false as const, message: "Supabase ei ole käytössä tässä ympäristössä." };
   }
 
-  const payload = {
+  // Admin hallinnoi globaaleja rivejä (owner_user_id null, mikä tahansa lähde).
+  // Muut käyttäjät luovat vain omia yksityisiä tuotteitaan (manual/ai). RLS valvoo
+  // tämän myös tietokantatasolla.
+  const isAdmin = requester.role === "admin";
+  const source = isAdmin ? input.source : input.source === "ai" ? "ai" : "manual";
+
+  if (input.id) {
+    const { data: existing } = await supabase
+      .from("ingredient_catalog")
+      .select("owner_user_id")
+      .eq("id", input.id)
+      .maybeSingle<{ owner_user_id: string | null }>();
+
+    if (!existing) {
+      return { ok: false as const, message: "Tuotetta ei löytynyt." };
+    }
+
+    if (!isAdmin && existing.owner_user_id !== requester.id) {
+      return { ok: false as const, message: "Voit muokata vain omia tuotteitasi." };
+    }
+  }
+
+  // owner_user_id ja created_by asetetaan vain luonnissa, jotta omistus pysyy vakaana.
+  const basePayload = {
     name: input.name.trim(),
     display_name: input.displayName?.trim() || null,
-    source: input.source,
+    source,
     source_external_id: input.sourceExternalId?.trim() || null,
-    owner_role: "admin",
-    created_by: requester.id,
+    owner_role: "admin" as const,
     default_purchase_unit: input.defaultPurchaseUnit ?? null,
     grams_per_unit: input.gramsPerUnit ?? null,
     kcal_per_100: input.kcalPer100,
@@ -170,8 +192,13 @@ export async function saveIngredientOnServer(requester: Requester, input: Ingred
   };
 
   const query = input.id
-    ? supabase.from("ingredient_catalog").update(payload).eq("id", input.id)
-    : supabase.from("ingredient_catalog").insert({ ...payload, created_at: new Date().toISOString() });
+    ? supabase.from("ingredient_catalog").update(basePayload).eq("id", input.id)
+    : supabase.from("ingredient_catalog").insert({
+        ...basePayload,
+        owner_user_id: isAdmin ? null : requester.id,
+        created_by: requester.id,
+        created_at: new Date().toISOString(),
+      });
   const { error } = await query;
   if (error) {
     return { ok: false as const, message: error.message || "Raaka-aineen tallennus epäonnistui." };
@@ -180,10 +207,22 @@ export async function saveIngredientOnServer(requester: Requester, input: Ingred
   return { ok: true as const };
 }
 
-export async function deleteIngredientOnServer(ingredientId: string) {
+export async function deleteIngredientOnServer(requester: Requester, ingredientId: string) {
   const supabase = await createSupabaseServerClient();
   if (!supabase) {
     return { ok: false as const, message: "Supabase ei ole käytössä tässä ympäristössä." };
+  }
+
+  if (requester.role !== "admin") {
+    const { data: existing } = await supabase
+      .from("ingredient_catalog")
+      .select("owner_user_id")
+      .eq("id", ingredientId)
+      .maybeSingle<{ owner_user_id: string | null }>();
+
+    if (!existing || existing.owner_user_id !== requester.id) {
+      return { ok: false as const, message: "Voit poistaa vain omia tuotteitasi." };
+    }
   }
 
   const { error } = await supabase.from("ingredient_catalog").delete().eq("id", ingredientId);

@@ -39,9 +39,26 @@ type PatchBodyPayload = {
   recipeId?: string;
   source?: DayMealSource;
   servings?: number;
+  // Ad hoc -ruoan annoskoon säätö grammoina.
+  grams?: number;
+  // Ad hoc -ruoan muokkaus / AI-arvion valmistuminen.
+  foodName?: string;
+  kcalPer100?: number;
+  proteinPer100?: number;
+  carbsPer100?: number;
+  fatPer100?: number;
+  // null = valmis; 'pending'/'failed' = AI-tila.
+  aiStatus?: "pending" | "failed" | null;
   // null = merkitse syömättömäksi; ISO-aikaleima = merkitse syödyksi.
   eatenAt?: string | null;
 };
+
+const PER_100_FIELDS: Array<{ key: "kcalPer100" | "proteinPer100" | "carbsPer100" | "fatPer100"; column: string; max: number }> = [
+  { key: "kcalPer100", column: "kcal_per_100", max: 1000 },
+  { key: "proteinPer100", column: "protein_per_100", max: 100 },
+  { key: "carbsPer100", column: "carbs_per_100", max: 100 },
+  { key: "fatPer100", column: "fat_per_100", max: 100 },
+];
 
 export async function PATCH(
   request: Request,
@@ -91,6 +108,40 @@ export async function PATCH(
       return NextResponse.json({ message: "Annoskoon on oltava suurempi kuin 0." }, { status: 400 });
     }
     update.servings = servings;
+  }
+
+  if (body.grams !== undefined) {
+    const grams = Number(body.grams);
+    if (!Number.isFinite(grams) || grams <= 0 || grams > 5000) {
+      return NextResponse.json({ message: "Anna kelvollinen annoskoko grammoina." }, { status: 400 });
+    }
+    update.grams = grams;
+  }
+
+  if (body.foodName !== undefined) {
+    const name = typeof body.foodName === "string" ? body.foodName.trim() : "";
+    if (!name) {
+      return NextResponse.json({ message: "Anna ruoan nimi." }, { status: 400 });
+    }
+    update.food_name = name;
+  }
+
+  for (const field of PER_100_FIELDS) {
+    const value = body[field.key];
+    if (value !== undefined) {
+      const num = Number(value);
+      if (!Number.isFinite(num) || num < 0 || num > field.max) {
+        return NextResponse.json({ message: "Tarkista ravintoarvot." }, { status: 400 });
+      }
+      update[field.column] = num;
+    }
+  }
+
+  if (body.aiStatus !== undefined) {
+    if (body.aiStatus !== null && body.aiStatus !== "pending" && body.aiStatus !== "failed") {
+      return NextResponse.json({ message: "Tuntematon AI-tila." }, { status: 400 });
+    }
+    update.ai_status = body.aiStatus;
   }
 
   if (body.eatenAt !== undefined) {

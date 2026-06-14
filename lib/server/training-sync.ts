@@ -199,11 +199,20 @@ type DayMealPlanRow = {
   athlete_id: string;
   plan_date: string;
   meal_tag: DayMealPlanEntry["mealTag"];
-  recipe_id: string;
+  recipe_id: string | null;
   source: DayMealPlanEntry["source"];
   servings: number;
   eaten_at: string | null;
   position: number;
+  ingredient_id: string | null;
+  grams: number | string | null;
+  food_name: string | null;
+  kcal_per_100: number | string | null;
+  protein_per_100: number | string | null;
+  carbs_per_100: number | string | null;
+  fat_per_100: number | string | null;
+  food_source: DayMealPlanEntry["foodSource"] | null;
+  ai_status: DayMealPlanEntry["aiStatus"] | null;
   created_at: string;
   updated_at: string;
 };
@@ -250,6 +259,7 @@ type IngredientRow = {
   source: Ingredient["source"];
   source_external_id: string | null;
   owner_role: Ingredient["ownerRole"];
+  owner_user_id: string | null;
   created_by: string;
   default_purchase_unit: Ingredient["defaultPurchaseUnit"] | null;
   grams_per_unit: number | string | null;
@@ -336,7 +346,7 @@ type AssignedMealPlanRow = {
 async function fetchAllIngredientRows(supabase: ServerClient) {
   const pageSize = 1000;
   const selectColumns =
-    "id, name, display_name, source, source_external_id, owner_role, created_by, default_purchase_unit, grams_per_unit, kcal_per_100, protein_per_100, carbs_per_100, fat_per_100, created_at, updated_at";
+    "id, name, display_name, source, source_external_id, owner_role, owner_user_id, created_by, default_purchase_unit, grams_per_unit, kcal_per_100, protein_per_100, carbs_per_100, fat_per_100, created_at, updated_at";
 
   // The catalog can hold thousands of rows; fetching pages sequentially adds a
   // round trip per 1000 rows to every full sync. Get the count with the first
@@ -489,6 +499,7 @@ function mapIngredientRow(entry: IngredientRow): Ingredient {
     source: entry.source,
     sourceExternalId: entry.source_external_id ?? undefined,
     ownerRole: entry.owner_role,
+    ownerUserId: entry.owner_user_id,
     createdBy: entry.created_by,
     defaultPurchaseUnit: entry.default_purchase_unit ?? undefined,
     gramsPerUnit: toNumberOrUndefined(entry.grams_per_unit),
@@ -582,7 +593,9 @@ function mapExtraActivityRow(entry: ExtraActivityRow): ExtraActivity {
   };
 }
 
-function mapDayMealPlanRow(entry: DayMealPlanRow): DayMealPlanEntry {
+export type { DayMealPlanRow };
+
+export function mapDayMealPlanRow(entry: DayMealPlanRow): DayMealPlanEntry {
   return {
     id: entry.id,
     athleteId: entry.athlete_id,
@@ -593,6 +606,15 @@ function mapDayMealPlanRow(entry: DayMealPlanRow): DayMealPlanEntry {
     servings: Number(entry.servings),
     eatenAt: entry.eaten_at,
     position: entry.position,
+    ingredientId: entry.ingredient_id,
+    grams: toNumberOrUndefined(entry.grams) ?? null,
+    foodName: entry.food_name,
+    kcalPer100: toNumberOrUndefined(entry.kcal_per_100) ?? null,
+    proteinPer100: toNumberOrUndefined(entry.protein_per_100) ?? null,
+    carbsPer100: toNumberOrUndefined(entry.carbs_per_100) ?? null,
+    fatPer100: toNumberOrUndefined(entry.fat_per_100) ?? null,
+    foodSource: entry.food_source,
+    aiStatus: entry.ai_status,
     createdAt: entry.created_at,
     updatedAt: entry.updated_at,
   };
@@ -758,7 +780,7 @@ export async function loadVisibleSupabaseAppState(
     mode === "full"
       ? supabase
           .from("day_meal_plans")
-          .select("id, athlete_id, plan_date, meal_tag, recipe_id, source, servings, eaten_at, position, created_at, updated_at")
+          .select("id, athlete_id, plan_date, meal_tag, recipe_id, source, servings, eaten_at, position, ingredient_id, grams, food_name, kcal_per_100, protein_per_100, carbs_per_100, fat_per_100, food_source, ai_status, created_at, updated_at")
           .limit(lite ? 120 : isAdminViewer ? 1000 : 500)
           .order("plan_date", { ascending: false })
       : Promise.resolve({ data: [] as DayMealPlanRow[], error: null }),
