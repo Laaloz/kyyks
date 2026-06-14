@@ -205,8 +205,8 @@ export function OwnRecipeEditor({
             <p className="mt-2 text-sm text-[var(--text-subtle)]">Hae ja lisää ainekset alta.</p>
           )}
 
-          <div className="mt-3 rounded-2xl bg-[var(--surface-2)] p-3">
-            <div className="flex items-center gap-2 rounded-xl bg-[var(--surface)] px-3 py-2">
+          <div className="mt-3">
+            <div className="flex items-center gap-2 rounded-xl bg-[var(--surface-2)] px-3 py-2.5 focus-within:ring-2 focus-within:ring-inset focus-within:ring-[var(--accent)]">
               <Search className="size-4 shrink-0 text-[var(--text-subtle)]" aria-hidden="true" />
               <input
                 type="search"

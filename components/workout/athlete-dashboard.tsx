@@ -412,6 +412,7 @@ export function AthleteDashboard({
   readOnly = false,
   onOpenWorkoutLog,
   onOpenSettings,
+  onOpenMeasurements,
   onOpenProgramEditor,
   onWorkoutDetailModeChange,
   overviewFocusTarget,
@@ -423,6 +424,7 @@ export function AthleteDashboard({
   readOnly?: boolean;
   onOpenWorkoutLog?: () => void;
   onOpenSettings?: () => void;
+  onOpenMeasurements?: () => void;
   onOpenProgramEditor?: () => void;
   onWorkoutDetailModeChange?: (isOpen: boolean) => void;
   overviewFocusTarget?: AthleteOverviewFocusTarget | null;
@@ -1841,7 +1843,14 @@ export function AthleteDashboard({
         </div>
       ) : null}
 
-      {view === "nutrition" && currentUser ? <NutritionView user={currentUser} readOnly={readOnly} /> : null}
+      {view === "nutrition" && currentUser ? (
+        <NutritionView
+          user={currentUser}
+          readOnly={readOnly}
+          onOpenSettings={onOpenSettings}
+          onOpenMeasurements={onOpenMeasurements}
+        />
+      ) : null}
 
       {view === "conversation" && currentUser ? (
         <ConversationPanel

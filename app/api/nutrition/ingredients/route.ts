@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 
 import { ingredientSchema } from "@/components/workout/schemas";
 import {
+  deleteIngredientOnServer,
   ensureAdminRequester,
   getNutritionRequester,
   saveIngredientOnServer,
@@ -58,4 +59,29 @@ export async function POST(request: Request) {
 
 export async function PATCH(request: Request) {
   return saveIngredient(request);
+}
+
+export async function DELETE(request: Request) {
+  const requesterResult = await getNutritionRequester();
+  if ("error" in requesterResult) {
+    return requesterResult.error;
+  }
+
+  const forbidden = ensureAdminRequester(requesterResult.requester);
+  if (forbidden) {
+    return forbidden;
+  }
+
+  const body = (await request.json().catch(() => ({}))) as { id?: unknown };
+  const ingredientId = typeof body.id === "string" ? body.id : "";
+  if (!ingredientId) {
+    return NextResponse.json({ message: "Raaka-aineen tunniste puuttuu." }, { status: 400 });
+  }
+
+  const result = await deleteIngredientOnServer(ingredientId);
+  if (!result.ok) {
+    return NextResponse.json({ message: result.message }, { status: 400 });
+  }
+
+  return NextResponse.json({ ok: true });
 }

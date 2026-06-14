@@ -11,6 +11,7 @@ import {
   getMealSlotGroupForTag,
   getMealSlotGroupKcalRange,
   getMealSlotKcalRange,
+  getVisibleRecipesForUser,
   joinRecipeInstructionSteps,
   scaleRecipeIngredient,
   splitRecipeInstructions,
@@ -394,6 +395,62 @@ describe("nutrition helpers", () => {
     const activePlans = assigned.assignedMealPlans.filter((plan) => plan.athleteId === "user_athlete_1" && plan.active);
     expect(activePlans).toHaveLength(1);
     expect(getActiveMealPlanForAthlete(assigned, "user_athlete_1")?.templateId).toBe("meal_template_1");
+  });
+
+  it("limits recipe visibility to global, owned, coach-assigned and referenced recipes", () => {
+    const state = cloneDemoState();
+    const baseRecipe = state.recipes[0];
+    if (!baseRecipe) {
+      throw new Error("Expected demo recipe");
+    }
+
+    state.recipes = [
+      ...state.recipes,
+      { ...baseRecipe, id: "recipe_coach_visible", name: "Coachin resepti", ownerRole: "coach", createdBy: "user_coach_1" },
+      { ...baseRecipe, id: "recipe_other_coach", name: "Toisen coachin resepti", ownerRole: "coach", createdBy: "user_coach_2" },
+      { ...baseRecipe, id: "recipe_own_athlete", name: "Oma resepti", ownerRole: "athlete", createdBy: "user_athlete_1" },
+      { ...baseRecipe, id: "recipe_other_athlete", name: "Toisen urheilijan resepti", ownerRole: "athlete", createdBy: "user_athlete_2" },
+      { ...baseRecipe, id: "recipe_assigned_private", name: "Pohjassa viitattu", ownerRole: "coach", createdBy: "user_coach_2" },
+      { ...baseRecipe, id: "recipe_day_private", name: "Paivassa viitattu", ownerRole: "athlete", createdBy: "user_athlete_2" },
+    ];
+    state.assignedMealPlans = state.assignedMealPlans.map((plan) =>
+      plan.id === "assigned_meal_plan_1"
+        ? {
+            ...plan,
+            items: [
+              ...plan.items,
+              { id: "assigned_meal_plan_item_private", mealTag: "snack", recipeId: "recipe_assigned_private", sortOrder: 10 },
+            ],
+          }
+        : plan,
+    );
+    state.dayMealPlans = [
+      {
+        id: "day_meal_private",
+        athleteId: "user_athlete_1",
+        planDate: "2026-06-14",
+        mealTag: "dinner",
+        recipeId: "recipe_day_private",
+        source: "added",
+        servings: 1,
+        position: 0,
+        createdAt: "2026-06-14T08:00:00.000Z",
+        updatedAt: "2026-06-14T08:00:00.000Z",
+      },
+    ];
+
+    const visibleIds = getVisibleRecipesForUser(state, { id: "user_athlete_1", role: "athlete" }).map((recipe) => recipe.id);
+
+    expect(visibleIds).toEqual(expect.arrayContaining([
+      "recipe_chicken_rice",
+      "recipe_skyr_oats",
+      "recipe_coach_visible",
+      "recipe_own_athlete",
+      "recipe_assigned_private",
+      "recipe_day_private",
+    ]));
+    expect(visibleIds).not.toContain("recipe_other_coach");
+    expect(visibleIds).not.toContain("recipe_other_athlete");
   });
 
   it("converts recipe steps to numbered instruction text", () => {

@@ -27,8 +27,8 @@ const AdminInvitesViewDynamic = dynamic(
   () => import("@/components/workout/admin/invites-view").then((module) => module.AdminInvitesView),
   { ssr: false, loading: () => <PanelSkeleton /> },
 );
-const NutritionAdminPanel = dynamic(
-  () => import("@/components/workout/nutrition-admin-panel").then((module) => module.NutritionAdminPanel),
+const AdminIngredientsViewDynamic = dynamic(
+  () => import("@/components/workout/admin/ingredients-view").then((module) => module.AdminIngredientsView),
   { ssr: false, loading: () => <PanelSkeleton /> },
 );
 import { Button } from "@/components/ui/button";
@@ -180,11 +180,12 @@ export function DashboardShell() {
     ingredients: Carrot,
   };
   const mobilePrimaryNavItems = mobilePrimaryNavItemsForRole(currentUser.role).filter((item) => navItems.includes(item));
+  const isFullscreenAdminSubView = currentUser.role === "admin" && view === "ingredients";
   const activePrimaryView =
     view === "settings" ? resolveInitialView(currentUser.role, currentUser.settings?.defaultDashboardView) : view;
   const activeTabId = `workspace-tab-${activePrimaryView}`;
   const activePanelId = `workspace-panel-${activePrimaryView}`;
-  const shouldHideMobileBottomNav = isMobileWorkoutDetailOpen || isMobileKeyboardOpen;
+  const shouldHideMobileBottomNav = isFullscreenAdminSubView || isMobileWorkoutDetailOpen || isMobileKeyboardOpen;
   const measurementReminder = getMeasurementReminderState(state, currentUser);
   const weeklyMeasurementRemindersEnabled = currentUser.settings?.weeklyMeasurementReminders ?? true;
   const shouldShowMeasurementReminder =
@@ -506,6 +507,7 @@ export function DashboardShell() {
         />
       ) : null}
 
+      {!isFullscreenAdminSubView ? (
       <header
         className="z-20 px-0 py-0 lg:rounded-3xl lg:border lg:border-[var(--border-strong)] lg:bg-[linear-gradient(180deg,var(--surface)_0%,var(--surface-2)_100%)] lg:px-4 lg:py-3.5 lg:shadow-[0_1px_0_0_var(--shadow-soft),0_14px_30px_-20px_var(--shadow)]"
       >
@@ -727,6 +729,7 @@ export function DashboardShell() {
           ) : null}
         </div>
       </header>
+      ) : null}
 
       <main id="main-content" className={view === "conversation" ? "flex min-h-0 min-w-0 flex-1 overflow-x-hidden" : "min-w-0 overflow-x-hidden"}>
         <HeaderActionProvider register={registerHeaderAction}>
@@ -747,6 +750,7 @@ export function DashboardShell() {
                 readOnly={isActivePreview}
                 onOpenWorkoutLog={() => setView("athlete-log")}
                 onOpenSettings={() => setView("settings")}
+                onOpenMeasurements={openMeasurementsOverview}
                 onOpenProgramEditor={() => setView(PROGRAMS_WORKSPACE_VIEW)}
                 onWorkoutDetailModeChange={setIsMobileWorkoutDetailOpen}
                 overviewFocusTarget={athleteOverviewFocusTarget}
@@ -760,6 +764,7 @@ export function DashboardShell() {
                 readOnly={isActivePreview}
                 onOpenWorkoutLog={() => setView("athlete-log")}
                 onOpenSettings={() => setView("settings")}
+                onOpenMeasurements={openMeasurementsOverview}
                 onOpenProgramEditor={() => setView(PROGRAMS_WORKSPACE_VIEW)}
                 onWorkoutDetailModeChange={setIsMobileWorkoutDetailOpen}
                 overviewFocusTarget={athleteOverviewFocusTarget}
@@ -779,7 +784,7 @@ export function DashboardShell() {
                 onOpenIngredients={currentUser.role === "admin" ? () => setView("ingredients") : undefined}
               />
             ) : currentUser.role === "admin" && view === "ingredients" ? (
-              <NutritionAdminPanel />
+              <AdminIngredientsViewDynamic onBack={() => setView("athletes")} />
             ) : currentUser.role === "admin" && view === "invites" ? (
               <AdminInvitesViewDynamic />
             ) : (
@@ -788,6 +793,7 @@ export function DashboardShell() {
                 readOnly={isActivePreview}
                 onOpenWorkoutLog={() => setView("athlete-log")}
                 onOpenSettings={() => setView("settings")}
+                onOpenMeasurements={openMeasurementsOverview}
                 onOpenProgramEditor={() => setView(PROGRAMS_WORKSPACE_VIEW)}
                 onWorkoutDetailModeChange={setIsMobileWorkoutDetailOpen}
                 overviewFocusTarget={athleteOverviewFocusTarget}

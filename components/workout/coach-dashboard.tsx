@@ -7,11 +7,13 @@ import {
   Check,
   ChevronDown,
   ChevronLeft,
+  ChevronRight,
   ChevronUp,
   Eye,
   MoreHorizontal,
   Plus,
   Search,
+  Send,
   UserPlus,
   X,
 } from "lucide-react";
@@ -38,6 +40,7 @@ import {
 import { isConversationEntryNotifiable } from "@/lib/conversation";
 import { splitLabel } from "@/lib/domain";
 import { buildAthleteRosterSummary } from "@/lib/coach-roster";
+import { getInviteLifecycleLabel, getVisiblePendingInvites } from "@/lib/invite-status";
 import { withMinimumDelay } from "@/lib/min-delay";
 import { deriveProgramWorkoutGuidance } from "@/lib/program-workout-guidance";
 import { getProgramStatus, isProgramActive } from "@/lib/program-status";
@@ -2565,6 +2568,28 @@ function SectionLabel({ label, meta }: { label: string; meta?: string }) {
   );
 }
 
+const inviteRoleLabels: Record<Exclude<Role, "admin">, string> = {
+  athlete: "Urheilija",
+  independent_athlete: "Itsenäinen treenaaja",
+  coach: "Valmentaja",
+};
+
+function inviteAgeLabel(createdAt: string) {
+  const created = new Date(createdAt).getTime();
+  if (!Number.isFinite(created)) {
+    return getInviteLifecycleLabel("pending");
+  }
+
+  const days = Math.max(0, Math.floor((Date.now() - created) / 86_400_000));
+  if (days === 0) {
+    return "lähetetty tänään";
+  }
+  if (days === 1) {
+    return "lähetetty eilen";
+  }
+  return `lähetetty ${days} pv sitten`;
+}
+
 /**
  * Valmentajan/adminin Tiimi-näkymä prototyypin mukaisena: [Tiimi | Ohjelmat]
  * -segmentti. Tiimi = urheilijakortit (viikkorytmi + tila-pilleri, napautus →
@@ -2588,10 +2613,15 @@ function CoachTeamView({
   onOpenInvites?: () => void;
   onOpenIngredients?: () => void;
 }) {
-  const { startAthletePreview, notify, createProgram, updateProgram, setProgramStatus } = useAppState();
+  const { startAthletePreview, notify, createProgram, updateProgram, setProgramStatus, createInvite } = useAppState();
   const [segment, setSegment] = useState<"tiimi" | "ohjelmat">("tiimi");
   const [editorGroup, setEditorGroup] = useState<TrainingPlan[] | null>(null);
   const [manageUserId, setManageUserId] = useState<string | null>(null);
+  const [isInviteSheetOpen, setIsInviteSheetOpen] = useState(false);
+  const [inviteEmail, setInviteEmail] = useState("");
+  const [inviteRole, setInviteRole] = useState<Exclude<Role, "admin">>("athlete");
+  const [isSendingInvite, setIsSendingInvite] = useState(false);
+  const [inviteMessage, setInviteMessage] = useState<string>("");
   const [manageMounted, setManageMounted] = useState(false);
   useEffect(() => setManageMounted(true), []);
   const isAdmin = isAdminRole(currentUser.role);
@@ -2673,6 +2703,10 @@ function CoachTeamView({
         return { coach, athleteCount: athleteIds.size, activePrograms };
       });
   }, [currentUser.id, isAdmin, state.plans, state.users]);
+  const pendingInvites = useMemo(
+    () => (isAdmin ? getVisiblePendingInvites(state.invites, state.users) : []),
+    [isAdmin, state.invites, state.users],
+  );
 
   const userNameById = useMemo(() => new Map(state.users.map((user) => [user.id, user.fullName])), [state.users]);
   // Saman program_group_id:n rivit = yksi ohjelma monelle urheilijalle.
@@ -2707,6 +2741,50 @@ function CoachTeamView({
     }
   };
 
+  const handleSendInvite = async () => {
+    const email = inviteEmail.trim();
+    if (!email) {
+      setInviteMessage("Anna kutsuttavan sähköpostiosoite.");
+      return;
+    }
+
+    setIsSendingInvite(true);
+    try {
+      const result = await withMinimumDelay(
+        createInvite({
+          email,
+          role: inviteRole,
+          coachId: inviteRole === "coach" ? undefined : currentUser.id,
+        }),
+      );
+      notify({
+        tone: result.ok ? "success" : "danger",
+        message: result.ok ? `Kutsu lähetettiin osoitteeseen ${email}.` : result.message,
+      });
+      setInviteMessage(result.ok ? "" : result.message);
+      if (result.ok) {
+        setInviteEmail("");
+      }
+    } finally {
+      setIsSendingInvite(false);
+    }
+  };
+
+  useEffect(() => {
+    if (!isInviteSheetOpen) {
+      return;
+    }
+
+    const handleKeyDown = (event: globalThis.KeyboardEvent) => {
+      if (event.key === "Escape") {
+        setIsInviteSheetOpen(false);
+      }
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [isInviteSheetOpen]);
+
   return (
     <div className="flex w-full min-w-0 flex-col gap-2">
       <Segmented
@@ -2728,7 +2806,7 @@ function CoachTeamView({
                 <button
                   key={athlete.id}
                   type="button"
-                  className="w-full rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-4 text-left transition hover:border-[var(--border-strong)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--background)]"
+                  className="w-full rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-4 text-left shadow-[0_1px_2px_var(--shadow-soft)] transition hover:bg-[var(--surface-2)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--background)]"
                   aria-label={`${isAdmin ? "Hallitse" : "Esikatsele"}: ${athlete.fullName}`}
                   onClick={() => (isAdmin ? setManageUserId(athlete.id) : handlePreview(athlete.id))}
                 >
@@ -2772,63 +2850,171 @@ function CoachTeamView({
 
           {rosterEntries.length ? (
             <p className="mx-1 mt-3 text-[13px] text-pretty text-[var(--text-subtle)]">
-              {isAdmin
-                ? "Napauta urheilijaa — hallitset roolia, vastuuhenkilöitä ja esikatselet hänen näkymäänsä."
-                : "Napauta urheilijaa — esikatselet hänen omaa näkymäänsä vain luku -tilassa."}
+              Napauta urheilijaa — esikatselet hänen omaa näkymäänsä vain luku -tilassa.
             </p>
           ) : null}
 
-          {isAdmin && otherCoaches.length ? (
+          {isAdmin ? (
             <>
               <SectionLabel label="Valmentajat" meta={`${otherCoaches.length} aktiivinen`} />
-              <Card className="divide-y divide-[var(--border)] p-0">
-                {otherCoaches.map(({ coach, athleteCount, activePrograms }) => (
-                  <button
-                    key={coach.id}
-                    type="button"
-                    className="flex w-full items-center justify-between gap-3 p-4 text-left transition hover:bg-[var(--surface-2)]"
-                    aria-label={`Hallitse: ${coach.fullName}`}
-                    onClick={() => setManageUserId(coach.id)}
-                  >
-                    <div className="flex min-w-0 items-center gap-2.5">
-                      <span className="grid size-10 shrink-0 place-items-center rounded-full bg-[var(--accent-soft)] font-[family-name:var(--font-display)] text-sm font-bold text-[var(--accent)]">
-                        {rosterInitials(coach.fullName)}
-                      </span>
-                      <div className="min-w-0">
-                        <p className="truncate font-[family-name:var(--font-display)] text-[15.5px] font-bold text-[var(--text)]">
-                          {coach.fullName}
-                        </p>
-                        <p className="text-[12.5px] text-[var(--text-subtle)]">
-                          {athleteCount} {athleteCount === 1 ? "urheilija" : "urheilijaa"} · {activePrograms}{" "}
-                          {activePrograms === 1 ? "ohjelma" : "ohjelmaa"}
-                        </p>
+              {otherCoaches.length ? (
+                <div className="overflow-hidden rounded-2xl border border-[var(--border)] bg-[var(--surface)] shadow-[0_1px_2px_var(--shadow-soft)]">
+                  {otherCoaches.map(({ coach, athleteCount, activePrograms }) => (
+                    <button
+                      key={coach.id}
+                      type="button"
+                      className="flex w-full items-center justify-between gap-3 p-4 text-left transition hover:bg-[var(--surface-2)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--surface)]"
+                      aria-label={`Hallitse: ${coach.fullName}`}
+                      onClick={() => setManageUserId(coach.id)}
+                    >
+                      <div className="flex min-w-0 items-center gap-2.5">
+                        <span className="grid size-10 shrink-0 place-items-center rounded-full bg-[var(--accent-soft)] font-[family-name:var(--font-display)] text-sm font-bold text-[var(--accent)]">
+                          {rosterInitials(coach.fullName)}
+                        </span>
+                        <div className="min-w-0">
+                          <p className="truncate font-[family-name:var(--font-display)] text-[15.5px] font-bold text-[var(--text)]">
+                            {coach.fullName}
+                          </p>
+                          <p className="text-[12.5px] text-[var(--text-subtle)]">
+                            {athleteCount} {athleteCount === 1 ? "urheilija" : "urheilijaa"} · {activePrograms}{" "}
+                            {activePrograms === 1 ? "ohjelma" : "ohjelmaa"}
+                          </p>
+                        </div>
                       </div>
-                    </div>
-                    <Badge>{coach.role === "admin" ? "Admin" : "Valmentaja"}</Badge>
-                  </button>
-                ))}
-              </Card>
+                      <Badge className="shrink-0">{coach.role === "admin" ? "Admin" : "Valmentaja"}</Badge>
+                    </button>
+                  ))}
+                </div>
+              ) : (
+                <Card>
+                  <CardDescription>Aktiivisia valmentajia ei ole vielä.</CardDescription>
+                </Card>
+              )}
             </>
           ) : null}
 
           {isAdmin && (onOpenInvites || onOpenIngredients) ? (
             <>
               <SectionLabel label="Hallinta" />
-              <div className="grid gap-2 sm:grid-cols-2">
+              <div className="overflow-hidden rounded-2xl border border-[var(--border)] bg-[var(--surface)] shadow-[0_1px_2px_var(--shadow-soft)]">
                 {onOpenInvites ? (
-                  <Button type="button" variant="secondary" className="justify-start gap-2" onClick={onOpenInvites}>
-                    <UserPlus className="size-4" aria-hidden="true" />
-                    Kutsut
-                  </Button>
+                  <button
+                    type="button"
+                    className="flex w-full items-center justify-between gap-3 p-4 text-left transition hover:bg-[var(--surface-2)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--surface)]"
+                    onClick={() => setIsInviteSheetOpen(true)}
+                  >
+                    <UserPlus className="size-5 shrink-0 text-[var(--text)]" aria-hidden="true" />
+                    <div className="min-w-0 flex-1">
+                      <p className="font-[family-name:var(--font-display)] text-[15.5px] font-bold text-[var(--text)]">Kutsut</p>
+                      <p className="mt-1 truncate text-[12.5px] text-[var(--text-muted)]">Kutsu uusia urheilijoita ja valmentajia</p>
+                    </div>
+                    <ChevronRight className="size-5 shrink-0 text-[var(--text)]" aria-hidden="true" />
+                  </button>
                 ) : null}
                 {onOpenIngredients ? (
-                  <Button type="button" variant="secondary" className="justify-start gap-2" onClick={onOpenIngredients}>
-                    <Carrot className="size-4" aria-hidden="true" />
-                    Raaka-ainekatalogi
-                  </Button>
+                  <button
+                    type="button"
+                    className="flex w-full items-center justify-between gap-3 border-t border-[var(--border)] p-4 text-left transition hover:bg-[var(--surface-2)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--surface)]"
+                    onClick={onOpenIngredients}
+                  >
+                    <Carrot className="size-5 shrink-0 text-[var(--text)]" aria-hidden="true" />
+                    <div className="min-w-0 flex-1">
+                      <p className="font-[family-name:var(--font-display)] text-[15.5px] font-bold text-[var(--text)]">
+                        Raaka-ainekatalogi
+                      </p>
+                      <p className="mt-1 truncate text-[12.5px] text-[var(--text-muted)]">Reseptien raaka-aineet ja ravintoarvot</p>
+                    </div>
+                    <ChevronRight className="size-5 shrink-0 text-[var(--text)]" aria-hidden="true" />
+                  </button>
                 ) : null}
               </div>
             </>
+          ) : null}
+
+          {isInviteSheetOpen ? (
+            <div className="fixed inset-0 z-50 flex items-end bg-black/45" onMouseDown={() => setIsInviteSheetOpen(false)}>
+              <div
+                role="dialog"
+                aria-modal="true"
+                aria-labelledby="admin-invite-sheet-title"
+                className="max-h-[82svh] w-full overflow-y-auto rounded-t-[2rem] bg-[var(--surface)] px-4 pb-[calc(env(safe-area-inset-bottom)+2rem)] pt-6 shadow-[0_-24px_70px_-34px_var(--shadow)] sm:mx-auto sm:max-w-3xl sm:px-8"
+                onMouseDown={(event) => event.stopPropagation()}
+              >
+                <div className="mx-auto mb-5 h-1.5 w-20 rounded-full bg-[var(--border-strong)]" aria-hidden="true" />
+                <h2 id="admin-invite-sheet-title" className="font-[family-name:var(--font-display)] text-2xl font-bold text-[var(--text)]">
+                  Kutsut
+                </h2>
+                <div className="mt-6 grid gap-3">
+                  <Label htmlFor="admin-team-invite-email" className="sr-only">
+                    Sähköposti
+                  </Label>
+                  <Input
+                    id="admin-team-invite-email"
+                    type="email"
+                    autoComplete="email"
+                    value={inviteEmail}
+                    onChange={(event) => {
+                      setInviteEmail(event.target.value);
+                      setInviteMessage("");
+                    }}
+                    placeholder="sähköposti@osoite.fi"
+                    className="h-12 rounded-xl border-0 bg-[var(--surface-2)] text-base"
+                  />
+                  <Label htmlFor="admin-team-invite-role" className="sr-only">
+                    Rooli
+                  </Label>
+                  <select
+                    id="admin-team-invite-role"
+                    value={inviteRole}
+                    onChange={(event) => setInviteRole(event.target.value as Exclude<Role, "admin">)}
+                    className="h-12 rounded-xl border border-[var(--border)] bg-[var(--surface)] px-4 text-base font-semibold text-[var(--text)]"
+                  >
+                    <option value="athlete">Urheilija</option>
+                    <option value="independent_athlete">Itsenäinen treenaaja</option>
+                    <option value="coach">Valmentaja</option>
+                  </select>
+                  <Button
+                    type="button"
+                    className="h-12 rounded-xl text-base"
+                    loading={isSendingInvite}
+                    loadingText="Lähetetään..."
+                    onClick={handleSendInvite}
+                  >
+                    <Send className="mr-2 size-4" aria-hidden="true" />
+                    Lähetä kutsu
+                  </Button>
+                  {inviteMessage ? (
+                    <p className="text-sm font-semibold text-[var(--danger)]" aria-live="polite">
+                      {inviteMessage}
+                    </p>
+                  ) : null}
+                </div>
+
+                <div className="mb-2 mt-6 flex items-baseline justify-between gap-3 px-1">
+                  <span className="text-xs font-semibold uppercase tracking-[0.06em] text-[var(--text-subtle)]">Avoimet kutsut</span>
+                  <span className="text-xs font-semibold uppercase tracking-[0.06em] text-[var(--text-subtle)]">
+                    {pendingInvites.length}
+                  </span>
+                </div>
+                <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-0 shadow-[0_1px_2px_var(--shadow-soft)]">
+                  {pendingInvites.length ? (
+                    pendingInvites.map((invite) => (
+                      <div key={invite.id} className="flex items-center justify-between gap-3 px-4 py-4">
+                        <div className="min-w-0">
+                          <p className="truncate text-[15px] font-bold text-[var(--text)]">{invite.email}</p>
+                          <p className="mt-1 truncate text-[12.5px] text-[var(--text-muted)]">
+                            {inviteRoleLabels[invite.role]} · {inviteAgeLabel(invite.createdAt)}
+                          </p>
+                        </div>
+                        <Badge className="shrink-0">Odottaa</Badge>
+                      </div>
+                    ))
+                  ) : (
+                    <p className="px-4 py-6 text-sm text-[var(--text-muted)]">Avoimia kutsuja ei ole.</p>
+                  )}
+                </div>
+              </div>
+            </div>
           ) : null}
         </div>
       ) : (

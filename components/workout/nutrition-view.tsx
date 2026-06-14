@@ -10,8 +10,10 @@ import { useHeaderAction } from "@/components/workout/header-action";
 import { OwnRecipeEditor } from "@/components/workout/own-recipe-editor";
 import { useKeepScreenOnPreference, useWakeLock } from "@/lib/use-wake-lock";
 import {
+  buildPersonalNutritionGoalComparison,
   getActiveMealPlanForAthlete,
-  getMealPlanRecipes,
+  getMissingMacroProfileFields,
+  getVisibleRecipesForUser,
   mealTagLabel,
   resolveRecipeNutritionPreview,
   splitRecipeInstructions,
@@ -20,6 +22,13 @@ import type { AppState, DayMealPlanEntry, MealTag, Recipe, UserProfile } from "@
 import { useAppState } from "@/providers/app-state-provider";
 
 const MEAL_TAG_ORDER: MealTag[] = ["breakfast", "lunch", "snack", "dinner", "evening_snack"];
+
+const missingFieldLabel: Record<"age" | "sex" | "heightCm" | "weightKg", string> = {
+  age: "ikä",
+  sex: "sukupuoli",
+  heightCm: "pituus",
+  weightKg: "paino",
+};
 
 function localDateKey(date: Date) {
   const year = date.getFullYear();
@@ -93,11 +102,15 @@ export function NutritionView({
   user,
   readOnly = false,
   dayOnly = false,
+  onOpenSettings,
+  onOpenMeasurements,
 }: {
   user: UserProfile;
   readOnly?: boolean;
   // Tänään-näkymä: vain Päivä-osio (sama komponentti kuin Ravinto-välilehdellä).
   dayOnly?: boolean;
+  onOpenSettings?: () => void;
+  onOpenMeasurements?: () => void;
 }) {
   const { state, addDayMeal, swapDayMeal, removeDayMeal, setDayMealEaten } = useAppState();
   const [seg, setSeg] = useState<"day" | "recipes">("day");
@@ -126,10 +139,29 @@ export function NutritionView({
 
   const todayKey = useMemo(() => localDateKey(new Date()), []);
   const catalog = state.ingredientsCatalog;
-  const recipeById = useMemo(() => new Map(state.recipes.map((recipe) => [recipe.id, recipe])), [state.recipes]);
+  const visibleRecipeSource = useMemo(() => getVisibleRecipesForUser(state, user), [state, user]);
+  const recipeById = useMemo(() => new Map(visibleRecipeSource.map((recipe) => [recipe.id, recipe])), [visibleRecipeSource]);
   const assignedPlan = useMemo(() => getActiveMealPlanForAthlete(state, user.id), [state, user.id]);
-  const basePlan = useMemo(() => getMealPlanRecipes(state, assignedPlan), [state, assignedPlan]);
+  const basePlan = useMemo(
+    () =>
+      assignedPlan
+        ? assignedPlan.items
+            .slice()
+            .sort((left, right) => left.sortOrder - right.sortOrder)
+            .flatMap((item) => {
+              const recipe = recipeById.get(item.recipeId);
+              return recipe ? [{ mealTag: item.mealTag, recipe }] : [];
+            })
+        : [],
+    [assignedPlan, recipeById],
+  );
   const nutritionProfile = state.nutritionProfiles.find((profile) => profile.userId === user.id) ?? null;
+  const nutritionComparison = buildPersonalNutritionGoalComparison(user, nutritionProfile);
+  const macroTarget = nutritionComparison?.activeTarget ?? null;
+  const missingMacroFields = getMissingMacroProfileFields(user);
+  const missingSettingsLabels = missingMacroFields.filter((field) => field !== "weightKg").map((field) => missingFieldLabel[field]);
+  const hasMissingSettings = missingSettingsLabels.length > 0;
+  const hasMissingWeight = missingMacroFields.includes("weightKg");
 
   const dayRows = useMemo(
     () =>
@@ -162,14 +194,14 @@ export function NutritionView({
 
   const visibleRecipes = useMemo(
     () =>
-      state.recipes
+      visibleRecipeSource
         .filter(
           (recipe) =>
             (filter === "all" || recipe.mealTag === filter) &&
             (!query.trim() || recipe.name.toLowerCase().includes(query.trim().toLowerCase())),
         )
         .sort((left, right) => left.name.localeCompare(right.name, "fi")),
-    [state.recipes, filter, query],
+    [visibleRecipeSource, filter, query],
   );
 
   const materializeFromPlan = async () => {
@@ -208,16 +240,48 @@ export function NutritionView({
 
       {dayOnly || seg === "day" ? (
         <div className={dayOnly ? "" : "mt-5"}>
-          {!dayOnly && nutritionProfile ? (
+          {!dayOnly && macroTarget ? (
             <div className="rounded-2xl bg-[var(--surface-2)] p-4">
               <p className="font-[family-name:var(--font-display)] text-4xl font-bold leading-none tabular-nums text-[var(--text)]">
                 {Math.round(consumed.kcal)}
-                <span className="ml-1.5 text-base font-semibold text-[var(--text-subtle)]">/ {nutritionProfile.targetKcal} kcal</span>
+                <span className="ml-1.5 text-base font-semibold text-[var(--text-subtle)]">/ {macroTarget.kcal} kcal</span>
               </p>
+              {nutritionComparison?.activeTargetSource === "auto_fallback" ? (
+                <p className="mt-1 text-xs font-medium text-[var(--text-subtle)]">Arvio profiilitiedoista</p>
+              ) : null}
               <div className="mt-4 space-y-3">
-                <MacroBar label="Proteiini" value={consumed.p} target={nutritionProfile.proteinG} />
-                <MacroBar label="Hiilihydraatit" value={consumed.c} target={nutritionProfile.carbsG} />
-                <MacroBar label="Rasva" value={consumed.f} target={nutritionProfile.fatG} />
+                <MacroBar label="Proteiini" value={consumed.p} target={macroTarget.proteinG} />
+                <MacroBar label="Hiilihydraatit" value={consumed.c} target={macroTarget.carbsG} />
+                <MacroBar label="Rasva" value={consumed.f} target={macroTarget.fatG} />
+              </div>
+            </div>
+          ) : !dayOnly ? (
+            <div className="rounded-2xl bg-[color-mix(in_srgb,var(--warning)_10%,var(--surface))] p-4">
+              <p className="text-sm font-semibold text-[var(--text)]">Täydennä tiedot, niin saat makrot näkyviin</p>
+              <p className="mt-1 text-sm leading-5 text-[var(--text-muted)]">
+                Makrot lasketaan, kun profiilin tiedot ja viimeisin paino ovat kunnossa.
+              </p>
+              {hasMissingSettings ? (
+                <p className="mt-2 text-xs font-medium text-[var(--text-subtle)]">
+                  Asetuksista puuttuu: {missingSettingsLabels.join(", ")}.
+                </p>
+              ) : null}
+              {hasMissingWeight ? (
+                <p className="mt-2 text-xs font-medium text-[var(--text-subtle)]">
+                  Keho-näkymästä puuttuu: paino.
+                </p>
+              ) : null}
+              <div className="mt-3 flex flex-col gap-2 sm:flex-row">
+                {onOpenSettings && hasMissingSettings ? (
+                  <Button type="button" variant="secondary" onClick={onOpenSettings}>
+                    Avaa asetukset
+                  </Button>
+                ) : null}
+                {onOpenMeasurements && hasMissingWeight ? (
+                  <Button type="button" variant="secondary" onClick={onOpenMeasurements}>
+                    Avaa Keho
+                  </Button>
+                ) : null}
               </div>
             </div>
           ) : null}
@@ -253,19 +317,33 @@ export function NutritionView({
                     ))}
                   </div>
                   {!readOnly ? (
-                    <Button
-                      type="button"
-                      className="mt-4 w-full"
-                      loading={isMaterializing}
-                      loadingText="Kootaan päivää..."
-                      onClick={() => void materializeFromPlan()}
-                    >
-                      Kokoa tämän päivän ateriat
-                    </Button>
+                    <div className="mt-4 grid gap-2">
+                      <Button
+                        type="button"
+                        className="w-full"
+                        loading={isMaterializing}
+                        loadingText="Kootaan päivää..."
+                        onClick={() => void materializeFromPlan()}
+                      >
+                        Kokoa tämän päivän ateriat
+                      </Button>
+                      <Button type="button" variant="secondary" className="w-full gap-2" onClick={() => setAddTag("breakfast")}>
+                        <Plus className="size-4" aria-hidden="true" />
+                        Lisää ateria
+                      </Button>
+                    </div>
                   ) : null}
                 </>
               ) : (
-                <p className="py-6 text-center text-sm text-[var(--text-subtle)]">Ei suunnitelmaa — luo oma resepti Reseptit-välilehdellä.</p>
+                <div className="rounded-2xl border border-dashed border-[var(--border)] bg-[var(--surface-2)] px-4 py-5 text-center">
+                  <p className="text-sm text-[var(--text-subtle)]">Ei vielä aterioita tälle päivälle.</p>
+                  {!readOnly ? (
+                    <Button type="button" variant="secondary" className="mt-4 w-full gap-2" onClick={() => setAddTag("breakfast")}>
+                      <Plus className="size-4" aria-hidden="true" />
+                      Lisää ateria
+                    </Button>
+                  ) : null}
+                </div>
               )}
             </div>
           ) : (
@@ -452,7 +530,7 @@ export function NutritionView({
       {swapTarget ? (
         <MealPickerSheet
           title="Vaihda ateria"
-          recipes={state.recipes
+          recipes={visibleRecipeSource
             .filter((recipe) => recipe.mealTag === swapTarget.mealTag && recipe.id !== swapTarget.currentRecipeId)
             .sort((left, right) => left.name.localeCompare(right.name, "fi"))}
           catalog={catalog}
@@ -471,7 +549,7 @@ export function NutritionView({
           title="Lisää ateria"
           mealTag={addTag}
           onChangeMealTag={setAddTag}
-          recipes={state.recipes
+          recipes={visibleRecipeSource
             .filter((recipe) => recipe.mealTag === addTag)
             .sort((left, right) => left.name.localeCompare(right.name, "fi"))}
           catalog={catalog}

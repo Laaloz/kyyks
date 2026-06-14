@@ -1418,18 +1418,62 @@ on public.ingredient_catalog for all
 using (public.is_admin())
 with check (public.is_admin());
 
-create policy "recipes read by authenticated users"
+create policy "recipes read by owner audience assignment or admin"
 on public.recipes for select
-using (auth.uid() is not null);
+using (
+  auth.uid() is not null
+  and (
+    public.is_admin()
+    or owner_role = 'admin'
+    or created_by = auth.uid()
+    or (
+      owner_role = 'coach'
+      and exists (
+        select 1
+        from public.coach_athlete_assignments assignment
+        where assignment.coach_id = recipes.created_by
+          and assignment.athlete_id = auth.uid()
+          and assignment.active
+      )
+    )
+    or exists (
+      select 1
+      from public.day_meal_plans day_meal
+      where day_meal.recipe_id = recipes.id
+        and (
+          day_meal.athlete_id = auth.uid()
+          or public.is_coach_of(day_meal.athlete_id)
+        )
+    )
+    or exists (
+      select 1
+      from public.assigned_meal_plan_items item
+      join public.assigned_meal_plans plan on plan.id = item.assigned_plan_id
+      where item.recipe_id = recipes.id
+        and plan.active
+        and (
+          plan.athlete_id = auth.uid()
+          or public.is_coach_of(plan.athlete_id)
+        )
+    )
+  )
+);
 
 create policy "recipes write by admin"
 on public.recipes for all
 using (public.is_admin())
 with check (public.is_admin());
 
-create policy "recipe ingredients read by authenticated users"
+create policy "recipe ingredients read with visible recipe"
 on public.recipe_ingredients for select
-using (auth.uid() is not null);
+using (
+  auth.uid() is not null
+  and exists (
+    select 1
+    from public.recipes recipe
+    where recipe.id = recipe_ingredients.recipe_id
+  )
+);
 
 create policy "recipe ingredients write by admin"
 on public.recipe_ingredients for all

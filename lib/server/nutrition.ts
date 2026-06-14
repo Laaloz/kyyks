@@ -180,6 +180,20 @@ export async function saveIngredientOnServer(requester: Requester, input: Ingred
   return { ok: true as const };
 }
 
+export async function deleteIngredientOnServer(ingredientId: string) {
+  const supabase = await createSupabaseServerClient();
+  if (!supabase) {
+    return { ok: false as const, message: "Supabase ei ole käytössä tässä ympäristössä." };
+  }
+
+  const { error } = await supabase.from("ingredient_catalog").delete().eq("id", ingredientId);
+  if (error) {
+    return { ok: false as const, message: error.message || "Raaka-aineen poisto epäonnistui." };
+  }
+
+  return { ok: true as const };
+}
+
 export async function saveRecipeOnServer(requester: Requester, input: RecipeInput) {
   const supabase = await createSupabaseServerClient();
   if (!supabase) {

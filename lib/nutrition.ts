@@ -844,6 +844,19 @@ export function upsertIngredient(state: AppState, actorId: string, input: Ingred
   };
 }
 
+export function deleteIngredientFromCatalog(state: AppState, ingredientId: string) {
+  return {
+    ...state,
+    ingredientsCatalog: state.ingredientsCatalog.filter((ingredient) => ingredient.id !== ingredientId),
+    recipes: state.recipes.map((recipe) => ({
+      ...recipe,
+      ingredients: recipe.ingredients.map((ingredient) =>
+        ingredient.ingredientId === ingredientId ? { ...ingredient, ingredientId: undefined } : ingredient,
+      ),
+    })),
+  };
+}
+
 export function upsertRecipe(
   state: AppState,
   actorId: string,
@@ -1003,6 +1016,49 @@ export function assignMealPlan(state: AppState, actorId: string, input: Assigned
 
 export function getActiveMealPlanForAthlete(state: AppState, athleteId: string) {
   return state.assignedMealPlans.find((plan) => plan.athleteId === athleteId && plan.active) ?? null;
+}
+
+export function getVisibleRecipesForUser(state: AppState, user: Pick<UserProfile, "id" | "role"> | null | undefined) {
+  if (!user) {
+    return [];
+  }
+
+  if (user.role === "admin") {
+    return state.recipes;
+  }
+
+  const referencedRecipeIds = new Set<string>();
+  for (const entry of state.dayMealPlans ?? []) {
+    if (entry.athleteId === user.id) {
+      referencedRecipeIds.add(entry.recipeId);
+    }
+  }
+  for (const plan of state.assignedMealPlans) {
+    if (plan.athleteId === user.id && plan.active) {
+      for (const item of plan.items) {
+        referencedRecipeIds.add(item.recipeId);
+      }
+    }
+  }
+
+  const activeCoachIds = new Set(
+    state.assignments
+      .filter((assignment) => assignment.athleteId === user.id && assignment.active)
+      .map((assignment) => assignment.coachId),
+  );
+
+  return state.recipes.filter((recipe) => {
+    if (referencedRecipeIds.has(recipe.id)) {
+      return true;
+    }
+    if (recipe.ownerRole === "admin") {
+      return true;
+    }
+    if (recipe.createdBy === user.id) {
+      return true;
+    }
+    return recipe.ownerRole === "coach" && activeCoachIds.has(recipe.createdBy);
+  });
 }
 
 export function getMealPlanRecipes(state: AppState, assignedMealPlan: AssignedMealPlan | null) {

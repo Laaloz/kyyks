@@ -32,6 +32,7 @@ import { getVisiblePendingInvites } from "@/lib/invite-status";
 import {
   assignMealPlan,
   calculateMacroTarget,
+  deleteIngredientFromCatalog,
   recipeUsageSummary,
   removeRecipe,
   upsertIngredient,
@@ -2371,6 +2372,7 @@ interface AppStateContextValue {
   updateCurrentUserMeasurements: (input: UserMeasurementInput) => Promise<ActionResult>;
   saveNutritionProfile: (input: NutritionProfileInput) => Promise<ActionResult>;
   saveIngredient: (input: IngredientInput) => Promise<ActionResult>;
+  deleteIngredient: (ingredientId: string) => Promise<ActionResult>;
   saveRecipe: (input: RecipeInput) => Promise<ActionResult>;
   deleteRecipe: (recipeId: string) => Promise<ActionResult>;
   saveMealPlanTemplate: (input: MealPlanTemplateInput) => Promise<ActionResult>;
@@ -4286,6 +4288,29 @@ function findResolvedUserIdInSnapshot(
         }
 
         setState((previous) => upsertIngredient(previous, currentUser.id, input));
+        return { ok: true };
+      },
+      async deleteIngredient(ingredientId) {
+        if (!currentUser || currentUser.role !== "admin") {
+          return { ok: false, message: "Vain admin voi hallita raaka-aineita." };
+        }
+
+        if (supabase) {
+          const response = await fetch("/api/nutrition/ingredients", {
+            method: "DELETE",
+            headers: {
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({ id: ingredientId }),
+          });
+          const payload = (await response.json().catch(() => null)) as { message?: string } | null;
+          if (!response.ok) {
+            await refreshSupabaseVisibleState();
+            return { ok: false, message: payload?.message ?? "Raaka-aineen poisto epäonnistui." };
+          }
+        }
+
+        setState((previous) => deleteIngredientFromCatalog(previous, ingredientId));
         return { ok: true };
       },
       async saveRecipe(input) {
