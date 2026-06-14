@@ -229,8 +229,18 @@ function ProgramWorkoutPreviewDialog({
 function ExtraActivityDialog({
   activityType,
   durationMinutes,
+  occurredDate,
+  notes,
+  estimatedKcal,
+  isManualKcalEnabled,
+  manualKcal,
+  saving = false,
   onChangeActivityType,
   onChangeDurationMinutes,
+  onChangeOccurredDate,
+  onChangeNotes,
+  onToggleManualKcal,
+  onChangeManualKcal,
   onClose,
   onSave,
 }: {
@@ -241,6 +251,7 @@ function ExtraActivityDialog({
   estimatedKcal: number;
   isManualKcalEnabled: boolean;
   manualKcal: string;
+  saving?: boolean;
   onChangeActivityType: (value: ExtraActivityType) => void;
   onChangeDurationMinutes: (value: string) => void;
   onChangeOccurredDate: (value: string) => void;
@@ -324,8 +335,58 @@ function ExtraActivityDialog({
           </div>
         </div>
 
+        <div className="mt-6 flex items-center justify-between gap-4">
+          <p className="text-sm font-semibold tracking-[0.02em] text-[var(--text-subtle)]">Kulutus (kcal)</p>
+          {isManualKcalEnabled ? (
+            <input
+              type="number"
+              inputMode="numeric"
+              min={0}
+              value={manualKcal}
+              onChange={(event) => onChangeManualKcal(event.target.value)}
+              placeholder={String(estimatedKcal)}
+              aria-label="Kulutus kcal"
+              className="h-12 w-28 rounded-xl bg-[var(--surface-2)] px-3 text-right font-[family-name:var(--font-display)] text-base font-bold tabular-nums text-[var(--text)] outline-none"
+            />
+          ) : (
+            <output className="font-[family-name:var(--font-display)] text-base font-bold tabular-nums text-[var(--text)]">
+              {estimatedKcal}
+            </output>
+          )}
+        </div>
+        <label className="mt-2 flex items-center gap-2 text-sm text-[var(--text-muted)]">
+          <input
+            type="checkbox"
+            checked={isManualKcalEnabled}
+            onChange={(event) => onToggleManualKcal(event.target.checked)}
+            className="size-4"
+          />
+          Syötä kulutus itse (muuten arvio painon ja keston mukaan)
+        </label>
+
+        <label className="mt-6 flex items-center justify-between gap-4">
+          <span className="text-sm font-semibold tracking-[0.02em] text-[var(--text-subtle)]">Päivä</span>
+          <input
+            type="date"
+            value={occurredDate}
+            onChange={(event) => onChangeOccurredDate(event.target.value)}
+            className="h-12 rounded-xl bg-[var(--surface-2)] px-3 text-sm text-[var(--text)] outline-none"
+          />
+        </label>
+
+        <label className="mt-6 flex flex-col gap-1">
+          <span className="text-sm font-semibold tracking-[0.02em] text-[var(--text-subtle)]">Muistiinpano</span>
+          <input
+            type="text"
+            value={notes}
+            onChange={(event) => onChangeNotes(event.target.value)}
+            placeholder="valinnainen"
+            className="rounded-xl bg-[var(--surface-2)] px-3 py-2.5 text-sm text-[var(--text)] outline-none placeholder:text-[var(--text-subtle)]"
+          />
+        </label>
+
         <div className="mt-8">
-          <Button type="button" className="w-full" onClick={onSave}>
+          <Button type="button" className="w-full" loading={saving} disabled={saving} onClick={onSave}>
             Tallenna
           </Button>
         </div>
@@ -473,6 +534,8 @@ export function AthleteDashboard({
   const [measurementMessage, setMeasurementMessage] = useState("");
   const [measurementMessageTone, setMeasurementMessageTone] = useState<MeasurementMessageTone>("info");
   const [isSavingMeasurements, setIsSavingMeasurements] = useState(false);
+  const savingMeasurementRef = useRef(false);
+  const completingWorkoutRef = useRef(false);
   const [isMeasurementSheetOpen, setIsMeasurementSheetOpen] = useState(false);
   const isMeasurementDraftDirtyRef = useRef(false);
   const initializedMeasurementSheetUserIdRef = useRef<string | null>(null);
@@ -485,6 +548,8 @@ export function AthleteDashboard({
   const [extraActivityNotes, setExtraActivityNotes] = useState("");
   const [isManualExtraActivityKcalEnabled, setIsManualExtraActivityKcalEnabled] = useState(false);
   const [manualExtraActivityKcal, setManualExtraActivityKcal] = useState("");
+  const [isSavingExtraActivity, setIsSavingExtraActivity] = useState(false);
+  const savingExtraActivityRef = useRef(false);
   const [isExtraActivityDialogOpen, setIsExtraActivityDialogOpen] = useState(false);
   const [editingExtraActivityId, setEditingExtraActivityId] = useState<string | null>(null);
   const [showAllExtraActivities, setShowAllExtraActivities] = useState(false);
@@ -954,6 +1019,10 @@ export function AthleteDashboard({
       : null;
   const visibleMeasurementEntries = showAllMeasurementEntries ? bodyMetricEntries : bodyMetricEntries.slice(0, 12);
   const handleSaveMeasurement = async () => {
+    // Estä tuplatallennus (sama-tick-klikkaus ennen kuin nappi ehtii disabloitua).
+    if (savingMeasurementRef.current) {
+      return;
+    }
     const parsed = bodyMeasurementSchema.safeParse({
       heightCm: "",
       weightKg: measurementDraft.weightKg,
@@ -965,6 +1034,7 @@ export function AthleteDashboard({
       return;
     }
 
+    savingMeasurementRef.current = true;
     setIsSavingMeasurements(true);
     try {
       const measurementInput: { heightCm?: number; weightKg?: number; waistCm?: number } = {};
@@ -988,6 +1058,7 @@ export function AthleteDashboard({
         notify({ tone: "danger", message: result.message });
       }
     } finally {
+      savingMeasurementRef.current = false;
       setIsSavingMeasurements(false);
     }
   };
@@ -2017,6 +2088,11 @@ export function AthleteDashboard({
                   return result;
                 }}
                 onComplete={async () => {
+                  // Estä tuplaklikki sama-tick-tilanteessa (completeWorkout on lisäksi idempotentti).
+                  if (completingWorkoutRef.current) {
+                    return;
+                  }
+                  completingWorkoutRef.current = true;
                   const completedWorkoutId = selectedWorkout.id;
                   const completionPercent = progress?.percent ?? 0;
                   setIsCompletingWorkout(true);
@@ -2051,6 +2127,7 @@ export function AthleteDashboard({
                     setWorkoutMessage(result.message);
                     notify({ tone: "danger", message: result.message });
                   } finally {
+                    completingWorkoutRef.current = false;
                     setIsCompletingWorkout(false);
                   }
                 }}
@@ -2853,6 +2930,7 @@ export function AthleteDashboard({
           estimatedKcal={extraActivityEstimatedKcalPreview}
           isManualKcalEnabled={isManualExtraActivityKcalEnabled}
           manualKcal={manualExtraActivityKcal}
+          saving={isSavingExtraActivity}
           onChangeActivityType={setExtraActivityType}
           onChangeDurationMinutes={setExtraActivityDurationMinutes}
           onChangeOccurredDate={setExtraActivityDate}
@@ -2864,6 +2942,12 @@ export function AthleteDashboard({
             setEditingExtraActivityId(null);
           }}
           onSave={() => {
+            // Estä tuplatallennus: ohita jos edellinen tallennus on yhä kesken.
+            if (savingExtraActivityRef.current) {
+              return;
+            }
+            savingExtraActivityRef.current = true;
+            setIsSavingExtraActivity(true);
             void (async () => {
               const payload = {
                 activityType: extraActivityType,
@@ -2872,24 +2956,27 @@ export function AthleteDashboard({
                 occurredAt: new Date(`${extraActivityDate}T12:00:00`).toISOString(),
                 notes: extraActivityNotes,
               };
-              const result = editingExtraActivityId
-                ? await updateExtraActivity(editingExtraActivityId, payload)
-                : await addExtraActivity(payload);
-              if (result.ok) {
-                notify({
-                  tone: "success",
-                  message: editingExtraActivityId ? "Extra-treeni päivitetty." : "Extra-treeni lisätty historiaan.",
-                });
-              } else {
-                notify({ tone: "danger", message: result.message });
-              }
-              if (result.ok) {
-                setExtraActivityDurationMinutes("30");
-                setExtraActivityNotes("");
-                setIsManualExtraActivityKcalEnabled(false);
-                setManualExtraActivityKcal("");
-                setIsExtraActivityDialogOpen(false);
-                setEditingExtraActivityId(null);
+              try {
+                const result = editingExtraActivityId
+                  ? await updateExtraActivity(editingExtraActivityId, payload)
+                  : await addExtraActivity(payload);
+                if (result.ok) {
+                  notify({
+                    tone: "success",
+                    message: editingExtraActivityId ? "Extra-treeni päivitetty." : "Extra-treeni lisätty historiaan.",
+                  });
+                  setExtraActivityDurationMinutes("30");
+                  setExtraActivityNotes("");
+                  setIsManualExtraActivityKcalEnabled(false);
+                  setManualExtraActivityKcal("");
+                  setIsExtraActivityDialogOpen(false);
+                  setEditingExtraActivityId(null);
+                } else {
+                  notify({ tone: "danger", message: result.message });
+                }
+              } finally {
+                savingExtraActivityRef.current = false;
+                setIsSavingExtraActivity(false);
               }
             })();
           }}

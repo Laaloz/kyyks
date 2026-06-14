@@ -4678,23 +4678,28 @@ function findResolvedUserIdInSnapshot(
           currentUser.weightKg !== weightKg ||
           currentUser.waistCm !== waistCm;
 
-        if (!hasMeasurementChange) {
+        // True no-op vain jos käyttäjä ei kirjannut mitään eikä arvo muuttunut.
+        // Eksplisiittinen kirjaus tallentaa aina historiarivin (myös samalla arvolla),
+        // jottei "tallennettu"-viesti valehtele eikä mittaushistoriaan jää aukkoja.
+        if (!hasRecordedMetric && !hasMeasurementChange) {
           return { ok: true };
         }
 
         if (supabase) {
-          const { error: profileError } = await supabase
-            .from("profiles")
-            .update({
-              height_cm: heightCm ?? null,
-              weight_kg: weightKg ?? null,
-              waist_cm: waistCm ?? null,
-              updated_at: timestamp,
-            })
-            .eq("id", currentUser.id);
+          if (hasMeasurementChange) {
+            const { error: profileError } = await supabase
+              .from("profiles")
+              .update({
+                height_cm: heightCm ?? null,
+                weight_kg: weightKg ?? null,
+                waist_cm: waistCm ?? null,
+                updated_at: timestamp,
+              })
+              .eq("id", currentUser.id);
 
-          if (profileError) {
-            return { ok: false, message: "Mittatietojen tallennus epäonnistui." };
+            if (profileError) {
+              return { ok: false, message: "Mittatietojen tallennus epäonnistui." };
+            }
           }
 
           if (hasRecordedMetric) {
@@ -6782,7 +6787,8 @@ function findResolvedUserIdInSnapshot(
           return { ok: false, message: payload?.message ?? "Extra-treenin tallennus epäonnistui." };
         }
 
-        await refreshSupabaseVisibleState({ mode: "workouts" });
+        // Synkkaa palvelintila taustalla — ei blokata tallennuksen resolvea (nopeus + kapeampi tuplaklikki-ikkuna).
+        void refreshSupabaseVisibleState({ mode: "workouts" });
         return { ok: true };
       },
       async deleteExtraActivity(activityId) {
@@ -6819,7 +6825,8 @@ function findResolvedUserIdInSnapshot(
           return { ok: false, message: payload?.message ?? "Extra-treenin poisto epäonnistui." };
         }
 
-        await refreshSupabaseVisibleState({ mode: "workouts" });
+        // Synkkaa palvelintila taustalla — ei blokata tallennuksen resolvea (nopeus + kapeampi tuplaklikki-ikkuna).
+        void refreshSupabaseVisibleState({ mode: "workouts" });
         return { ok: true };
       },
       async updateExtraActivity(activityId, input) {
@@ -6899,7 +6906,8 @@ function findResolvedUserIdInSnapshot(
           return { ok: false, message: payload?.message ?? "Extra-treenin muokkaus epäonnistui." };
         }
 
-        await refreshSupabaseVisibleState({ mode: "workouts" });
+        // Synkkaa palvelintila taustalla — ei blokata tallennuksen resolvea (nopeus + kapeampi tuplaklikki-ikkuna).
+        void refreshSupabaseVisibleState({ mode: "workouts" });
         return { ok: true };
       },
       async addDayMeal(input) {
