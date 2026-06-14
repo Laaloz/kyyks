@@ -2693,6 +2693,9 @@ export function AppStateProvider({ children }: PropsWithChildren) {
   const lastResolvedAuthenticatedUserRef = useRef<UserProfile | null>(null);
   const lastResolvedCurrentUserRef = useRef<UserProfile | null>(null);
   const refreshSupabaseVisibleStatePromiseRef = useRef<Promise<boolean> | null>(null);
+  // Uloskirjautumisen aikana/jälkeen estää kesken olevaa synkkaa tai myöhästynyttä
+  // auth-eventtiä re-autentikoimasta käyttäjää (korjaa "kirjautuu heti takaisin sisään").
+  const isLoggingOutRef = useRef(false);
   const backgroundRefreshTimeoutRef = useRef<number | null>(null);
   const backgroundRefreshModeRef = useRef<"full" | "workouts" | null>(null);
   const backgroundRefreshSettledCallbacksRef = useRef<Array<() => void>>([]);
@@ -2877,6 +2880,12 @@ export function AppStateProvider({ children }: PropsWithChildren) {
 
     const syncFromAuthUser = async (authUser: SupabaseAuthUser | null, source: SupabaseAuthSyncSource) => {
       if (!active) {
+        return;
+      }
+
+      // Uloskirjautumisen jälkeen myöhästynyt SIGNED_IN/TOKEN_REFRESHED ei saa re-autentikoida.
+      // (Oikea kirjautuminen nollaa lipun ensin, joten sitä tämä ei estä.)
+      if (authUser?.email && isLoggingOutRef.current) {
         return;
       }
 
@@ -3257,10 +3266,10 @@ function findResolvedUserIdInSnapshot(
             authenticatedUserId,
             impersonatedUserId,
           );
-          if (resolvedSession.authenticatedUserId !== authenticatedUserId) {
+          if (!isLoggingOutRef.current && resolvedSession.authenticatedUserId !== authenticatedUserId) {
             setAuthenticatedUserId(resolvedSession.authenticatedUserId);
           }
-          if (resolvedSession.impersonatedUserId !== impersonatedUserId) {
+          if (!isLoggingOutRef.current && resolvedSession.impersonatedUserId !== impersonatedUserId) {
             setImpersonatedUserId(resolvedSession.impersonatedUserId);
           }
         }
@@ -4331,6 +4340,7 @@ function findResolvedUserIdInSnapshot(
       isHydrated,
       notify,
       async login(email, password, options) {
+        isLoggingOutRef.current = false;
         const localUser = state.users.find((candidate) => candidate.email.toLowerCase() === email.toLowerCase());
 
         if (
@@ -4365,6 +4375,7 @@ function findResolvedUserIdInSnapshot(
         return { ok: true };
       },
       async logout() {
+        isLoggingOutRef.current = true;
         try {
           window.localStorage.removeItem(SESSION_KEY);
         } catch {
@@ -4378,6 +4389,7 @@ function findResolvedUserIdInSnapshot(
         setImpersonatedUserId(null);
       },
       loginAsDemoUser(userId) {
+        isLoggingOutRef.current = false;
         setIsAuthTransitionPending(false);
         setAuthenticatedUserId(userId);
         setImpersonatedUserId(null);
