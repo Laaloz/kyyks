@@ -138,7 +138,7 @@ export function LoginScreen() {
             ) : null}
           </div>
           {requiresCaptcha ? (
-            <div className="space-y-2">
+            <div className="w-full space-y-2 [&_iframe]:!w-full [&>div]:!w-full">
               <HCaptcha
                 ref={captchaRef}
                 sitekey={hCaptchaSiteKey}

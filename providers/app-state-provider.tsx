@@ -3266,7 +3266,14 @@ function findResolvedUserIdInSnapshot(
             authenticatedUserId,
             impersonatedUserId,
           );
-          if (!isLoggingOutRef.current && resolvedSession.authenticatedUserId !== authenticatedUserId) {
+          // Taustasynkka saa vain RECONCILOIDA kirjautuneen käyttäjän (esim. bootstrap),
+          // ei koskaan kirjata ulos (asettaa null) — muuten ohimenevä null heti loginin
+          // jälkeen heittäisi takaisin login-näkymään. Uloskirjaus vain logout/SIGNED_OUT.
+          if (
+            !isLoggingOutRef.current &&
+            resolvedSession.authenticatedUserId &&
+            resolvedSession.authenticatedUserId !== authenticatedUserId
+          ) {
             setAuthenticatedUserId(resolvedSession.authenticatedUserId);
           }
           if (!isLoggingOutRef.current && resolvedSession.impersonatedUserId !== impersonatedUserId) {
