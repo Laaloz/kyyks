@@ -119,6 +119,7 @@ export function NutritionView({
   const [filter, setFilter] = useState<MealTag | "all">("all");
   const [query, setQuery] = useState("");
   const [editorOpen, setEditorOpen] = useState(false);
+  const [editRecipe, setEditRecipe] = useState<Recipe | null>(null);
   const [detail, setDetail] = useState<{ recipeId: string; entryId?: string } | null>(null);
   const [swapTarget, setSwapTarget] = useState<{ entryId: string; mealTag: MealTag; currentRecipeId: string } | null>(null);
   const [addTag, setAddTag] = useState<MealTag | null>(null);
@@ -131,6 +132,7 @@ export function NutritionView({
           icon: Plus,
           onClick: () => {
             setSeg("recipes");
+            setEditRecipe(null);
             setEditorOpen(true);
           },
         }
@@ -526,6 +528,22 @@ export function NutritionView({
             await setDayMealEaten(entryId, eaten);
           }}
           onClose={() => setDetail(null)}
+          onEdit={
+            !readOnly &&
+            recipeById.get(detail.recipeId)?.ownerRole === "athlete" &&
+            recipeById.get(detail.recipeId)?.createdBy === user.id
+              ? () => {
+                  const target = recipeById.get(detail.recipeId);
+                  if (!target) {
+                    return;
+                  }
+                  setDetail(null);
+                  setEditRecipe(target);
+                  setSeg("recipes");
+                  setEditorOpen(true);
+                }
+              : undefined
+          }
         />
       ) : null}
 
@@ -567,9 +585,14 @@ export function NutritionView({
 
       {editorOpen ? (
         <OwnRecipeEditor
-          onClose={() => setEditorOpen(false)}
+          initialRecipe={editRecipe}
+          onClose={() => {
+            setEditorOpen(false);
+            setEditRecipe(null);
+          }}
           onSaved={() => {
             setEditorOpen(false);
+            setEditRecipe(null);
             setSeg("recipes");
           }}
         />
@@ -585,6 +608,7 @@ function RecipeDetailSheet({
   readOnly,
   onToggleEaten,
   onClose,
+  onEdit,
 }: {
   recipe: Recipe | null;
   catalog: AppState["ingredientsCatalog"];
@@ -592,6 +616,7 @@ function RecipeDetailSheet({
   readOnly: boolean;
   onToggleEaten: (entryId: string, eaten: boolean) => void | Promise<void>;
   onClose: () => void;
+  onEdit?: () => void;
 }) {
   const [servings, setServings] = useState(recipe?.defaultServings ?? 1);
   const [isPending, setIsPending] = useState(false);
@@ -661,6 +686,15 @@ function RecipeDetailSheet({
             </p>
             <h2 className="mt-1 font-[family-name:var(--font-display)] text-2xl font-bold leading-tight text-[var(--text)]">{recipe.name}</h2>
           </div>
+          {onEdit ? (
+            <button
+              type="button"
+              onClick={onEdit}
+              className="shrink-0 rounded-full bg-[var(--surface-2)] px-3 py-1.5 text-xs font-semibold text-[var(--text-muted)] transition hover:text-[var(--text)]"
+            >
+              Muokkaa
+            </button>
+          ) : null}
         </div>
 
         <div className="mt-3 min-h-0 flex-1 overflow-y-auto">

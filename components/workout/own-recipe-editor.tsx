@@ -12,7 +12,7 @@ import {
   resolveRecipeIngredientNormalizedQuantity,
   resolveRecipeNutritionPreview,
 } from "@/lib/nutrition";
-import type { MealTag, RecipeIngredient, RecipeInput } from "@/lib/types";
+import type { MealTag, Recipe, RecipeIngredient, RecipeInput } from "@/lib/types";
 import { useAppState } from "@/providers/app-state-provider";
 
 const MEAL_TAG_ORDER: MealTag[] = ["breakfast", "lunch", "snack", "dinner", "evening_snack"];
@@ -30,18 +30,35 @@ type DraftRow = {
 
 export function OwnRecipeEditor({
   initialMealTag = "breakfast",
+  initialRecipe,
   onClose,
   onSaved,
 }: {
   initialMealTag?: MealTag;
+  initialRecipe?: Recipe | null;
   onClose: () => void;
   onSaved?: (recipeName: string) => void;
 }) {
   const { state, saveRecipe } = useAppState();
-  const [name, setName] = useState("");
-  const [mealTag, setMealTag] = useState<MealTag>(initialMealTag);
-  const [rows, setRows] = useState<DraftRow[]>([]);
-  const [instructions, setInstructions] = useState("");
+  const isEditing = Boolean(initialRecipe);
+  const [name, setName] = useState(() => initialRecipe?.name ?? "");
+  const [mealTag, setMealTag] = useState<MealTag>(initialRecipe?.mealTag ?? initialMealTag);
+  const [rows, setRows] = useState<DraftRow[]>(() =>
+    (initialRecipe?.ingredients ?? []).map((ing) => ({
+      key: ing.id,
+      ingredientId: ing.ingredientId ?? "",
+      ingredientName: ing.ingredientName,
+      grams: ing.quantity !== undefined ? String(ing.quantity) : "",
+      groupLabel: ing.groupLabel ?? "",
+      alternatives: (ing.alternativeOptions ?? []).map((alt, index) => ({
+        key: `${ing.id}-alt-${index}`,
+        ingredientId: alt.ingredientId ?? "",
+        ingredientName: alt.ingredientName,
+        grams: String(alt.grams),
+      })),
+    })),
+  );
+  const [instructions, setInstructions] = useState(() => initialRecipe?.instructions ?? "");
   const [query, setQuery] = useState("");
   const [altSearchRowKey, setAltSearchRowKey] = useState<string | null>(null);
   const [altQuery, setAltQuery] = useState("");
@@ -125,6 +142,7 @@ export function OwnRecipeEditor({
     setError("");
     try {
       const input: RecipeInput = {
+        id: initialRecipe?.id,
         name: name.trim(),
         instructions: instructions.trim(),
         mealTag,
@@ -163,7 +181,7 @@ export function OwnRecipeEditor({
   return (
     <FullScreenOverlay onClose={onClose} ariaLabel="Oma resepti" closeOnEscape={false} scroll={false}>
       <div className="flex items-center justify-between gap-3 border-b border-[var(--border)] px-4 py-3.5">
-        <CardTitle>Oma resepti</CardTitle>
+        <CardTitle>{isEditing ? "Muokkaa reseptiä" : "Oma resepti"}</CardTitle>
         <button
           type="button"
           className="grid size-9 place-items-center rounded-full bg-[var(--surface-2)] text-[var(--text-subtle)]"
@@ -455,7 +473,7 @@ export function OwnRecipeEditor({
           disabled={!canSave}
           onClick={() => void handleSave()}
         >
-          Tallenna resepti
+          {isEditing ? "Tallenna muutokset" : "Tallenna resepti"}
         </Button>
       </div>
     </FullScreenOverlay>
