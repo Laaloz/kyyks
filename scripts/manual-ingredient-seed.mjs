@@ -145,6 +145,13 @@ const manualIngredientSeedBase = [
   { name: "Juusto alle 10%", source: "manual", defaultPurchaseUnit: "pack", gramsPerUnit: 100, kcalPer100: 170, proteinPer100: 29, carbsPer100: 1, fatPer100: 9 },
   { name: "Atria rahkaohukainen kaakao-vadelma", source: "manual", defaultPurchaseUnit: "pack", gramsPerUnit: 65, kcalPer100: 250, proteinPer100: 11, carbsPer100: 28, fatPer100: 10 },
   { name: "Profeel proteiinivanukas suklaa", source: "manual", defaultPurchaseUnit: "pack", gramsPerUnit: 180, kcalPer100: 83, proteinPer100: 10.5, carbsPer100: 7.5, fatPer100: 0.8 },
+  { name: "Kaakaojauhe", source: "manual", defaultPurchaseUnit: "g", kcalPer100: 350, proteinPer100: 22, carbsPer100: 14, fatPer100: 11 },
+  { name: "Tumma suklaa", source: "manual", defaultPurchaseUnit: "g", kcalPer100: 600, proteinPer100: 7.8, carbsPer100: 46, fatPer100: 43 },
+  { name: "Mantelimaito", source: "manual", defaultPurchaseUnit: "l", kcalPer100: 15, proteinPer100: 0.5, carbsPer100: 0.2, fatPer100: 1.2 },
+  { name: "Kasvimaito", source: "manual", defaultPurchaseUnit: "l", kcalPer100: 45, proteinPer100: 1.0, carbsPer100: 6.6, fatPer100: 1.5 },
+  { name: "Saksanpähkinä", source: "manual", defaultPurchaseUnit: "g", kcalPer100: 654, proteinPer100: 15.2, carbsPer100: 13.7, fatPer100: 65.2 },
+  { name: "Voi", source: "manual", defaultPurchaseUnit: "g", kcalPer100: 737, proteinPer100: 0.7, carbsPer100: 0.6, fatPer100: 81.5 },
+  { name: "Espresso", source: "manual", defaultPurchaseUnit: "l", kcalPer100: 2, proteinPer100: 0.1, carbsPer100: 0, fatPer100: 0 },
 ];
 
 const displayNameOverrides = {
