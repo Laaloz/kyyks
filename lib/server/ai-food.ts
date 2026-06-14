@@ -5,10 +5,11 @@ import { z } from "zod";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import type { SupabaseClient } from "@supabase/supabase-js";
 
-// Gemini Flash on halvin/ilmaisin reitti. Malli-ID ja ilmaistason kiintiöt kannattaa
-// vahvistaa Google AI Studiosta (Google muuttaa näitä) — siksi GEMINI_MODEL voi
-// ylikirjoittaa oletuksen ilman koodimuutosta.
-const DEFAULT_MODEL = "gemini-2.0-flash";
+// gemini-3.5-flash: paras Flash-laatu teksti- ja kuvahaulle (multimodaali), kulu sentit/kk
+// nykykäytöllä. Google poistaa malli-ID:itä ajoittain (esim. gemini-2.0-flash → 404
+// "no longer available"), joten GEMINI_MODEL voi ylikirjoittaa oletuksen ilman koodimuutosta.
+// Vahvista saatavuus Google AI Studiosta.
+const DEFAULT_MODEL = "gemini-3.5-flash";
 const DAILY_LIMIT = 30;
 
 const IMAGE_PROMPT = [
@@ -166,6 +167,11 @@ async function runGeminiEstimate(
         generationConfig: {
           responseMimeType: "application/json",
           responseSchema: RESPONSE_SCHEMA,
+          // Ruoka-arvio on muistinvaraista poimintaa, ei päättelyä — "thinking" ei paranna
+          // tulosta mutta hidastaa rajusti (3.5-flash: ~7s → ~1s) ja maksaa. 3.5 kunnioittaa
+          // budjetin 0 täysin (thoughtTokens=0). Koodi ei rajaa maxOutputTokens → JSON ei jää
+          // tyhjäksi vaikka jokin malli pakottaisi minimi-thinkingin.
+          thinkingConfig: { thinkingBudget: 0 },
         },
       }),
     });
