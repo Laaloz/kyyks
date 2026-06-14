@@ -15,12 +15,9 @@ import { useAppState } from "@/providers/app-state-provider";
 
 export function AdminUserManagementPanel({ focusUserId }: { focusUserId?: string } = {}) {
   const {
-    authenticatedUser,
     currentUser,
-    isImpersonating,
     notify,
     state,
-    startAdminImpersonation,
     adminDeleteUser,
     adminSendPasswordResetEmail,
     adminUpdateUserRole,
@@ -171,37 +168,19 @@ export function AdminUserManagementPanel({ focusUserId }: { focusUserId?: string
         ) : null}
 
         {selectedManagedUser ? (
-              <div className="mt-4 grid gap-4 rounded-2xl border-2 border-[var(--border)] bg-[var(--surface-2)] p-4">
-                <div className="flex flex-wrap items-start justify-between gap-3">
-                  <div>
-                    <p className="font-medium text-[var(--text)]">{selectedManagedUser.fullName}</p>
-                    <p className="text-sm text-[var(--text-muted)]">{selectedManagedUser.email}</p>
+              <div className="mt-4 space-y-5">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <p className="font-[family-name:var(--font-display)] text-lg font-bold text-[var(--text)]">
+                      {selectedManagedUser.fullName}
+                    </p>
+                    <p className="truncate text-sm text-[var(--text-muted)]">{selectedManagedUser.email}</p>
                     <div className="mt-2 flex flex-wrap gap-2">
                       <Badge>{roleLabel(selectedManagedUser.role)}</Badge>
-                      <Badge>{selectedManagedUser.status === "active" ? "Aktiivinen" : "Kutsu odottaa"}</Badge>
-                      {(selectedManagedUser.role === "athlete" || selectedManagedUser.role === "independent_athlete") &&
-                      selectedManagedAthleteCoachIds.length > 0 ? (
-                        <Badge>Valmentajia: {selectedManagedAthleteCoachIds.length}</Badge>
-                      ) : null}
+                      {selectedManagedUser.status !== "active" ? <Badge>Kutsu odottaa</Badge> : null}
                     </div>
                   </div>
-                  <div className="flex flex-wrap items-center gap-2">
-                    <Button
-                      type="button"
-                      variant="primary"
-                      disabled={selectedManagedUser.status !== "active"}
-                      onClick={() => {
-                        const result = startAdminImpersonation(selectedManagedUser.id);
-                        setAdminMessage(result.ok ? `Vaihdoit käyttäjäksi: ${selectedManagedUser.fullName}.` : result.message);
-                        setAdminMessageTone(result.ok ? "success" : "danger");
-                        notify({
-                          tone: result.ok ? "success" : "danger",
-                          message: result.ok ? "Käyttäjän vaihto aktivoitiin." : result.message,
-                        });
-                      }}
-                    >
-                      Vaihda käyttäjäksi
-                    </Button>
+                  <div className="flex shrink-0 items-center gap-2">
                     <details className="relative">
                       <summary className="inline-flex size-10 list-none items-center justify-center rounded-full border border-[var(--border)] bg-[var(--surface)] p-0 text-[var(--text-muted)] transition hover:border-[var(--border-strong)] hover:bg-[var(--surface-2)] hover:text-[var(--text)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--surface)]">
                         <MoreHorizontal className="size-4" aria-hidden="true" />
@@ -289,18 +268,16 @@ export function AdminUserManagementPanel({ focusUserId }: { focusUserId?: string
                   </div>
                 </div>
 
-                <div className="grid gap-3 rounded-xl border border-[var(--border)] bg-[var(--surface)] p-3">
-                  <div className="flex flex-wrap items-center justify-between gap-3">
-                    <Label htmlFor="admin-managed-role" className="mb-0">
-                      Rooli
-                    </Label>
+                <div>
+                  <div className="flex items-center justify-between gap-3">
+                    <Label htmlFor="admin-managed-role" className="mb-0">Rooli</Label>
                     {isRoleDirty ? (
                       <Button
                         type="button"
                         variant="secondary"
-                        className="w-full sm:w-auto"
+                        className="!h-9 !px-3 text-sm"
                         loading={isSavingRole}
-                        loadingText="Tallennetaan roolia..."
+                        loadingText="Tallennetaan…"
                         onClick={async () => {
                           setIsSavingRole(true);
                           try {
@@ -317,43 +294,35 @@ export function AdminUserManagementPanel({ focusUserId }: { focusUserId?: string
                           }
                         }}
                       >
-                        Tallenna rooli
+                        Tallenna
                       </Button>
-                    ) : (
-                      <Badge>Ei muutoksia</Badge>
-                    )}
+                    ) : null}
                   </div>
-                  <div>
-                    <Select
-                      id="admin-managed-role"
-                      value={selectedManagedRole}
-                      onChange={(event) => setSelectedManagedRole(event.target.value as Role)}
-                    >
-                      <option value="admin">Admin</option>
-                      <option value="coach">Valmentaja</option>
-                      <option value="athlete">Treenaaja</option>
-                      <option value="independent_athlete">Itsenäinen treenaaja</option>
-                    </Select>
-                    <p className="mt-2 text-xs text-[var(--text-subtle)]">
-                      Roolin vaihto siivoaa vain ristiriitaiset valmentaja-treenaaja-suhteet. Muu käyttäjädata säilyy.
-                    </p>
-                  </div>
+                  <Select
+                    className="mt-2"
+                    id="admin-managed-role"
+                    value={selectedManagedRole}
+                    onChange={(event) => setSelectedManagedRole(event.target.value as Role)}
+                  >
+                    <option value="admin">Admin</option>
+                    <option value="coach">Valmentaja</option>
+                    <option value="athlete">Treenaaja</option>
+                    <option value="independent_athlete">Itsenäinen treenaaja</option>
+                  </Select>
                 </div>
 
                 {selectedManagedUser.role === "athlete" || selectedManagedUser.role === "independent_athlete" ? (
-                  <div className="grid gap-3 rounded-xl border border-[var(--border)] bg-[var(--surface)] p-3">
-                    <div className="flex flex-wrap items-center justify-between gap-3">
-                      <Label htmlFor="admin-managed-coaches" className="mb-0">
-                        Vastuuhenkilöt
-                      </Label>
+                  <div>
+                    <div className="flex items-center justify-between gap-3">
+                      <Label htmlFor="admin-managed-coaches" className="mb-0">Vastuuhenkilöt</Label>
                       {isCoachSelectionDirty ? (
                         <Button
                           type="button"
                           variant="secondary"
-                          className="w-full sm:w-auto"
+                          className="!h-9 !px-3 text-sm"
                           disabled={selectedManagedCoachIds.length === 0}
                           loading={isSavingCoaches}
-                          loadingText="Tallennetaan vastuuhenkilöitä..."
+                          loadingText="Tallennetaan…"
                           onClick={async () => {
                             setIsSavingCoaches(true);
                             try {
@@ -370,17 +339,11 @@ export function AdminUserManagementPanel({ focusUserId }: { focusUserId?: string
                             }
                           }}
                         >
-                          Tallenna vastuuhenkilöt
+                          Tallenna
                         </Button>
-                      ) : (
-                        <Badge>Ei muutoksia</Badge>
-                      )}
+                      ) : null}
                     </div>
-                    <div>
-                      <div
-                        id="admin-managed-coaches"
-                        className="grid gap-2"
-                      >
+                    <div id="admin-managed-coaches" className="mt-2 grid gap-2">
                         {assignableCoaches.map((user) => {
                           const checked = selectedManagedCoachIds.includes(user.id);
                           return (
@@ -411,60 +374,32 @@ export function AdminUserManagementPanel({ focusUserId }: { focusUserId?: string
                             </label>
                           );
                         })}
-                      </div>
-                      <p className="mt-2 text-xs text-[var(--text-subtle)]">
-                        Voit valita treenaajalle useamman valmennuskelpoisen vastuuhenkilön. Myös admin voidaan
-                        liittää tähän listaan.
-                      </p>
-                    </div>
-                    <div className="flex flex-wrap items-center gap-3">
-                      <p className="text-xs text-[var(--text-subtle)]">
-                        Valittuna {selectedManagedCoachIds.length} / {assignableCoaches.length}
-                      </p>
                     </div>
                   </div>
                 ) : null}
-              </div>
-            ) : null}
-          <p
-            aria-live="polite"
-            className={`mt-4 text-sm ${
-              !adminMessage
-                ? "text-[var(--text-subtle)]"
-                : adminMessageTone === "success"
-                  ? "text-[var(--success)]"
-                  : "text-[var(--danger)]"
-            }`}
-          >
-            {adminMessage ||
-              (selectedManagedUser
-                ? "Päivitä rooli, vastuuhenkilöt tai käytä valitun käyttäjän toimintoja."
-                : "Valitse käyttäjä aloittaaksesi hallinnan.")}
-          </p>
-
-          {isImpersonating && authenticatedUser ? (
-            <p className="mt-2 text-xs text-[var(--text-subtle)]">
-              Käyttäjän vaihto on aktiivinen. Olet kirjautuneena adminina ({authenticatedUser.fullName}), mutta toimit
-              nyt valittuna käyttäjänä.
+          {adminMessage ? (
+            <p
+              aria-live="polite"
+              className={`text-sm ${adminMessageTone === "success" ? "text-[var(--success)]" : "text-[var(--danger)]"}`}
+            >
+              {adminMessage}
             </p>
           ) : null}
 
           {previewResetUrl ? (
-            <div className="mt-4 grid gap-3 rounded-xl border-2 border-[var(--border)] bg-[var(--surface-2)] p-4">
-              <p className="text-xs font-semibold tracking-[0.03em] text-[var(--text-subtle)]">Sähköpostin esikatselu</p>
-              <p className="text-sm text-[var(--text-muted)]">
-                Demo-ympäristössä voit avata tästä nollauslinkin esikatselun. Tuotannossa linkki lähetetään suoraan
-                käyttäjän sähköpostiin.
-              </p>
+            <div className="grid gap-2 rounded-2xl border border-[var(--border)] bg-[var(--surface-2)] p-3">
+              <p className="text-xs font-semibold tracking-[0.03em] text-[var(--text-subtle)]">Sähköpostin nollauslinkki</p>
               <a
                 href={previewResetUrl}
                 aria-label={`Avaa salasanan nollauslinkin esikatselu käyttäjälle ${selectedManagedUser?.email ?? "valittu käyttäjä"}`}
-                className="inline-flex w-full items-center justify-center rounded-xl border-2 border-[var(--border-strong)] bg-[var(--surface)] px-3 py-2 text-sm font-semibold text-[var(--text)] transition duration-150 hover:bg-[var(--surface-3)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--background)] sm:w-fit"
+                className="inline-flex w-full items-center justify-center rounded-xl border border-[var(--border-strong)] bg-[var(--surface)] px-3 py-2 text-sm font-semibold text-[var(--text)] transition hover:bg-[var(--surface-3)]"
               >
-                Avaa nollauslinkin esikatselu
+                Avaa nollauslinkki
               </a>
             </div>
           ) : null}
+          </div>
+        ) : null}
       </Card>
     </div>
   );
