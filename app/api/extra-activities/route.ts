@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 
-import { estimateExtraActivityKcal } from "@/lib/extra-activities";
+import { estimateExtraActivityKcal, extraActivityCatalog } from "@/lib/extra-activities";
 import type { ExtraActivityType, Role } from "@/lib/types";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 
@@ -31,10 +31,7 @@ export async function POST(request: Request) {
   const manualKcal = Number(body?.manualKcal ?? 0);
   const occurredAt = body?.occurredAt;
 
-  if (
-    !activityType ||
-    !["run", "walk", "cycle", "swim", "climb", "hike", "row", "ski", "yoga", "hiit", "combat", "dance", "mobility", "other"].includes(activityType)
-  ) {
+  if (!activityType || !Object.prototype.hasOwnProperty.call(extraActivityCatalog, activityType)) {
     return NextResponse.json({ message: "Valitse extra-treenin tyyppi." }, { status: 400 });
   }
 
