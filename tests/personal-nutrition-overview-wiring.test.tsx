@@ -3,28 +3,14 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { AthleteDashboard } from "@/components/workout/athlete-dashboard";
 
-vi.mock("@/components/workout/personal-nutrition-summary-card", () => ({
-  PersonalNutritionSummaryCard: () => <div>PersonalNutritionSummaryCard</div>,
-}));
-
-vi.mock("@/components/workout/nutrition-athlete-card", () => ({
-  NutritionAthleteCard: () => <div>NutritionAthleteCard</div>,
-}));
-
 vi.mock("@/components/workout/nutrition-view", () => ({
   NutritionView: () => <div>NutritionView</div>,
-}));
-
-vi.mock("@/components/workout/own-measurements-card", () => ({
-  OwnMeasurementsCard: () => <div>OwnMeasurementsCard</div>,
 }));
 
 vi.mock("@/components/workout/shared", async () => {
   const actual = await vi.importActual<object>("@/components/workout/shared");
   return {
     ...actual,
-    OwnTrainingOverviewCard: () => <div>OwnTrainingOverviewCard</div>,
-    MetricGrid: () => <div>MetricGrid</div>,
     roleLabel: (role: string) => role,
   };
 });

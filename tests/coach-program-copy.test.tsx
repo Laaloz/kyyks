@@ -13,14 +13,6 @@ vi.mock("@/components/workout/metric-trend-chart", () => ({
   MetricTrendChart: () => <div>MetricTrendChart</div>,
 }));
 
-vi.mock("@/components/workout/own-measurements-card", () => ({
-  OwnMeasurementsCard: () => <div>OwnMeasurementsCard</div>,
-}));
-
-vi.mock("@/components/workout/personal-nutrition-summary-card", () => ({
-  PersonalNutritionSummaryCard: () => <div>PersonalNutritionSummaryCard</div>,
-}));
-
 vi.mock("@/components/workout/coach/invite-panel", () => ({
   CoachInvitePanel: () => <div>CoachInvitePanel</div>,
 }));
@@ -33,8 +25,6 @@ vi.mock("@/components/workout/shared", async () => {
   const actual = await vi.importActual<object>("@/components/workout/shared");
   return {
     ...actual,
-    OwnTrainingOverviewCard: () => <div>OwnTrainingOverviewCard</div>,
-    MetricGrid: () => <div>MetricGrid</div>,
     roleLabel: (role: string) => role,
   };
 });
