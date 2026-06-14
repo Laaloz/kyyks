@@ -2613,6 +2613,9 @@ export function AppStateProvider({ children }: PropsWithChildren) {
   const lastResolvedAuthenticatedUserRef = useRef<UserProfile | null>(null);
   const lastResolvedCurrentUserRef = useRef<UserProfile | null>(null);
   const refreshSupabaseVisibleStatePromiseRef = useRef<Promise<boolean> | null>(null);
+  const backgroundRefreshTimeoutRef = useRef<number | null>(null);
+  const backgroundRefreshModeRef = useRef<"full" | "workouts" | null>(null);
+  const backgroundRefreshSettledCallbacksRef = useRef<Array<() => void>>([]);
   const lastFullSnapshotSyncAtRef = useRef(0);
   const workoutMutationQueueRef = useRef<Map<string, WorkoutMutationQueueState>>(new Map());
   const workoutMutationRunnerRef = useRef<Map<string, Promise<void>>>(new Map());
@@ -3161,6 +3164,39 @@ function findResolvedUserIdInSnapshot(
         refreshSupabaseVisibleStatePromiseRef.current = null;
       }
     }
+  }
+
+  function scheduleSupabaseVisibleStateRefresh(options?: {
+    mode?: "full" | "workouts";
+    onSettled?: () => void;
+  }) {
+    if (!supabase) {
+      options?.onSettled?.();
+      return;
+    }
+
+    if (options?.onSettled) {
+      backgroundRefreshSettledCallbacksRef.current.push(options.onSettled);
+    }
+
+    const requestedMode = options?.mode ?? "full";
+    backgroundRefreshModeRef.current =
+      requestedMode === "full" || backgroundRefreshModeRef.current === "full" ? "full" : "workouts";
+
+    if (backgroundRefreshTimeoutRef.current) {
+      window.clearTimeout(backgroundRefreshTimeoutRef.current);
+    }
+
+    backgroundRefreshTimeoutRef.current = window.setTimeout(() => {
+      backgroundRefreshTimeoutRef.current = null;
+      const mode = backgroundRefreshModeRef.current ?? "full";
+      backgroundRefreshModeRef.current = null;
+      const callbacks = backgroundRefreshSettledCallbacksRef.current.splice(0);
+
+      void refreshSupabaseVisibleState({ mode }).finally(() => {
+        callbacks.forEach((callback) => callback());
+      });
+    }, 150);
   }
 
   async function ensureWorkoutVisibleInState(
@@ -6632,7 +6668,7 @@ function findResolvedUserIdInSnapshot(
               method: "DELETE",
             }).catch(() => null);
           }
-          await refreshSupabaseVisibleState({ mode: "full" });
+          scheduleSupabaseVisibleStateRefresh({ mode: "full" });
           return { ok: true };
         }
 
@@ -6645,8 +6681,10 @@ function findResolvedUserIdInSnapshot(
           }));
         }
 
-        await refreshSupabaseVisibleState({ mode: "full" });
-        pendingDayMealCreatesRef.current.delete(optimisticId);
+        scheduleSupabaseVisibleStateRefresh({
+          mode: "full",
+          onSettled: () => pendingDayMealCreatesRef.current.delete(optimisticId),
+        });
         return { ok: true };
       },
       async swapDayMeal(entryId, recipeId) {
@@ -6690,7 +6728,7 @@ function findResolvedUserIdInSnapshot(
           return { ok: false, message: payload?.message ?? "Aterian vaihto epäonnistui." };
         }
 
-        await refreshSupabaseVisibleState({ mode: "full" });
+        scheduleSupabaseVisibleStateRefresh({ mode: "full" });
         return { ok: true };
       },
       async removeDayMeal(entryId) {
@@ -6733,7 +6771,7 @@ function findResolvedUserIdInSnapshot(
           return { ok: false, message: payload?.message ?? "Aterian poisto epäonnistui." };
         }
 
-        await refreshSupabaseVisibleState({ mode: "full" });
+        scheduleSupabaseVisibleStateRefresh({ mode: "full" });
         return { ok: true };
       },
       async setDayMealEaten(entryId, eaten) {
@@ -6774,7 +6812,7 @@ function findResolvedUserIdInSnapshot(
           return { ok: false, message: payload?.message ?? "Aterian merkintä epäonnistui." };
         }
 
-        await refreshSupabaseVisibleState({ mode: "full" });
+        scheduleSupabaseVisibleStateRefresh({ mode: "full" });
         return { ok: true };
       },
       async updateWorkoutSet(scheduledWorkoutId, logId, patch) {
