@@ -70,7 +70,7 @@ export function AdminInvitesView() {
   };
 
   return (
-    <div className="flex w-full min-w-0 flex-col gap-2">
+    <div className="flex w-full min-w-0 flex-col gap-6">
       {isFormOpen ? (
         <Card className="border-[var(--border-strong)]">
           <div className="flex items-start justify-between gap-3">

@@ -2789,7 +2789,7 @@ function CoachTeamView({
   }, [isInviteSheetOpen]);
 
   return (
-    <div className="flex w-full min-w-0 flex-col gap-2">
+    <div className="flex w-full min-w-0 flex-col gap-6">
       <Segmented
         ariaLabel="Tiimi tai ohjelmat"
         value={segment}
@@ -2864,13 +2864,13 @@ function CoachTeamView({
             <>
               <SectionLabel label="Valmentajat" meta={`${otherCoaches.length} aktiivinen`} />
               {otherCoaches.length ? (
-                <div className="overflow-hidden rounded-2xl border border-[var(--border)] bg-[var(--surface)] shadow-[0_1px_2px_var(--shadow-soft)]">
+                <div className="flex flex-col gap-3">
                   {otherCoaches.map(({ coach, athleteCount, activePrograms }) => (
                     <button
                       key={coach.id}
                       type="button"
                       className={cn(
-                        "flex w-full items-center justify-between gap-3 border border-transparent p-4 text-left transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--surface)]",
+                        "flex w-full items-center justify-between gap-3 rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-4 text-left shadow-[0_1px_2px_var(--shadow-soft)] transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--background)]",
                         TEAM_CARD_HOVER,
                       )}
                       aria-label={`Hallitse: ${coach.fullName}`}

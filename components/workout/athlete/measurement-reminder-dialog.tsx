@@ -44,8 +44,8 @@ export function MeasurementReminderDialog({
           Kirjaa paino ja vyötärö kerran viikossa. Kun tiedot ovat ajan tasalla,
           kehon seuranta, kehitysgraafit ja kaloriarvio pysyvät hyödyllisinä.
         </p>
-        <div className="mt-4 grid gap-4 divide-y divide-[var(--border)] sm:grid-cols-2 sm:divide-y-0 sm:divide-x">
-          <div className="sm:pr-4">
+        <div className="mt-4 grid divide-y divide-[var(--border)] sm:grid-cols-2 sm:divide-y-0 sm:divide-x">
+          <div className="sm:pr-4 pb-4">
             <p className="text-sm font-semibold text-[var(--text)]">
               Paino — {weightDue ? "päivitä tänä viikonloppuna" : "tämän viikon merkintä kunnossa"}
             </p>
