@@ -12,10 +12,6 @@ export function getMeasurementsForUser(state: Pick<AppState, "bodyMeasurements">
     .sort(sortMeasurementsNewestFirst);
 }
 
-export function getLatestMeasurement(state: Pick<AppState, "bodyMeasurements">, userId: string) {
-  return getMeasurementsForUser(state, userId)[0];
-}
-
 export function getWeightAtMoment(
   user: Pick<UserProfile, "weightKg"> | undefined,
   measurements: BodyMeasurement[],

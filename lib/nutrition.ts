@@ -37,13 +37,6 @@ export type PersonalNutritionGoalComparison = {
   calculationMode?: NutritionProfile["calculationMode"];
 };
 
-export type RecipeCompatibilityAlert = {
-  key: string;
-  category: "allergy" | "dietary";
-  label: string;
-  matchedIngredients: string[];
-};
-
 export type MealSlotKcalStatus = "below" | "within" | "above";
 export type MealSlotGroupId = "morning_evening" | "main" | "snack";
 
@@ -682,79 +675,6 @@ export function buildRecipeGoalComparison(
   };
 }
 
-function findMatchedIngredientNames(ingredientNames: string[], keywords: readonly string[]) {
-  const normalizedKeywords = keywords.map((keyword) => normalizeFoodText(keyword));
-  return ingredientNames.filter((ingredientName) =>
-    normalizedKeywords.some((keyword) => ingredientName.includes(keyword)),
-  );
-}
-
-export function getRecipeCompatibilityAlerts(
-  recipe: Pick<Recipe, "ingredients" | "dietaryFlags" | "allergies">,
-  profile?: Pick<NutritionProfile, "dietaryFlags" | "allergies"> | null,
-) {
-  if (!profile) {
-    return [] as RecipeCompatibilityAlert[];
-  }
-
-  const ingredientNames = recipe.ingredients
-    .map((ingredient) => normalizeFoodText(ingredient.ingredientName))
-    .filter(Boolean);
-
-  if (ingredientNames.length === 0) {
-    return [] as RecipeCompatibilityAlert[];
-  }
-
-  const alerts: RecipeCompatibilityAlert[] = [];
-  const explicitAllergies = new Set(recipe.allergies ?? []);
-  const explicitDietaryFlags = new Set(recipe.dietaryFlags ?? []);
-
-  const allergyRules: Record<string, readonly string[]> = {
-    maito: ["maito", "juusto", "jogurtti", "rahka", "raejuusto", "tuorejuusto", "kerma", "mozzarella", "feta", "parmesan", "skyr"],
-    kananmuna: ["kananmuna", "muna", "valkuainen"],
-    kala: ["kala", "lohi", "tonnikala"],
-    äyriäiset: ["ayriainen", "katkarapu", "rapu", "shrimp"],
-    pähkinä: ["pahkina", "manteli", "cashew", "maapahkina", "pekaanipahkina", "saksanpahkina"],
-    soija: ["soija", "tofu", "soijakastike"],
-    seesami: ["seesami", "tahini"],
-  };
-
-  for (const allergy of profile.allergies ?? []) {
-    const matchedIngredients = findMatchedIngredientNames(ingredientNames, allergyRules[allergy] ?? [allergy]);
-    if (explicitAllergies.has(allergy) || matchedIngredients.length > 0) {
-      alerts.push({
-        key: `allergy-${allergy}`,
-        category: "allergy",
-        label: `Mahdollinen allergeeniriski: ${allergy}`,
-        matchedIngredients: matchedIngredients.length > 0 ? matchedIngredients : [allergy],
-      });
-    }
-  }
-
-  const dietaryRules: Record<string, readonly string[]> = {
-    laktoositon: ["maito", "jogurtti", "rahka", "raejuusto", "tuorejuusto", "kerma", "skyr"],
-    maidoton: ["maito", "juusto", "jogurtti", "rahka", "raejuusto", "tuorejuusto", "kerma", "mozzarella", "feta", "parmesan", "skyr"],
-    gluteeniton: ["pasta", "spaghetti", "makaroni", "tortilla", "leipa", "ruisleipa", "mysli", "granola", "couscous"],
-    kasvis: ["kana", "broileri", "kalkkuna", "jauheliha", "nauta", "liha", "lohi", "tonnikala", "kala"],
-    vegaaninen: ["kana", "broileri", "kalkkuna", "jauheliha", "nauta", "liha", "lohi", "tonnikala", "kala", "kananmuna", "muna", "maito", "juusto", "jogurtti", "rahka", "raejuusto", "tuorejuusto", "kerma", "hunaja"],
-    halal: ["kinkku", "pekoni", "bacon", "porsas", "sika", "salami"],
-  };
-
-  for (const flag of profile.dietaryFlags ?? []) {
-    const matchedIngredients = findMatchedIngredientNames(ingredientNames, dietaryRules[flag] ?? []);
-    if (explicitDietaryFlags.has(flag) || matchedIngredients.length > 0) {
-      alerts.push({
-        key: `dietary-${flag}`,
-        category: "dietary",
-        label: `Mahdollinen ristiriita ruokavalion kanssa: ${flag}`,
-        matchedIngredients: matchedIngredients.length > 0 ? matchedIngredients : [flag],
-      });
-    }
-  }
-
-  return alerts;
-}
-
 export function upsertNutritionProfile(
   state: AppState,
   actorId: string,
@@ -1059,19 +979,4 @@ export function getVisibleRecipesForUser(state: AppState, user: Pick<UserProfile
     }
     return recipe.ownerRole === "coach" && activeCoachIds.has(recipe.createdBy);
   });
-}
-
-export function getMealPlanRecipes(state: AppState, assignedMealPlan: AssignedMealPlan | null) {
-  if (!assignedMealPlan) {
-    return [];
-  }
-
-  const recipeById = new Map(state.recipes.map((recipe) => [recipe.id, recipe]));
-  return assignedMealPlan.items
-    .slice()
-    .sort((left, right) => left.sortOrder - right.sortOrder)
-    .flatMap((item) => {
-      const recipe = recipeById.get(item.recipeId);
-      return recipe ? [{ mealTag: item.mealTag, recipe }] : [];
-    });
 }

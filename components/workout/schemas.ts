@@ -160,29 +160,6 @@ export const inviteSchema = z
     path: ["coachId"],
   });
 
-export const templateSchema = z.object({
-  title: z.string().min(3, "Anna treenille nimi."),
-  description: z.string().min(8, "Kuvaus auttaa valmennettavaa."),
-  goal: z.string().min(3, "Anna treenin tavoite."),
-  splitType: z.enum(["upper", "lower", "full_body", "custom"]),
-  blockTitle: z.string().min(2, "Anna blokille nimi."),
-  blockNote: z.string().optional(),
-  exercises: z
-    .array(
-      z.object({
-        exerciseId: z.string().min(1, "Valitse liike."),
-        muscleGroup: optionalEnumField(CUSTOM_MUSCLE_GROUP_OPTIONS),
-        instruction: z.string().min(2, "Anna lyhyt valmennusohje."),
-        setCount: z.coerce.number().min(1).max(8),
-        targetReps: z.coerce.number().min(1).max(30),
-        targetLoad: z.coerce.number().min(0).optional(),
-        restSeconds: z.coerce.number().min(15).max(600),
-        notes: z.string().optional(),
-      }),
-    )
-    .min(1, "Lisää vähintään yksi liike."),
-});
-
 export const acceptInviteSchema = z.object({
   fullName: z.string().min(2, "Anna koko nimi."),
   password: z.string().min(6, "Salasanan pitää olla vähintään 6 merkkiä."),
@@ -201,25 +178,6 @@ export const resetPasswordSchema = z
     message: "Salasanat eivät täsmää.",
     path: ["confirmPassword"],
   });
-
-export const programSchema = z
-  .object({
-    title: z.string().min(3, "Anna ohjelmalle nimi."),
-    athleteId: z.string().min(1, "Valitse treenaaja."),
-    weekCount: z.coerce.number().min(1).max(16),
-    startDate: z.string().min(8, "Valitse aloituspäivä."),
-    upperTemplateId: z.string().min(1, "Valitse yläkropan treeni."),
-    lowerTemplateId: z.string().min(1, "Valitse alakropan treeni."),
-    fullBodyTemplateId: z.string().min(1, "Valitse koko kropan treeni."),
-  })
-  .refine(
-    (value) =>
-      new Set([value.upperTemplateId, value.lowerTemplateId, value.fullBodyTemplateId]).size === 3,
-    {
-      message: "Valitse kolme eri treeniä ohjelmaan.",
-      path: ["fullBodyTemplateId"],
-    },
-  );
 
 export const programWorkoutExerciseSchema = z
   .object({
@@ -302,19 +260,6 @@ export const programComposerSchema = z.object({
   workouts: z.array(programWorkoutSchema).min(1, "Lisää vähintään yksi harjoitus ohjelmaan."),
 });
 
-export function emptyTemplateExercise() {
-  return {
-    exerciseId: "",
-    muscleGroup: "" as "" | (typeof CUSTOM_MUSCLE_GROUP_OPTIONS)[number],
-    instruction: "",
-    setCount: 3,
-    targetReps: 8,
-    targetLoad: 0,
-    restSeconds: 180,
-    notes: "",
-  };
-}
-
 export function emptyProgramWorkoutExercise(defaultRestSeconds = 120) {
   return {
     exerciseId: "",
@@ -345,9 +290,4 @@ export function emptyProgramWorkout(
     defaultRestSeconds,
     exercises: [],
   };
-}
-
-export function numberOrUndefined(value: string) {
-  const normalized = value.trim().replace(",", ".");
-  return normalized === "" ? undefined : Number(normalized);
 }
