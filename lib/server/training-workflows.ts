@@ -1962,6 +1962,8 @@ export async function updateWorkoutExerciseStructureOnServer({
         muscleGroup?: ProgramWorkoutExercise["muscleGroup"];
         setCount?: number;
         targetReps?: number;
+        targetRepsMin?: number;
+        targetRepsMax?: number;
         targetLoad?: number;
         restSeconds?: number;
       }
@@ -1972,6 +1974,8 @@ export async function updateWorkoutExerciseStructureOnServer({
         muscleGroup?: ProgramWorkoutExercise["muscleGroup"];
         setCount?: number;
         targetReps?: number;
+        targetRepsMin?: number;
+        targetRepsMax?: number;
         targetLoad?: number;
         restSeconds?: number;
       }
@@ -2040,6 +2044,41 @@ export async function updateWorkoutExerciseStructureOnServer({
         0;
 
   const timestamp = nowIso();
+  const clampTargetReps = (value: number) => Math.min(50, Math.max(1, value));
+  const rangeTarget =
+    action.type !== "remove" &&
+    action.targetRepsMin !== undefined &&
+    action.targetRepsMax !== undefined &&
+    action.targetRepsMax > action.targetRepsMin
+      ? {
+          min: clampTargetReps(action.targetRepsMin),
+          max: clampTargetReps(action.targetRepsMax),
+        }
+      : null;
+  const resolveTargetRepsPatch = (
+    existing?: {
+      targetReps?: number;
+      targetRepsMin?: number;
+      targetRepsMax?: number;
+    },
+    fallback = 12,
+  ) => {
+    if (rangeTarget) {
+      const min = Math.min(rangeTarget.min, rangeTarget.max);
+      const max = Math.max(rangeTarget.min, rangeTarget.max);
+      return { targetReps: min, targetRepsMin: min, targetRepsMax: max };
+    }
+
+    if (action.type !== "remove" && action.targetReps !== undefined) {
+      return { targetReps: clampTargetReps(action.targetReps), targetRepsMin: undefined, targetRepsMax: undefined };
+    }
+
+    return {
+      targetReps: existing?.targetReps ?? fallback,
+      targetRepsMin: existing?.targetRepsMin,
+      targetRepsMax: existing?.targetRepsMax,
+    };
+  };
   const updatedWorkouts = planRow.workouts.map((programWorkout) => {
     if (programWorkout.id !== workout.program_workout_id) {
       return programWorkout;
@@ -2058,12 +2097,13 @@ export async function updateWorkoutExerciseStructureOnServer({
                 muscleGroup: action.muscleGroup,
                 sets: Array.from({ length: nextSetCount }, (_, index) => {
                   const existing = exercise.sets[index];
+                  const repsPatch = resolveTargetRepsPatch(existing);
                   return {
                     id: existing?.id ?? `${exercise.id}_set_${index + 1}`,
                     label: String(index + 1),
-                    targetReps: action.targetReps ?? existing?.targetReps ?? 12,
-                    targetRepsMin: undefined,
-                    targetRepsMax: undefined,
+                    targetReps: repsPatch.targetReps,
+                    targetRepsMin: repsPatch.targetRepsMin,
+                    targetRepsMax: repsPatch.targetRepsMax,
                     targetLoad: resolvedTargetLoad ?? existing?.targetLoad,
                     restSeconds: action.restSeconds ?? existing?.restSeconds ?? programWorkout.defaultRestSeconds,
                   };
@@ -2085,13 +2125,15 @@ export async function updateWorkoutExerciseStructureOnServer({
     }
 
     const setCount = Math.min(8, Math.max(1, action.setCount ?? 3));
-    const reps = Math.min(50, Math.max(1, action.targetReps ?? 12));
+    const repsPatch = resolveTargetRepsPatch();
     const restSeconds = Math.min(900, Math.max(15, action.restSeconds ?? programWorkout.defaultRestSeconds ?? 120));
     const extraExerciseId = `extra_${crypto.randomUUID()}`;
     const nextSets: ProgramWorkoutSet[] = Array.from({ length: setCount }, (_, index) => ({
       id: `${extraExerciseId}_set_${index + 1}`,
       label: String(index + 1),
-      targetReps: reps,
+      targetReps: repsPatch.targetReps,
+      targetRepsMin: repsPatch.targetRepsMin,
+      targetRepsMax: repsPatch.targetRepsMax,
       targetLoad: resolvedTargetLoad,
       restSeconds,
     }));

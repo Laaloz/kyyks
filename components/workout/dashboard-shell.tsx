@@ -185,7 +185,9 @@ export function DashboardShell() {
     view === "settings" ? resolveInitialView(currentUser.role, currentUser.settings?.defaultDashboardView) : view;
   const activeTabId = `workspace-tab-${activePrimaryView}`;
   const activePanelId = `workspace-panel-${activePrimaryView}`;
-  const shouldHideMobileBottomNav = isFullscreenAdminSubView || isMobileWorkoutDetailOpen || isMobileKeyboardOpen;
+  const shouldHideWorkoutWorkspaceHeader = view === "athlete-log" && isMobileWorkoutDetailOpen;
+  const shouldHideWorkspaceHeader = isFullscreenAdminSubView || shouldHideWorkoutWorkspaceHeader;
+  const shouldHideMobileBottomNav = shouldHideWorkspaceHeader || isMobileKeyboardOpen;
   const measurementReminder = getMeasurementReminderState(state, currentUser);
   const weeklyMeasurementRemindersEnabled = currentUser.settings?.weeklyMeasurementReminders ?? true;
   const shouldShowMeasurementReminder =
@@ -507,7 +509,9 @@ export function DashboardShell() {
         />
       ) : null}
 
-      {!isFullscreenAdminSubView ? (
+      {shouldHideWorkoutWorkspaceHeader ? <h1 className="sr-only">{navLabelByView[view]}</h1> : null}
+
+      {!shouldHideWorkspaceHeader ? (
       <header
         className="z-20 px-0 py-0 lg:rounded-3xl lg:border lg:border-[var(--border-strong)] lg:bg-[linear-gradient(180deg,var(--surface)_0%,var(--surface-2)_100%)] lg:px-4 lg:py-3.5 lg:shadow-[0_1px_0_0_var(--shadow-soft),0_14px_30px_-20px_var(--shadow)]"
       >
@@ -831,7 +835,7 @@ export function DashboardShell() {
                     <span className="absolute bottom-0 left-1/2 h-0.5 w-5 -translate-x-1/2 rounded-full bg-[var(--accent)]" aria-hidden="true" />
                   ) : null}
                   <span
-                    className={`relative flex size-6.5 items-center justify-center rounded-full transition ${
+                    className={`relative flex size-6.5 w-8.5 items-center justify-center rounded-full transition ${
                       isWorkoutItem
                         ? // Treeni-päätoiminto: täytetty neutraali pilleri levossa, aksentti vasta valittuna.
                           isActive

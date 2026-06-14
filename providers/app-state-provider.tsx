@@ -2456,6 +2456,8 @@ interface AppStateContextValue {
           customExerciseName?: string;
           setCount?: number;
           targetReps?: number;
+          targetRepsMin?: number;
+          targetRepsMax?: number;
           targetLoad?: number;
           restSeconds?: number;
         }
@@ -2465,6 +2467,8 @@ interface AppStateContextValue {
           customExerciseName?: string;
           setCount?: number;
           targetReps?: number;
+          targetRepsMin?: number;
+          targetRepsMax?: number;
           targetLoad?: number;
           restSeconds?: number;
         }
@@ -6654,6 +6658,41 @@ function findResolvedUserIdInSnapshot(
 
         const updatedAt = new Date().toISOString();
         const extraId = action.type === "add_extra" ? `extra_${crypto.randomUUID()}` : null;
+        const clampTargetReps = (value: number) => Math.min(50, Math.max(1, value));
+        const rangeTarget =
+          action.type !== "remove" &&
+          action.targetRepsMin !== undefined &&
+          action.targetRepsMax !== undefined &&
+          action.targetRepsMax > action.targetRepsMin
+            ? {
+                min: clampTargetReps(action.targetRepsMin),
+                max: clampTargetReps(action.targetRepsMax),
+              }
+            : null;
+        const resolveTargetRepsPatch = (
+          existing?: {
+            targetReps?: number;
+            targetRepsMin?: number;
+            targetRepsMax?: number;
+          },
+          fallback = 12,
+        ) => {
+          if (rangeTarget) {
+            const min = Math.min(rangeTarget.min, rangeTarget.max);
+            const max = Math.max(rangeTarget.min, rangeTarget.max);
+            return { targetReps: min, targetRepsMin: min, targetRepsMax: max };
+          }
+
+          if (action.type !== "remove" && action.targetReps !== undefined) {
+            return { targetReps: clampTargetReps(action.targetReps), targetRepsMin: undefined, targetRepsMax: undefined };
+          }
+
+          return {
+            targetReps: existing?.targetReps ?? fallback,
+            targetRepsMin: existing?.targetRepsMin,
+            targetRepsMax: existing?.targetRepsMax,
+          };
+        };
 
         setState((previous) => {
           const nextPlans = previous.plans.map((plan) => {
@@ -6683,10 +6722,13 @@ function findResolvedUserIdInSnapshot(
                             muscleGroup: resolvedMuscleGroup,
                             sets: Array.from({ length: nextSetCount }, (_, index) => {
                               const existing = exercise.sets[index];
+                              const repsPatch = resolveTargetRepsPatch(existing);
                               return {
                                 id: existing?.id ?? `${exercise.id}_set_${index + 1}`,
                                 label: String(index + 1),
-                                targetReps: action.targetReps ?? existing?.targetReps ?? 12,
+                                targetReps: repsPatch.targetReps,
+                                targetRepsMin: repsPatch.targetRepsMin,
+                                targetRepsMax: repsPatch.targetRepsMax,
                                 targetLoad: action.targetLoad ?? existing?.targetLoad,
                                 restSeconds: action.restSeconds ?? existing?.restSeconds ?? programWorkout.defaultRestSeconds,
                               };
@@ -6705,12 +6747,14 @@ function findResolvedUserIdInSnapshot(
                 }
 
                 const setCount = Math.min(8, Math.max(1, action.setCount ?? 3));
-                const targetReps = Math.min(50, Math.max(1, action.targetReps ?? 12));
+                const repsPatch = resolveTargetRepsPatch();
                 const restSeconds = Math.min(900, Math.max(15, action.restSeconds ?? programWorkout.defaultRestSeconds));
                 const extraSets = Array.from({ length: setCount }, (_, index) => ({
                   id: `${extraId}_set_${index + 1}`,
                   label: String(index + 1),
-                  targetReps,
+                  targetReps: repsPatch.targetReps,
+                  targetRepsMin: repsPatch.targetRepsMin,
+                  targetRepsMax: repsPatch.targetRepsMax,
                   targetLoad: action.targetLoad,
                   restSeconds,
                 }));
@@ -6744,6 +6788,7 @@ function findResolvedUserIdInSnapshot(
               const baseLog = targetLogs[0];
               const rebuilt = Array.from({ length: nextSetCount }, (_, index) => {
                 const existing = targetLogs[index];
+                const repsPatch = resolveTargetRepsPatch(existing ?? baseLog);
                 return {
                   id: existing?.id ?? `temp_${scheduledWorkoutId}_${action.templateExerciseId}_${index + 1}`,
                   scheduledWorkoutId,
@@ -6753,7 +6798,9 @@ function findResolvedUserIdInSnapshot(
                   exerciseName: resolvedExerciseName,
                   muscleGroup: resolvedMuscleGroup,
                   setLabel: String(index + 1),
-                  targetReps: action.targetReps ?? existing?.targetReps ?? baseLog?.targetReps ?? 12,
+                  targetReps: repsPatch.targetReps,
+                  targetRepsMin: repsPatch.targetRepsMin,
+                  targetRepsMax: repsPatch.targetRepsMax,
                   targetLoad: action.targetLoad ?? existing?.targetLoad ?? baseLog?.targetLoad,
                   targetRestSeconds: action.restSeconds ?? existing?.targetRestSeconds ?? baseLog?.targetRestSeconds,
                   programWorkoutId: workout.programWorkoutId,
@@ -6782,7 +6829,7 @@ function findResolvedUserIdInSnapshot(
             }
 
             const setCount = Math.min(8, Math.max(1, action.setCount ?? 3));
-            const targetReps = Math.min(50, Math.max(1, action.targetReps ?? 12));
+            const repsPatch = resolveTargetRepsPatch();
             const restSeconds = Math.min(900, Math.max(15, action.restSeconds ?? 120));
             const extraLogs = Array.from({ length: setCount }, (_, index) => ({
               id: `temp_${extraId}_${index + 1}`,
@@ -6793,11 +6840,13 @@ function findResolvedUserIdInSnapshot(
               exerciseName: resolvedExerciseName,
               muscleGroup: resolvedMuscleGroup,
               setLabel: String(index + 1),
-              targetReps,
+              targetReps: repsPatch.targetReps,
+              targetRepsMin: repsPatch.targetRepsMin,
+              targetRepsMax: repsPatch.targetRepsMax,
               targetLoad: action.targetLoad,
               targetRestSeconds: restSeconds,
               programWorkoutId: workout.programWorkoutId,
-              actualReps: targetReps,
+              actualReps: repsPatch.targetRepsMin ?? repsPatch.targetReps,
               actualLoad: action.targetLoad,
               done: false,
             }));
@@ -6830,6 +6879,8 @@ function findResolvedUserIdInSnapshot(
                 muscleGroup: targetExercise?.category,
                 setCount: action.setCount,
                 targetReps: action.targetReps,
+                targetRepsMin: action.targetRepsMin,
+                targetRepsMax: action.targetRepsMax,
                 targetLoad: action.targetLoad,
                 restSeconds: action.restSeconds,
               }
@@ -6841,6 +6892,8 @@ function findResolvedUserIdInSnapshot(
                 muscleGroup: targetExercise?.category,
                 setCount: action.setCount,
                 targetReps: action.targetReps,
+                targetRepsMin: action.targetRepsMin,
+                targetRepsMax: action.targetRepsMax,
                 targetLoad: action.targetLoad,
                 restSeconds: action.restSeconds,
               }

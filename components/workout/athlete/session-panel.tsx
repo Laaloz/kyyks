@@ -192,6 +192,8 @@ function ExerciseStructureDialog({
   initialExerciseId,
   initialSetCount,
   initialTargetReps,
+  initialTargetRepsMin,
+  initialTargetRepsMax,
   initialRestSeconds,
   onClose,
   onSubmit,
@@ -204,16 +206,33 @@ function ExerciseStructureDialog({
   initialExerciseId?: string;
   initialSetCount?: number;
   initialTargetReps?: number;
+  initialTargetRepsMin?: number;
+  initialTargetRepsMax?: number;
   initialRestSeconds?: number;
   onClose: () => void;
-  onSubmit: (payload: { exerciseId: string; customExerciseName?: string; setCount?: number; targetReps?: number; restSeconds?: number }) => void;
+  onSubmit: (payload: {
+    exerciseId: string;
+    customExerciseName?: string;
+    setCount?: number;
+    targetReps?: number;
+    targetRepsMin?: number;
+    targetRepsMax?: number;
+    restSeconds?: number;
+  }) => void;
   onRemove?: (templateExerciseId: string) => void;
 }) {
   const CUSTOM_EXERCISE_VALUE = "__custom__";
+  const hasInitialRange =
+    initialTargetRepsMin !== undefined &&
+    initialTargetRepsMax !== undefined &&
+    initialTargetRepsMax > initialTargetRepsMin;
   const [exerciseId, setExerciseId] = useState(initialExerciseId ?? exercises[0]?.id ?? "");
   const [customExerciseName, setCustomExerciseName] = useState("");
   const [setCount, setSetCount] = useState(String(initialSetCount ?? 3));
   const [targetReps, setTargetReps] = useState(String(initialTargetReps ?? 12));
+  const [repsMode, setRepsMode] = useState<"single" | "range">(hasInitialRange ? "range" : "single");
+  const [targetRepsMin, setTargetRepsMin] = useState(String(initialTargetRepsMin ?? initialTargetReps ?? 8));
+  const [targetRepsMax, setTargetRepsMax] = useState(String(initialTargetRepsMax ?? initialTargetReps ?? 12));
   const [restSeconds, setRestSeconds] = useState(String(initialRestSeconds ?? 120));
   const [isOpen, setIsOpen] = useState(false);
   const [query, setQuery] = useState("");
@@ -230,35 +249,82 @@ function ExerciseStructureDialog({
     ? customExerciseName.trim() || "Luo oma liike"
     : selectedExercise?.name ?? "Valitse liike";
 
+  useEffect(() => {
+    const handleKeyDown = (event: globalThis.KeyboardEvent) => {
+      if (event.key === "Escape") {
+        onClose();
+      }
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [onClose]);
+
+  const buildPayload = () => {
+    const nextSetCount = Math.min(8, Math.max(1, Number(setCount) || 3));
+    const nextRestSeconds = Math.min(900, Math.max(15, Number(restSeconds) || 120));
+
+    if (repsMode === "range") {
+      const parsedMin = Math.min(50, Math.max(1, Number(targetRepsMin) || Number(targetReps) || 1));
+      const parsedMax = Math.min(50, Math.max(1, Number(targetRepsMax) || Number(targetReps) || parsedMin));
+      const nextTargetRepsMin = Math.min(parsedMin, parsedMax);
+      const nextTargetRepsMax = Math.max(parsedMin, parsedMax);
+
+      return {
+        exerciseId,
+        customExerciseName: exerciseId === CUSTOM_EXERCISE_VALUE ? customExerciseName.trim() : undefined,
+        setCount: nextSetCount,
+        targetReps: nextTargetRepsMin,
+        targetRepsMin: nextTargetRepsMin,
+        targetRepsMax: nextTargetRepsMax,
+        restSeconds: nextRestSeconds,
+      };
+    }
+
+    const nextTargetReps = Math.min(50, Math.max(1, Number(targetReps) || Number(targetRepsMin) || 12));
+    return {
+      exerciseId,
+      customExerciseName: exerciseId === CUSTOM_EXERCISE_VALUE ? customExerciseName.trim() : undefined,
+      setCount: nextSetCount,
+      targetReps: nextTargetReps,
+      restSeconds: nextRestSeconds,
+    };
+  };
+
   if (typeof document === "undefined") {
     return null;
   }
 
   return createPortal(
     <div
-      className="fixed inset-0 z-50 flex items-end justify-center bg-[color:color-mix(in_srgb,var(--background)_48%,transparent)] p-0"
+      className="fixed inset-0 z-50 flex items-end justify-center bg-[color:color-mix(in_srgb,var(--background)_54%,transparent)] p-0 sm:items-center sm:p-4"
       role="presentation"
       onClick={onClose}
     >
       <div
         role="dialog"
         aria-modal="true"
-        className="flex max-h-[88svh] w-full max-w-lg flex-col overflow-hidden rounded-t-3xl bg-[var(--surface)] p-5 pb-[max(env(safe-area-inset-bottom),1.25rem)] shadow-[0_24px_60px_-24px_var(--shadow)]"
+        aria-labelledby="exercise-structure-title"
+        className="flex max-h-[88svh] w-full max-w-none flex-col overflow-hidden rounded-t-3xl bg-[var(--surface)] p-5 pb-[max(env(safe-area-inset-bottom),1.25rem)] shadow-[0_24px_60px_-24px_var(--shadow)] sm:max-w-lg sm:rounded-3xl"
         onClick={(event) => event.stopPropagation()}
       >
-        <p className="text-[11px] font-semibold tracking-[0.06em] text-[var(--accent)]">
+        <span className="mx-auto mb-3 block h-1 w-10 rounded-full bg-[var(--border-strong)]" aria-hidden="true" />
+        <p className="text-sm font-medium text-[var(--accent)]">
           {mode === "edit" ? "Muokkaa liikettä" : "Lisää extra-liike"}
         </p>
-        {mode === "edit" && exerciseName ? (
-          <p className="mt-1 text-sm text-[var(--text-muted)]">{exerciseName}</p>
-        ) : null}
-        <div className="mt-3 flex-1 space-y-3 overflow-y-auto pr-1">
+        <h3
+          id="exercise-structure-title"
+          className="mt-2 font-[family-name:var(--font-display)] text-2xl font-bold leading-tight text-[var(--text)]"
+        >
+          {mode === "edit" ? exerciseName ?? "Liike" : "Uusi liike"}
+        </h3>
+        <div className="mt-5 flex-1 space-y-4 overflow-y-auto pr-1">
           <div className={`relative ${isOpen ? "z-20 pb-2" : ""}`}>
             <Label htmlFor="exercise-structure-select">Liike</Label>
             <button
               id="exercise-structure-select"
               type="button"
-              className="mt-1 flex w-full items-center justify-between rounded-xl border border-[var(--border)] bg-[var(--surface)] px-3 py-2 text-left text-sm text-[var(--text)]"
+              className="flex w-full items-center justify-between rounded-xl border border-[var(--border)] bg-[var(--surface)] px-4 py-3 text-left text-base text-[var(--text)] transition hover:border-[var(--border-strong)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--background)]"
               onClick={() => setIsOpen((current) => !current)}
               aria-expanded={isOpen}
               aria-haspopup="listbox"
@@ -277,7 +343,7 @@ function ExerciseStructureDialog({
                 <div className="max-h-[min(36svh,16rem)] overflow-y-auto p-2">
                   <button
                     type="button"
-                    className="mb-2 flex w-full items-center justify-between rounded-xl border border-[var(--border)] bg-[var(--surface-2)] px-3 py-2 text-left text-sm"
+                    className="mb-2 flex w-full items-center justify-between rounded-xl border border-[var(--border)] bg-[var(--surface-2)] px-3 py-2 text-left text-sm transition hover:border-[var(--border-strong)]"
                     onClick={() => {
                       setExerciseId(CUSTOM_EXERCISE_VALUE);
                       setIsOpen(false);
@@ -290,7 +356,7 @@ function ExerciseStructureDialog({
                     <button
                       key={exercise.id}
                       type="button"
-                      className="flex w-full items-center justify-between rounded-xl px-3 py-2 text-left text-sm hover:bg-[var(--surface-2)]"
+                      className="flex w-full items-center justify-between rounded-xl px-3 py-2 text-left text-sm transition hover:bg-[var(--surface-2)]"
                       onClick={() => {
                         setExerciseId(exercise.id);
                         setIsOpen(false);
@@ -316,50 +382,86 @@ function ExerciseStructureDialog({
             </div>
           ) : null}
           {mode === "add_extra" || mode === "edit" ? (
-            <div className="grid grid-cols-2 gap-2">
-              <div>
-                <Label htmlFor="extra-set-count">Sarjat</Label>
-                <Input id="extra-set-count" value={setCount} onChange={(event) => setSetCount(event.target.value)} inputMode="numeric" placeholder="3" />
+            <div className="space-y-4">
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <Label htmlFor="extra-set-count">Sarjat</Label>
+                  <Input id="extra-set-count" value={setCount} onChange={(event) => setSetCount(event.target.value)} inputMode="numeric" placeholder="3" />
+                </div>
+                <div>
+                  <Label htmlFor="extra-rest-seconds">Lepo (s)</Label>
+                  <Input id="extra-rest-seconds" value={restSeconds} onChange={(event) => setRestSeconds(event.target.value)} inputMode="numeric" placeholder="120" />
+                </div>
               </div>
               <div>
-                <Label htmlFor="extra-target-reps">Toistot</Label>
-                <Input id="extra-target-reps" value={targetReps} onChange={(event) => setTargetReps(event.target.value)} inputMode="numeric" placeholder="12" />
-              </div>
-              <div>
-                <Label htmlFor="extra-rest-seconds">Lepo (s)</Label>
-                <Input id="extra-rest-seconds" value={restSeconds} onChange={(event) => setRestSeconds(event.target.value)} inputMode="numeric" placeholder="120" />
+                <div className="mb-2 flex items-center justify-between gap-3">
+                  <Label className="mb-0" htmlFor={repsMode === "range" ? "extra-target-reps-min" : "extra-target-reps"}>
+                    Toistot
+                  </Label>
+                  <div className="inline-flex shrink-0 rounded-full bg-[var(--surface-2)] p-1">
+                    {(["single", "range"] as const).map((value) => (
+                      <button
+                        key={value}
+                        type="button"
+                        className={`rounded-full px-3 py-1 text-sm font-semibold transition ${
+                          repsMode === value
+                            ? "bg-[var(--text)] text-[var(--background)] shadow-[0_8px_18px_-16px_var(--shadow)]"
+                            : "text-[var(--text-muted)] hover:text-[var(--text)]"
+                        }`}
+                        onClick={() => setRepsMode(value)}
+                        aria-pressed={repsMode === value}
+                      >
+                        {value === "single" ? "Yksi" : "Range"}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+                {repsMode === "range" ? (
+                  <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-2">
+                    <Input
+                      id="extra-target-reps-min"
+                      value={targetRepsMin}
+                      onChange={(event) => setTargetRepsMin(event.target.value)}
+                      inputMode="numeric"
+                      placeholder="5"
+                      aria-label="Toistojen minimi"
+                    />
+                    <span className="text-sm font-semibold text-[var(--text-subtle)]">-</span>
+                    <Input
+                      id="extra-target-reps-max"
+                      value={targetRepsMax}
+                      onChange={(event) => setTargetRepsMax(event.target.value)}
+                      inputMode="numeric"
+                      placeholder="8"
+                      aria-label="Toistojen maksimi"
+                    />
+                  </div>
+                ) : (
+                  <Input id="extra-target-reps" value={targetReps} onChange={(event) => setTargetReps(event.target.value)} inputMode="numeric" placeholder="12" />
+                )}
               </div>
             </div>
           ) : null}
         </div>
-        <div className="mt-4 flex shrink-0 justify-end gap-2 border-t border-[var(--border)] pt-3">
-          {mode === "edit" && templateExerciseId && onRemove ? (
-            <Button
-              type="button"
-              variant="ghost"
-              className="mr-auto text-[var(--danger)]"
-              onClick={() => onRemove(templateExerciseId)}
-            >
-              <Trash2 className="mr-1 size-4" aria-hidden="true" />
-              Poista liike
-            </Button>
-          ) : null}
-          <Button type="button" variant="ghost" onClick={onClose}>Sulje</Button>
+        <div className="mt-5 shrink-0 space-y-3 border-t border-[var(--border)] pt-4">
           <Button
             type="button"
-            onClick={() =>
-              onSubmit({
-                exerciseId,
-                customExerciseName: exerciseId === CUSTOM_EXERCISE_VALUE ? customExerciseName.trim() : undefined,
-                setCount: Number(setCount) || undefined,
-                targetReps: Number(targetReps) || undefined,
-                restSeconds: Number(restSeconds) || undefined,
-              })
-            }
+            className="w-full"
+            onClick={() => onSubmit(buildPayload())}
             disabled={!exerciseId || (exerciseId === CUSTOM_EXERCISE_VALUE && !customExerciseName.trim())}
           >
-            {mode === "edit" ? "Vaihda" : "Lisää"}
+            {mode === "edit" ? "Tallenna muutokset" : "Lisää liike"}
           </Button>
+          {mode === "edit" && templateExerciseId && onRemove ? (
+            <button
+              type="button"
+              className="inline-flex w-full items-center justify-center gap-2 rounded-xl px-4 py-2.5 text-base font-semibold text-[var(--danger)] transition hover:bg-[color-mix(in_srgb,var(--danger)_8%,var(--surface))] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--danger)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--background)]"
+              onClick={() => onRemove(templateExerciseId)}
+            >
+              <Trash2 className="size-4" aria-hidden="true" />
+              Poista liike
+            </button>
+          ) : null}
         </div>
       </div>
     </div>,
@@ -639,9 +741,20 @@ export function AthleteSessionPanel({
           customExerciseName?: string;
           setCount?: number;
           targetReps?: number;
+          targetRepsMin?: number;
+          targetRepsMax?: number;
           restSeconds?: number;
         }
-      | { type: "add_extra"; exerciseId: string; customExerciseName?: string; setCount?: number; targetReps?: number; restSeconds?: number }
+      | {
+          type: "add_extra";
+          exerciseId: string;
+          customExerciseName?: string;
+          setCount?: number;
+          targetReps?: number;
+          targetRepsMin?: number;
+          targetRepsMax?: number;
+          restSeconds?: number;
+        }
       | { type: "remove"; templateExerciseId: string }
   ) => Promise<{ ok: boolean; message?: string }>;
 }) {
@@ -677,6 +790,8 @@ export function AthleteSessionPanel({
         initialExerciseId?: string;
         initialSetCount?: number;
         initialTargetReps?: number;
+        initialTargetRepsMin?: number;
+        initialTargetRepsMax?: number;
         initialRestSeconds?: number;
       }
     | { mode: "add_extra" }
@@ -1085,9 +1200,13 @@ export function AthleteSessionPanel({
       const groupKeys = group.supersetGroup
         ? (supersetMembersByGroup.get(group.supersetGroup) ?? [group.key])
         : [group.key];
-      const current = previous[group.key] ?? defaultExpandedKeys.has(group.key);
-      const target = nextExpanded ?? !current;
-      const next = { ...previous };
+      const allTargetKeysOpen = groupKeys.every((key) => previous[key] ?? defaultExpandedKeys.has(key));
+      const target = nextExpanded ?? !allTargetKeysOpen;
+      const next: Record<string, boolean> = {};
+
+      exerciseGroups.forEach((exerciseGroup) => {
+        next[exerciseGroup.key] = false;
+      });
       groupKeys.forEach((key) => {
         next[key] = target;
       });
@@ -1112,11 +1231,14 @@ export function AthleteSessionPanel({
     setRestEndsAt(Date.now() + duration * 1000);
     setRestExerciseKey(exerciseKey);
     setRestExerciseName(exerciseName);
-    setExpandedExerciseKeys((previous) => {
+    setExpandedExerciseKeys(() => {
       const keys = supersetGroup
         ? (supersetMembersByGroup.get(supersetGroup) ?? [exerciseKey])
         : [exerciseKey];
-      const next = { ...previous };
+      const next: Record<string, boolean> = {};
+      exerciseGroups.forEach((exerciseGroup) => {
+        next[exerciseGroup.key] = false;
+      });
       keys.forEach((key) => {
         next[key] = true;
       });
@@ -1402,13 +1524,18 @@ export function AthleteSessionPanel({
     setIsSecondaryActionsOpen(true);
   };
 
-  // Prototyypin (SessionOverlay) mukainen aktiivisen kirjauksen liikekortti:
-  // aina auki, paino × toistot DragNumberilla, pyöreä kuittaus. Kytkennät
-  // (onUpdate paino/toistot/done) säilytetty.
   const renderActiveExerciseCard = (group: ExerciseGroup) => {
+    const exerciseKey = group.key;
+    const safeExerciseKey = exerciseKey.replace(/[^a-zA-Z0-9_-]/g, "-");
+    const disclosureButtonId = `${scheduledWorkoutId}-${safeExerciseKey}-active-toggle`;
+    const disclosurePanelId = `${scheduledWorkoutId}-${safeExerciseKey}-active-panel`;
     const logs = group.logs;
     const exerciseName = group.exerciseName;
+    const supersetGroup = group.supersetGroup;
+    const completedInExercise = logs.filter((log) => log.done).length;
     const allDone = logs.length > 0 && logs.every((log) => log.done);
+    const isStarted = completedInExercise > 0 && !allDone;
+    const isExpanded = getIsExpanded(group);
     const targetSummary = logs.length > 0 ? `${logs.length} × ${formatTargetReps(logs[0]!)}` : "";
     const liveOneRepMax = logs.reduce((best, log) => {
       const load = log.actualLoad ?? 0;
@@ -1438,18 +1565,37 @@ export function AthleteSessionPanel({
         : 0;
     const isRecord = previousOneRepMax > 0 && liveOneRepMax > previousOneRepMax && logs.some((log) => log.done);
     const instruction = exerciseInstructions.get(group.key)?.trim();
+    const activeCardToneClass = allDone
+      ? "border-[color-mix(in_srgb,var(--success)_30%,var(--border))] shadow-[0_12px_28px_-24px_var(--success)]"
+      : isStarted
+        ? "border-[color-mix(in_srgb,var(--warning)_30%,var(--border))] shadow-[0_12px_28px_-24px_var(--warning)]"
+        : supersetGroup
+          ? "border-[color-mix(in_srgb,var(--accent)_24%,var(--border))] shadow-[0_12px_30px_-28px_var(--accent)]"
+          : "border-[var(--border)] shadow-[0_12px_30px_-28px_var(--shadow)]";
 
     return (
       <div
-        key={group.key}
-        className="min-w-0 max-w-full overflow-hidden rounded-[1.6rem] border border-[var(--border)] bg-[var(--surface)] p-4 shadow-[0_12px_30px_-28px_var(--shadow)]"
+        key={exerciseKey}
+        className={`min-w-0 max-w-full overflow-hidden rounded-[18px] border bg-[var(--surface)] p-4 ${activeCardToneClass}`}
       >
         <div className="flex items-start justify-between gap-3">
-          <div className="min-w-0">
+          <button
+            type="button"
+            id={disclosureButtonId}
+            aria-expanded={isExpanded}
+            aria-controls={disclosurePanelId}
+            className="min-w-0 flex-1 rounded-[1rem] text-left transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--surface)]"
+            onClick={() => setGroupExpansion(group)}
+          >
             <div className="flex min-w-0 flex-wrap items-center gap-2">
               <span className="font-[family-name:var(--font-display)] text-[1.05rem] font-bold leading-tight text-[var(--text)] [overflow-wrap:anywhere]">
                 {exerciseName}
               </span>
+              {supersetGroup ? (
+                <span className="inline-flex items-center rounded-full border border-[color-mix(in_srgb,var(--accent)_28%,var(--border))] bg-[color-mix(in_srgb,var(--accent)_8%,var(--surface))] px-2 py-0.5 text-[11px] font-semibold text-[var(--accent)]">
+                  Superset {supersetGroup}
+                </span>
+              ) : null}
               {shouldIncreaseLoad ? (
                 <span className="inline-flex items-center gap-1 rounded-full bg-[color-mix(in_srgb,var(--accent)_14%,var(--surface))] px-2.5 py-0.5 text-[11px] font-semibold text-[var(--accent)]">
                   Nosta painoa <span aria-hidden="true">↑</span>
@@ -1460,11 +1606,7 @@ export function AthleteSessionPanel({
                 </span>
               ) : null}
             </div>
-            <p className="mt-0.5 text-xs tabular-nums text-[var(--text-subtle)]">
-              Tavoite {targetSummary}
-              {liveOneRepMax > 0 ? ` · e1RM nyt ${Math.round(liveOneRepMax)} kg` : ""}
-            </p>
-          </div>
+          </button>
           <div className="flex shrink-0 items-center gap-1.5">
             {instruction ? (
               <button
@@ -1490,69 +1632,93 @@ export function AthleteSessionPanel({
                   initialExerciseId: logs[0]?.exerciseId,
                   initialSetCount: logs.length,
                   initialTargetReps: logs[0]?.targetReps,
+                  initialTargetRepsMin: logs[0]?.targetRepsMin,
+                  initialTargetRepsMax: logs[0]?.targetRepsMax,
                   initialRestSeconds: logs[0]?.targetRestSeconds,
                 })
               }
             >
               <Settings2 className="size-3.5" aria-hidden="true" />
             </button>
-            {allDone ? (
-              <span className="grid size-8 place-items-center rounded-full bg-[color-mix(in_srgb,var(--success)_16%,var(--surface))] text-[var(--success)]">
-                <Check className="size-4 stroke-[2.5]" aria-hidden="true" />
-              </span>
+            {!supersetGroup ? (
+              <button
+                type="button"
+                aria-label={isExpanded ? `Sulje ${exerciseName}` : `Avaa ${exerciseName}`}
+                aria-expanded={isExpanded}
+                aria-controls={disclosurePanelId}
+                className="grid size-8 place-items-center rounded-full border border-[var(--border)] bg-[var(--surface-2)] text-[var(--text-subtle)] transition hover:border-[var(--border-strong)] hover:bg-[var(--surface-3)] hover:text-[var(--text)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)]"
+                onClick={() => setGroupExpansion(group)}
+              >
+                {isExpanded ? (
+                  <ChevronUp className="size-4" aria-hidden="true" />
+                ) : (
+                  <ChevronDown className="size-4" aria-hidden="true" />
+                )}
+              </button>
             ) : null}
           </div>
         </div>
-        <div className="mt-3 space-y-2">
-          {logs.map((log, index) => {
-            const targetMinimum = log.targetRepsMin ?? log.targetReps;
-            const missed =
-              log.actualReps !== undefined && log.actualReps !== null && targetMinimum !== undefined && log.actualReps < targetMinimum;
-            // Kuitatun sarjan sävy: vihreä kun tavoite täyttyi, amber kun toistot
-            // jäi alle tavoitteen (sama logiikka kentissä ja kuittausnapissa).
-            const rowTone = log.done ? (missed ? "warn" : "success") : undefined;
-            return (
-              <div key={log.id} className="grid grid-cols-[1.25rem_1fr_0.75rem_1fr_2.75rem] items-center gap-2">
-                <span className="text-center font-[family-name:var(--font-display)] text-sm font-semibold text-[var(--text-subtle)]">
-                  {index + 1}
-                </span>
-                <DragNumber
-                  value={log.actualLoad ?? 0}
-                  step={loadIncrementKg}
-                  tone={rowTone}
-                  ariaLabel={`${exerciseName} sarja ${log.setLabel} paino`}
-                  disabled={readOnly}
-                  onChange={(next) => handleLogUpdate(log, { actualLoad: next })}
-                />
-                <span className="text-center text-sm text-[var(--text-subtle)]">×</span>
-                <DragNumber
-                  value={log.actualReps ?? 0}
-                  step={1}
-                  tone={rowTone}
-                  ariaLabel={`${exerciseName} sarja ${log.setLabel} toistot`}
-                  disabled={readOnly}
-                  onChange={(next) => handleLogUpdate(log, { actualReps: next })}
-                />
-                <button
-                  type="button"
-                  disabled={readOnly}
-                  aria-pressed={log.done}
-                  aria-label={log.done ? `Kumoa sarja ${log.setLabel}` : `Kuittaa sarja ${log.setLabel}${missed ? ", toistot alle tavoitteen" : ""}`}
-                  className={`grid size-11 place-items-center rounded-full border transition ${
-                    log.done
-                      ? missed
-                        ? "border-[var(--warning)] bg-[var(--warning)] text-white"
-                        : "border-[var(--success)] bg-[var(--success)] text-white"
-                      : "border-[var(--border-strong)] bg-[var(--surface)] text-[var(--text-subtle)] hover:border-[var(--accent)] hover:text-[var(--accent)]"
-                  }`}
-                  onClick={() => handleDoneUpdate(log, !log.done)}
-                >
-                  <Check className="size-5 stroke-[2.5]" aria-hidden="true" />
-                </button>
-              </div>
-            );
-          })}
-        </div>
+        <p className="mt-1.5 min-w-0 text-xs tabular-nums text-[var(--text-subtle)] [overflow-wrap:anywhere]">
+          {completedInExercise}/{logs.length} sarjaa · tavoite {targetSummary}
+          {liveOneRepMax > 0 ? ` · e1RM nyt ${Math.round(liveOneRepMax)} kg` : ""}
+        </p>
+        {isExpanded ? (
+          <div
+            id={disclosurePanelId}
+            role="region"
+            aria-labelledby={disclosureButtonId}
+            className="mt-3 space-y-2"
+          >
+            {logs.map((log, index) => {
+              const targetMinimum = log.targetRepsMin ?? log.targetReps;
+              const missed =
+                log.actualReps !== undefined && log.actualReps !== null && targetMinimum !== undefined && log.actualReps < targetMinimum;
+              // Kuitatun sarjan sävy: vihreä kun tavoite täyttyi, amber kun toistot
+              // jäi alle tavoitteen (sama logiikka kentissä ja kuittausnapissa).
+              const rowTone = log.done ? (missed ? "warn" : "success") : undefined;
+              return (
+                <div key={log.id} className="grid grid-cols-[1.25rem_1fr_0.75rem_1fr_2.75rem] items-center gap-2">
+                  <span className="text-center font-[family-name:var(--font-display)] text-sm font-semibold text-[var(--text-subtle)]">
+                    {index + 1}
+                  </span>
+                  <DragNumber
+                    value={log.actualLoad ?? 0}
+                    step={loadIncrementKg}
+                    tone={rowTone}
+                    ariaLabel={`${exerciseName} sarja ${log.setLabel} paino`}
+                    disabled={readOnly}
+                    onChange={(next) => handleLogUpdate(log, { actualLoad: next })}
+                  />
+                  <span className="text-center text-sm text-[var(--text-subtle)]">×</span>
+                  <DragNumber
+                    value={log.actualReps ?? 0}
+                    step={1}
+                    tone={rowTone}
+                    ariaLabel={`${exerciseName} sarja ${log.setLabel} toistot`}
+                    disabled={readOnly}
+                    onChange={(next) => handleLogUpdate(log, { actualReps: next })}
+                  />
+                  <button
+                    type="button"
+                    disabled={readOnly}
+                    aria-pressed={log.done}
+                    aria-label={log.done ? `Kumoa sarja ${log.setLabel}` : `Kuittaa sarja ${log.setLabel}${missed ? ", toistot alle tavoitteen" : ""}`}
+                    className={`grid size-11 place-items-center rounded-full border transition ${
+                      log.done
+                        ? missed
+                          ? "border-[var(--warning)] bg-[var(--warning)] text-white"
+                          : "border-[var(--success)] bg-[var(--success)] text-white"
+                        : "border-[var(--border-strong)] bg-[var(--surface)] text-[var(--text-subtle)] hover:border-[var(--accent)] hover:text-[var(--accent)]"
+                    }`}
+                    onClick={() => handleDoneUpdate(log, !log.done)}
+                  >
+                    <Check className="size-5 stroke-[2.5]" aria-hidden="true" />
+                  </button>
+                </div>
+              );
+            })}
+          </div>
+        ) : null}
       </div>
     );
   };
@@ -1617,7 +1783,7 @@ export function AthleteSessionPanel({
     return (
       <div
         key={exerciseKey}
-        className={`min-w-0 max-w-full overflow-hidden rounded-[1.35rem] border p-3 md:p-3.5 ${cardToneClass}`}
+        className={`min-w-0 max-w-full overflow-hidden rounded-[18px] border p-3 md:p-3.5 ${cardToneClass}`}
       >
         <div className="flex min-w-0 items-start gap-2 px-1">
           <button
@@ -1665,6 +1831,8 @@ export function AthleteSessionPanel({
                   initialExerciseId: logs[0]?.exerciseId,
                   initialSetCount: logs.length,
                   initialTargetReps: logs[0]?.targetReps,
+                  initialTargetRepsMin: logs[0]?.targetRepsMin,
+                  initialTargetRepsMax: logs[0]?.targetRepsMax,
                   initialRestSeconds: logs[0]?.targetRestSeconds,
                 })
               }
@@ -1895,7 +2063,7 @@ export function AthleteSessionPanel({
   if (isSessionSyncing) {
     return (
       <div className="mt-6 space-y-4">
-        <div className="rounded-3xl border border-[var(--border-strong)] bg-[color:color-mix(in_srgb,var(--surface-2)_82%,var(--surface))] px-4 py-5 shadow-[0_12px_28px_-24px_var(--shadow)]">
+        <div className="rounded-[18px] border border-[var(--border-strong)] bg-[color:color-mix(in_srgb,var(--surface-2)_82%,var(--surface))] px-4 py-5 shadow-[0_12px_28px_-24px_var(--shadow)]">
           <div className="flex items-center gap-3">
             <span
               aria-hidden="true"
@@ -1937,31 +2105,36 @@ export function AthleteSessionPanel({
   }
 
   return (
-    <div className="mt-6 min-w-0 max-w-full space-y-5 overflow-x-clip [contain:inline-size]">
+    <div className={`${activeLoggingView ? "mt-0 space-y-3" : "mt-6 space-y-5"} min-w-0 max-w-full overflow-x-clip [contain:inline-size]`}>
       {activeLoggingView ? (
-        <div className="flex items-center gap-3">
-          <button
-            type="button"
-            onClick={onBackToList}
-            aria-label="Takaisin treenilistaan"
-            className="grid size-10 shrink-0 place-items-center rounded-full border border-[var(--border)] bg-[var(--surface)] text-[var(--text)] transition hover:border-[var(--border-strong)]"
-          >
-            <ChevronLeft className="size-5" aria-hidden="true" />
-          </button>
-          <div className="min-w-0 flex-1">
-            <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-[var(--text-subtle)]">
-              Käynnissä · {formatWorkoutDuration(elapsedSeconds)}
-            </p>
-            <h2 className="truncate font-[family-name:var(--font-display)] text-2xl font-bold leading-tight text-[var(--text)]">
-              {scheduledWorkoutTitle}
-            </h2>
+        <>
+          <div className="fixed inset-x-0 top-0 z-40 bg-[var(--background)]">
+            <div className="mx-auto flex max-w-7xl items-center gap-3 px-4 pb-3 pt-[calc(env(safe-area-inset-top)+0.75rem)] sm:px-6 lg:px-8">
+              <button
+                type="button"
+                onClick={onBackToList}
+                aria-label="Takaisin treenilistaan"
+                className="grid size-10 shrink-0 place-items-center rounded-full border border-[var(--border)] bg-[var(--surface)] text-[var(--text)] transition hover:border-[var(--border-strong)]"
+              >
+                <ChevronLeft className="size-5" aria-hidden="true" />
+              </button>
+              <div className="min-w-0 flex-1">
+                <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-[var(--text-subtle)]">
+                  Käynnissä · {formatWorkoutDuration(elapsedSeconds)}
+                </p>
+                <h2 className="truncate font-[family-name:var(--font-display)] text-2xl font-bold leading-tight text-[var(--text)]">
+                  {scheduledWorkoutTitle}
+                </h2>
+              </div>
+              {progress ? (
+                <span className="shrink-0 rounded-full bg-[color-mix(in_srgb,var(--success)_18%,var(--surface))] px-3 py-1 text-sm font-semibold tabular-nums text-[var(--success)]">
+                  {progress.completedSets}/{progress.totalSets}
+                </span>
+              ) : null}
+            </div>
           </div>
-          {progress ? (
-            <span className="shrink-0 rounded-full bg-[color-mix(in_srgb,var(--success)_18%,var(--surface))] px-3 py-1 text-sm font-semibold tabular-nums text-[var(--success)]">
-              {progress.completedSets}/{progress.totalSets}
-            </span>
-          ) : null}
-        </div>
+          <div aria-hidden="true" className="h-[calc(env(safe-area-inset-top)+4.25rem)]" />
+        </>
       ) : (
         <div className="flex min-w-0 flex-wrap items-center gap-3">
           <Badge className={workoutStatusBadgeClass(status)}>{workoutStatusLabel(status)}</Badge>
@@ -2106,7 +2279,7 @@ export function AthleteSessionPanel({
         {workoutMessage}
       </p>
       {isSessionSyncing ? (
-        <div className="rounded-3xl border border-[var(--border-strong)] bg-[color:color-mix(in_srgb,var(--surface-2)_82%,var(--surface))] px-4 py-5 shadow-[0_12px_28px_-24px_var(--shadow)]">
+        <div className="rounded-[18px] border border-[var(--border-strong)] bg-[color:color-mix(in_srgb,var(--surface-2)_82%,var(--surface))] px-4 py-5 shadow-[0_12px_28px_-24px_var(--shadow)]">
           <div className="flex items-center gap-3">
             <span
               aria-hidden="true"
@@ -2133,14 +2306,83 @@ export function AthleteSessionPanel({
         </div>
       ) : null}
           {activeLoggingView
-            ? exerciseGroups.map((group) => renderActiveExerciseCard(group))
+            ? exerciseRenderBlocks.map((block) => {
+                if (block.type === "single") {
+                  return renderActiveExerciseCard(block.groups[0]!);
+                }
+
+                const firstGroup = block.groups[0];
+                if (!firstGroup) {
+                  return null;
+                }
+
+                const safeBlockKey = block.key.replace(/[^a-zA-Z0-9_-]/g, "-");
+                const supersetButtonId = `${scheduledWorkoutId}-${safeBlockKey}-active-toggle`;
+                const supersetPanelId = `${scheduledWorkoutId}-${safeBlockKey}-active-panel`;
+                const allLogs = block.groups.flatMap((group) => group.logs);
+                const completedInSuperset = allLogs.filter((log) => log.done).length;
+                const isExpanded = block.groups.some((group) => getIsExpanded(group));
+                const exerciseNames = block.groups.map((group) => group.exerciseName).join(" + ");
+
+                return (
+                  <div
+                    key={block.key}
+                    className="min-w-0 max-w-full overflow-hidden rounded-[18px] border border-[color-mix(in_srgb,var(--accent)_30%,var(--border))] bg-[color-mix(in_srgb,var(--accent)_5%,var(--surface))] p-3 shadow-[0_14px_32px_-30px_var(--accent)]"
+                  >
+                    <button
+                      type="button"
+                      id={supersetButtonId}
+                      aria-expanded={isExpanded}
+                      aria-controls={supersetPanelId}
+                      className="group flex w-full min-w-0 items-center justify-between gap-3 rounded-[1.2rem] text-left transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--surface)]"
+                      onClick={() => setGroupExpansion(firstGroup)}
+                    >
+                      <span className="min-w-0">
+                        <span className="flex min-w-0 flex-wrap items-center gap-2">
+                          <span className="font-[family-name:var(--font-display)] text-[0.98rem] font-bold text-[var(--accent)]">
+                            Superset {block.supersetGroup}
+                          </span>
+                          <span className="inline-flex rounded-full border border-[color-mix(in_srgb,var(--accent)_24%,var(--border))] bg-[var(--surface)] px-2 py-0.5 text-[11px] font-semibold text-[var(--text-subtle)]">
+                            {block.groups.length} liikettä
+                          </span>
+                        </span>
+                        <span className="mt-0.5 block truncate text-xs text-[var(--text-subtle)]">
+                          {exerciseNames}
+                        </span>
+                      </span>
+                      <span className="flex shrink-0 items-center gap-2">
+                        <span className="rounded-full bg-[var(--surface)] px-2.5 py-1 text-xs font-semibold tabular-nums text-[var(--text-subtle)]">
+                          {completedInSuperset}/{allLogs.length}
+                        </span>
+                        <span className="grid size-8 place-items-center rounded-full border border-[color-mix(in_srgb,var(--accent)_26%,var(--border))] bg-[var(--surface)] text-[var(--accent)] transition group-hover:bg-[color-mix(in_srgb,var(--accent)_8%,var(--surface))]">
+                          {isExpanded ? (
+                            <ChevronUp className="size-4" aria-hidden="true" />
+                          ) : (
+                            <ChevronDown className="size-4" aria-hidden="true" />
+                          )}
+                        </span>
+                      </span>
+                    </button>
+                    {isExpanded ? (
+                      <div
+                        id={supersetPanelId}
+                        role="region"
+                        aria-labelledby={supersetButtonId}
+                        className="mt-3 grid min-w-0 gap-2.5"
+                      >
+                        {block.groups.map((group) => renderActiveExerciseCard(group))}
+                      </div>
+                    ) : null}
+                  </div>
+                );
+              })
             : exerciseRenderBlocks.map((block) => {
                 if (block.type === "single") {
                   return renderExerciseGroupCard(block.groups[0]!);
                 }
 
                 return (
-                  <div key={block.key} className="min-w-0 max-w-full overflow-x-clip rounded-3xl border border-[var(--accent)] bg-[var(--surface-3)]/60 p-3 [contain:inline-size]">
+                  <div key={block.key} className="min-w-0 max-w-full overflow-x-clip rounded-[18px] border border-[var(--accent)] bg-[var(--surface-3)]/60 p-3 [contain:inline-size]">
                     <div className="mb-3 flex min-w-0 items-center justify-between gap-3">
                       <div className="inline-flex min-w-0 items-center gap-1.5">
                         <p className="text-sm font-semibold text-[var(--accent)]">
@@ -2186,6 +2428,8 @@ export function AthleteSessionPanel({
           initialExerciseId={openExerciseStructure.mode === "edit" ? openExerciseStructure.initialExerciseId : undefined}
           initialSetCount={openExerciseStructure.mode === "edit" ? openExerciseStructure.initialSetCount : undefined}
           initialTargetReps={openExerciseStructure.mode === "edit" ? openExerciseStructure.initialTargetReps : undefined}
+          initialTargetRepsMin={openExerciseStructure.mode === "edit" ? openExerciseStructure.initialTargetRepsMin : undefined}
+          initialTargetRepsMax={openExerciseStructure.mode === "edit" ? openExerciseStructure.initialTargetRepsMax : undefined}
           initialRestSeconds={openExerciseStructure.mode === "edit" ? openExerciseStructure.initialRestSeconds : undefined}
           onClose={() => setOpenExerciseStructure(null)}
           onRemove={async (templateExerciseId) => {
@@ -2208,6 +2452,8 @@ export function AthleteSessionPanel({
                 customExerciseName: payload.customExerciseName,
                 setCount: payload.setCount,
                 targetReps: payload.targetReps,
+                targetRepsMin: payload.targetRepsMin,
+                targetRepsMax: payload.targetRepsMax,
                 restSeconds: payload.restSeconds,
               });
             } else {
@@ -2217,6 +2463,8 @@ export function AthleteSessionPanel({
                 customExerciseName: payload.customExerciseName,
                 setCount: payload.setCount,
                 targetReps: payload.targetReps,
+                targetRepsMin: payload.targetRepsMin,
+                targetRepsMax: payload.targetRepsMax,
                 restSeconds: payload.restSeconds,
               });
             }

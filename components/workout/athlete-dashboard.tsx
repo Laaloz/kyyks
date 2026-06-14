@@ -22,7 +22,6 @@ import {
   Trash2,
   Waves,
   Activity,
-  X,
   Clock3,
 } from "lucide-react";
 import {
@@ -59,7 +58,7 @@ import { buildScheduledWorkoutExerciseOrder } from "@/lib/workout-exercise-order
 import { buildWorkoutHistoryTitleMap, normalizeWorkoutHistoryTitle } from "@/lib/workout-history-title";
 import { cn } from "@/lib/utils";
 import { estimateExtraActivityKcal, extraActivityCatalog } from "@/lib/extra-activities";
-import type { AppState, ConversationEntry, ExtraActivity, ExtraActivityType, WorkoutSession } from "@/lib/types";
+import type { AppState, ConversationEntry, ExtraActivity, ExtraActivityType, ProgramWorkout, ProgramWorkoutSet, WorkoutSession } from "@/lib/types";
 import { formatDate, formatDateWithWeekday, formatRelativeDate } from "@/lib/utils";
 import { resolveBlockingWorkoutStart, useAppState } from "@/providers/app-state-provider";
 
@@ -175,20 +174,116 @@ function CoachInstructionDialog({
   );
 }
 
+function formatProgramWorkoutSetReps(set: ProgramWorkoutSet) {
+  if (
+    set.targetRepsMin !== undefined &&
+    set.targetRepsMax !== undefined &&
+    set.targetRepsMax > set.targetRepsMin
+  ) {
+    return `${set.targetRepsMin}-${set.targetRepsMax}`;
+  }
+
+  return String(set.targetReps);
+}
+
+function formatProgramWorkoutExerciseTarget(sets: ProgramWorkoutSet[]) {
+  if (!sets.length) {
+    return "Ei sarjoja";
+  }
+
+  const repTargets = Array.from(new Set(sets.map((set) => formatProgramWorkoutSetReps(set))));
+  return `${sets.length} × ${repTargets.length === 1 ? repTargets[0] : repTargets.join("/")}`;
+}
+
+function ProgramWorkoutPreviewDialog({
+  workout,
+  onClose,
+}: {
+  workout: ProgramWorkout;
+  onClose: () => void;
+}) {
+  const setCount = workout.exercises.reduce((sum, exercise) => sum + exercise.sets.length, 0);
+
+  useEffect(() => {
+    const handleKeyDown = (event: globalThis.KeyboardEvent) => {
+      if (event.key === "Escape") {
+        onClose();
+      }
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [onClose]);
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-end justify-center bg-[color:color-mix(in_srgb,var(--background)_54%,transparent)] sm:p-4 sm:items-center"
+      role="presentation"
+      onClick={onClose}
+    >
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="program-workout-preview-title"
+        className="w-full max-w-none rounded-t-3xl bg-[var(--surface)] p-5 pb-[max(env(safe-area-inset-bottom),1.25rem)] shadow-[0_24px_60px_-24px_var(--shadow)] sm:max-w-lg sm:rounded-3xl"
+        onClick={(event) => event.stopPropagation()}
+      >
+        <span className="mx-auto mb-3 block h-1 w-10 rounded-full bg-[var(--border-strong)]" aria-hidden="true" />
+        <div className="flex items-start justify-between gap-3">
+          <div className="min-w-0">
+            <h3
+              id="program-workout-preview-title"
+              className="font-[family-name:var(--font-display)] text-2xl font-bold leading-tight text-[var(--text)]"
+            >
+              {workout.name}
+            </h3>
+            <p className="mt-1 text-sm text-[var(--text-subtle)]">
+              {workout.exercises.length} liikettä · {setCount} sarjaa
+            </p>
+          </div>
+        </div>
+
+        <div className="mt-4 max-h-[60vh] overflow-y-auto">
+          <div className="grid gap-2">
+            {workout.exercises.map((exercise, index) => (
+              <div
+                key={exercise.id}
+                className="rounded-[18px] border border-[var(--border)] bg-[var(--surface-2)] px-3 py-3"
+              >
+                <div className="flex min-w-0 items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <p className="text-[11px] font-semibold uppercase tracking-[0.06em] text-[var(--text-subtle)]">
+                      Liike {index + 1}
+                    </p>
+                    <div className="mt-0.5 flex min-w-0 flex-wrap items-center gap-2">
+                      <p className="min-w-0 font-semibold text-[var(--text)] [overflow-wrap:anywhere]">
+                        {exercise.exerciseName}
+                      </p>
+                      {exercise.supersetGroup ? (
+                        <span className="shrink-0 rounded-full border border-[color-mix(in_srgb,var(--accent)_28%,var(--border))] bg-[color-mix(in_srgb,var(--accent)_8%,var(--surface))] px-2 py-0.5 text-[10px] font-semibold text-[var(--accent)]">
+                          Superset {exercise.supersetGroup}
+                        </span>
+                      ) : null}
+                    </div>
+                  </div>
+                  <div className="shrink-0 rounded-full bg-[var(--surface)] px-2.5 py-1 text-xs font-semibold tabular-nums text-[var(--text-subtle)]">
+                    {formatProgramWorkoutExerciseTarget(exercise.sets)}
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function ExtraActivityDialog({
   activityType,
   durationMinutes,
-  occurredDate,
-  notes,
-  estimatedKcal,
-  isManualKcalEnabled,
-  manualKcal,
   onChangeActivityType,
   onChangeDurationMinutes,
-  onChangeOccurredDate,
-  onChangeNotes,
-  onToggleManualKcal,
-  onChangeManualKcal,
   onClose,
   onSave,
 }: {
@@ -209,8 +304,14 @@ function ExtraActivityDialog({
   onSave: () => void;
 }) {
   const totalMinutes = Math.max(0, Number(durationMinutes) || 0);
-  const durationHours = Math.floor(totalMinutes / 60);
-  const durationRemainderMinutes = totalMinutes % 60;
+  const primaryActivityTypes: ExtraActivityType[] = ["run", "cycle", "walk", "swim", "hiit", "mobility"];
+  const activityTypes = primaryActivityTypes.includes(activityType)
+    ? primaryActivityTypes
+    : [...primaryActivityTypes, activityType];
+  const updateDurationBy = (delta: number) => {
+    onChangeDurationMinutes(String(Math.max(5, totalMinutes + delta)));
+  };
+
   useEffect(() => {
     const handleKeyDown = (event: globalThis.KeyboardEvent) => {
       if (event.key === "Escape") {
@@ -224,7 +325,7 @@ function ExtraActivityDialog({
 
   return (
     <div
-      className="fixed inset-0 z-40 flex items-end justify-center bg-[color:color-mix(in_srgb,var(--background)_54%,transparent)] p-4 sm:items-center"
+      className="fixed inset-0 z-40 flex items-end justify-center bg-[color:color-mix(in_srgb,var(--background)_54%,transparent)] sm:p-4 sm:items-center"
       role="presentation"
       onClick={onClose}
     >
@@ -232,118 +333,70 @@ function ExtraActivityDialog({
         role="dialog"
         aria-modal="true"
         aria-labelledby="extra-activity-title"
-        className="w-full max-w-lg overflow-x-hidden rounded-3xl border border-[var(--border-strong)] bg-[var(--surface)] p-4 shadow-[0_24px_60px_-24px_var(--shadow)]"
+        aria-describedby="extra-activity-description"
+        className="w-full max-w-none overflow-x-hidden rounded-t-3xl bg-[var(--surface)] p-5 pb-[max(env(safe-area-inset-bottom),1.25rem)] shadow-[0_24px_60px_-24px_var(--shadow)] sm:max-w-lg sm:rounded-3xl"
         onClick={(event) => event.stopPropagation()}
       >
-        <p className="text-[11px] font-semibold tracking-[0.06em] text-[var(--accent)]">Extra-treeni</p>
-        <h3 id="extra-activity-title" className="mt-2 text-xl font-semibold text-[var(--text)]">
-          Lisää extra-treeni historiaan
+        <span className="mx-auto mb-3 block h-1 w-10 rounded-full bg-[var(--border-strong)]" aria-hidden="true" />
+        <h3 id="extra-activity-title" className="font-[family-name:var(--font-display)] text-2xl font-bold text-[var(--text)]">
+          Extra-treeni
         </h3>
-        <div className="mt-4 grid gap-2 sm:grid-cols-3">
-          <div className="min-w-0">
-            <Label htmlFor="extra-activity-type-modal" className="text-xs">Laji</Label>
-            <Select
-              id="extra-activity-type-modal"
-              className="mt-1 w-full min-w-0"
-              value={activityType}
-              onChange={(event) => onChangeActivityType(event.target.value as ExtraActivityType)}
-            >
-              {Object.entries(extraActivityCatalog).map(([key, value]) => (
-                <option key={key} value={key}>{value.label}</option>
-              ))}
-            </Select>
-          </div>
-          <div className="min-w-0">
-            <Label className="text-xs">Kesto</Label>
-            <div className="mt-1 grid grid-cols-2 gap-2">
-              <div className="min-w-0">
-                <Label htmlFor="extra-activity-duration-hours-modal" className="text-[11px] text-[var(--text-subtle)]">Tunnit</Label>
-                <Input
-                  id="extra-activity-duration-hours-modal"
-                  className="mt-1 w-full min-w-0"
-                  type="number"
-                  min={0}
-                  step={1}
-                  inputMode="numeric"
-                  value={String(durationHours)}
-                  onChange={(event) => {
-                    const hours = Math.max(0, Number(event.target.value) || 0);
-                    onChangeDurationMinutes(String(hours * 60 + durationRemainderMinutes));
-                  }}
-                />
-              </div>
-              <div className="min-w-0">
-                <Label htmlFor="extra-activity-duration-minutes-modal" className="text-[11px] text-[var(--text-subtle)]">Minuutit</Label>
-                <Input
-                  id="extra-activity-duration-minutes-modal"
-                  className="mt-1 w-full min-w-0"
-                  type="number"
-                  min={0}
-                  max={59}
-                  step={1}
-                  inputMode="numeric"
-                  value={String(durationRemainderMinutes)}
-                  onChange={(event) => {
-                    const minutes = Math.min(59, Math.max(0, Number(event.target.value) || 0));
-                    onChangeDurationMinutes(String(durationHours * 60 + minutes));
-                  }}
-                />
-              </div>
-            </div>
-          </div>
-          <div className="min-w-0">
-            <Label htmlFor="extra-activity-date-modal" className="text-xs">Päivä</Label>
-            <div className="mt-1 min-w-0 overflow-hidden rounded-xl border border-[var(--border)] bg-[var(--surface)] transition focus-within:border-[var(--accent)] focus-within:shadow-[inset_0_0_0_1px_var(--accent)]">
-              <input
-                id="extra-activity-date-modal"
-                className="block h-12 w-full min-w-0 max-w-full border-0 bg-transparent px-4 py-3 text-sm text-[var(--text)] outline-none ring-0 focus:outline-none focus:ring-0"
-                type="date"
-                inputMode="none"
-                value={occurredDate}
-                onChange={(event) => onChangeOccurredDate(event.target.value)}
-              />
-            </div>
-          </div>
-        </div>
-        <p className="mt-2 text-xs text-[var(--text-subtle)]">
-          Arvio kcal lasketaan automaattisesti: {estimatedKcal} kcal
+        <p id="extra-activity-description" className="mt-1 text-sm text-[var(--text-muted)]">
+          Cardio ja muu liikunta ohjelman rinnalle — näkyy historiassa.
         </p>
-        <label className="mt-2 flex items-center gap-2 text-xs text-[var(--text)]">
-          <input
-            type="checkbox"
-            checked={isManualKcalEnabled}
-            onChange={(event) => onToggleManualKcal(event.target.checked)}
-          />
-          Tarkenna kcal manuaalisesti
-        </label>
-        {isManualKcalEnabled ? (
-          <div className="mt-2">
-            <Label htmlFor="extra-activity-manual-kcal-modal" className="text-xs">Manuaalinen kcal</Label>
-            <Input
-              id="extra-activity-manual-kcal-modal"
-              className="mt-1"
-              type="number"
-              min={1}
-              step={1}
-              value={manualKcal}
-              onChange={(event) => onChangeManualKcal(event.target.value)}
-            />
-          </div>
-        ) : null}
-        <div className="mt-2">
-          <Label htmlFor="extra-activity-notes-modal" className="text-xs">Muistiinpano (valinnainen)</Label>
-          <Textarea
-            id="extra-activity-notes-modal"
-            className="mt-1"
-            value={notes}
-            onChange={(event) => onChangeNotes(event.target.value)}
-          />
+
+        <div className="mt-5 flex flex-wrap gap-3" role="group" aria-label="Extra-treenin laji">
+          {activityTypes.map((type) => {
+            const active = activityType === type;
+            return (
+              <button
+                key={type}
+                type="button"
+                aria-pressed={active}
+                className={cn(
+                  "rounded-full px-5 py-2 text-base font-semibold transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--background)]",
+                  active
+                    ? "bg-[var(--text)] text-[var(--background)]"
+                    : "bg-transparent text-[var(--text-muted)] hover:bg-[var(--surface-2)] hover:text-[var(--text)]",
+                )}
+                onClick={() => onChangeActivityType(type)}
+              >
+                {extraActivityCatalog[type].label}
+              </button>
+            );
+          })}
         </div>
-        <div className="mt-5 flex justify-end gap-2">
-          <Button type="button" variant="ghost" onClick={onClose}>
-            Peruuta
-          </Button>
-          <Button type="button" onClick={onSave}>
+
+        <div className="mt-7 flex items-center justify-between gap-4">
+          <p className="font-[family-name:var(--font-display)] text-xl font-bold text-[var(--text)]">Kesto (min)</p>
+          <div className="flex h-14 shrink-0 items-center gap-3 rounded-[18px] bg-[var(--surface-2)] px-4">
+            <button
+              type="button"
+              aria-label="Vähennä kestoa"
+              className="grid size-9 place-items-center rounded-full text-2xl leading-none text-[var(--text)] transition hover:bg-[var(--surface)]"
+              onClick={() => updateDurationBy(-5)}
+            >
+              -
+            </button>
+            <output
+              aria-live="polite"
+              className="min-w-10 text-center font-[family-name:var(--font-display)] text-xl font-bold tabular-nums text-[var(--text)]"
+            >
+              {totalMinutes}
+            </output>
+            <button
+              type="button"
+              aria-label="Lisää kestoa"
+              className="grid size-9 place-items-center rounded-full text-2xl leading-none text-[var(--text)] transition hover:bg-[var(--surface)]"
+              onClick={() => updateDurationBy(5)}
+            >
+              +
+            </button>
+          </div>
+        </div>
+
+        <div className="mt-8">
+          <Button type="button" className="w-full" onClick={onSave}>
             Tallenna
           </Button>
         </div>
@@ -454,6 +507,7 @@ export function AthleteDashboard({
   const [selectedWorkoutId, setSelectedWorkoutId] = useState<string | null>(null);
   const [workoutMessage, setWorkoutMessage] = useState<string>("");
   const [openWorkoutInstruction, setOpenWorkoutInstruction] = useState<{ exerciseName: string; instruction: string } | null>(null);
+  const [previewProgramWorkout, setPreviewProgramWorkout] = useState<ProgramWorkout | null>(null);
   const [athleteLogMode, setAthleteLogMode] = useState<AthleteLogMode>("overview");
   const [athleteLogTab, setAthleteLogTab] = useState<AthleteLogTab>("training");
   const [athleteLogReturnTab, setAthleteLogReturnTab] = useState<AthleteLogTab>("training");
@@ -2250,35 +2304,46 @@ export function AthleteDashboard({
                                       {workout.exercises.length} liikettä · ~{estMin} min{doneWeekday ? ` · Tehty ${doneWeekday}` : ""}
                                     </p>
                                   </div>
-                                  {doneThisWeek && !isActiveRow ? (
-                                    <Check className="size-5 shrink-0 text-[var(--success)]" aria-label="Tehty tällä viikolla" />
-                                  ) : readOnly ? (
-                                    <span className="shrink-0 rounded-full bg-[var(--surface-2)] px-2.5 py-0.5 text-xs font-semibold text-[var(--text-muted)]">Tulossa</span>
-                                  ) : activeScheduledId ? (
-                                    <Button type="button" variant="primary" className="h-9 shrink-0 px-4 text-sm" onClick={() => openWorkoutView(activeScheduledId)}>
-                                      Jatka
-                                    </Button>
-                                  ) : (
-                                    <Button
+                                  <div className="flex shrink-0 items-center gap-2">
+                                    <button
                                       type="button"
-                                      variant={isNext || resumableScheduledId ? "primary" : "secondary"}
-                                      className="h-9 shrink-0 px-4 text-sm"
-                                      disabled={
-                                        isLockedByAnotherWorkout ||
-                                        isTransitionLoading(`program-${program.id}-workout-${workout.id}`) ||
-                                        (!resumableScheduledId && pendingWorkoutTransition?.type === "start")
-                                      }
-                                      onClick={() => {
-                                        if (resumableScheduledId) {
-                                          void openOrResumeWorkout(resumableScheduledId, `program-${program.id}-workout-${workout.id}`);
-                                          return;
-                                        }
-                                        void startWorkoutFromProgram(program.id, workout.id, workout.name, `program-${program.id}-workout-${workout.id}`);
-                                      }}
+                                      aria-label={`Näytä treenin ${workout.name} liikkeet`}
+                                      title="Näytä liikkeet"
+                                      className="grid size-9 place-items-center rounded-full border border-[var(--border)] bg-[var(--surface)] text-[var(--text-subtle)] transition hover:border-[var(--border-strong)] hover:bg-[var(--surface-2)] hover:text-[var(--text)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--background)]"
+                                      onClick={() => setPreviewProgramWorkout(workout)}
                                     >
-                                      {resumableScheduledId ? "Jatka" : "Aloita"}
-                                    </Button>
-                                  )}
+                                      <Info className="size-4" aria-hidden="true" />
+                                    </button>
+                                    {doneThisWeek && !isActiveRow ? (
+                                      <Check className="size-5 shrink-0 text-[var(--success)]" aria-label="Tehty tällä viikolla" />
+                                    ) : readOnly ? (
+                                      <span className="shrink-0 rounded-full bg-[var(--surface-2)] px-2.5 py-0.5 text-xs font-semibold text-[var(--text-muted)]">Tulossa</span>
+                                    ) : activeScheduledId ? (
+                                      <Button type="button" variant="primary" className="h-9 shrink-0 px-4 text-sm" onClick={() => openWorkoutView(activeScheduledId)}>
+                                        Jatka
+                                      </Button>
+                                    ) : (
+                                      <Button
+                                        type="button"
+                                        variant={isNext || resumableScheduledId ? "primary" : "secondary"}
+                                        className="h-9 shrink-0 px-4 text-sm"
+                                        disabled={
+                                          isLockedByAnotherWorkout ||
+                                          isTransitionLoading(`program-${program.id}-workout-${workout.id}`) ||
+                                          (!resumableScheduledId && pendingWorkoutTransition?.type === "start")
+                                        }
+                                        onClick={() => {
+                                          if (resumableScheduledId) {
+                                            void openOrResumeWorkout(resumableScheduledId, `program-${program.id}-workout-${workout.id}`);
+                                            return;
+                                          }
+                                          void startWorkoutFromProgram(program.id, workout.id, workout.name, `program-${program.id}-workout-${workout.id}`);
+                                        }}
+                                      >
+                                        {resumableScheduledId ? "Jatka" : "Aloita"}
+                                      </Button>
+                                    )}
+                                  </div>
                                 </div>
                               );
                             })}
@@ -2831,6 +2896,12 @@ export function AthleteDashboard({
           exerciseName={openWorkoutInstruction.exerciseName}
           instruction={openWorkoutInstruction.instruction}
           onClose={() => setOpenWorkoutInstruction(null)}
+        />
+      ) : null}
+      {previewProgramWorkout ? (
+        <ProgramWorkoutPreviewDialog
+          workout={previewProgramWorkout}
+          onClose={() => setPreviewProgramWorkout(null)}
         />
       ) : null}
       {isExtraActivityDialogOpen ? (
