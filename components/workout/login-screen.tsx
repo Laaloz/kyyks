@@ -138,11 +138,12 @@ export function LoginScreen() {
             ) : null}
           </div>
           {requiresCaptcha ? (
-            <div className="w-full space-y-2 [&_iframe]:!w-full [&>div]:!w-full">
-              <HCaptcha
-                ref={captchaRef}
-                sitekey={hCaptchaSiteKey}
-                theme="light"
+            <div className="space-y-2">
+              <div className="flex justify-center">
+                <HCaptcha
+                  ref={captchaRef}
+                  sitekey={hCaptchaSiteKey}
+                  theme="light"
                 onVerify={(token) => {
                   setCaptchaToken(token);
                   setCaptchaError(null);
@@ -156,7 +157,8 @@ export function LoginScreen() {
                   setCaptchaToken(null);
                   setCaptchaError("Captcha ei latautunut oikein. Kokeile päivittää sivu.");
                 }}
-              />
+                />
+              </div>
               {captchaError ? (
                 <p aria-live="polite" className="text-sm text-[var(--danger)]">
                   {captchaError}
