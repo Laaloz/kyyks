@@ -7311,7 +7311,9 @@ function findResolvedUserIdInSnapshot(
           return { ok: true };
         }
 
-        // 1) Tallenna keskeneräinen rivi palvelimelle.
+        // Tausta: tallenna pending-rivi, aja AI ja täydennä kortti. EI awaiteta täällä →
+        // action palaa heti, sheet sulkeutuu, ja kortti näkyy "Arvioidaan…" kunnes AI valmistuu.
+        void (async () => {
         const createResponse = await fetch("/api/day-meal-plans", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -7325,7 +7327,7 @@ function findResolvedUserIdInSnapshot(
             ...previous,
             dayMealPlans: (previous.dayMealPlans ?? []).filter((entry) => entry.id !== optimisticId),
           }));
-          return { ok: false, message: createPayload?.message ?? "Ruoan lisäys epäonnistui." };
+          return;
         }
 
         const serverId = createPayload.id;
@@ -7340,7 +7342,7 @@ function findResolvedUserIdInSnapshot(
         if (pendingCreate?.canceled) {
           recentlyRemovedDayMealIdsRef.current.set(serverId, Date.now());
           await fetch(`/api/day-meal-plans/${encodeURIComponent(serverId)}`, { method: "DELETE" }).catch(() => null);
-          return { ok: true };
+          return;
         }
 
         // 2) Aja AI-arvio (teksti tai kuva).
@@ -7379,7 +7381,7 @@ function findResolvedUserIdInSnapshot(
               entry.id === serverId ? { ...entry, aiStatus: "failed" as const } : entry,
             ),
           }));
-          return { ok: true };
+          return;
         }
 
         const estimate = aiPayload.estimate;
@@ -7415,6 +7417,8 @@ function findResolvedUserIdInSnapshot(
         }));
 
         void ensureOwnFood(estimate.name, "ai", estimate.kcalPer100, estimate.proteinPer100, estimate.carbsPer100, estimate.fatPer100);
+        })();
+
         return { ok: true };
       },
       async saveDayMealFood(entryId, input) {

@@ -61,7 +61,9 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(function Button
             aria-hidden="true"
             className="size-4 animate-spin rounded-full border-2 border-current border-r-transparent"
           />
-          <span>{loadingText ?? children}</span>
+          {/* Vain loadingText näytetään latauksessa — ei childrenin ikonia+tekstiä, ettei
+              nappi mene rikki (kahdelle riville). Ilman loadingTextiä pelkkä spinneri. */}
+          {loadingText ? <span className="truncate">{loadingText}</span> : null}
         </span>
       ) : (
         children

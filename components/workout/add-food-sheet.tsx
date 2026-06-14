@@ -193,6 +193,7 @@ export function AddFoodSheet({
             type="button"
             className={cn("w-full gap-2", ownFoods.length > 0 ? "mt-4" : "mt-2")}
             loading={pending}
+            loadingText="Lisätään…"
             onClick={() => void runQuickAdd()}
           >
             <Plus className="size-4" aria-hidden="true" />
