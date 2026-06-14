@@ -5,6 +5,7 @@ import { useEffect, useMemo, useState } from "react";
 
 import { Button } from "@/components/ui/button";
 import { Card, CardDescription, CardTitle } from "@/components/ui/card";
+import { Sheet } from "@/components/ui/sheet";
 import {
   buildRecipeGoalComparison,
   getActiveMealPlanForAthlete,
@@ -165,37 +166,6 @@ function RecipeDetailDialog({
   const [wakeLockSentinel, setWakeLockSentinel] = useState<{ release: () => Promise<void> } | null>(null);
 
   useEffect(() => {
-    const { body, documentElement } = document;
-    const previousBodyOverflow = body.style.overflow;
-    const previousBodyOverscrollBehavior = body.style.overscrollBehavior;
-    const previousDocumentOverflow = documentElement.style.overflow;
-    const previousDocumentOverscrollBehavior = documentElement.style.overscrollBehavior;
-
-    body.style.overflow = "hidden";
-    body.style.overscrollBehavior = "none";
-    documentElement.style.overflow = "hidden";
-    documentElement.style.overscrollBehavior = "none";
-
-    return () => {
-      body.style.overflow = previousBodyOverflow;
-      body.style.overscrollBehavior = previousBodyOverscrollBehavior;
-      documentElement.style.overflow = previousDocumentOverflow;
-      documentElement.style.overscrollBehavior = previousDocumentOverscrollBehavior;
-    };
-  }, []);
-
-  useEffect(() => {
-    const handleKeyDown = (event: globalThis.KeyboardEvent) => {
-      if (event.key === "Escape") {
-        onClose();
-      }
-    };
-
-    window.addEventListener("keydown", handleKeyDown);
-    return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [onClose]);
-
-  useEffect(() => {
     setWakeLockSupported(typeof navigator !== "undefined" && "wakeLock" in navigator);
   }, []);
 
@@ -288,23 +258,17 @@ function RecipeDetailDialog({
   );
 
   return (
-    <div
-      className="fixed inset-0 z-40 flex items-end justify-center bg-[color:color-mix(in_srgb,var(--background)_56%,transparent)] p-3 sm:items-center sm:p-4"
-      role="presentation"
-      onClick={onClose}
+    <Sheet
+      onClose={onClose}
+      ariaLabelledby="nutrition-recipe-title"
+      ariaDescribedby="nutrition-recipe-description"
+      className="max-w-2xl overflow-hidden border border-[var(--border-strong)] p-0"
+      showHandle={false}
     >
-      <div
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="nutrition-recipe-title"
-        aria-describedby="nutrition-recipe-description"
-        className="flex max-h-[92vh] w-full max-w-2xl flex-col overflow-hidden rounded-3xl border border-[var(--border-strong)] bg-[var(--surface)] shadow-[0_24px_60px_-24px_var(--shadow)]"
-        onClick={(event) => event.stopPropagation()}
-      >
         <div className="border-b border-[var(--border)] px-4 py-3 sm:px-5">
           <div className="flex items-start justify-between gap-4">
             <div>
-              <p className="text-[11px] font-semibold tracking-[0.06em] text-[var(--accent)]">{mealTagLabel(mealTag)}</p>
+              <p className="text-sm font-semibold text-[var(--accent)]">{mealTagLabel(mealTag)}</p>
               <h3 id="nutrition-recipe-title" className="mt-1.5 text-xl font-semibold text-[var(--text)] sm:text-2xl">
                 {recipe.name}
               </h3>
@@ -496,8 +460,7 @@ function RecipeDetailDialog({
             </div>
           </div>
         </div>
-      </div>
-    </div>
+    </Sheet>
   );
 }
 
