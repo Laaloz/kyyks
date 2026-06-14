@@ -1,7 +1,7 @@
 "use client";
 
 import { Camera, Check, Plus, Search } from "lucide-react";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 
 import { Button } from "@/components/ui/button";
 import { Sheet } from "@/components/ui/sheet";
@@ -60,12 +60,17 @@ export function AddFoodSheet({
   const [pending, setPending] = useState(false);
   const [error, setError] = useState("");
 
+  // Suodata omat tuotteet koko katalogista vain kerran (ei joka näppäimenpainalluksella) —
+  // koko katalogin läpikäynti per painallus aiheutti turhaa muisti-/CPU-painetta mobiilissa.
+  const myFoods = useMemo(
+    () =>
+      catalog
+        .filter((item) => item.ownerUserId === userId)
+        .sort((left, right) => (left.displayName || left.name).localeCompare(right.displayName || right.name, "fi")),
+    [catalog, userId],
+  );
   const term = query.trim().toLowerCase();
-  const ownFoods = catalog
-    .filter((item) => item.ownerUserId === userId && (!term || (item.displayName || item.name).toLowerCase().includes(term)))
-    .slice()
-    .sort((left, right) => (left.displayName || left.name).localeCompare(right.displayName || right.name, "fi"))
-    .slice(0, 50);
+  const ownFoods = (term ? myFoods.filter((item) => (item.displayName || item.name).toLowerCase().includes(term)) : myFoods).slice(0, 50);
 
   const runQuickAdd = async () => {
     const name = query.trim();
