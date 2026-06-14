@@ -1,6 +1,6 @@
 "use client";
 
-import { BellRing, Carrot, Dumbbell, HeartPulse, Home, LogOut, MessageSquare, Plus, ScrollText, UserPlus, UserRound, UserRoundCog, Users, UtensilsCrossed, type LucideIcon } from "lucide-react";
+import { BellRing, Carrot, Dumbbell, HeartPulse, Home, LogOut, MessageSquare, Plus, ScrollText, UserPlus, UserRound, UserRoundCog, Users, UtensilsCrossed, X, type LucideIcon } from "lucide-react";
 import { useCallback, useEffect, useRef, useState, type KeyboardEvent } from "react";
 
 import dynamic from "next/dynamic";
@@ -472,6 +472,28 @@ export function DashboardShell() {
         shouldHideMobileBottomNav ? "pb-[calc(1rem+env(safe-area-inset-bottom))] lg:pb-4" : "pb-28 lg:pb-4"
       }`}
     >
+      {isActivePreview ? (
+        // Prototyypin esikatselupalkki: leveä vihreä yläpalkki + X. Sticky, full-bleed.
+        <div className="sticky top-0 z-40 -mx-4 -mt-4 flex items-center justify-between gap-3 rounded-b-2xl bg-[var(--accent)] px-4 py-3 text-[var(--accent-contrast)] shadow-[0_8px_20px_-16px_var(--shadow)] sm:-mx-6 sm:px-6 lg:-mx-8 lg:px-8">
+          <p className="min-w-0 truncate text-sm font-semibold">
+            <span className="font-bold">Esikatselu</span> · {currentUser.fullName} — sama näkymä kuin urheilijalla
+          </p>
+          <button
+            type="button"
+            className="grid size-8 shrink-0 place-items-center rounded-full text-[var(--accent-contrast)] transition hover:bg-[color:color-mix(in_srgb,var(--accent-contrast)_18%,transparent)]"
+            aria-label="Sulje esikatselu"
+            onClick={() => {
+              const result = stopAthletePreview();
+              if (result.ok) {
+                setView("overview");
+              }
+            }}
+          >
+            <X className="size-5" aria-hidden="true" />
+          </button>
+        </div>
+      ) : null}
+
       {shouldShowMeasurementReminder && isMeasurementReminderOpen ? (
         <MeasurementReminderDialog
           weightDue={weightReminderDue}
@@ -677,26 +699,7 @@ export function DashboardShell() {
             </nav>
           </div>
 
-          {isActivePreview ? (
-            <div className="flex flex-col gap-3 rounded-2xl bg-[var(--accent)] px-3 py-3 text-[var(--accent-contrast)] sm:flex-row sm:items-center sm:justify-between">
-              <p className="text-sm font-semibold">
-                Esikatselu · {currentUser.fullName}
-              </p>
-              <Button
-                type="button"
-                variant="secondary"
-                className="h-10 shrink-0 rounded-xl px-4 text-sm"
-                onClick={() => {
-                  const result = stopAthletePreview();
-                  if (result.ok) {
-                    setView("overview");
-                  }
-                }}
-              >
-                Sulje esikatselu
-              </Button>
-            </div>
-          ) : isImpersonating && authenticatedUser ? (
+          {!isActivePreview && isImpersonating && authenticatedUser ? (
             <div className="flex flex-col gap-2 sm:gap-2.5">
               <div className="flex flex-col gap-3 rounded-2xl border border-[var(--border-strong)] bg-[var(--surface-2)] px-3 py-3 sm:flex-row sm:items-center sm:justify-between">
                 <p className="text-sm text-[var(--text-muted)]">
