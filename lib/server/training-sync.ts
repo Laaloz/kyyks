@@ -620,15 +620,24 @@ export function mapDayMealPlanRow(entry: DayMealPlanRow): DayMealPlanEntry {
   };
 }
 
+// Heittää vain kriittisille (critical=true) hauille — käytännössä Profiles (identiteetti).
+// Muut domain-haut vain varoittavat ja jäävät tyhjäksi (mapperit käyttävät `?? []`), jottei
+// yksi rikkinäinen haku (puuttuva sarake, RLS, hetkellinen virhe) kaada koko app-state-latausta.
 function throwIfQueryFailed(
   label: string,
   result: {
     error: { message?: string | null } | null;
   },
+  critical = false,
 ) {
-  if (result.error) {
-    throw new Error(`${label} sync failed: ${result.error.message ?? "Unknown Supabase error."}`);
+  if (!result.error) {
+    return;
   }
+  const message = `${label} sync failed: ${result.error.message ?? "Unknown Supabase error."}`;
+  if (critical) {
+    throw new Error(message);
+  }
+  console.warn(`[app-state-sync] ${message} — osa jätetään tyhjäksi, muu tila ladataan silti.`);
 }
 
 export async function loadVisibleSupabaseAppState(
@@ -794,7 +803,7 @@ export async function loadVisibleSupabaseAppState(
   ]);
   logSyncPhase("all-queries", queryStartedAt);
 
-  throwIfQueryFailed("Profiles", profilesResult);
+  throwIfQueryFailed("Profiles", profilesResult, true);
   throwIfQueryFailed("Body measurements", bodyMeasurementsResult);
   throwIfQueryFailed("Nutrition profiles", nutritionProfilesResult);
   throwIfQueryFailed("Ingredients", ingredientsResult);

@@ -262,10 +262,16 @@ function ExtraActivityDialog({
   onSave: () => void;
 }) {
   const totalMinutes = Math.max(0, Number(durationMinutes) || 0);
+  const [showAllActivityTypes, setShowAllActivityTypes] = useState(false);
   const primaryActivityTypes: ExtraActivityType[] = ["run", "cycle", "walk", "swim", "hiit", "mobility"];
-  const activityTypes = primaryActivityTypes.includes(activityType)
-    ? primaryActivityTypes
-    : [...primaryActivityTypes, activityType];
+  const restActivityTypes = (Object.keys(extraActivityCatalog) as ExtraActivityType[])
+    .filter((type) => !primaryActivityTypes.includes(type))
+    .sort((left, right) => extraActivityCatalog[left].label.localeCompare(extraActivityCatalog[right].label, "fi"));
+  const activityTypes = showAllActivityTypes
+    ? [...primaryActivityTypes, ...restActivityTypes]
+    : primaryActivityTypes.includes(activityType)
+      ? primaryActivityTypes
+      : [...primaryActivityTypes, activityType];
   const updateDurationBy = (delta: number) => {
     onChangeDurationMinutes(String(Math.max(5, totalMinutes + delta)));
   };
@@ -305,6 +311,14 @@ function ExtraActivityDialog({
               </button>
             );
           })}
+          <button
+            type="button"
+            aria-expanded={showAllActivityTypes}
+            className="rounded-full px-4 py-2 text-sm font-semibold text-[var(--accent)] transition hover:bg-[var(--surface-2)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--background)]"
+            onClick={() => setShowAllActivityTypes((previous) => !previous)}
+          >
+            {showAllActivityTypes ? "Näytä vähemmän" : "Lisää lajeja"}
+          </button>
         </div>
 
         <div className="mt-6 flex items-center justify-between gap-4">
