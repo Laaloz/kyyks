@@ -6,7 +6,10 @@ import {
   getNutritionRequester,
   saveIngredientOnServer,
 } from "@/lib/server/nutrition";
+import { fetchAllIngredientRows, mapIngredientRow } from "@/lib/server/training-sync";
 
+// Koko katalogi mapattuna (Ingredient[]). Tämä on tarvittaessa-lataus: oletussynkka lataa vain
+// kevennetyn katalogin, ja reseptieditori/admin hakee koko Fineli-valikoiman tästä.
 export async function GET() {
   const requesterResult = await getNutritionRequester();
   if ("error" in requesterResult) {
@@ -14,12 +17,15 @@ export async function GET() {
   }
 
   const { supabase } = requesterResult;
-  const { data, error } = await supabase.from("ingredient_catalog").select("*").order("name", { ascending: true });
-  if (error) {
-    return NextResponse.json({ message: error.message || "Raaka-aineiden haku epäonnistui." }, { status: 400 });
+  try {
+    const rows = await fetchAllIngredientRows(supabase);
+    return NextResponse.json(rows.map(mapIngredientRow));
+  } catch (error) {
+    return NextResponse.json(
+      { message: error instanceof Error ? error.message : "Raaka-aineiden haku epäonnistui." },
+      { status: 400 },
+    );
   }
-
-  return NextResponse.json(data ?? []);
 }
 
 async function saveIngredient(request: Request) {

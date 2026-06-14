@@ -257,6 +257,12 @@ function createSupabaseMock(options?: { omitFirstExerciseFromPlan?: boolean }) {
         inCalls.push({ table, column, values });
         return builder;
       },
+      not() {
+        return builder;
+      },
+      or() {
+        return builder;
+      },
       limit() {
         return builder;
       },

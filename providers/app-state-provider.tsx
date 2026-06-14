@@ -2525,6 +2525,8 @@ interface AppStateContextValue {
   saveNutritionProfile: (input: NutritionProfileInput) => Promise<ActionResult>;
   saveIngredient: (input: IngredientInput) => Promise<ActionResult>;
   deleteIngredient: (ingredientId: string) => Promise<ActionResult>;
+  // Lataa koko ainekatalogi (ml. Fineli) muistiin tarvittaessa — reseptieditori/admin.
+  ensureFullIngredientCatalog: () => Promise<void>;
   saveRecipe: (input: RecipeInput) => Promise<ActionResult>;
   deleteRecipe: (recipeId: string) => Promise<ActionResult>;
   saveMealPlanTemplate: (input: MealPlanTemplateInput) => Promise<ActionResult>;
@@ -2696,6 +2698,9 @@ export function AppStateProvider({ children }: PropsWithChildren) {
   // Uloskirjautumisen aikana/jälkeen estää kesken olevaa synkkaa tai myöhästynyttä
   // auth-eventtiä re-autentikoimasta käyttäjää (korjaa "kirjautuu heti takaisin sisään").
   const isLoggingOutRef = useRef(false);
+  // Oletussynkka lataa vain kevennetyn katalogin (ei koko Fineliä). Koko katalogi haetaan
+  // tarvittaessa (reseptieditori/admin); tämä lippu estää tuplahaun.
+  const fullIngredientCatalogLoadedRef = useRef(false);
   const backgroundRefreshTimeoutRef = useRef<number | null>(null);
   const backgroundRefreshModeRef = useRef<"full" | "workouts" | null>(null);
   const backgroundRefreshSettledCallbacksRef = useRef<Array<() => void>>([]);
@@ -4826,6 +4831,30 @@ function findResolvedUserIdInSnapshot(
 
         setState((previous) => deleteIngredientFromCatalog(previous, ingredientId));
         return { ok: true };
+      },
+      async ensureFullIngredientCatalog() {
+        // Oletussynkka lataa vain kevennetyn katalogin. Reseptieditori/admin kutsuu tätä, jotta
+        // koko Fineli-valikoima on haettavissa — haetaan vain kerran per sessio.
+        if (!supabase || fullIngredientCatalogLoadedRef.current) {
+          return;
+        }
+        fullIngredientCatalogLoadedRef.current = true;
+        const response = await fetch("/api/nutrition/ingredients").catch(() => null);
+        if (!response?.ok) {
+          fullIngredientCatalogLoadedRef.current = false;
+          return;
+        }
+        const rows = (await response.json().catch(() => null)) as AppState["ingredientsCatalog"] | null;
+        if (!rows || rows.length === 0) {
+          return;
+        }
+        setState((previous) => {
+          const byId = new Map((previous.ingredientsCatalog ?? []).map((item) => [item.id, item]));
+          for (const row of rows) {
+            byId.set(row.id, row);
+          }
+          return { ...previous, ingredientsCatalog: Array.from(byId.values()) };
+        });
       },
       async saveRecipe(input) {
         if (!currentUser) {

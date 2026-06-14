@@ -1,7 +1,7 @@
 "use client";
 
 import { ArrowLeft, ChevronRight, Plus, Search, Trash2 } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 import { Button } from "@/components/ui/button";
 import { Input, Label } from "@/components/ui/field";
@@ -42,7 +42,12 @@ function ingredientNutritionLine(ingredient: Ingredient) {
 }
 
 export function AdminIngredientsView({ onBack }: { onBack?: () => void }) {
-  const { currentUser, state, saveIngredient, deleteIngredient, notify } = useAppState();
+  const { currentUser, state, saveIngredient, deleteIngredient, notify, ensureFullIngredientCatalog } = useAppState();
+  // Admin hallinnoi koko katalogia → ladataan koko Fineli muistiin (oletussynkka on kevennetty).
+  useEffect(() => {
+    void ensureFullIngredientCatalog();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
   const [query, setQuery] = useState("");
   const [isSheetOpen, setIsSheetOpen] = useState(false);
   const [selectedIngredientId, setSelectedIngredientId] = useState<string>("");

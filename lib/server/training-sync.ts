@@ -343,10 +343,67 @@ type AssignedMealPlanRow = {
   updated_at: string;
 };
 
-async function fetchAllIngredientRows(supabase: ServerClient) {
+const INGREDIENT_SELECT_COLUMNS =
+  "id, name, display_name, source, source_external_id, owner_role, owner_user_id, created_by, default_purchase_unit, grams_per_unit, kcal_per_100, protein_per_100, carbs_per_100, fat_per_100, created_at, updated_at";
+
+// Kevennetty katalogilataus: vain ei-Fineli-ainekset + käyttäjän omat tuotteet + reseptien
+// viittaamat ainekset (makroja varten). Koko Fineli (tuhansia rivejä) jätetään pois selaimen
+// muistista — se haetaan tarvittaessa (reseptieditori/admin). Korjaa mobiilin muistinpaineen.
+export async function fetchReducedIngredientRows(
+  supabase: ServerClient,
+  userId: string | null,
+): Promise<IngredientRow[]> {
+  const { data: refData } = await supabase
+    .from("recipe_ingredients")
+    .select("ingredient_id")
+    .not("ingredient_id", "is", null);
+  const referencedIds = Array.from(
+    new Set(
+      ((refData ?? []) as Array<{ ingredient_id: string | null }>)
+        .map((row) => row.ingredient_id)
+        .filter((id): id is string => Boolean(id)),
+    ),
+  );
+
+  const orFilter = userId ? `source.neq.fineli,owner_user_id.eq.${userId}` : "source.neq.fineli";
+  const baseQuery = await supabase
+    .from("ingredient_catalog")
+    .select(INGREDIENT_SELECT_COLUMNS)
+    .or(orFilter)
+    .order("name", { ascending: true });
+  if (baseQuery.error) {
+    throw new Error(baseQuery.error.message || "Ingredients haku epäonnistui.");
+  }
+
+  const byId = new Map<string, IngredientRow>();
+  for (const row of (baseQuery.data ?? []) as IngredientRow[]) {
+    byId.set(row.id, row);
+  }
+
+  // Lisää reseptien viittaamat ainekset jotka eivät jo ole mukana (esim. mahdollinen Fineli-
+  // aines reseptissä) — muuten kyseisen reseptin makrot menisivät väärin.
+  const missingRefs = referencedIds.filter((id) => !byId.has(id));
+  const chunkSize = 200;
+  for (let index = 0; index < missingRefs.length; index += chunkSize) {
+    const chunk = missingRefs.slice(index, index + chunkSize);
+    const { data: refRows, error: refError } = await supabase
+      .from("ingredient_catalog")
+      .select(INGREDIENT_SELECT_COLUMNS)
+      .in("id", chunk);
+    if (refError) {
+      throw new Error(refError.message || "Ingredients haku epäonnistui.");
+    }
+    for (const row of (refRows ?? []) as IngredientRow[]) {
+      byId.set(row.id, row);
+    }
+  }
+
+  return Array.from(byId.values());
+}
+
+export async function fetchAllIngredientRows(supabase: ServerClient) {
   const pageSize = 1000;
-  const selectColumns =
-    "id, name, display_name, source, source_external_id, owner_role, owner_user_id, created_by, default_purchase_unit, grams_per_unit, kcal_per_100, protein_per_100, carbs_per_100, fat_per_100, created_at, updated_at";
+  const selectColumns = INGREDIENT_SELECT_COLUMNS;
 
   // The catalog can hold thousands of rows; fetching pages sequentially adds a
   // round trip per 1000 rows to every full sync. Get the count with the first
@@ -491,7 +548,7 @@ function mapNutritionProfileRow(entry: NutritionProfileRow): NutritionProfile {
   };
 }
 
-function mapIngredientRow(entry: IngredientRow): Ingredient {
+export function mapIngredientRow(entry: IngredientRow): Ingredient {
   return {
     id: entry.id,
     name: entry.name,
@@ -663,7 +720,7 @@ export async function loadVisibleSupabaseAppState(
   const queryStartedAt = performance.now();
   const ingredientsPromise =
     mode === "full"
-      ? fetchAllIngredientRows(supabase).then((data) => ({ data, error: null }))
+      ? fetchReducedIngredientRows(supabase, authUser?.id ?? null).then((data) => ({ data, error: null }))
       : Promise.resolve({ data: [] as IngredientRow[], error: null });
 
   const [

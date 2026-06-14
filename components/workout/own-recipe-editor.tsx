@@ -1,7 +1,7 @@
 "use client";
 
 import { Plus, Search, Trash2, X } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 import { Button } from "@/components/ui/button";
 import { CardTitle } from "@/components/ui/card";
@@ -39,7 +39,13 @@ export function OwnRecipeEditor({
   onClose: () => void;
   onSaved?: (recipeName: string) => void;
 }) {
-  const { state, saveRecipe } = useAppState();
+  const { state, saveRecipe, ensureFullIngredientCatalog } = useAppState();
+  // Reseptieditori tarvitsee koko aineskatalogin (ml. Fineli) ainesten hakuun — oletussynkka
+  // lataa vain kevennetyn version, joten haetaan koko katalogi tässä.
+  useEffect(() => {
+    void ensureFullIngredientCatalog();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
   const isEditing = Boolean(initialRecipe);
   const [name, setName] = useState(() => initialRecipe?.name ?? "");
   const [mealTag, setMealTag] = useState<MealTag>(initialRecipe?.mealTag ?? initialMealTag);
