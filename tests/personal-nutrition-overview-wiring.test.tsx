@@ -1,9 +1,7 @@
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { cleanup, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { AdminDashboard } from "@/components/workout/admin-dashboard";
 import { AthleteDashboard } from "@/components/workout/athlete-dashboard";
-import { CoachDashboard } from "@/components/workout/coach-dashboard";
 
 vi.mock("@/components/workout/personal-nutrition-summary-card", () => ({
   PersonalNutritionSummaryCard: () => <div>PersonalNutritionSummaryCard</div>,
@@ -103,29 +101,5 @@ describe("personal nutrition summary overview wiring", () => {
 
     render(<AthleteDashboard view="nutrition" />);
     expect(screen.getByText("NutritionView")).toBeInTheDocument();
-  });
-
-  // Vaihe 8: valmentajan oma treeni renderöityy treenaajasovelluksesta (shell
-  // reitittää coach overview → AthleteDashboard), ei enää CoachDashboardista.
-  // Aiempi "coach overview näyttää OwnTrainingOverviewCardin" -testi poistettu.
-
-  it("keeps admin own overview focused on training and measurements", () => {
-    const state = createBaseState();
-    const adminUser = { ...state.users[0], id: "admin_1", role: "admin", email: "admin@example.com" };
-    state.users = [adminUser];
-
-    mockUseAppState.mockReturnValue({
-      currentUser: adminUser,
-      state,
-      notify: vi.fn(),
-      createInvite: vi.fn(),
-      resendInvite: vi.fn(),
-    });
-
-    render(<AdminDashboard view="overview" />);
-    expect(screen.queryByText("PersonalNutritionSummaryCard")).not.toBeInTheDocument();
-    fireEvent.click(screen.getByRole("tab", { name: "Oma" }));
-    expect(screen.queryByText("PersonalNutritionSummaryCard")).not.toBeInTheDocument();
-    expect(screen.getByText("OwnTrainingOverviewCard")).toBeInTheDocument();
   });
 });

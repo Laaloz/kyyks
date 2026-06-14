@@ -11,7 +11,6 @@ import { Button } from "@/components/ui/button";
 import { Card, CardDescription, CardTitle } from "@/components/ui/card";
 import { Input, Label, Select } from "@/components/ui/field";
 import { Segmented } from "@/components/ui/segmented";
-import { AdminUserManagementPanel } from "@/components/workout/admin-user-management-panel";
 import { InlineFeedback } from "@/components/workout/inline-feedback";
 import type { ProfileSheetSection } from "@/components/workout/profile-sheet";
 import { bodyMeasurementSchema, userSettingsSchema } from "@/components/workout/schemas";
@@ -106,10 +105,8 @@ function SettingToggle({
 }
 
 export function UserSettingsPanel({
-  adminOnly = false,
   initialSection,
 }: {
-  adminOnly?: boolean;
   initialSection?: SettingsSection;
 }) {
   const {
@@ -263,10 +260,6 @@ export function UserSettingsPanel({
 
   if (!currentUser) {
     return null;
-  }
-
-  if (adminOnly) {
-    return <AdminUserManagementPanel />;
   }
 
   const submitSettings = form.handleSubmit(async (values) => {

@@ -42,17 +42,22 @@ export function AdminUserManagementPanel({ focusUserId }: { focusUserId?: string
             .filter((user) => user.id !== currentUser.id)
             .sort((a, b) => a.fullName.localeCompare(b.fullName, "fi-FI"))
         : [],
-    [currentUser, state.users],
+    [currentUser?.id, currentUser?.role, state.users],
   );
+  const activeManagedUserId = focusUserId ?? selectedManagedUserId;
   const selectedManagedUser = useMemo(
-    () => manageableUsers.find((user) => user.id === selectedManagedUserId) ?? manageableUsers[0],
-    [manageableUsers, selectedManagedUserId],
+    () =>
+      manageableUsers.find((user) => user.id === activeManagedUserId) ??
+      (focusUserId ? null : (manageableUsers[0] ?? null)),
+    [activeManagedUserId, focusUserId, manageableUsers],
   );
   const filteredUsers = useMemo(() => {
-    const q = query.trim().toLowerCase();
-    return q
+    const normalizedQuery = query.trim().toLowerCase();
+    return normalizedQuery
       ? manageableUsers.filter(
-          (user) => user.fullName.toLowerCase().includes(q) || user.email.toLowerCase().includes(q),
+          (user) =>
+            user.fullName.toLowerCase().includes(normalizedQuery) ||
+            user.email.toLowerCase().includes(normalizedQuery),
         )
       : manageableUsers;
   }, [manageableUsers, query]);
@@ -69,7 +74,7 @@ export function AdminUserManagementPanel({ focusUserId }: { focusUserId?: string
         : [],
     [selectedManagedUser, state.assignments],
   );
-  const isRoleDirty = Boolean(selectedManagedUser) && selectedManagedRole !== selectedManagedUser.role;
+  const isRoleDirty = selectedManagedUser !== null && selectedManagedRole !== selectedManagedUser.role;
   const isCoachSelectionDirty =
     (selectedManagedUser?.role === "athlete" || selectedManagedUser?.role === "independent_athlete") &&
     (selectedManagedCoachIds.length !== selectedManagedAthleteCoachIds.length ||
