@@ -226,3 +226,32 @@ legend {
   background: var(--selection-background);
   color: var(--text);
 }
+
+/* AI generoi sisältöä → "ajatteleva" aalto liukuu tekstin yli (kuten AI-chatit).
+   Teematietoinen: tumma perusväri + kirkas korostuskaista samoista CSS-muuttujista.
+   prefers-reduced-motion (yllä) pysäyttää animaation automaattisesti. */
+@keyframes ai-shimmer {
+  0% {
+    background-position: 150% center;
+  }
+  100% {
+    background-position: -150% center;
+  }
+}
+
+.ai-shimmer-text {
+  background-image: linear-gradient(
+    90deg,
+    var(--text-subtle) 0%,
+    var(--text-subtle) 38%,
+    var(--text) 50%,
+    var(--text-subtle) 62%,
+    var(--text-subtle) 100%
+  );
+  background-size: 220% 100%;
+  background-clip: text;
+  -webkit-background-clip: text;
+  color: transparent;
+  -webkit-text-fill-color: transparent;
+  animation: ai-shimmer 1.8s ease-in-out infinite;
+}

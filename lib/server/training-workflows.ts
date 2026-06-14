@@ -92,7 +92,6 @@ type PlanRow = {
 type ScheduledWorkoutRow = {
   id: string;
   training_plan_id: string | null;
-  template_id: string | null;
   program_workout_id: string | null;
   athlete_id: string;
   coach_id: string;
@@ -254,7 +253,6 @@ function mapScheduledWorkoutRow(row: ScheduledWorkoutRow): ScheduledWorkout {
   return {
     id: row.id,
     trainingPlanId: row.training_plan_id ?? undefined,
-    templateId: row.template_id ?? undefined,
     programWorkoutId: row.program_workout_id ?? undefined,
     athleteId: row.athlete_id,
     coachId: row.coach_id,
@@ -310,7 +308,7 @@ async function fetchStartedWorkoutPayload(
 ): Promise<StartedWorkoutPayload | null> {
   const { data: scheduledWorkout } = await admin
     .from("scheduled_workouts")
-    .select("id, training_plan_id, template_id, program_workout_id, athlete_id, coach_id, title, scheduled_date, status, completed_at, created_at, updated_at")
+    .select("id, training_plan_id, program_workout_id, athlete_id, coach_id, title, scheduled_date, status, completed_at, created_at, updated_at")
     .eq("id", scheduledWorkoutId)
     .maybeSingle<ScheduledWorkoutRow>();
 
@@ -1461,7 +1459,7 @@ export async function startScheduledWorkoutOnServer({
 
   const { data: workout } = await admin
     .from("scheduled_workouts")
-    .select("id, training_plan_id, template_id, program_workout_id, athlete_id, coach_id, title, scheduled_date, status, completed_at, created_at, updated_at")
+    .select("id, training_plan_id, program_workout_id, athlete_id, coach_id, title, scheduled_date, status, completed_at, created_at, updated_at")
     .eq("id", scheduledWorkoutId)
     .maybeSingle<ScheduledWorkoutRow>();
 

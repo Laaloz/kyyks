@@ -860,8 +860,8 @@ export async function acceptInviteOnServer({
     return { ok: false as const, message: "Anna koko nimi." };
   }
 
-  if (password.trim().length < 6) {
-    return { ok: false as const, message: "Salasanan pitää olla vähintään 6 merkkiä." };
+  if (password.trim().length < 8) {
+    return { ok: false as const, message: "Salasanan pitää olla vähintään 8 merkkiä." };
   }
 
   const { data: invite, error: inviteError } = await admin
@@ -1030,12 +1030,15 @@ export async function completePasswordResetOnServer({
     return { ok: false as const, message: "Salasanan päivittäminen epäonnistui." };
   }
 
-  const { error: consumeError } = await admin
+  const { data: consumed, error: consumeError } = await admin
     .from("password_reset_requests")
     .update({ consumed_at: new Date().toISOString() })
-    .eq("id", request.id);
+    .eq("id", request.id)
+    .is("consumed_at", null)
+    .select("id")
+    .maybeSingle();
 
-  if (consumeError) {
+  if (consumeError || !consumed) {
     return { ok: false as const, message: "Nollauspyynnön viimeistely epäonnistui." };
   }
 

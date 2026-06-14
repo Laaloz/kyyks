@@ -1,6 +1,6 @@
 "use client";
 
-import { Check, ChevronRight, Plus, Repeat2, Search, Trash2 } from "lucide-react";
+import { Check, ChevronRight, Loader2, Plus, Repeat2, Search, Trash2 } from "lucide-react";
 import { useMemo, useRef, useState } from "react";
 
 import { Button } from "@/components/ui/button";
@@ -438,6 +438,10 @@ export function NutritionView({
                     entry.aiStatus === "pending" && Number.isFinite(updatedMs) && Date.now() - updatedMs > 120_000;
                   const aiPending = entry.aiStatus === "pending" && !isStalePending;
                   const aiFailed = entry.aiStatus === "failed" || isStalePending;
+                  // AI generoi vielä makroja → lukitaan kortti (ei muokkausta/syödyksi-merkintää
+                  // keskeneräisillä 0-arvoilla). Disable on sidottu vain aiPendingiin: kun arvio
+                  // valmistuu (aiStatus=null) tai epäonnistuu (aiFailed / stale), lukko poistuu itsestään.
+                  const aiDisabled = aiPending;
                   const isEaten = Boolean(entry.eatenAt);
                   const isPending = pendingId === entry.id;
                   const m = entryMacros(entry);
@@ -449,16 +453,20 @@ export function NutritionView({
                       ? `${mealTagLabel(entry.mealTag)} · arvio ei onnistunut — muokkaa`
                       : macroLine;
                   return (
-                    <div key={entry.id} className="flex items-center gap-3 py-3">
+                    <div
+                      key={entry.id}
+                      className={cn("flex items-center gap-3 py-3 transition-opacity", aiDisabled && "opacity-60")}
+                      aria-busy={aiDisabled || undefined}
+                    >
                       {!readOnly ? (
                         <button
                           type="button"
                           className={`grid size-9 shrink-0 place-items-center rounded-full transition ${
                             isEaten ? "bg-[var(--success)] text-white" : "border border-[var(--border-strong)] text-transparent"
-                          }`}
+                          } disabled:cursor-not-allowed`}
                           aria-pressed={isEaten}
                           aria-label={isEaten ? "Merkitse syömättömäksi" : "Merkitse syödyksi"}
-                          disabled={isPending}
+                          disabled={isPending || aiDisabled}
                           onClick={async () => {
                             setPendingId(entry.id);
                             try {
@@ -477,21 +485,37 @@ export function NutritionView({
                           className="min-w-0 flex-1 text-left"
                           onClick={() => setDetail({ recipeId: recipe.id, entryId: entry.id })}
                         >
-                          <p className={`truncate text-sm font-semibold ${isEaten ? "text-[var(--text-subtle)]" : "text-[var(--text)]"}`}>
+                          <p
+                            className={cn(
+                              "truncate text-sm font-semibold",
+                              aiDisabled ? "ai-shimmer-text" : isEaten ? "text-[var(--text-subtle)]" : "text-[var(--text)]",
+                            )}
+                          >
                             {title}
                           </p>
-                          <p className="truncate text-xs text-[var(--text-subtle)]">{subtitle}</p>
+                          <p className={cn("truncate text-xs", aiDisabled ? "ai-shimmer-text" : "text-[var(--text-subtle)]")}>
+                            {subtitle}
+                          </p>
                         </button>
                       ) : (
                         <button
                           type="button"
-                          className="min-w-0 flex-1 text-left"
+                          className="min-w-0 flex-1 text-left disabled:cursor-not-allowed"
+                          disabled={aiDisabled}
+                          aria-disabled={aiDisabled || undefined}
                           onClick={() => setEditFoodEntry(entry)}
                         >
-                          <p className={`truncate text-sm font-semibold ${isEaten ? "text-[var(--text-subtle)]" : "text-[var(--text)]"}`}>
+                          <p
+                            className={cn(
+                              "truncate text-sm font-semibold",
+                              aiDisabled ? "ai-shimmer-text" : isEaten ? "text-[var(--text-subtle)]" : "text-[var(--text)]",
+                            )}
+                          >
                             {title}
                           </p>
-                          <p className="truncate text-xs text-[var(--text-subtle)]">{subtitle}</p>
+                          <p className={cn("truncate text-xs", aiDisabled ? "ai-shimmer-text" : "text-[var(--text-subtle)]")}>
+                            {subtitle}
+                          </p>
                         </button>
                       )}
                       {!readOnly ? (
@@ -537,11 +561,16 @@ export function NutritionView({
                       ) : (
                         <button
                           type="button"
-                          className="grid size-8 shrink-0 place-items-center rounded-full text-[var(--text-subtle)] transition hover:text-[var(--text)]"
-                          aria-label={`Muokkaa: ${title}`}
+                          className="grid size-8 shrink-0 place-items-center rounded-full text-[var(--text-subtle)] transition hover:text-[var(--text)] disabled:cursor-not-allowed disabled:hover:text-[var(--text-subtle)]"
+                          aria-label={aiDisabled ? "Arvioidaan tekoälyllä…" : `Muokkaa: ${title}`}
+                          disabled={aiDisabled}
                           onClick={() => setEditFoodEntry(entry)}
                         >
-                          <ChevronRight className="size-4" aria-hidden="true" />
+                          {aiDisabled ? (
+                            <Loader2 className="size-4 animate-spin" aria-hidden="true" />
+                          ) : (
+                            <ChevronRight className="size-4" aria-hidden="true" />
+                          )}
                         </button>
                       )}
                     </div>
