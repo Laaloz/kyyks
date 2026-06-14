@@ -25,6 +25,8 @@ function textPrompt(query: string): string {
     `Arvioi ruoan "${query}" ravintosisältö.`,
     "Palauta: siistitty nimi suomeksi, tyypillinen annoskoko grammoina,",
     "sekä energia ja makrot PER 100 GRAMMAA (kcal, proteiini, hiilihydraatit, rasva).",
+    'Jos käyttäjä ilmoitti määrän tai kappalemäärän (esim. "2 banaania"), säilytä se nimessä',
+    "ja huomioi se annoskoossa grammoina.",
     "Arvio on suuntaa-antava; vastaa pelkkä JSON ilman selityksiä.",
   ].join(" ");
 }

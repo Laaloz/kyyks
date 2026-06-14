@@ -4242,6 +4242,12 @@ function findResolvedUserIdInSnapshot(
         return { ok: false, message: "Supabase-kirjautuminen ei ole käytettävissä." };
       }
 
+      // login() kasvattaa epookin ennen tätä. Jos uloskirjaus tai uusi kirjautuminen tapahtuu
+      // näiden awaitien aikana, epookki muuttuu eikä vanhentunutta tulosta saa enää autentikoida
+      // (symmetrinen suoja uloskirjautumisen racelle).
+      const epoch = authEpochRef.current;
+      const isSuperseded = () => authEpochRef.current !== epoch;
+
       setIsAuthTransitionPending(true);
 
       const { data, error } = await supabase.auth.signInWithPassword({
@@ -4278,6 +4284,9 @@ function findResolvedUserIdInSnapshot(
       setState(localResolution.nextState);
 
       if (resolvedUserId) {
+        if (isSuperseded()) {
+          return { ok: true };
+        }
         setAuthenticatedUserId(resolvedUserId);
         setImpersonatedUserId(null);
         setIsAuthTransitionPending(false);
@@ -4331,6 +4340,9 @@ function findResolvedUserIdInSnapshot(
       }
 
       if (resolvedSnapshotUserId) {
+        if (isSuperseded()) {
+          return { ok: true };
+        }
         setAuthenticatedUserId(resolvedSnapshotUserId);
         setImpersonatedUserId(null);
         setIsAuthTransitionPending(false);
@@ -4346,6 +4358,9 @@ function findResolvedUserIdInSnapshot(
         return { ok: true, message: "Kirjautuminen onnistui. Avataan työtilaa..." };
       }
 
+      if (isSuperseded()) {
+        return { ok: true };
+      }
       setAuthenticatedUserId(resolvedUserId);
       setImpersonatedUserId(null);
       setIsAuthTransitionPending(false);
@@ -7351,13 +7366,22 @@ function findResolvedUserIdInSnapshot(
           dayMealPlans: (previous.dayMealPlans ?? []).map((entry) => (entry.id === optimisticId ? { ...entry, id: serverId } : entry)),
         }));
         const pendingCreate = pendingDayMealCreatesRef.current.get(optimisticId);
-        pendingDayMealCreatesRef.current.delete(optimisticId);
 
         // Jos rivi ehdittiin perua ennen kuin id valmistui → siivoa palvelin.
         if (pendingCreate?.canceled) {
+          pendingDayMealCreatesRef.current.delete(optimisticId);
           recentlyRemovedDayMealIdsRef.current.set(serverId, Date.now());
           await fetch(`/api/day-meal-plans/${encodeURIComponent(serverId)}`, { method: "DELETE" }).catch(() => null);
           return;
+        }
+
+        // Pidä optimistinen suojaus voimassa serverId:llä AI-arvion ajan. Id on jo vaihdettu
+        // serverId:ksi, mutta palvelimen rivi ei vielä näy taustasynkan snapshotissa — ilman
+        // tätä reconcile pudottaisi kortin hetkeksi (näkyy → katoaa → palaa). Suojaus poistetaan
+        // vasta kun AI-arvio on valmis ja seuraava synkka on noutanut täydennetyn rivin (onSettled).
+        if (pendingCreate) {
+          pendingCreate.serverId = serverId;
+          pendingDayMealCreatesRef.current.set(optimisticId, pendingCreate);
         }
 
         // 2) Aja AI-arvio (teksti tai kuva).
@@ -7396,6 +7420,7 @@ function findResolvedUserIdInSnapshot(
               entry.id === serverId ? { ...entry, aiStatus: "failed" as const } : entry,
             ),
           }));
+          scheduleDayMealRefresh({ onSettled: () => pendingDayMealCreatesRef.current.delete(optimisticId) });
           return;
         }
 
@@ -7432,6 +7457,7 @@ function findResolvedUserIdInSnapshot(
         }));
 
         void ensureOwnFood(estimate.name, "ai", estimate.kcalPer100, estimate.proteinPer100, estimate.carbsPer100, estimate.fatPer100);
+        scheduleDayMealRefresh({ onSettled: () => pendingDayMealCreatesRef.current.delete(optimisticId) });
         })();
 
         return { ok: true };
