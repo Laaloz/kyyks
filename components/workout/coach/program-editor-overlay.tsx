@@ -1,6 +1,6 @@
 "use client";
 
-import { BookOpen, ChevronLeft, Plus, Search, Trash2, X } from "lucide-react";
+import { BookOpen, ChevronLeft, Plus, Search, Trash2 } from "lucide-react";
 import { useMemo, useState } from "react";
 
 import { Button } from "@/components/ui/button";
@@ -544,14 +544,6 @@ export function ProgramEditorOverlay({
           <div className="max-h-[70%] overflow-y-auto rounded-t-3xl bg-[var(--surface)] p-4 pb-[calc(env(safe-area-inset-bottom)+1rem)]">
             <div className="flex items-center justify-between gap-3">
               <h2 className="font-[family-name:var(--font-display)] text-xl font-bold text-[var(--text)]">Lisää liike</h2>
-              <button
-                type="button"
-                className="grid size-9 place-items-center rounded-full text-[var(--text-subtle)] transition hover:bg-[var(--surface-2)]"
-                aria-label="Sulje"
-                onClick={closePicker}
-              >
-                <X className="size-5" aria-hidden="true" />
-              </button>
             </div>
             <div className="relative mt-2">
               <Search className="pointer-events-none absolute left-3.5 top-1/2 size-[18px] -translate-y-1/2 text-[var(--text-subtle)]" aria-hidden="true" />
@@ -625,14 +617,6 @@ export function ProgramEditorOverlay({
                   {instructionTarget.exercise.name}
                 </h2>
               </div>
-              <button
-                type="button"
-                className="grid size-9 shrink-0 place-items-center rounded-full text-[var(--text-subtle)] transition hover:bg-[var(--surface-2)]"
-                aria-label="Sulje"
-                onClick={() => setOpenInstructionUid(null)}
-              >
-                <X className="size-5" aria-hidden="true" />
-              </button>
             </div>
             <textarea
               autoFocus

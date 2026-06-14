@@ -766,9 +766,6 @@ function ProgramWorkoutEditorModal({
                 {subtitle}
               </p>
             </div>
-            <Button type="button" variant="ghost" className="shrink-0" onClick={onClose}>
-              Sulje
-            </Button>
           </div>
         </div>
         <div className="flex-1 overflow-y-auto px-4 py-4 sm:px-5">{children}</div>

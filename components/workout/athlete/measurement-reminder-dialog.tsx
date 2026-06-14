@@ -48,10 +48,7 @@ export function MeasurementReminderDialog({
             </p>
           </div>
         </div>
-        <div className="mt-5 flex flex-col gap-3 sm:flex-row sm:justify-end">
-          <Button type="button" variant="ghost" onClick={onClose}>
-            Sulje
-          </Button>
+        <div className="mt-5 flex justify-end">
           <Button type="button" onClick={onOpenOverview}>
             Avaa kehon seuranta
           </Button>

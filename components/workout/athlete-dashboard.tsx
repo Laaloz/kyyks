@@ -141,11 +141,6 @@ function CoachInstructionDialog({
         >
           {instruction}
         </p>
-        <div className="mt-5 flex justify-end">
-          <Button type="button" variant="ghost" onClick={onClose}>
-            Sulje
-          </Button>
-        </div>
     </Sheet>
   );
 }

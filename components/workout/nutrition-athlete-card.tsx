@@ -309,9 +309,6 @@ function RecipeDetailDialog({
                 <p className="mt-1 text-xs text-[var(--danger)]">{wakeLockError}</p>
               ) : null}
             </div>
-            <Button type="button" variant="ghost" className="shrink-0" onClick={onClose}>
-              Sulje
-            </Button>
           </div>
         </div>
 

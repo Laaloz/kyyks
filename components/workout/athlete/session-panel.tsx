@@ -145,11 +145,6 @@ function CoachInstructionDialog({
         >
           {instruction}
         </p>
-        <div className="mt-5 flex justify-end">
-          <Button type="button" variant="ghost" onClick={onClose}>
-            Sulje
-          </Button>
-        </div>
     </Sheet>
   );
 }
@@ -256,7 +251,7 @@ function ExerciseStructureDialog({
       ariaLabelledby="exercise-structure-title"
       className="max-w-none overflow-hidden sm:max-w-lg"
     >
-        <p className="text-sm font-medium text-[var(--accent)]">
+        <p className="text-sm font-semibold text-[var(--accent)]">
           {mode === "edit" ? "Muokkaa liikettä" : "Lisää extra-liike"}
         </p>
         <h3
@@ -271,48 +266,71 @@ function ExerciseStructureDialog({
             <button
               id="exercise-structure-select"
               type="button"
-              className="flex w-full items-center justify-between rounded-xl border border-[var(--border)] bg-[var(--surface)] px-4 py-3 text-left text-base text-[var(--text)] transition hover:border-[var(--border-strong)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--background)]"
+              className="flex w-full items-center justify-between gap-2 rounded-xl border border-[var(--border)] bg-[var(--surface)] px-4 py-3 text-left text-base text-[var(--text)] outline-none transition hover:border-[var(--border-strong)] focus-visible:border-[var(--accent)]"
               onClick={() => setIsOpen((current) => !current)}
               aria-expanded={isOpen}
               aria-haspopup="listbox"
             >
               <span className="truncate">{triggerLabel}</span>
-              <ChevronDown className="size-4 text-[var(--text-subtle)]" aria-hidden="true" />
+              <ChevronDown
+                className={`size-4 shrink-0 text-[var(--text-subtle)] transition ${isOpen ? "rotate-180" : ""}`}
+                aria-hidden="true"
+              />
             </button>
             {isOpen ? (
               <div className="mt-2 overflow-hidden rounded-2xl border border-[var(--border-strong)] bg-[var(--surface)] shadow-[0_18px_45px_-24px_var(--shadow)]">
                 <div className="border-b border-[var(--border)] p-2">
                   <div className="relative">
                     <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-[var(--text-subtle)]" aria-hidden="true" />
-                    <Input value={query} onChange={(event) => setQuery(event.target.value)} className="pl-9" placeholder="Hae liikettä" />
+                    <Input value={query} onChange={(event) => setQuery(event.target.value)} className="pl-9" placeholder="Hae tai nimeä uusi liike…" />
                   </div>
                 </div>
-                <div className="max-h-[min(36svh,16rem)] overflow-y-auto p-2">
+                <div className="max-h-[min(40svh,18rem)] overflow-y-auto p-2">
                   <button
                     type="button"
-                    className="mb-2 flex w-full items-center justify-between rounded-xl border border-[var(--border)] bg-[var(--surface-2)] px-3 py-2 text-left text-sm transition hover:border-[var(--border-strong)]"
+                    className="mb-1 flex w-full items-center justify-between gap-2 rounded-xl border border-[var(--accent)] bg-[var(--accent-soft)] px-3 py-2.5 text-left text-sm font-semibold text-[var(--accent)] transition hover:brightness-105"
                     onClick={() => {
                       setExerciseId(CUSTOM_EXERCISE_VALUE);
+                      if (query.trim()) {
+                        setCustomExerciseName(query.trim());
+                      }
+                      setQuery("");
                       setIsOpen(false);
                     }}
                   >
-                    <span>Luo oma liike</span>
-                    {exerciseId === CUSTOM_EXERCISE_VALUE ? <Check className="size-4 text-[var(--accent)]" /> : null}
+                    <span className="flex min-w-0 items-center gap-2">
+                      <Plus className="size-4 shrink-0" aria-hidden="true" />
+                      <span className="truncate">{query.trim() ? `Luo oma liike: "${query.trim()}"` : "Luo oma liike"}</span>
+                    </span>
+                    {exerciseId === CUSTOM_EXERCISE_VALUE ? <Check className="size-4 shrink-0" /> : null}
                   </button>
                   {filteredExercises.map((exercise) => (
                     <button
                       key={exercise.id}
                       type="button"
-                      className="flex w-full items-center justify-between rounded-xl px-3 py-2 text-left text-sm transition hover:bg-[var(--surface-2)]"
+                      className="flex w-full items-center justify-between gap-3 rounded-xl px-3 py-2.5 text-left transition hover:bg-[var(--surface-2)]"
                       onClick={() => {
                         setExerciseId(exercise.id);
                         setIsOpen(false);
                       }}
                     >
-                      <span className="truncate">{exercise.name}</span>
-                      {exerciseId === exercise.id ? <Check className="size-4 text-[var(--accent)]" /> : null}
+                      <span className="flex min-w-0 items-center gap-2">
+                        <span className="min-w-0">
+                          <span className="block truncate text-sm font-semibold text-[var(--text)]">{exercise.name}</span>
+                          <span className="block truncate text-xs text-[var(--text-subtle)]">{exercise.category}</span>
+                        </span>
+                        {exercise.scope === "coach_custom" ? (
+                          <span className="shrink-0 rounded-full bg-[var(--accent-soft)] px-2 py-0.5 text-[11px] font-semibold text-[var(--accent)]">
+                            Oma
+                          </span>
+                        ) : null}
+                      </span>
+                      {exerciseId === exercise.id ? <Check className="size-4 shrink-0 text-[var(--accent)]" /> : null}
                     </button>
                   ))}
+                  {filteredExercises.length === 0 ? (
+                    <p className="px-3 py-3 text-sm text-[var(--text-subtle)]">Ei liikkeitä haulla — voit luoda oman yllä.</p>
+                  ) : null}
                 </div>
               </div>
             ) : null}
@@ -2053,7 +2071,7 @@ export function AthleteSessionPanel({
     <div className={`${activeLoggingView ? "mt-0 space-y-3" : "mt-6 space-y-5"} min-w-0 max-w-full overflow-x-clip [contain:inline-size]`}>
       {activeLoggingView ? (
         <>
-          <div className="fixed inset-x-0 top-0 z-40 bg-[var(--background)]">
+          <div className="fixed inset-x-0 top-0 z-40 bg-[var(--background)] m-0">
             <div className="mx-auto flex max-w-7xl items-center gap-3 px-4 pb-3 pt-[calc(env(safe-area-inset-top)+0.75rem)] sm:px-6 lg:px-8">
               <button
                 type="button"
@@ -2078,7 +2096,7 @@ export function AthleteSessionPanel({
               ) : null}
             </div>
           </div>
-          <div aria-hidden="true" className="h-[calc(env(safe-area-inset-top)+4.25rem)]" />
+          <div aria-hidden="true" className="h-[calc(env(safe-area-inset-top)+4.25rem)] m-0" />
         </>
       ) : (
         <div className="flex min-w-0 flex-wrap items-center gap-3">

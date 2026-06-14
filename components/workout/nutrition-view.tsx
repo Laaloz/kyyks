@@ -1,6 +1,6 @@
 "use client";
 
-import { Check, ChevronRight, Plus, Repeat2, Search, Trash2, X } from "lucide-react";
+import { Check, ChevronRight, Plus, Repeat2, Search, Trash2 } from "lucide-react";
 import { useMemo, useState } from "react";
 
 import { Button } from "@/components/ui/button";
@@ -617,9 +617,6 @@ function RecipeDetailSheet({
             </p>
             <h2 className="mt-1 font-[family-name:var(--font-display)] text-2xl font-bold leading-tight text-[var(--text)]">{recipe.name}</h2>
           </div>
-          <button type="button" className="grid size-9 shrink-0 place-items-center rounded-full bg-[var(--surface-2)] text-[var(--text-subtle)]" aria-label="Sulje" onClick={onClose}>
-            <X className="size-4" aria-hidden="true" />
-          </button>
         </div>
 
         <div className="mt-3 min-h-0 flex-1 overflow-y-auto">
@@ -731,9 +728,6 @@ function MealPickerSheet({
     <Sheet onClose={onClose} ariaLabel={title}>
         <div className="flex items-center justify-between gap-3">
           <h2 className="font-[family-name:var(--font-display)] text-xl font-semibold text-[var(--text)]">{title}</h2>
-          <button type="button" className="grid size-8 place-items-center rounded-full bg-[var(--surface-2)] text-[var(--text-subtle)]" aria-label="Sulje" onClick={onClose}>
-            <X className="size-4" aria-hidden="true" />
-          </button>
         </div>
 
         {mealTag && onChangeMealTag ? (
