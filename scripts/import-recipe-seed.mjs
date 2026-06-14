@@ -9,6 +9,7 @@ function parseArgs(argv) {
   const args = {
     dryRun: false,
     limit: undefined,
+    createdBy: undefined,
   };
 
   for (let index = 0; index < argv.length; index += 1) {
@@ -20,6 +21,16 @@ function parseArgs(argv) {
     if (value === "--limit") {
       args.limit = Number(argv[index + 1]);
       index += 1;
+      continue;
+    }
+    if (value === "--created-by") {
+      args.createdBy = argv[index + 1];
+      index += 1;
+      continue;
+    }
+    // Ensimmainen ei-flag-argumentti tulkitaan admin-kayttajan created_by-arvoksi.
+    if (!value.startsWith("--") && args.createdBy === undefined) {
+      args.createdBy = value;
     }
   }
 
@@ -291,9 +302,17 @@ async function main() {
     return;
   }
 
-  const createdBy = getCreatedBy();
+  const createdBy = args.createdBy || getCreatedBy();
   if (!createdBy) {
-    throw new Error("Aseta RECIPE_SEED_CREATED_BY admin-kayttajan UUID-arvoksi ennen importtia.");
+    throw new Error(
+      "Anna admin-kayttajan UUID joko argumenttina (npm run import:recipes <uuid>) tai RECIPE_SEED_CREATED_BY-ymparistomuuttujana.",
+    );
+  }
+  const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+  if (!uuidPattern.test(createdBy)) {
+    throw new Error(
+      `created_by ei ole kelvollinen UUID: "${createdBy}". Kayta admin-kayttajan taytta UUID:ta (esim. 11111111-2222-3333-4444-555555555555).`,
+    );
   }
 
   const supabase = getAdminClient();
