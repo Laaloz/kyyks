@@ -110,8 +110,8 @@ export function AddFoodSheet({
   };
 
   return (
-    <Sheet ariaLabel="Lisää ruoka" onClose={onClose}>
-      <h2 className="font-[family-name:var(--font-display)] text-lg font-bold text-[var(--text)]">Lisää ruoka</h2>
+    <Sheet ariaLabel="Lisää ateriaan" onClose={onClose}>
+      <h2 className="font-[family-name:var(--font-display)] text-lg font-bold text-[var(--text)]">Lisää ateriaan</h2>
 
       {error ? (
         <p className="mt-3 text-sm text-[var(--danger)]" role="alert">
@@ -132,7 +132,7 @@ export function AddFoodSheet({
             type="search"
             value={query}
             onChange={(event) => setQuery(event.target.value)}
-            placeholder="Mitä söit?"
+            placeholder="Mitä söit tai joit?"
             aria-label="Hae tai lisää ruoka"
             enterKeyHint="done"
             className="min-w-0 flex-1 bg-transparent text-sm text-[var(--text)] outline-none placeholder:text-[var(--text-subtle)]"
