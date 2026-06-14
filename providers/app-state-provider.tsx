@@ -2698,6 +2698,10 @@ export function AppStateProvider({ children }: PropsWithChildren) {
   // Uloskirjautumisen aikana/jälkeen estää kesken olevaa synkkaa tai myöhästynyttä
   // auth-eventtiä re-autentikoimasta käyttäjää (korjaa "kirjautuu heti takaisin sisään").
   const isLoggingOutRef = useRef(false);
+  // Kasvaa joka kerta kun käyttäjä kirjautuu sisään tai ulos. Lennossa oleva syncFromAuthUser
+  // ottaa arvon talteen alussa ja keskeyttää, jos arvo on muuttunut awaitin aikana — näin
+  // ennen toimintoa alkanut haku ei voi enää yliajaa tuoretta login/logout-tilaa (race).
+  const authEpochRef = useRef(0);
   // Oletussynkka lataa vain kevennetyn katalogin (ei koko Fineliä). Koko katalogi haetaan
   // tarvittaessa (reseptieditori/admin); tämä lippu estää tuplahaun.
   const fullIngredientCatalogLoadedRef = useRef(false);
@@ -2888,6 +2892,12 @@ export function AppStateProvider({ children }: PropsWithChildren) {
         return;
       }
 
+      // Otetaan auth-epookki talteen heti: jos käyttäjä kirjautuu sisään/ulos tämän
+      // (mahdollisesti pitkän) synkan aikana, alla olevat await-tarkistukset keskeyttävät
+      // ettei vanhentunut vastaus yliaja tuoretta tilaa.
+      const epoch = authEpochRef.current;
+      const isSuperseded = () => !active || epoch !== authEpochRef.current;
+
       // Uloskirjautumisen jälkeen myöhästynyt SIGNED_IN/TOKEN_REFRESHED ei saa re-autentikoida.
       // (Oikea kirjautuminen nollaa lipun ensin, joten sitä tämä ei estä.)
       if (authUser?.email && isLoggingOutRef.current) {
@@ -2927,7 +2937,7 @@ export function AppStateProvider({ children }: PropsWithChildren) {
         ) {
           setDidAttemptBootstrapRevalidation(true);
           const confirmedAuthUser = await withTimeout(confirmCurrentSupabaseAuthUser(supabase), 4000, null);
-          if (!active) {
+          if (isSuperseded()) {
             return;
           }
 
@@ -2953,7 +2963,9 @@ export function AppStateProvider({ children }: PropsWithChildren) {
           mode: useLightweightSnapshot ? "workouts" : "full",
         }),
       ]);
-      if (!active) {
+      // Jos uloskirjautuminen/uusi kirjautuminen alkoi näiden hakujen aikana, ei saa enää
+      // soveltaa tätä vastausta (race: lennossa ollut sync palaisi loginiin/logoutiin).
+      if (isSuperseded()) {
         return;
       }
 
@@ -3012,7 +3024,7 @@ export function AppStateProvider({ children }: PropsWithChildren) {
           )
         ) {
           const confirmedAuthUser = await withTimeout(confirmCurrentSupabaseAuthUser(supabase), 4000, null);
-          if (!active) {
+          if (isSuperseded()) {
             return;
           }
 
@@ -4353,6 +4365,7 @@ function findResolvedUserIdInSnapshot(
       notify,
       async login(email, password, options) {
         isLoggingOutRef.current = false;
+        authEpochRef.current += 1;
         const localUser = state.users.find((candidate) => candidate.email.toLowerCase() === email.toLowerCase());
 
         if (
@@ -4388,6 +4401,7 @@ function findResolvedUserIdInSnapshot(
       },
       async logout() {
         isLoggingOutRef.current = true;
+        authEpochRef.current += 1;
         try {
           window.localStorage.removeItem(SESSION_KEY);
         } catch {
@@ -4402,6 +4416,7 @@ function findResolvedUserIdInSnapshot(
       },
       loginAsDemoUser(userId) {
         isLoggingOutRef.current = false;
+        authEpochRef.current += 1;
         setIsAuthTransitionPending(false);
         setAuthenticatedUserId(userId);
         setImpersonatedUserId(null);
