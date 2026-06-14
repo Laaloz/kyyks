@@ -60,6 +60,7 @@ import type {
   ConversationEntry,
   ConversationEntryType,
   DashboardHomeView,
+  DayMealPlanEntry,
   DayMealSource,
   Exercise,
   ExtraActivityType,
@@ -415,6 +416,7 @@ function mergeServerDayMealPlansWithLocalState(
   previousDayMealPlans: AppState["dayMealPlans"] | undefined,
   pendingDayMealCreates: ReadonlyMap<string, PendingDayMealCreate>,
   recentlyRemovedDayMealIds: ReadonlyMap<string, number>,
+  pendingDayMealMutations: ReadonlyMap<string, PendingDayMealMutation>,
 ) {
   const serverEntries = serverDayMealPlans ?? previousDayMealPlans ?? [];
   const now = Date.now();
@@ -424,7 +426,26 @@ function mergeServerDayMealPlansWithLocalState(
       .map(([entryId]) => entryId),
   );
   const previousById = new Map((previousDayMealPlans ?? []).map((entry) => [entry.id, entry]));
-  const merged = serverEntries.filter((entry) => !recentlyRemovedIds.has(entry.id));
+  const isMutationProtected = (entryId: string, serverUpdatedAt: string | undefined) => {
+    const pendingMutation = pendingDayMealMutations.get(entryId);
+    if (!pendingMutation) {
+      return false;
+    }
+
+    const pendingUpdatedAtMs = Date.parse(pendingMutation.updatedAt);
+    if (!Number.isFinite(pendingUpdatedAtMs) || now - pendingUpdatedAtMs >= LOCAL_SYNC_PROTECTION_MS) {
+      return false;
+    }
+
+    const serverUpdatedAtMs = Date.parse(serverUpdatedAt ?? "");
+    return !Number.isFinite(serverUpdatedAtMs) || serverUpdatedAtMs < pendingUpdatedAtMs;
+  };
+  const merged = serverEntries
+    .filter((entry) => !recentlyRemovedIds.has(entry.id))
+    .map((entry) => {
+      const localEntry = previousById.get(entry.id);
+      return localEntry && isMutationProtected(entry.id, entry.updatedAt) ? localEntry : entry;
+    });
 
   pendingDayMealCreates.forEach((pending, optimisticId) => {
     if (pending.canceled) {
@@ -433,6 +454,16 @@ function mergeServerDayMealPlansWithLocalState(
 
     const localEntry = previousById.get(pending.serverId ?? optimisticId) ?? previousById.get(optimisticId);
     if (localEntry && !merged.some((entry) => entry.id === optimisticId || entry.id === pending.serverId)) {
+      merged.push(localEntry);
+    }
+  });
+  pendingDayMealMutations.forEach((_pending, entryId) => {
+    if (recentlyRemovedIds.has(entryId) || merged.some((entry) => entry.id === entryId)) {
+      return;
+    }
+
+    const localEntry = previousById.get(entryId);
+    if (localEntry && isMutationProtected(entryId, undefined)) {
       merged.push(localEntry);
     }
   });
@@ -1758,6 +1789,15 @@ type PendingDayMealCreate = {
   canceled: boolean;
   serverId?: string;
 };
+type PendingDayMealMutation = {
+  updatedAt: string;
+};
+type QueuedDayMealEatenMutation = {
+  eatenAt: string | null;
+  previousEntry: DayMealPlanEntry;
+  updatedAt: string;
+  version: number;
+};
 
 export function reconcileSupabaseInviteDirectory(
   previous: AppState,
@@ -1824,6 +1864,7 @@ export function reconcileSupabaseVisibleState(
   recentlyConfirmedMeasurements: ReadonlyMap<string, string> = new Map(),
   pendingDayMealCreates: ReadonlyMap<string, PendingDayMealCreate> = new Map(),
   recentlyRemovedDayMealIds: ReadonlyMap<string, number> = new Map(),
+  pendingDayMealMutations: ReadonlyMap<string, PendingDayMealMutation> = new Map(),
 ) {
   const suppressedWorkoutIds = new Set(
     Array.from(recentlyDeletedWorkoutIds?.entries() ?? [])
@@ -2082,6 +2123,7 @@ export function reconcileSupabaseVisibleState(
           previous.dayMealPlans,
           pendingDayMealCreates,
           recentlyRemovedDayMealIds,
+          pendingDayMealMutations,
         ),
     conversationEntries: filteredSnapshot.conversationEntries ?? previous.conversationEntries,
   });
@@ -2630,6 +2672,10 @@ export function AppStateProvider({ children }: PropsWithChildren) {
   const recentlyConfirmedWorkoutNotesRef = useRef<RecentlyConfirmedWorkoutNotes>(new Map());
   const recentlyConfirmedMeasurementsRef = useRef<RecentlyConfirmedMeasurements>(new Map());
   const pendingDayMealCreatesRef = useRef<Map<string, PendingDayMealCreate>>(new Map());
+  const pendingDayMealMutationsRef = useRef<Map<string, PendingDayMealMutation>>(new Map());
+  const dayMealEatenMutationVersionRef = useRef<Map<string, number>>(new Map());
+  const dayMealEatenMutationQueueRef = useRef<Map<string, QueuedDayMealEatenMutation>>(new Map());
+  const dayMealEatenMutationInFlightRef = useRef<Set<string>>(new Set());
   const recentlyRemovedDayMealIdsRef = useRef<Map<string, number>>(new Map());
   const recentlyDeletedWorkoutsRef = useRef<Map<string, number>>(new Map());
   const recentlyStartedWorkoutsRef = useRef<RecentlyStartedWorkouts>(new Map());
@@ -2870,6 +2916,7 @@ export function AppStateProvider({ children }: PropsWithChildren) {
             recentlyConfirmedMeasurementsRef.current,
             pendingDayMealCreatesRef.current,
             recentlyRemovedDayMealIdsRef.current,
+            pendingDayMealMutationsRef.current,
           ),
         );
         resolvedUserId = findResolvedUserIdInSnapshot(snapshot, authUser);
@@ -3115,6 +3162,31 @@ function findResolvedUserIdInSnapshot(
             recentlyRemovedDayMealIdsRef.current.delete(entryId);
           }
         });
+        const nextPendingDayMealMutations = new Map(pendingDayMealMutationsRef.current);
+        (payload.dayMealPlans ?? []).forEach((entry) => {
+          const pendingMutation = nextPendingDayMealMutations.get(entry.id);
+          if (!pendingMutation) {
+            return;
+          }
+
+          const serverUpdatedAt = Date.parse(entry.updatedAt);
+          const pendingUpdatedAt = Date.parse(pendingMutation.updatedAt);
+          if (
+            (Number.isFinite(serverUpdatedAt) &&
+              Number.isFinite(pendingUpdatedAt) &&
+              serverUpdatedAt >= pendingUpdatedAt) ||
+            (Number.isFinite(pendingUpdatedAt) && now - pendingUpdatedAt >= LOCAL_SYNC_PROTECTION_MS)
+          ) {
+            nextPendingDayMealMutations.delete(entry.id);
+          }
+        });
+        nextPendingDayMealMutations.forEach((pendingMutation, entryId) => {
+          const pendingUpdatedAt = Date.parse(pendingMutation.updatedAt);
+          if (Number.isFinite(pendingUpdatedAt) && now - pendingUpdatedAt >= LOCAL_SYNC_PROTECTION_MS) {
+            nextPendingDayMealMutations.delete(entryId);
+          }
+        });
+        pendingDayMealMutationsRef.current = nextPendingDayMealMutations;
 
         setState((previous) =>
           reconcileSupabaseVisibleState(
@@ -3130,6 +3202,7 @@ function findResolvedUserIdInSnapshot(
             recentlyConfirmedMeasurementsRef.current,
             pendingDayMealCreatesRef.current,
             recentlyRemovedDayMealIdsRef.current,
+            pendingDayMealMutationsRef.current,
           ),
         );
         if (options?.mode !== "workouts") {
@@ -3197,6 +3270,56 @@ function findResolvedUserIdInSnapshot(
         callbacks.forEach((callback) => callback());
       });
     }, 150);
+  }
+
+  function queueDayMealEatenSync(entryId: string, mutation: QueuedDayMealEatenMutation) {
+    dayMealEatenMutationQueueRef.current.set(entryId, mutation);
+    void flushQueuedDayMealEatenSync(entryId);
+  }
+
+  async function flushQueuedDayMealEatenSync(entryId: string) {
+    if (!supabase || dayMealEatenMutationInFlightRef.current.has(entryId)) {
+      return;
+    }
+
+    const mutation = dayMealEatenMutationQueueRef.current.get(entryId);
+    if (!mutation) {
+      return;
+    }
+
+    dayMealEatenMutationQueueRef.current.delete(entryId);
+    dayMealEatenMutationInFlightRef.current.add(entryId);
+
+    try {
+      const response = await fetch(`/api/day-meal-plans/${encodeURIComponent(entryId)}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ eatenAt: mutation.eatenAt }),
+      }).catch(() => null);
+      const payload = (response ? await response.json().catch(() => null) : null) as { message?: string } | null;
+
+      if (!response?.ok) {
+        const currentVersion = dayMealEatenMutationVersionRef.current.get(entryId);
+        if (currentVersion === mutation.version && !dayMealEatenMutationQueueRef.current.has(entryId)) {
+          pendingDayMealMutationsRef.current.delete(entryId);
+          setState((previous) => ({
+            ...previous,
+            dayMealPlans: (previous.dayMealPlans ?? []).map((entry) =>
+              entry.id === entryId ? mutation.previousEntry : entry,
+            ),
+          }));
+          notify({ tone: "danger", message: payload?.message ?? "Aterian merkintä epäonnistui." });
+        }
+        return;
+      }
+
+      scheduleSupabaseVisibleStateRefresh({ mode: "full" });
+    } finally {
+      dayMealEatenMutationInFlightRef.current.delete(entryId);
+      if (dayMealEatenMutationQueueRef.current.has(entryId)) {
+        void flushQueuedDayMealEatenSync(entryId);
+      }
+    }
   }
 
   async function ensureWorkoutVisibleInState(
@@ -3988,6 +4111,7 @@ function findResolvedUserIdInSnapshot(
             recentlyConfirmedMeasurementsRef.current,
             pendingDayMealCreatesRef.current,
             recentlyRemovedDayMealIdsRef.current,
+            pendingDayMealMutationsRef.current,
           ),
         );
       }
@@ -6705,6 +6829,7 @@ function findResolvedUserIdInSnapshot(
 
         const previousState = stateRef.current;
         const updatedAt = new Date().toISOString();
+        pendingDayMealMutationsRef.current.set(entryId, { updatedAt });
         setState((previous) => ({
           ...previous,
           dayMealPlans: (previous.dayMealPlans ?? []).map((entry) =>
@@ -6713,6 +6838,7 @@ function findResolvedUserIdInSnapshot(
         }));
 
         if (!supabase) {
+          pendingDayMealMutationsRef.current.delete(entryId);
           return { ok: true };
         }
 
@@ -6724,6 +6850,7 @@ function findResolvedUserIdInSnapshot(
         const payload = (response ? await response.json().catch(() => null) : null) as { message?: string } | null;
 
         if (!response?.ok) {
+          pendingDayMealMutationsRef.current.delete(entryId);
           setState(previousState);
           return { ok: false, message: payload?.message ?? "Aterian vaihto epäonnistui." };
         }
@@ -6749,6 +6876,8 @@ function findResolvedUserIdInSnapshot(
           pendingCreate.canceled = true;
           pendingDayMealCreatesRef.current.set(entryId, pendingCreate);
         }
+        pendingDayMealMutationsRef.current.delete(entryId);
+        dayMealEatenMutationQueueRef.current.delete(entryId);
         const previousState = stateRef.current;
         setState((previous) => ({
           ...previous,
@@ -6787,32 +6916,29 @@ function findResolvedUserIdInSnapshot(
           return { ok: false, message: "Odota hetki, aterian tallennus on vielä kesken." };
         }
 
-        const previousState = stateRef.current;
         const eatenAt = eaten ? new Date().toISOString() : null;
+        const updatedAt = new Date().toISOString();
+        const version = (dayMealEatenMutationVersionRef.current.get(entryId) ?? 0) + 1;
+        dayMealEatenMutationVersionRef.current.set(entryId, version);
+        pendingDayMealMutationsRef.current.set(entryId, { updatedAt });
         setState((previous) => ({
           ...previous,
           dayMealPlans: (previous.dayMealPlans ?? []).map((entry) =>
-            entry.id === entryId ? { ...entry, eatenAt, updatedAt: new Date().toISOString() } : entry,
+            entry.id === entryId ? { ...entry, eatenAt, updatedAt } : entry,
           ),
         }));
 
         if (!supabase) {
+          pendingDayMealMutationsRef.current.delete(entryId);
           return { ok: true };
         }
 
-        const response = await fetch(`/api/day-meal-plans/${encodeURIComponent(entryId)}`, {
-          method: "PATCH",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ eatenAt }),
-        }).catch(() => null);
-        const payload = (response ? await response.json().catch(() => null) : null) as { message?: string } | null;
-
-        if (!response?.ok) {
-          setState(previousState);
-          return { ok: false, message: payload?.message ?? "Aterian merkintä epäonnistui." };
-        }
-
-        scheduleSupabaseVisibleStateRefresh({ mode: "full" });
+        queueDayMealEatenSync(entryId, {
+          eatenAt,
+          previousEntry: target,
+          updatedAt,
+          version,
+        });
         return { ok: true };
       },
       async updateWorkoutSet(scheduledWorkoutId, logId, patch) {
