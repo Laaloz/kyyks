@@ -64,14 +64,14 @@ export function InviteAcceptView({ token, initialInvite }: { token: string; init
 
   if (!invite) {
     return (
-      <div className="mx-auto flex min-h-screen max-w-xl items-center px-4">
-        <Card className="w-full border-[var(--border-strong)]">
-          <p className="text-xs font-semibold tracking-[0.04em] text-[var(--text-subtle)]">Kutsun tila</p>
+      <div className="mx-auto flex min-h-svh w-full max-w-md flex-col justify-center gap-6 px-5 py-12">
+        <Card className="space-y-3">
+          <p className="text-xs font-semibold uppercase tracking-[0.14em] text-[var(--text-subtle)]">Kutsun tila</p>
           <CardTitle>Kutsua ei löytynyt</CardTitle>
-          <CardDescription className="mt-3">
-            Tarkista linkki tai luo uusi kutsu admin- tai coach-näkymästä.
+          <CardDescription className="leading-6">
+            Tarkista linkki tai pyydä uusi kutsu valmentajalta tai ylläpidolta.
           </CardDescription>
-          <Link className="mt-5 inline-block text-sm font-semibold text-[var(--accent)]" href="/">
+          <Link className="inline-block pt-1 text-sm font-semibold text-[var(--accent)] hover:underline" href="/">
             Palaa etusivulle
           </Link>
         </Card>
@@ -82,25 +82,31 @@ export function InviteAcceptView({ token, initialInvite }: { token: string; init
   const expired = invite.status !== "pending" || isInviteExpired(invite.expiresAt);
 
   return (
-    <div className="mx-auto flex min-h-screen max-w-xl items-center px-4 py-10">
-      <Card className="w-full border-[var(--border-strong)]">
+    <div className="mx-auto flex min-h-svh w-full max-w-md flex-col justify-center gap-7 px-5 py-12">
+      <header className="space-y-3">
         <Badge>{roleLabel(invite.role)}</Badge>
-        <p className="mt-4 text-xs font-semibold tracking-[0.04em] text-[var(--text-subtle)]">Käyttöönotto</p>
-        <CardTitle className="text-2xl">Viimeistele tunnus</CardTitle>
-        <CardDescription className="mt-2">
-          Kutsu on lähetetty osoitteeseen {invite.email}. Valitse nimi ja salasana, niin pääset heti omaan
-          työtilaasi.
-        </CardDescription>
-        {expired ? (
-          <div className="mt-6 space-y-4">
-            <p className="text-sm text-[var(--danger)]">Tämä kutsu on vanhentunut. Pyydä uusi kutsu ylläpidolta tai valmentajaltasi.</p>
-            <Link className="rounded-xl border-2 border-[var(--border)] bg-[var(--surface-2)] px-4 py-2.5 text-sm font-semibold text-[var(--text)]" href="/">
-              Takaisin etusivulle
-            </Link>
-          </div>
-        ) : (
+        <h1 className="font-[family-name:var(--font-display)] text-3xl font-bold leading-tight text-[var(--text)]">
+          Viimeistele tunnus
+        </h1>
+        <p className="text-base leading-7 text-[var(--text-muted)]">
+          Kutsu on lähetetty osoitteeseen <span className="font-semibold text-[var(--text)]">{invite.email}</span>. Valitse
+          nimi ja salasana, niin pääset heti omaan työtilaasi.
+        </p>
+      </header>
+
+      {expired ? (
+        <Card className="space-y-4">
+          <p className="text-sm leading-6 text-[var(--danger)]">
+            Tämä kutsu on vanhentunut. Pyydä uusi kutsu ylläpidolta tai valmentajaltasi.
+          </p>
+          <Link className="inline-block text-sm font-semibold text-[var(--accent)] hover:underline" href="/">
+            Takaisin etusivulle
+          </Link>
+        </Card>
+      ) : (
+        <Card>
           <form
-            className="mt-6 space-y-4"
+            className="space-y-5"
             onSubmit={form.handleSubmit(async (values) => {
               if (requiresCaptcha && !captchaToken) {
                 setMessageTone("danger");
@@ -137,8 +143,7 @@ export function InviteAcceptView({ token, initialInvite }: { token: string; init
               }
             })}
           >
-            <fieldset className="space-y-4 rounded-xl border-2 border-[var(--border)] bg-[var(--surface-2)] p-4">
-              <legend className="px-2 text-sm font-semibold tracking-[0.03em] text-[var(--text-subtle)]">Perustiedot</legend>
+            <fieldset className="space-y-4">
               <div>
                 <Label htmlFor={`${formId}-full-name`}>Koko nimi</Label>
                 <Input id={`${formId}-full-name`} autoComplete="name" {...form.register("fullName")} />
@@ -148,12 +153,15 @@ export function InviteAcceptView({ token, initialInvite }: { token: string; init
                 <Input id={`${formId}-new-password`} type="password" autoComplete="new-password" {...form.register("password")} />
               </div>
             </fieldset>
-            <fieldset className="space-y-4 rounded-xl border-2 border-[var(--border)] bg-[var(--surface-2)] p-4">
-              <legend className="px-2 text-sm font-semibold tracking-[0.03em] text-[var(--text-subtle)]">Valinnaiset profiilitiedot</legend>
-              <p className="text-sm text-[var(--text-muted)]">
-                Voit täydentää nämä nyt, niin ravintoprofiilin autolaskenta toimii myöhemmin paremmin. Kentät eivät ole pakollisia.
+
+            <fieldset className="border-t border-[var(--border)] pt-5">
+              <legend className="font-[family-name:var(--font-display)] text-base font-bold text-[var(--text)]">
+                Valinnaiset profiilitiedot
+              </legend>
+              <p className="mt-1 text-sm text-[var(--text-muted)]">
+                Voit täydentää nämä nyt, niin ravintoprofiilin autolaskenta toimii myöhemmin paremmin.
               </p>
-              <div className="grid gap-4 sm:grid-cols-2">
+              <div className="mt-4 grid gap-4 sm:grid-cols-2">
                 <div>
                   <Label htmlFor={`${formId}-age`}>Ikä</Label>
                   <Input id={`${formId}-age`} type="number" inputMode="numeric" min={13} max={100} step="1" {...form.register("age")} />
@@ -177,6 +185,7 @@ export function InviteAcceptView({ token, initialInvite }: { token: string; init
                 </div>
               </div>
             </fieldset>
+
             {requiresCaptcha ? (
               <div className="space-y-2">
                 <HCaptcha
@@ -204,28 +213,33 @@ export function InviteAcceptView({ token, initialInvite }: { token: string; init
                 ) : null}
               </div>
             ) : null}
-            <p
-              aria-live="polite"
-              className={`min-h-5 text-sm ${messageTone === "success" ? "text-[var(--success)]" : "text-[var(--danger)]"}`}
-            >
-              {message ?? ""}
-            </p>
-            <div className="flex flex-wrap gap-3">
+
+            {message ? (
+              <p
+                aria-live="polite"
+                className={`text-sm leading-6 ${messageTone === "success" ? "text-[var(--success)]" : "text-[var(--danger)]"}`}
+              >
+                {message}
+              </p>
+            ) : null}
+
+            <div className="space-y-3 border-t border-[var(--border)] pt-4">
               <Button
                 type="submit"
+                className="w-full"
                 disabled={isSubmitting || (requiresCaptcha && !captchaToken)}
                 loading={isSubmitting}
                 loadingText="Aktivoidaan..."
               >
                 Aktivoi tunnus
               </Button>
-              <Link className="rounded-xl border-2 border-[var(--border)] bg-[var(--surface-2)] px-4 py-2.5 text-sm font-semibold text-[var(--text)]" href="/">
+              <Link className="block text-center text-sm font-semibold text-[var(--text-muted)] hover:underline" href="/">
                 Takaisin etusivulle
               </Link>
             </div>
           </form>
-        )}
-      </Card>
+        </Card>
+      )}
     </div>
   );
 }
