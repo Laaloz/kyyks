@@ -497,7 +497,7 @@ export function NutritionView({
                     ruokakuva
                   </span>
                   <span>
-                    <span className="block text-sm font-semibold leading-tight text-[var(--text)]">{recipe.name}</span>
+                    <span className="block text-sm font-semibold leading-tight text-[var(--text)] [overflow-wrap:anywhere]">{recipe.name}</span>
                     <span className="mt-0.5 block text-xs text-[var(--text-subtle)]">{m.kcal} kcal · P {m.p} g</span>
                   </span>
                   <span className="mt-auto flex flex-wrap gap-1.5">
@@ -684,7 +684,7 @@ function RecipeDetailSheet({
               {mealTagLabel(recipe.mealTag)}
               {recipe.ownerRole === "athlete" ? " · Oma resepti" : ""}
             </p>
-            <h2 className="mt-1 font-[family-name:var(--font-display)] text-2xl font-bold leading-tight text-[var(--text)]">{recipe.name}</h2>
+            <h2 className="mt-1 font-[family-name:var(--font-display)] text-2xl font-bold leading-tight text-[var(--text)] [overflow-wrap:anywhere]">{recipe.name}</h2>
           </div>
           {onEdit ? (
             <button
