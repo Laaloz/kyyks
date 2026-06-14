@@ -283,6 +283,14 @@ export async function saveRecipeOnServer(requester: Requester, input: RecipeInpu
       ingredient_name: ingredient.ingredientName?.trim() || catalogIngredient?.displayName || catalogIngredient?.name || "",
       group_label: ingredient.groupLabel?.trim() || null,
       alternatives: ingredient.alternatives?.map((value) => value.trim()).filter(Boolean) ?? [],
+      alternative_options:
+        ingredient.alternativeOptions
+          ?.map((option) => ({
+            ingredientId: option.ingredientId ?? null,
+            ingredientName: option.ingredientName?.trim() ?? "",
+            grams: Math.max(0, Math.round(Number(option.grams) || 0)),
+          }))
+          .filter((option) => option.ingredientName.length > 0 && option.grams > 0) ?? [],
       quantity: ingredient.quantity ?? null,
       unit: ingredient.unit,
       display_quantity: ingredient.displayQuantity?.trim() || null,

@@ -10,6 +10,7 @@ import { Sheet } from "@/components/ui/sheet";
 import { useHeaderAction } from "@/components/workout/header-action";
 import { OwnRecipeEditor } from "@/components/workout/own-recipe-editor";
 import { useKeepScreenOnPreference, useWakeLock } from "@/lib/use-wake-lock";
+import { cn } from "@/lib/utils";
 import {
   buildPersonalNutritionGoalComparison,
   getActiveMealPlanForAthlete,
@@ -594,6 +595,8 @@ function RecipeDetailSheet({
 }) {
   const [servings, setServings] = useState(recipe?.defaultServings ?? 1);
   const [isPending, setIsPending] = useState(false);
+  // Per-aines valittu vaihtoehto: -1 = alkuperäinen, >=0 = indeksi alternativeOptionsiin.
+  const [altByIngredient, setAltByIngredient] = useState<Record<string, number>>({});
   // Pidä näyttö päällä reseptiä lukiessa (laitekohtainen preferenssi, sama kuin
   // treenin kirjauksessa). Sheet on mountattuna vain kun resepti on auki.
   const [keepScreenOn] = useKeepScreenOnPreference();
@@ -602,7 +605,33 @@ function RecipeDetailSheet({
     return null;
   }
 
-  const macros = servingMacros(recipe, catalog);
+  // Kun jokin vaihtoehto on valittu, lasketaan makrot uudelleen aineksista (ohitetaan
+  // tallennettu cache rakentamalla efektiivinen resepti valituilla aineksilla).
+  const hasAltSelection = Object.values(altByIngredient).some((value) => value >= 0);
+  const effectiveRecipe: Recipe = hasAltSelection
+    ? {
+        ...recipe,
+        nutritionPerServing: undefined,
+        nutritionPerRecipe: undefined,
+        ingredients: recipe.ingredients.map((ing) => {
+          const selectedIndex = altByIngredient[ing.id];
+          const alternative =
+            selectedIndex !== undefined && selectedIndex >= 0 ? ing.alternativeOptions?.[selectedIndex] : undefined;
+          if (!alternative) {
+            return ing;
+          }
+          return {
+            ...ing,
+            ingredientId: alternative.ingredientId,
+            ingredientName: alternative.ingredientName,
+            quantity: alternative.grams,
+            unit: "g" as const,
+            normalizedQuantity: alternative.grams,
+          };
+        }),
+      }
+    : recipe;
+  const macros = servingMacros(effectiveRecipe, catalog);
   const steps = splitRecipeInstructions(recipe.instructions).filter(Boolean);
   const perServingScale = recipe.defaultServings > 0 ? servings / recipe.defaultServings : servings;
   const isEaten = Boolean(entry?.eatenAt);
@@ -639,27 +668,66 @@ function RecipeDetailSheet({
             </div>
           </div>
           <div className="mt-2 divide-y divide-[var(--border)]">
-            {recipe.ingredients.map((ing) => (
-              <div key={ing.id} className="py-2.5">
-                <div className="flex items-center justify-between gap-3">
-                  <span className="text-sm font-medium text-[var(--text)]">{ing.ingredientName}</span>
-                  {ing.quantity !== undefined ? (
-                    <span className="shrink-0 font-[family-name:var(--font-display)] text-sm tabular-nums text-[var(--text-subtle)]">
-                      {Math.round(ing.quantity * perServingScale)} {ing.unit}
-                    </span>
+            {recipe.ingredients.map((ing) => {
+              const options = ing.alternativeOptions ?? [];
+              const selectedIndex = altByIngredient[ing.id] ?? -1;
+              const activeName = selectedIndex >= 0 ? options[selectedIndex]?.ingredientName ?? ing.ingredientName : ing.ingredientName;
+              const activeGrams = selectedIndex >= 0 ? options[selectedIndex]?.grams : ing.quantity;
+              const activeUnit = selectedIndex >= 0 ? "g" : ing.unit;
+              return (
+                <div key={ing.id} className="py-2.5">
+                  <div className="flex items-center justify-between gap-3">
+                    <span className="text-sm font-medium text-[var(--text)]">{activeName}</span>
+                    {activeGrams !== undefined ? (
+                      <span className="shrink-0 font-[family-name:var(--font-display)] text-sm tabular-nums text-[var(--text-subtle)]">
+                        {Math.round(activeGrams * perServingScale)} {activeUnit}
+                      </span>
+                    ) : null}
+                  </div>
+                  {options.length > 0 ? (
+                    <div className="mt-1.5 flex flex-wrap gap-1.5">
+                      <button
+                        type="button"
+                        aria-pressed={selectedIndex === -1}
+                        onClick={() => setAltByIngredient((previous) => ({ ...previous, [ing.id]: -1 }))}
+                        className={cn(
+                          "rounded-full px-2.5 py-0.5 text-xs font-medium transition",
+                          selectedIndex === -1
+                            ? "bg-[var(--accent)] text-[var(--accent-contrast)]"
+                            : "bg-[var(--surface-2)] text-[var(--text-muted)] hover:text-[var(--text)]",
+                        )}
+                      >
+                        {ing.ingredientName}
+                      </button>
+                      {options.map((option, index) => (
+                        <button
+                          key={`${ing.id}-alt-${index}`}
+                          type="button"
+                          aria-pressed={selectedIndex === index}
+                          onClick={() => setAltByIngredient((previous) => ({ ...previous, [ing.id]: index }))}
+                          className={cn(
+                            "rounded-full px-2.5 py-0.5 text-xs font-medium transition",
+                            selectedIndex === index
+                              ? "bg-[var(--accent)] text-[var(--accent-contrast)]"
+                              : "bg-[var(--surface-2)] text-[var(--text-muted)] hover:text-[var(--text)]",
+                          )}
+                        >
+                          ⇄ {option.ingredientName}
+                        </button>
+                      ))}
+                    </div>
+                  ) : ing.alternatives && ing.alternatives.length > 0 ? (
+                    <div className="mt-1.5 flex flex-wrap gap-1.5">
+                      {ing.alternatives.map((alt) => (
+                        <span key={alt} className="rounded-full bg-[var(--surface-2)] px-2.5 py-0.5 text-xs text-[var(--text-muted)]">
+                          ⇄ {alt}
+                        </span>
+                      ))}
+                    </div>
                   ) : null}
                 </div>
-                {ing.alternatives && ing.alternatives.length > 0 ? (
-                  <div className="mt-1.5 flex flex-wrap gap-1.5">
-                    {ing.alternatives.map((alt) => (
-                      <span key={alt} className="rounded-full bg-[var(--surface-2)] px-2.5 py-0.5 text-xs text-[var(--text-muted)]">
-                        ⇄ {alt}
-                      </span>
-                    ))}
-                  </div>
-                ) : null}
-              </div>
-            ))}
+              );
+            })}
           </div>
 
           {steps.length > 0 ? (

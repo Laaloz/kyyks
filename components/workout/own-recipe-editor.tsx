@@ -17,11 +17,14 @@ import { useAppState } from "@/providers/app-state-provider";
 
 const MEAL_TAG_ORDER: MealTag[] = ["breakfast", "lunch", "snack", "dinner", "evening_snack"];
 
+type DraftAlt = { key: string; ingredientId: string; ingredientName: string; grams: string };
+
 type DraftRow = {
   key: string;
   ingredientId: string;
   ingredientName: string;
   grams: string;
+  alternatives: DraftAlt[];
 };
 
 export function OwnRecipeEditor({
@@ -38,6 +41,8 @@ export function OwnRecipeEditor({
   const [mealTag, setMealTag] = useState<MealTag>(initialMealTag);
   const [rows, setRows] = useState<DraftRow[]>([]);
   const [query, setQuery] = useState("");
+  const [altSearchRowKey, setAltSearchRowKey] = useState<string | null>(null);
+  const [altQuery, setAltQuery] = useState("");
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState("");
 
@@ -56,6 +61,22 @@ export function OwnRecipeEditor({
       .sort((left, right) => left.name.localeCompare(right.name, "fi"))
       .slice(0, 8);
   }, [query, state.ingredientsCatalog]);
+
+  // Vaihtoehtoisen aineksen haku (yhdelle ainekselle kerrallaan).
+  const altSearchResults = useMemo(() => {
+    const trimmed = altQuery.trim().toLowerCase();
+    if (!trimmed || !altSearchRowKey) {
+      return [];
+    }
+    const activeRow = rows.find((row) => row.key === altSearchRowKey);
+    const excludeIds = new Set(
+      [activeRow?.ingredientId, ...(activeRow?.alternatives.map((alt) => alt.ingredientId) ?? [])].filter(Boolean),
+    );
+    return state.ingredientsCatalog
+      .filter((item) => item.name.toLowerCase().includes(trimmed) && !excludeIds.has(item.id))
+      .sort((left, right) => left.name.localeCompare(right.name, "fi"))
+      .slice(0, 6);
+  }, [altQuery, altSearchRowKey, rows, state.ingredientsCatalog]);
 
   // Live-makrot: rakennetaan pseudoresepti ja lasketaan annoskohtaiset makrot.
   const preview = useMemo(() => {
@@ -111,6 +132,9 @@ export function OwnRecipeEditor({
             unit: "g" as const,
             ingredientRole: "main" as const,
             scalingMode: "linear" as const,
+            alternativeOptions: row.alternatives
+              .filter((alt) => alt.ingredientId && Number(alt.grams) > 0)
+              .map((alt) => ({ ingredientId: alt.ingredientId, ingredientName: alt.ingredientName, grams: Number(alt.grams) })),
           })),
       };
 
@@ -175,30 +199,142 @@ export function OwnRecipeEditor({
           {rows.length > 0 ? (
             <div className="mt-2 divide-y divide-[var(--border)]">
               {rows.map((row) => (
-                <div key={row.key} className="flex items-center gap-3 py-2.5">
-                  <span className="min-w-0 flex-1 truncate text-sm text-[var(--text)]">{row.ingredientName}</span>
-                  <Input
-                    className="h-9 w-20 px-2 text-center text-sm"
-                    type="number"
-                    inputMode="numeric"
-                    min={0}
-                    value={row.grams}
-                    aria-label={`${row.ingredientName} grammat`}
-                    onChange={(event) =>
-                      setRows((previous) =>
-                        previous.map((item) => (item.key === row.key ? { ...item, grams: event.target.value } : item)),
-                      )
-                    }
-                  />
-                  <span className="text-xs text-[var(--text-subtle)]">g</span>
-                  <button
-                    type="button"
-                    className="grid size-8 shrink-0 place-items-center rounded-full bg-[var(--surface-2)] text-[var(--text-subtle)] transition hover:text-[var(--danger)]"
-                    aria-label={`Poista ${row.ingredientName}`}
-                    onClick={() => setRows((previous) => previous.filter((item) => item.key !== row.key))}
-                  >
-                    <Trash2 className="size-4" aria-hidden="true" />
-                  </button>
+                <div key={row.key} className="py-2.5">
+                  <div className="flex items-center gap-3">
+                    <span className="min-w-0 flex-1 truncate text-sm text-[var(--text)]">{row.ingredientName}</span>
+                    <Input
+                      className="h-9 w-20 px-2 text-center text-sm"
+                      type="number"
+                      inputMode="numeric"
+                      min={0}
+                      value={row.grams}
+                      aria-label={`${row.ingredientName} grammat`}
+                      onChange={(event) =>
+                        setRows((previous) =>
+                          previous.map((item) => (item.key === row.key ? { ...item, grams: event.target.value } : item)),
+                        )
+                      }
+                    />
+                    <span className="text-xs text-[var(--text-subtle)]">g</span>
+                    <button
+                      type="button"
+                      className="grid size-8 shrink-0 place-items-center rounded-full bg-[var(--surface-2)] text-[var(--text-subtle)] transition hover:text-[var(--danger)]"
+                      aria-label={`Poista ${row.ingredientName}`}
+                      onClick={() => setRows((previous) => previous.filter((item) => item.key !== row.key))}
+                    >
+                      <Trash2 className="size-4" aria-hidden="true" />
+                    </button>
+                  </div>
+
+                  {row.alternatives.length > 0 ? (
+                    <div className="mt-1.5 space-y-1.5 border-l-2 border-[var(--border)] pl-3">
+                      {row.alternatives.map((alt) => (
+                        <div key={alt.key} className="flex items-center gap-2">
+                          <span className="min-w-0 flex-1 truncate text-xs text-[var(--text-muted)]">tai {alt.ingredientName}</span>
+                          <Input
+                            className="h-8 w-16 px-2 text-center text-xs"
+                            type="number"
+                            inputMode="numeric"
+                            min={0}
+                            value={alt.grams}
+                            aria-label={`${alt.ingredientName} grammat`}
+                            onChange={(event) =>
+                              setRows((previous) =>
+                                previous.map((item) =>
+                                  item.key === row.key
+                                    ? {
+                                        ...item,
+                                        alternatives: item.alternatives.map((option) =>
+                                          option.key === alt.key ? { ...option, grams: event.target.value } : option,
+                                        ),
+                                      }
+                                    : item,
+                                ),
+                              )
+                            }
+                          />
+                          <span className="text-[11px] text-[var(--text-subtle)]">g</span>
+                          <button
+                            type="button"
+                            className="grid size-7 shrink-0 place-items-center rounded-full text-[var(--text-subtle)] transition hover:text-[var(--danger)]"
+                            aria-label={`Poista vaihtoehto ${alt.ingredientName}`}
+                            onClick={() =>
+                              setRows((previous) =>
+                                previous.map((item) =>
+                                  item.key === row.key
+                                    ? { ...item, alternatives: item.alternatives.filter((option) => option.key !== alt.key) }
+                                    : item,
+                                ),
+                              )
+                            }
+                          >
+                            <X className="size-3.5" aria-hidden="true" />
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  ) : null}
+
+                  <div className="mt-1.5 pl-3">
+                    <button
+                      type="button"
+                      className="inline-flex items-center gap-1 rounded-full border border-dashed border-[var(--border-strong)] px-3 py-1 text-xs font-semibold text-[var(--text-muted)] transition hover:text-[var(--text)]"
+                      onClick={() => {
+                        setAltSearchRowKey((current) => (current === row.key ? null : row.key));
+                        setAltQuery("");
+                      }}
+                    >
+                      <Plus className="size-3" aria-hidden="true" /> Vaihtoehto
+                    </button>
+                  </div>
+
+                  {altSearchRowKey === row.key ? (
+                    <div className="mt-2 rounded-xl bg-[var(--surface-2)] p-2">
+                      <div className="flex items-center gap-2 rounded-lg bg-[var(--surface)] px-3 py-2">
+                        <Search className="size-4 shrink-0 text-[var(--text-subtle)]" aria-hidden="true" />
+                        <input
+                          type="search"
+                          value={altQuery}
+                          onChange={(event) => setAltQuery(event.target.value)}
+                          placeholder="Hae vaihtoehtoinen raaka-aine..."
+                          className="min-w-0 flex-1 bg-transparent text-sm text-[var(--text)] outline-none placeholder:text-[var(--text-subtle)]"
+                        />
+                      </div>
+                      {altSearchResults.length > 0 ? (
+                        <div className="mt-1 divide-y divide-[var(--border)]">
+                          {altSearchResults.map((item) => (
+                            <button
+                              key={item.id}
+                              type="button"
+                              className="flex w-full items-center justify-between gap-2 py-2 text-left"
+                              onClick={() => {
+                                setRows((previous) =>
+                                  previous.map((candidate) =>
+                                    candidate.key === row.key
+                                      ? {
+                                          ...candidate,
+                                          alternatives: [
+                                            ...candidate.alternatives,
+                                            { key: `${item.id}-${Date.now()}`, ingredientId: item.id, ingredientName: item.name, grams: row.grams || "100" },
+                                          ],
+                                        }
+                                      : candidate,
+                                  ),
+                                );
+                                setAltSearchRowKey(null);
+                                setAltQuery("");
+                              }}
+                            >
+                              <span className="min-w-0 truncate text-sm text-[var(--text)]">{item.name}</span>
+                              <Plus className="size-4 shrink-0 text-[var(--accent)]" aria-hidden="true" />
+                            </button>
+                          ))}
+                        </div>
+                      ) : altQuery.trim() ? (
+                        <p className="px-1 py-2 text-xs text-[var(--text-subtle)]">Ei osumia.</p>
+                      ) : null}
+                    </div>
+                  ) : null}
                 </div>
               ))}
             </div>
@@ -228,7 +364,7 @@ export function OwnRecipeEditor({
                       setRows((previous) =>
                         previous.some((row) => row.ingredientId === item.id)
                           ? previous
-                          : [...previous, { key: `${item.id}-${Date.now()}`, ingredientId: item.id, ingredientName: item.name, grams: "100" }],
+                          : [...previous, { key: `${item.id}-${Date.now()}`, ingredientId: item.id, ingredientName: item.name, grams: "100", alternatives: [] }],
                       );
                       setQuery("");
                     }}

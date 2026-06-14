@@ -268,6 +268,7 @@ type RecipeIngredientRow = {
   ingredient_name: string;
   group_label: string | null;
   alternatives: string[] | null;
+  alternative_options: Recipe["ingredients"][number]["alternativeOptions"] | null;
   quantity: number | string | null;
   unit: Recipe["ingredients"][number]["unit"];
   display_quantity: string | null;
@@ -686,7 +687,7 @@ export async function loadVisibleSupabaseAppState(
     mode === "full"
       ? supabase
           .from("recipe_ingredients")
-          .select("id, recipe_id, ingredient_id, ingredient_name, group_label, alternatives, quantity, unit, display_quantity, display_unit, normalized_quantity, ingredient_role, scaling_mode, sort_order")
+          .select("id, recipe_id, ingredient_id, ingredient_name, group_label, alternatives, alternative_options, quantity, unit, display_quantity, display_unit, normalized_quantity, ingredient_role, scaling_mode, sort_order")
           .order("recipe_id", { ascending: true })
           .order("sort_order", { ascending: true })
       : Promise.resolve({ data: [] as RecipeIngredientRow[], error: null }),
@@ -827,6 +828,7 @@ export async function loadVisibleSupabaseAppState(
       ingredientName: entry.ingredient_name,
       groupLabel: entry.group_label ?? undefined,
       alternatives: entry.alternatives ?? undefined,
+      alternativeOptions: entry.alternative_options ?? undefined,
       quantity: toNumberOrUndefined(entry.quantity),
       unit: entry.unit,
       displayQuantity: entry.display_quantity ?? undefined,

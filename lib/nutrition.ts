@@ -807,6 +807,8 @@ export function upsertRecipe(
         ingredientId: ingredient.ingredientId,
         ingredientName: ingredient.ingredientName?.trim() || "",
         groupLabel: ingredient.groupLabel?.trim() || undefined,
+        alternatives: ingredient.alternatives,
+        alternativeOptions: ingredient.alternativeOptions,
         quantity: ingredient.quantity,
         unit: ingredient.unit,
         displayQuantity: ingredient.displayQuantity?.trim() || undefined,

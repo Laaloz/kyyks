@@ -141,12 +141,22 @@ export interface Ingredient {
   updatedAt: string;
 }
 
+export interface RecipeIngredientAlternative {
+  /** Katalogiaineksen id, jos vaihtoehto on pankista — mahdollistaa makrolaskennan. */
+  ingredientId?: string;
+  ingredientName: string;
+  grams: number;
+}
+
 export interface RecipeIngredient {
   id: string;
   ingredientId?: string;
   ingredientName: string;
   groupLabel?: string;
+  /** Vapaatekstiset vaihtoehtonimet (legacy). */
   alternatives?: string[];
+  /** Rakenteiset vaihtoehdot omalla grammamäärällä ja katalogiaineksella. */
+  alternativeOptions?: RecipeIngredientAlternative[];
   quantity?: number;
   unit: IngredientUnit;
   displayQuantity?: string;
@@ -588,6 +598,7 @@ export interface RecipeIngredientInput {
   ingredientName?: string;
   groupLabel?: string;
   alternatives?: string[];
+  alternativeOptions?: RecipeIngredientAlternative[];
   quantity?: number;
   unit: IngredientUnit;
   displayQuantity?: string;

@@ -97,6 +97,15 @@ export const recipeIngredientSchema = z.object({
   ingredientName: z.string().optional(),
   groupLabel: z.string().optional(),
   alternatives: z.array(z.string().trim().min(1)).optional(),
+  alternativeOptions: z
+    .array(
+      z.object({
+        ingredientId: z.string().optional(),
+        ingredientName: z.string().trim().min(1),
+        grams: z.coerce.number().min(1).max(100000),
+      }),
+    )
+    .optional(),
   quantity: optionalNumberField(z.number().min(0).max(100000)),
   unit: z.enum(["g", "ml", "pcs"]),
   displayQuantity: z.string().optional(),
