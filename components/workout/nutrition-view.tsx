@@ -139,6 +139,7 @@ export function NutritionView({
       : null,
   );
   const [isMaterializing, setIsMaterializing] = useState(false);
+  const [materializeMessage, setMaterializeMessage] = useState("");
   const [pendingId, setPendingId] = useState<string | null>(null);
 
   const todayKey = useMemo(() => localDateKey(new Date()), []);
@@ -227,9 +228,16 @@ export function NutritionView({
 
   const materializeFromPlan = async () => {
     setIsMaterializing(true);
+    setMaterializeMessage("");
     try {
-      for (const [index, item] of plannedDay.entries()) {
-        await addDayMeal({ planDate: todayKey, mealTag: item.mealTag, recipeId: item.recipe.id, source: "plan", position: index });
+      const results = await Promise.all(
+        plannedDay.map((item, index) =>
+          addDayMeal({ planDate: todayKey, mealTag: item.mealTag, recipeId: item.recipe.id, source: "plan", position: index }),
+        ),
+      );
+      const failed = results.find((result) => !result.ok);
+      if (failed) {
+        setMaterializeMessage(failed.message);
       }
     } finally {
       setIsMaterializing(false);
@@ -348,6 +356,11 @@ export function NutritionView({
                       >
                         Kokoa tämän päivän ateriat
                       </Button>
+                      {materializeMessage ? (
+                        <p className="text-sm text-[var(--danger)]" role="alert">
+                          {materializeMessage}
+                        </p>
+                      ) : null}
                       <Button type="button" variant="secondary" className="w-full gap-2" onClick={() => setAddTag("breakfast")}>
                         <Plus className="size-4" aria-hidden="true" />
                         Lisää ateria

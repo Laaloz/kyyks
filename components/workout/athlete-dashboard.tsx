@@ -474,6 +474,8 @@ export function AthleteDashboard({
   const [measurementMessageTone, setMeasurementMessageTone] = useState<MeasurementMessageTone>("info");
   const [isSavingMeasurements, setIsSavingMeasurements] = useState(false);
   const [isMeasurementSheetOpen, setIsMeasurementSheetOpen] = useState(false);
+  const isMeasurementDraftDirtyRef = useRef(false);
+  const initializedMeasurementSheetUserIdRef = useRef<string | null>(null);
   const [activeMeasurementTrend, setActiveMeasurementTrend] = useState<"weight" | "waist">("weight");
   const [bodyMetricRange, setBodyMetricRange] = useState<"3m" | "1y" | "all">("3m");
   const [showAllMeasurementEntries, setShowAllMeasurementEntries] = useState(false);
@@ -527,6 +529,11 @@ export function AthleteDashboard({
     // state.bodyMeasurements/weightKg:sta — muuten taustasynkka uudelleen-
     // initialisoisi kentät kesken kirjoittamisen ja pyyhkisi syötetyt arvot.
     if (!isMeasurementSheetOpen) {
+      initializedMeasurementSheetUserIdRef.current = null;
+      isMeasurementDraftDirtyRef.current = false;
+      return;
+    }
+    if (!currentUser || initializedMeasurementSheetUserIdRef.current === currentUser.id || isMeasurementDraftDirtyRef.current) {
       return;
     }
 
@@ -539,6 +546,7 @@ export function AthleteDashboard({
       weightKg: currentUser?.weightKg !== undefined ? String(currentUser.weightKg) : "",
       waistCm: latestWaistValue !== undefined ? String(latestWaistValue) : "",
     });
+    initializedMeasurementSheetUserIdRef.current = currentUser.id;
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isMeasurementSheetOpen, currentUser?.id]);
   useEffect(() => {
@@ -971,6 +979,8 @@ export function AthleteDashboard({
       setMeasurementMessage(result.ok ? "Mittatiedot tallennettu." : result.message);
       setMeasurementMessageTone(result.ok ? "success" : "error");
       if (result.ok) {
+        isMeasurementDraftDirtyRef.current = false;
+        initializedMeasurementSheetUserIdRef.current = null;
         setMeasurementDraft((previous) => ({ ...previous, weightKg: "", waistCm: "" }));
         setIsMeasurementSheetOpen(false);
         notify({ tone: "success", message: "Mittaus tallennettu." });
@@ -1759,7 +1769,14 @@ export function AthleteDashboard({
           </div>
 
           {isMeasurementSheetOpen ? (
-              <Sheet onClose={() => setIsMeasurementSheetOpen(false)} ariaLabel="Uusi mittaus">
+              <Sheet
+                onClose={() => {
+                  isMeasurementDraftDirtyRef.current = false;
+                  initializedMeasurementSheetUserIdRef.current = null;
+                  setIsMeasurementSheetOpen(false);
+                }}
+                ariaLabel="Uusi mittaus"
+              >
                     <h2 className="font-[family-name:var(--font-display)] text-2xl font-bold text-[var(--text)]">Uusi mittaus</h2>
                     <p className="mt-1 text-sm text-[var(--text-muted)]">Täytä vain ne, jotka mittasit tänään.</p>
                     <div className="mt-4 space-y-3">
@@ -1775,6 +1792,7 @@ export function AthleteDashboard({
                           placeholder={currentUser?.weightKg !== undefined ? String(currentUser.weightKg) : "Esim. 72.4"}
                           value={measurementDraft.weightKg}
                           onChange={(event) => {
+                            isMeasurementDraftDirtyRef.current = true;
                             setMeasurementDraft((previous) => ({ ...previous, weightKg: event.target.value }));
                             setMeasurementMessage("");
                             setMeasurementMessageTone("info");
@@ -1793,6 +1811,7 @@ export function AthleteDashboard({
                           placeholder={latestWaistCm !== undefined ? String(latestWaistCm) : "Esim. 81"}
                           value={measurementDraft.waistCm}
                           onChange={(event) => {
+                            isMeasurementDraftDirtyRef.current = true;
                             setMeasurementDraft((previous) => ({ ...previous, waistCm: event.target.value }));
                             setMeasurementMessage("");
                             setMeasurementMessageTone("info");

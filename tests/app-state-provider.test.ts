@@ -4,7 +4,7 @@ import { describe, expect, it, vi } from "vitest";
 import type { User as SupabaseAuthUser } from "@supabase/supabase-js";
 
 import { cloneDemoState } from "@/lib/domain";
-import type { WorkoutSession } from "@/lib/types";
+import type { DayMealPlanEntry, WorkoutSession } from "@/lib/types";
 import {
   applyPartialUserMeasurementUpdate,
   applyProgramDeletion,
@@ -1476,6 +1476,105 @@ describe("shouldPreserveStoredSessionDuringSupabaseBootstrap", () => {
     expect(nextState.plans.find((plan) => plan.id === "plan_a")?.status).toBe("archived");
     expect(nextState.plans.find((plan) => plan.id === "plan_b")?.status).toBe("active");
     expect(nextState.plans.find((plan) => plan.id === "plan_c")?.status).toBe("removed");
+  });
+});
+
+describe("reconcileSupabaseVisibleState local sync protection", () => {
+  it("preserves pending day meal creates when a full snapshot has not caught up yet", () => {
+    const state = cloneDemoState();
+    const localMeal: DayMealPlanEntry = {
+      id: "day_meal_pending",
+      athleteId: "user_athlete_1",
+      planDate: "2026-03-24",
+      mealTag: "breakfast",
+      recipeId: "recipe_skyr_oats",
+      source: "plan",
+      servings: 1,
+      eatenAt: null,
+      position: 0,
+      createdAt: "2026-03-24T08:00:00.000Z",
+      updatedAt: "2026-03-24T08:00:00.000Z",
+    };
+    state.dayMealPlans = [localMeal];
+
+    const nextState = reconcileSupabaseVisibleState(
+      state,
+      {
+        users: state.users,
+        bodyMeasurements: state.bodyMeasurements,
+        dayMealPlans: [],
+        conversationEntries: state.conversationEntries,
+      },
+      new Map(),
+      new Map(),
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      "full",
+      new Map(),
+      new Map([["day_meal_pending", { canceled: false }]]),
+      new Map(),
+    );
+
+    expect(nextState.dayMealPlans).toContainEqual(localMeal);
+  });
+
+  it("keeps a recently saved measurement over an older full snapshot", () => {
+    const state = cloneDemoState();
+    const athlete = state.users.find((user) => user.id === "user_athlete_1")!;
+    const timestamp = new Date().toISOString();
+    state.users = state.users.map((user) =>
+      user.id === athlete.id
+        ? {
+            ...user,
+            weightKg: 82.4,
+            waistCm: 88.2,
+            updatedAt: timestamp,
+          }
+        : user,
+    );
+    state.bodyMeasurements = [
+      {
+        id: "measurement_local",
+        userId: athlete.id,
+        weightKg: 82.4,
+        waistCm: 88.2,
+        measuredAt: timestamp,
+        createdAt: timestamp,
+      },
+    ];
+
+    const nextState = reconcileSupabaseVisibleState(
+      state,
+      {
+        users: state.users.map((user) =>
+          user.id === athlete.id
+            ? {
+                ...user,
+                weightKg: 80,
+                waistCm: 90,
+                updatedAt: new Date(Date.now() - 1000).toISOString(),
+              }
+            : user,
+        ),
+        bodyMeasurements: [],
+        conversationEntries: state.conversationEntries,
+      },
+      new Map(),
+      new Map(),
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      "full",
+      new Map([[athlete.id, timestamp]]),
+    );
+
+    const nextAthlete = nextState.users.find((user) => user.id === athlete.id)!;
+    expect(nextAthlete.weightKg).toBe(82.4);
+    expect(nextAthlete.waistCm).toBe(88.2);
+    expect(nextState.bodyMeasurements[0]?.id).toBe("measurement_local");
   });
 });
 

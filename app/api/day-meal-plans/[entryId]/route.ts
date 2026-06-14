@@ -4,12 +4,17 @@ import type { DayMealSource } from "@/lib/types";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 
 const SOURCES: DayMealSource[] = ["plan", "swapped", "added"];
+const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 export async function DELETE(
   _request: Request,
   { params }: { params: Promise<{ entryId: string }> },
 ) {
   const { entryId } = await params;
+  if (!UUID_PATTERN.test(entryId)) {
+    return NextResponse.json({ message: "Aterian tunniste ei ole vielä valmis. Yritä hetken päästä uudelleen." }, { status: 400 });
+  }
+
   const supabase = await createSupabaseServerClient();
   if (!supabase) {
     return NextResponse.json({ message: "Supabase ei ole käytössä tässä ympäristössä." }, { status: 503 });
@@ -43,6 +48,10 @@ export async function PATCH(
   { params }: { params: Promise<{ entryId: string }> },
 ) {
   const { entryId } = await params;
+  if (!UUID_PATTERN.test(entryId)) {
+    return NextResponse.json({ message: "Aterian tunniste ei ole vielä valmis. Yritä hetken päästä uudelleen." }, { status: 400 });
+  }
+
   const supabase = await createSupabaseServerClient();
   if (!supabase) {
     return NextResponse.json({ message: "Supabase ei ole käytössä tässä ympäristössä." }, { status: 503 });

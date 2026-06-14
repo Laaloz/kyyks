@@ -410,6 +410,90 @@ function mergeServerSessionWithLocalSetInputs(
   return { ...serverSession, setLogs: mergedSetLogs };
 }
 
+function mergeServerDayMealPlansWithLocalState(
+  serverDayMealPlans: AppState["dayMealPlans"] | undefined,
+  previousDayMealPlans: AppState["dayMealPlans"] | undefined,
+  pendingDayMealCreates: ReadonlyMap<string, PendingDayMealCreate>,
+  recentlyRemovedDayMealIds: ReadonlyMap<string, number>,
+) {
+  const serverEntries = serverDayMealPlans ?? previousDayMealPlans ?? [];
+  const now = Date.now();
+  const recentlyRemovedIds = new Set(
+    Array.from(recentlyRemovedDayMealIds.entries())
+      .filter(([, removedAt]) => now - removedAt < LOCAL_SYNC_PROTECTION_MS)
+      .map(([entryId]) => entryId),
+  );
+  const previousById = new Map((previousDayMealPlans ?? []).map((entry) => [entry.id, entry]));
+  const merged = serverEntries.filter((entry) => !recentlyRemovedIds.has(entry.id));
+
+  pendingDayMealCreates.forEach((pending, optimisticId) => {
+    if (pending.canceled) {
+      return;
+    }
+
+    const localEntry = previousById.get(pending.serverId ?? optimisticId) ?? previousById.get(optimisticId);
+    if (localEntry && !merged.some((entry) => entry.id === optimisticId || entry.id === pending.serverId)) {
+      merged.push(localEntry);
+    }
+  });
+
+  return merged;
+}
+
+function mergeServerMeasurementsWithLocalState(
+  snapshot: SupabaseVisibleAppStateSnapshot,
+  previous: AppState,
+  recentlyConfirmedMeasurements: ReadonlyMap<string, string>,
+) {
+  const snapshotMeasurements = snapshot.bodyMeasurements ?? previous.bodyMeasurements;
+  const snapshotUsers = snapshot.users ?? previous.users;
+  if (recentlyConfirmedMeasurements.size === 0) {
+    return { bodyMeasurements: snapshotMeasurements, users: snapshotUsers };
+  }
+
+  const now = Date.now();
+  const protectedUserIds = new Set(
+    Array.from(recentlyConfirmedMeasurements.entries())
+      .filter(([, updatedAt]) => {
+        const updatedAtMs = Date.parse(updatedAt);
+        return Number.isFinite(updatedAtMs) && now - updatedAtMs < LOCAL_SYNC_PROTECTION_MS;
+      })
+      .map(([userId]) => userId),
+  );
+
+  if (protectedUserIds.size === 0) {
+    return { bodyMeasurements: snapshotMeasurements, users: snapshotUsers };
+  }
+
+  const snapshotMeasurementIds = new Set(snapshotMeasurements.map((measurement) => measurement.id));
+  const preservedMeasurements = previous.bodyMeasurements.filter(
+    (measurement) => protectedUserIds.has(measurement.userId) && !snapshotMeasurementIds.has(measurement.id),
+  );
+  const previousUsersById = new Map(previous.users.map((user) => [user.id, user]));
+
+  return {
+    bodyMeasurements: [...preservedMeasurements, ...snapshotMeasurements],
+    users: snapshotUsers.map((user) => {
+      const localUser = previousUsersById.get(user.id);
+      if (!localUser || !protectedUserIds.has(user.id)) {
+        return user;
+      }
+
+      const localUpdatedAt = Date.parse(localUser.updatedAt);
+      const serverUpdatedAt = Date.parse(user.updatedAt);
+      return Number.isFinite(localUpdatedAt) && Number.isFinite(serverUpdatedAt) && localUpdatedAt > serverUpdatedAt
+        ? {
+            ...user,
+            heightCm: localUser.heightCm,
+            weightKg: localUser.weightKg,
+            waistCm: localUser.waistCm,
+            updatedAt: localUser.updatedAt,
+          }
+        : user;
+    }),
+  };
+}
+
 function hasOpenActiveWorkout(state: AppState, athleteId: string | null | undefined) {
   if (!athleteId) {
     return false;
@@ -1666,6 +1750,15 @@ type SupabaseVisibleAppStateSnapshot = Partial<Pick<
   | "conversationEntries"
 >>;
 
+const SUPABASE_UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+const LOCAL_SYNC_PROTECTION_MS = 15_000;
+
+type RecentlyConfirmedMeasurements = Map<string, string>;
+type PendingDayMealCreate = {
+  canceled: boolean;
+  serverId?: string;
+};
+
 export function reconcileSupabaseInviteDirectory(
   previous: AppState,
   snapshot: SupabaseInviteDirectorySnapshot,
@@ -1728,6 +1821,9 @@ export function reconcileSupabaseVisibleState(
   recentlyDeletedWorkoutIds?: ReadonlyMap<string, number>,
   recentlyStartedWorkoutIds?: ReadonlyMap<string, number>,
   snapshotMode: "full" | "workouts" = "full",
+  recentlyConfirmedMeasurements: ReadonlyMap<string, string> = new Map(),
+  pendingDayMealCreates: ReadonlyMap<string, PendingDayMealCreate> = new Map(),
+  recentlyRemovedDayMealIds: ReadonlyMap<string, number> = new Map(),
 ) {
   const suppressedWorkoutIds = new Set(
     Array.from(recentlyDeletedWorkoutIds?.entries() ?? [])
@@ -1835,11 +1931,16 @@ export function reconcileSupabaseVisibleState(
 
     return shouldPreserve;
   });
+  const mergedMeasurements = mergeServerMeasurementsWithLocalState(
+    filteredSnapshot,
+    previous,
+    snapshotMode === "workouts" ? new Map() : recentlyConfirmedMeasurements,
+  );
 
   return normalizeState({
     ...previous,
-    users: [...(snapshot.users ?? previous.users), ...preservedInvitedUsers],
-    bodyMeasurements: snapshotMode === "workouts" ? previous.bodyMeasurements : (filteredSnapshot.bodyMeasurements ?? previous.bodyMeasurements),
+    users: [...(snapshotMode === "workouts" ? (snapshot.users ?? previous.users) : mergedMeasurements.users), ...preservedInvitedUsers],
+    bodyMeasurements: snapshotMode === "workouts" ? previous.bodyMeasurements : mergedMeasurements.bodyMeasurements,
     nutritionProfiles: snapshotMode === "workouts" ? previous.nutritionProfiles : (filteredSnapshot.nutritionProfiles ?? previous.nutritionProfiles),
     ingredientsCatalog: snapshotMode === "workouts" ? previous.ingredientsCatalog : (filteredSnapshot.ingredientsCatalog ?? previous.ingredientsCatalog),
     recipes: snapshotMode === "workouts" ? previous.recipes : (filteredSnapshot.recipes ?? previous.recipes),
@@ -1974,7 +2075,14 @@ export function reconcileSupabaseVisibleState(
       return mergedNotes;
     })(),
     extraActivities: filteredSnapshot.extraActivities ?? previous.extraActivities ?? [],
-    dayMealPlans: filteredSnapshot.dayMealPlans ?? previous.dayMealPlans ?? [],
+    dayMealPlans: snapshotMode === "workouts"
+      ? previous.dayMealPlans ?? []
+      : mergeServerDayMealPlansWithLocalState(
+          filteredSnapshot.dayMealPlans,
+          previous.dayMealPlans,
+          pendingDayMealCreates,
+          recentlyRemovedDayMealIds,
+        ),
     conversationEntries: filteredSnapshot.conversationEntries ?? previous.conversationEntries,
   });
 }
@@ -2517,6 +2625,9 @@ export function AppStateProvider({ children }: PropsWithChildren) {
   const workoutSetDraftWakeTimeoutRef = useRef<Map<string, number>>(new Map());
   const recentlyConfirmedSetLogsRef = useRef<RecentlyConfirmedWorkoutSetLogs>(new Map());
   const recentlyConfirmedWorkoutNotesRef = useRef<RecentlyConfirmedWorkoutNotes>(new Map());
+  const recentlyConfirmedMeasurementsRef = useRef<RecentlyConfirmedMeasurements>(new Map());
+  const pendingDayMealCreatesRef = useRef<Map<string, PendingDayMealCreate>>(new Map());
+  const recentlyRemovedDayMealIdsRef = useRef<Map<string, number>>(new Map());
   const recentlyDeletedWorkoutsRef = useRef<Map<string, number>>(new Map());
   const recentlyStartedWorkoutsRef = useRef<RecentlyStartedWorkouts>(new Map());
   const isHydrated =
@@ -2753,6 +2864,9 @@ export function AppStateProvider({ children }: PropsWithChildren) {
             recentlyDeletedWorkoutsRef.current,
             recentlyStartedWorkoutsRef.current,
             useLightweightSnapshot ? "workouts" : "full",
+            recentlyConfirmedMeasurementsRef.current,
+            pendingDayMealCreatesRef.current,
+            recentlyRemovedDayMealIdsRef.current,
           ),
         );
         resolvedUserId = findResolvedUserIdInSnapshot(snapshot, authUser);
@@ -2971,6 +3085,33 @@ function findResolvedUserIdInSnapshot(
           }
         });
         recentlyConfirmedWorkoutNotesRef.current = nextRecentlyConfirmedNotes;
+        if (options?.mode !== "workouts") {
+          const nextRecentlyConfirmedMeasurements = new Map(recentlyConfirmedMeasurementsRef.current);
+          (payload.users ?? []).forEach((user) => {
+            const confirmedUpdatedAt = nextRecentlyConfirmedMeasurements.get(user.id);
+            if (!confirmedUpdatedAt) {
+              return;
+            }
+
+            const serverUpdatedAt = Date.parse(user.updatedAt);
+            const localConfirmedUpdatedAt = Date.parse(confirmedUpdatedAt);
+            if (
+              Number.isFinite(serverUpdatedAt) &&
+              Number.isFinite(localConfirmedUpdatedAt) &&
+              serverUpdatedAt >= localConfirmedUpdatedAt
+            ) {
+              nextRecentlyConfirmedMeasurements.delete(user.id);
+            }
+          });
+          recentlyConfirmedMeasurementsRef.current = nextRecentlyConfirmedMeasurements;
+        }
+
+        const now = Date.now();
+        recentlyRemovedDayMealIdsRef.current.forEach((removedAt, entryId) => {
+          if (now - removedAt >= LOCAL_SYNC_PROTECTION_MS) {
+            recentlyRemovedDayMealIdsRef.current.delete(entryId);
+          }
+        });
 
         setState((previous) =>
           reconcileSupabaseVisibleState(
@@ -2983,6 +3124,9 @@ function findResolvedUserIdInSnapshot(
             recentlyDeletedWorkoutsRef.current,
             recentlyStartedWorkoutsRef.current,
             options?.mode ?? "full",
+            recentlyConfirmedMeasurementsRef.current,
+            pendingDayMealCreatesRef.current,
+            recentlyRemovedDayMealIdsRef.current,
           ),
         );
         if (options?.mode !== "workouts") {
@@ -3805,6 +3949,9 @@ function findResolvedUserIdInSnapshot(
             recentlyDeletedWorkoutsRef.current,
             recentlyStartedWorkoutsRef.current,
             "workouts",
+            recentlyConfirmedMeasurementsRef.current,
+            pendingDayMealCreatesRef.current,
+            recentlyRemovedDayMealIdsRef.current,
           ),
         );
       }
@@ -4227,6 +4374,7 @@ function findResolvedUserIdInSnapshot(
           }
         }
 
+        recentlyConfirmedMeasurementsRef.current.set(currentUser.id, timestamp);
         setState((previous) => applyPartialUserMeasurementUpdate(previous, currentUser.id, input, timestamp));
 
         return { ok: true };
@@ -6436,12 +6584,14 @@ function findResolvedUserIdInSnapshot(
           updatedAt: now,
         };
 
+        pendingDayMealCreatesRef.current.set(optimisticId, { canceled: false });
         setState((previous) => ({
           ...previous,
           dayMealPlans: [...(previous.dayMealPlans ?? []), optimisticEntry],
         }));
 
         if (!supabase) {
+          pendingDayMealCreatesRef.current.delete(optimisticId);
           return { ok: true };
         }
 
@@ -6457,9 +6607,10 @@ function findResolvedUserIdInSnapshot(
             position: input.position ?? 0,
           }),
         }).catch(() => null);
-        const payload = (response ? await response.json().catch(() => null) : null) as { message?: string } | null;
+        const payload = (response ? await response.json().catch(() => null) : null) as { id?: string; message?: string } | null;
 
         if (!response?.ok) {
+          pendingDayMealCreatesRef.current.delete(optimisticId);
           setState((previous) => ({
             ...previous,
             dayMealPlans: (previous.dayMealPlans ?? []).filter((entry) => entry.id !== optimisticId),
@@ -6467,7 +6618,35 @@ function findResolvedUserIdInSnapshot(
           return { ok: false, message: payload?.message ?? "Aterian lisäys epäonnistui." };
         }
 
+        const pendingCreate = pendingDayMealCreatesRef.current.get(optimisticId);
+        const serverId = payload?.id;
+        if (pendingCreate && serverId) {
+          pendingCreate.serverId = serverId;
+          pendingDayMealCreatesRef.current.set(optimisticId, pendingCreate);
+        }
+        if (pendingCreate?.canceled) {
+          pendingDayMealCreatesRef.current.delete(optimisticId);
+          if (serverId && SUPABASE_UUID_PATTERN.test(serverId)) {
+            recentlyRemovedDayMealIdsRef.current.set(serverId, Date.now());
+            await fetch(`/api/day-meal-plans/${encodeURIComponent(serverId)}`, {
+              method: "DELETE",
+            }).catch(() => null);
+          }
+          await refreshSupabaseVisibleState({ mode: "full" });
+          return { ok: true };
+        }
+
+        if (serverId) {
+          setState((previous) => ({
+            ...previous,
+            dayMealPlans: (previous.dayMealPlans ?? []).map((entry) =>
+              entry.id === optimisticId ? { ...entry, id: serverId } : entry,
+            ),
+          }));
+        }
+
         await refreshSupabaseVisibleState({ mode: "full" });
+        pendingDayMealCreatesRef.current.delete(optimisticId);
         return { ok: true };
       },
       async swapDayMeal(entryId, recipeId) {
@@ -6481,6 +6660,9 @@ function findResolvedUserIdInSnapshot(
         }
         if (target.eatenAt) {
           return { ok: false, message: "Syötyä ateriaa ei voi vaihtaa." };
+        }
+        if (!SUPABASE_UUID_PATTERN.test(entryId)) {
+          return { ok: false, message: "Odota hetki, aterian tallennus on vielä kesken." };
         }
 
         const previousState = stateRef.current;
@@ -6524,22 +6706,29 @@ function findResolvedUserIdInSnapshot(
           return { ok: false, message: "Syötyä ateriaa ei voi poistaa." };
         }
 
+        const pendingCreate = pendingDayMealCreatesRef.current.get(entryId);
+        if (pendingCreate) {
+          pendingCreate.canceled = true;
+          pendingDayMealCreatesRef.current.set(entryId, pendingCreate);
+        }
         const previousState = stateRef.current;
         setState((previous) => ({
           ...previous,
           dayMealPlans: (previous.dayMealPlans ?? []).filter((entry) => entry.id !== entryId),
         }));
 
-        if (!supabase) {
+        if (!supabase || !SUPABASE_UUID_PATTERN.test(entryId)) {
           return { ok: true };
         }
 
+        recentlyRemovedDayMealIdsRef.current.set(entryId, Date.now());
         const response = await fetch(`/api/day-meal-plans/${encodeURIComponent(entryId)}`, {
           method: "DELETE",
         }).catch(() => null);
         const payload = (response ? await response.json().catch(() => null) : null) as { message?: string } | null;
 
         if (!response?.ok) {
+          recentlyRemovedDayMealIdsRef.current.delete(entryId);
           setState(previousState);
           return { ok: false, message: payload?.message ?? "Aterian poisto epäonnistui." };
         }
@@ -6555,6 +6744,9 @@ function findResolvedUserIdInSnapshot(
         const target = (stateRef.current.dayMealPlans ?? []).find((entry) => entry.id === entryId);
         if (!target) {
           return { ok: false, message: "Ateriaa ei löytynyt." };
+        }
+        if (!SUPABASE_UUID_PATTERN.test(entryId)) {
+          return { ok: false, message: "Odota hetki, aterian tallennus on vielä kesken." };
         }
 
         const previousState = stateRef.current;
