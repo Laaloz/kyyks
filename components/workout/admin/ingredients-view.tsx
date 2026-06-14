@@ -1,10 +1,11 @@
 "use client";
 
 import { ArrowLeft, ChevronRight, Plus, Search, Trash2 } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 
 import { Button } from "@/components/ui/button";
 import { Input, Label } from "@/components/ui/field";
+import { Sheet } from "@/components/ui/sheet";
 import { ingredientSchema } from "@/components/workout/schemas";
 import { withMinimumDelay } from "@/lib/min-delay";
 import type { Ingredient } from "@/lib/types";
@@ -71,21 +72,6 @@ export function AdminIngredientsView({ onBack }: { onBack?: () => void }) {
     () => state.ingredientsCatalog.find((ingredient) => ingredient.id === selectedIngredientId) ?? null,
     [selectedIngredientId, state.ingredientsCatalog],
   );
-
-  useEffect(() => {
-    if (!isSheetOpen) {
-      return;
-    }
-
-    const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape") {
-        setIsSheetOpen(false);
-      }
-    };
-
-    window.addEventListener("keydown", handleKeyDown);
-    return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [isSheetOpen]);
 
   if (currentUser?.role !== "admin") {
     return null;
@@ -259,15 +245,11 @@ export function AdminIngredientsView({ onBack }: { onBack?: () => void }) {
       </div>
 
       {isSheetOpen ? (
-        <div className="fixed inset-0 z-50 flex items-end bg-black/45" onMouseDown={() => setIsSheetOpen(false)}>
-          <div
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="new-ingredient-title"
-            className="max-h-[86svh] w-full overflow-y-auto rounded-t-[2rem] bg-[var(--surface)] px-4 pb-[calc(env(safe-area-inset-bottom)+2rem)] pt-6 shadow-[0_-24px_70px_-34px_var(--shadow)] sm:mx-auto sm:max-w-3xl sm:px-8"
-            onMouseDown={(event) => event.stopPropagation()}
-          >
-            <div className="mx-auto mb-5 h-1.5 w-20 rounded-full bg-[var(--border-strong)]" aria-hidden="true" />
+        <Sheet
+          onClose={() => setIsSheetOpen(false)}
+          ariaLabelledby="new-ingredient-title"
+          className="overflow-y-auto sm:max-w-3xl"
+        >
             <p className="text-sm font-semibold text-[var(--accent-strong)]">
               {selectedIngredient ? `${sourceLabel(selectedIngredient.source)}-raaka-aine` : "Uusi raaka-aine"}
             </p>
@@ -342,8 +324,7 @@ export function AdminIngredientsView({ onBack }: { onBack?: () => void }) {
                 )}
               </button>
             ) : null}
-          </div>
-        </div>
+        </Sheet>
       ) : null}
     </div>
   );

@@ -1,10 +1,10 @@
 "use client";
 
 import { ChevronLeft, Search } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
-import { createPortal } from "react-dom";
+import { useMemo, useState } from "react";
 
 import { Card } from "@/components/ui/card";
+import { FullScreenOverlay } from "@/components/ui/sheet";
 import { MetricTrendChart } from "@/components/workout/metric-trend-chart";
 import type { ExerciseProgressCatalog, ExerciseProgressSummary } from "@/lib/exercise-progress";
 import { formatDate } from "@/lib/utils";
@@ -138,24 +138,10 @@ function ExerciseDetail({ summary, onClose }: { summary: ExerciseProgressSummary
   const delta = deltaPercent(summary);
   const bestE1rm = summary.trendPoints.reduce((best, point) => Math.max(best, point.value), 0);
   const recent = [...summary.trendPoints].reverse().slice(0, 6);
-  const [mounted, setMounted] = useState(false);
-  useEffect(() => {
-    setMounted(true);
-    // Lukitse taustan vieritys, ettei se vuoda overscrollissa overlayn taakse.
-    const previousOverflow = document.body.style.overflow;
-    document.body.style.overflow = "hidden";
-    return () => {
-      document.body.style.overflow = previousOverflow;
-    };
-  }, []);
-  if (!mounted) {
-    return null;
-  }
 
   // Drill-down = kokonäytön overlay (oma takaisin-header, peittää ala/yläpalkin).
-  // overscroll-contain estää scroll-ketjutuksen taustaan rubber-band-reunoilla.
-  return createPortal(
-    <div className="fixed inset-0 z-50 flex flex-col overflow-y-auto overscroll-contain bg-[var(--background)] px-4 pb-[calc(env(safe-area-inset-bottom)+1.5rem)] pt-[calc(env(safe-area-inset-top)+0.75rem)]">
+  return (
+    <FullScreenOverlay onClose={onClose} ariaLabel={`Liikkeen kehitys: ${summary.exerciseName}`}>
       <div className="flex items-center gap-3">
         <button
           type="button"
@@ -282,7 +268,6 @@ function ExerciseDetail({ summary, onClose }: { summary: ExerciseProgressSummary
           ))}
         </div>
       </Card>
-    </div>,
-    document.body,
+    </FullScreenOverlay>
   );
 }

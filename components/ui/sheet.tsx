@@ -18,9 +18,20 @@ import { cn } from "@/lib/utils";
  */
 function useDialogChrome(onClose: () => void, closeOnEscape: boolean) {
   useEffect(() => {
-    // Nesting-turvallinen: sisäkkäinen sheet palauttaa "hidden", uloin "".
-    const previousOverflow = document.body.style.overflow;
-    document.body.style.overflow = "hidden";
+    // Robusti taustalukko: estää sekä body- että html-tason vierityksen ja
+    // overscroll-rubber-bandin (iOS Safari). Nesting-turvallinen — talletetut
+    // edelliset arvot palautetaan, joten sisäkkäinen sheet palauttaa "hidden".
+    const { body, documentElement } = document;
+    const previous = {
+      bodyOverflow: body.style.overflow,
+      bodyOverscroll: body.style.overscrollBehavior,
+      htmlOverflow: documentElement.style.overflow,
+      htmlOverscroll: documentElement.style.overscrollBehavior,
+    };
+    body.style.overflow = "hidden";
+    body.style.overscrollBehavior = "none";
+    documentElement.style.overflow = "hidden";
+    documentElement.style.overscrollBehavior = "none";
 
     const handleKeyDown = (event: globalThis.KeyboardEvent) => {
       if (closeOnEscape && event.key === "Escape") {
@@ -30,7 +41,10 @@ function useDialogChrome(onClose: () => void, closeOnEscape: boolean) {
     window.addEventListener("keydown", handleKeyDown);
 
     return () => {
-      document.body.style.overflow = previousOverflow;
+      body.style.overflow = previous.bodyOverflow;
+      body.style.overscrollBehavior = previous.bodyOverscroll;
+      documentElement.style.overflow = previous.htmlOverflow;
+      documentElement.style.overscrollBehavior = previous.htmlOverscroll;
       window.removeEventListener("keydown", handleKeyDown);
     };
   }, [onClose, closeOnEscape]);
@@ -106,8 +120,16 @@ export function FullScreenOverlay({
   ariaLabelledby,
   className,
   closeOnEscape = true,
+  scroll = true,
   children,
-}: SharedDialogProps) {
+}: SharedDialogProps & {
+  /**
+   * true (oletus): scrollaava sivu, jolla on safe-area-padding (esim. drill-down).
+   * false: pelkkä chrome-säiliö (flex-col), kun sisältö hoitaa oman scrollinsa
+   * (esim. ohjelmaeditori, jolla on kiinteä header + scrollaava runko + footer).
+   */
+  scroll?: boolean;
+}) {
   useDialogChrome(onClose, closeOnEscape);
 
   if (typeof document === "undefined") {
@@ -122,7 +144,9 @@ export function FullScreenOverlay({
       aria-labelledby={ariaLabelledby}
       // overscroll-contain estää scroll-ketjutuksen taustaan rubber-band-reunoilla.
       className={cn(
-        "fixed inset-0 z-50 flex flex-col overflow-y-auto overscroll-contain bg-[var(--background)] px-4 pb-[calc(env(safe-area-inset-bottom)+1.5rem)] pt-[calc(env(safe-area-inset-top)+0.75rem)]",
+        "fixed inset-0 z-50 flex flex-col bg-[var(--background)]",
+        scroll &&
+          "overflow-y-auto overscroll-contain px-4 pb-[calc(env(safe-area-inset-bottom)+1.5rem)] pt-[calc(env(safe-area-inset-top)+0.75rem)]",
         className,
       )}
     >

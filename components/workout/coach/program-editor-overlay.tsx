@@ -1,12 +1,12 @@
 "use client";
 
 import { BookOpen, ChevronLeft, Plus, Search, Trash2, X } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
-import { createPortal } from "react-dom";
+import { useMemo, useState } from "react";
 
 import { Button } from "@/components/ui/button";
 import { DragNumber } from "@/components/ui/drag-number";
 import { Select } from "@/components/ui/field";
+import { FullScreenOverlay } from "@/components/ui/sheet";
 import { customMuscleGroupLabels } from "@/components/workout/coach/program-composer";
 import { CUSTOM_EXERCISE_VALUE, CUSTOM_MUSCLE_GROUP_OPTIONS, SUPERSET_GROUP_OPTIONS } from "@/components/workout/schemas";
 import { cn } from "@/lib/utils";
@@ -148,17 +148,6 @@ export function ProgramEditorOverlay({
   const [openInstructionUid, setOpenInstructionUid] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [mounted, setMounted] = useState(false);
-
-  useEffect(() => {
-    setMounted(true);
-    // Lukitse taustan vieritys, ettei se vuoda overscrollissa overlayn taakse.
-    const previousOverflow = document.body.style.overflow;
-    document.body.style.overflow = "hidden";
-    return () => {
-      document.body.style.overflow = previousOverflow;
-    };
-  }, []);
 
   const weekCount = basePlan?.weekCount ?? 8;
 
@@ -302,12 +291,8 @@ export function ProgramEditorOverlay({
     onClose();
   };
 
-  if (!mounted) {
-    return null;
-  }
-
-  return createPortal(
-    <div className="fixed inset-0 z-50 flex flex-col bg-[var(--background)]">
+  return (
+    <FullScreenOverlay onClose={onClose} ariaLabel="Ohjelman muokkaus" closeOnEscape={false} scroll={false}>
       <div className="flex items-center gap-3 px-4 pt-[calc(env(safe-area-inset-top)+0.75rem)] pb-2">
         <button
           type="button"
@@ -665,7 +650,6 @@ export function ProgramEditorOverlay({
           </div>
         </div>
       ) : null}
-    </div>,
-    document.body,
+    </FullScreenOverlay>
   );
 }

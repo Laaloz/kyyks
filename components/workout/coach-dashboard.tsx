@@ -17,7 +17,6 @@ import {
   UserPlus,
   X,
 } from "lucide-react";
-import { createPortal } from "react-dom";
 import { type CSSProperties, type ReactNode, useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { type Resolver, useFieldArray, useForm } from "react-hook-form";
 
@@ -26,6 +25,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardDescription, CardTitle } from "@/components/ui/card";
 import { Input, Label, Select, Textarea } from "@/components/ui/field";
 import { Segmented } from "@/components/ui/segmented";
+import { FullScreenOverlay, Sheet } from "@/components/ui/sheet";
 import { ConversationPanel } from "@/components/workout/conversation-panel";
 import { InlineFeedback } from "@/components/workout/inline-feedback";
 import { CoachInvitePanel } from "@/components/workout/coach/invite-panel";
@@ -748,23 +748,17 @@ function ProgramWorkoutEditorModal({
   onClose: () => void;
 }) {
   return (
-    <div
-      className="fixed inset-0 z-40 flex items-end justify-center bg-[color:color-mix(in_srgb,var(--background)_56%,transparent)] p-3 sm:items-center sm:p-4"
-      role="presentation"
-      onClick={onClose}
+    <Sheet
+      onClose={onClose}
+      ariaLabelledby="program-workout-editor-modal-title"
+      ariaDescribedby="program-workout-editor-modal-description"
+      className="max-w-3xl overflow-hidden border border-[var(--border-strong)] p-0"
+      showHandle={false}
     >
-      <div
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="program-workout-editor-modal-title"
-        aria-describedby="program-workout-editor-modal-description"
-        className="flex max-h-[92vh] w-full max-w-3xl flex-col overflow-hidden rounded-3xl border border-[var(--border-strong)] bg-[var(--surface)] shadow-[0_24px_60px_-24px_var(--shadow)]"
-        onClick={(event) => event.stopPropagation()}
-      >
         <div className="border-b border-[var(--border)] px-4 py-4 sm:px-5">
           <div className="flex items-start justify-between gap-4">
             <div className="min-w-0">
-              <p className="text-[11px] font-semibold tracking-[0.06em] text-[var(--accent)]">Liikkeet</p>
+              <p className="text-sm font-semibold text-[var(--accent)]">Liikkeet</p>
               <h3 id="program-workout-editor-modal-title" className="mt-2 text-2xl font-semibold text-[var(--text)]">
                 {title}
               </h3>
@@ -778,8 +772,7 @@ function ProgramWorkoutEditorModal({
           </div>
         </div>
         <div className="flex-1 overflow-y-auto px-4 py-4 sm:px-5">{children}</div>
-      </div>
-    </div>
+    </Sheet>
   );
 }
 
@@ -1203,44 +1196,6 @@ export function CoachDashboard({
     window.scrollTo({ top: 0, behavior: "auto" });
   }, [view]);
 
-  useEffect(() => {
-    if (workoutEditorModalIndex === null) {
-      return;
-    }
-
-    const handleKeyDown = (event: globalThis.KeyboardEvent) => {
-      if (event.key === "Escape") {
-        setWorkoutEditorModalIndex(null);
-      }
-    };
-
-    window.addEventListener("keydown", handleKeyDown);
-    return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [workoutEditorModalIndex]);
-
-  useEffect(() => {
-    if (workoutEditorModalIndex === null) {
-      return;
-    }
-
-    const { body, documentElement } = document;
-    const previousBodyOverflow = body.style.overflow;
-    const previousBodyOverscrollBehavior = body.style.overscrollBehavior;
-    const previousDocumentOverflow = documentElement.style.overflow;
-    const previousDocumentOverscrollBehavior = documentElement.style.overscrollBehavior;
-
-    body.style.overflow = "hidden";
-    body.style.overscrollBehavior = "none";
-    documentElement.style.overflow = "hidden";
-    documentElement.style.overscrollBehavior = "none";
-
-    return () => {
-      body.style.overflow = previousBodyOverflow;
-      body.style.overscrollBehavior = previousBodyOverscrollBehavior;
-      documentElement.style.overflow = previousDocumentOverflow;
-      documentElement.style.overscrollBehavior = previousDocumentOverscrollBehavior;
-    };
-  }, [workoutEditorModalIndex]);
 
   useEffect(() => {
     if (workoutEditorModalIndex === null) {
@@ -2773,21 +2728,6 @@ function CoachTeamView({
     }
   };
 
-  useEffect(() => {
-    if (!isInviteSheetOpen) {
-      return;
-    }
-
-    const handleKeyDown = (event: globalThis.KeyboardEvent) => {
-      if (event.key === "Escape") {
-        setIsInviteSheetOpen(false);
-      }
-    };
-
-    window.addEventListener("keydown", handleKeyDown);
-    return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [isInviteSheetOpen]);
-
   return (
     <div className="flex w-full min-w-0 flex-col gap-6">
       <Segmented
@@ -2941,15 +2881,11 @@ function CoachTeamView({
           ) : null}
 
           {isInviteSheetOpen ? (
-            <div className="fixed inset-0 z-50 flex items-end bg-black/45" onMouseDown={() => setIsInviteSheetOpen(false)}>
-              <div
-                role="dialog"
-                aria-modal="true"
-                aria-labelledby="admin-invite-sheet-title"
-                className="max-h-[82svh] w-full overflow-y-auto rounded-t-[2rem] bg-[var(--surface)] px-4 pb-[calc(env(safe-area-inset-bottom)+2rem)] pt-6 shadow-[0_-24px_70px_-34px_var(--shadow)] sm:mx-auto sm:max-w-3xl sm:px-8"
-                onMouseDown={(event) => event.stopPropagation()}
-              >
-                <div className="mx-auto mb-5 h-1.5 w-20 rounded-full bg-[var(--border-strong)]" aria-hidden="true" />
+            <Sheet
+              onClose={() => setIsInviteSheetOpen(false)}
+              ariaLabelledby="admin-invite-sheet-title"
+              className="overflow-y-auto sm:max-w-3xl"
+            >
                 <h2 id="admin-invite-sheet-title" className="font-[family-name:var(--font-display)] text-2xl font-bold text-[var(--text)]">
                   Kutsut
                 </h2>
@@ -3022,8 +2958,7 @@ function CoachTeamView({
                     <p className="px-4 py-6 text-sm text-[var(--text-muted)]">Avoimia kutsuja ei ole.</p>
                   )}
                 </div>
-              </div>
-            </div>
+            </Sheet>
           ) : null}
         </div>
       ) : (
@@ -3078,9 +3013,8 @@ function CoachTeamView({
         />
       ) : null}
 
-      {manageMounted && manageUser
-        ? createPortal(
-            <div className="fixed inset-0 z-50 flex flex-col overflow-y-auto overscroll-contain bg-[var(--background)] px-4 pb-[calc(env(safe-area-inset-bottom)+1.5rem)] pt-[calc(env(safe-area-inset-top)+0.75rem)]">
+      {manageMounted && manageUser ? (
+            <FullScreenOverlay onClose={() => setManageUserId(null)} ariaLabel="Käyttäjän hallinta">
               <div className="flex items-center gap-3">
                 <button
                   type="button"
@@ -3117,10 +3051,8 @@ function CoachTeamView({
               <div className="mt-4">
                 <AdminUserManagementPanel focusUserId={manageUser.id} />
               </div>
-            </div>,
-            document.body,
-          )
-        : null}
+            </FullScreenOverlay>
+          ) : null}
     </div>
   );
 }
