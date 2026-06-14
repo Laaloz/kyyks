@@ -812,7 +812,7 @@ export const recipeSeedData = [
     mealTag: "breakfast",
     ...singleServe,
     ingredients: [
-      ingredient("Kaurajauho", 50, "g", { groupLabel: "Pohja" }),
+      ingredient("Kaurahiutale", 50, "g", { groupLabel: "Pohja" }),
       ingredient("Suklaaproteiinijauhe", 25, "g", { groupLabel: "Pohja" }),
       ingredient("Kaakaojauhe", 10, "g", { groupLabel: "Pohja" }),
       ingredient("Kreikkalainen jogurtti", 100, "g", { groupLabel: "Pohja" }),
@@ -824,7 +824,7 @@ export const recipeSeedData = [
       textIngredient("Hunaja", "maun mukaan", "", { groupLabel: "Suklaakuorrute" }),
     ],
     instructions: [
-      "Sekoita kaurajauho, suklaaproteiini, kaakaojauhe, chian siemenet ja suklaanpalat kulhossa.",
+      "Sekoita kaurahiutaleet, suklaaproteiini, kaakaojauhe, chian siemenet ja suklaanpalat kulhossa.",
       "Lisää kreikkalainen jogurtti ja vesi, ja sekoita tasaiseksi taikinaksi.",
       "Anna tekeytyä jääkaapissa vähintään yön yli.",
       "Sekoita kuorrutteeksi kaakaojauhe, kuuma vesi ja hunaja.",

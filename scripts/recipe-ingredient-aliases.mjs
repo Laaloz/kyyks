@@ -7,9 +7,6 @@ export const ingredientAliases = {
     "kreikkalainen jogurtti 2%",
     "kreikkalainen jogurtti 0%",
   ],
-  "kaurajauho": [
-    "kaurahiutale",
-  ],
   "vaniljaproteiinijauhe": [
     "heraproteiinijauhe",
   ],
