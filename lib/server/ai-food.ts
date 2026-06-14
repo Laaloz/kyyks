@@ -16,7 +16,7 @@ const IMAGE_PROMPT = [
   "Tunnista kuvassa näkyvä ruoka ja arvioi sen ravintosisältö.",
   "Palauta arvio: ruoan nimi suomeksi, arvioitu annoskoko grammoina,",
   "sekä energia ja makrot PER 100 GRAMMAA (kcal, proteiini, hiilihydraatit, rasva).",
-  "Jos lautasella on useita ruokia, arvioi koko annos yhtenä kokonaisuutena.",
+  "Jos kuvassa on useita eri ruokia tai tuotteita, nimeä ne yhdessä ja arvioi koko annos yhtenä kokonaisuutena.",
   "Arvio on suuntaa-antava; vastaa pelkkä JSON ilman selityksiä.",
 ].join(" ");
 
@@ -139,6 +139,7 @@ async function runGeminiEstimate(
   supabase: SupabaseClient,
   userId: string,
   parts: unknown[],
+  options?: { thinkingBudget?: number },
 ): Promise<AiFoodResult> {
   const apiKey = process.env.GEMINI_API_KEY;
   if (!apiKey) {
@@ -159,6 +160,18 @@ async function runGeminiEstimate(
   const model = process.env.GEMINI_MODEL || DEFAULT_MODEL;
   const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
 
+  const generationConfig: Record<string, unknown> = {
+    responseMimeType: "application/json",
+    responseSchema: RESPONSE_SCHEMA,
+  };
+  // Tekstihaku on muistinvaraista poimintaa → thinking pois (thinkingBudget 0) pitää sen
+  // nopeana (~1s) ilman laatuhaittaa. Kuvahaku taas on epävarmempaa visuaalista arviointia
+  // (esim. monta tuotetta samassa kuvassa), ja budjetilla 0 malli voi palauttaa tyhjän/heikon
+  // tuloksen → kuvalle annetaan ajatella (ei thinkingConfigia = mallin oletusbudjetti).
+  if (typeof options?.thinkingBudget === "number") {
+    generationConfig.thinkingConfig = { thinkingBudget: options.thinkingBudget };
+  }
+
   let response: Response | null = null;
   try {
     response = await fetch(url, {
@@ -166,15 +179,7 @@ async function runGeminiEstimate(
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         contents: [{ parts }],
-        generationConfig: {
-          responseMimeType: "application/json",
-          responseSchema: RESPONSE_SCHEMA,
-          // Ruoka-arvio on muistinvaraista poimintaa, ei päättelyä — "thinking" ei paranna
-          // tulosta mutta hidastaa rajusti (3.5-flash: ~7s → ~1s) ja maksaa. 3.5 kunnioittaa
-          // budjetin 0 täysin (thoughtTokens=0). Koodi ei rajaa maxOutputTokens → JSON ei jää
-          // tyhjäksi vaikka jokin malli pakottaisi minimi-thinkingin.
-          thinkingConfig: { thinkingBudget: 0 },
-        },
+        generationConfig,
       }),
     });
   } catch {
@@ -228,6 +233,8 @@ export async function estimateFoodFromImage(args: {
   imageBase64: string;
   mimeType: string;
 }): Promise<AiFoodResult> {
+  // Ei thinkingBudgetia → malli saa ajatella: parantaa kuvan (etenkin monen tuotteen)
+  // tunnistuksen luotettavuutta. Latenssi maltillinen (~3-4s), kuvalle hyväksyttävä.
   return runGeminiEstimate(args.supabase, args.userId, [
     { text: IMAGE_PROMPT },
     { inline_data: { mime_type: args.mimeType, data: args.imageBase64 } },
@@ -239,5 +246,5 @@ export async function estimateFoodFromText(args: {
   userId: string;
   query: string;
 }): Promise<AiFoodResult> {
-  return runGeminiEstimate(args.supabase, args.userId, [{ text: textPrompt(args.query) }]);
+  return runGeminiEstimate(args.supabase, args.userId, [{ text: textPrompt(args.query) }], { thinkingBudget: 0 });
 }
