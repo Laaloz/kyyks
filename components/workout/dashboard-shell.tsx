@@ -464,7 +464,10 @@ export function DashboardShell() {
 
   return (
     <div
-      className={`mx-auto flex max-w-7xl flex-col overflow-x-hidden px-4 py-4 sm:px-6 lg:px-8 min-h-[100dvh] ${
+      className={`mx-auto flex max-w-7xl flex-col overflow-x-hidden px-4 sm:px-6 lg:px-8 min-h-[100dvh] ${
+        // Esikatselupalkki kiinni yläreunaan → ei ylä-paddingia esikatselussa.
+        isActivePreview ? "pt-0" : "pt-4"
+      } ${
         view === "conversation" ? "overflow-hidden gap-4 lg:gap-4" : "gap-4 lg:gap-6"
       } ${
         // Alanavin tila vain kun navi näkyy; aktiivitreenissä/näppäimistöllä navi on
@@ -474,7 +477,7 @@ export function DashboardShell() {
     >
       {isActivePreview ? (
         // Prototyypin esikatselupalkki: leveä vihreä yläpalkki + X. Sticky, full-bleed.
-        <div className="sticky top-0 z-40 -mx-4 -mt-4 flex items-center justify-between gap-3 rounded-b-2xl bg-[var(--accent)] px-4 py-3 text-[var(--accent-contrast)] shadow-[0_8px_20px_-16px_var(--shadow)] sm:-mx-6 sm:px-6 lg:-mx-8 lg:px-8">
+        <div className="sticky top-0 z-40 -mx-4 flex items-center justify-between gap-3 rounded-b-2xl bg-[var(--accent)] px-4 pb-3 pt-[calc(env(safe-area-inset-top)+0.75rem)] text-[var(--accent-contrast)] shadow-[0_8px_20px_-16px_var(--shadow)] sm:-mx-6 sm:px-6 lg:-mx-8 lg:px-8">
           <p className="min-w-0 truncate text-sm font-semibold">
             <span className="font-bold">Esikatselu</span> · {currentUser.fullName} — sama näkymä kuin urheilijalla
           </p>

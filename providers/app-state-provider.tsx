@@ -103,6 +103,7 @@ const PROFILE_IMAGE_ALLOWED_TYPES = new Set(["image/jpeg", "image/png", "image/w
 type PersistedSession = {
   authenticatedUserId: string | null;
   impersonatedUserId: string | null;
+  isPreviewMode: boolean;
 };
 
 function shiftIsoTimestamp(value: string | undefined, deltaMs: number) {
@@ -1020,23 +1021,26 @@ function removeUserFromState(previous: AppState, targetUser: UserProfile): AppSt
 
 function parsePersistedSession(rawSession: string | null): PersistedSession {
   if (!rawSession) {
-    return { authenticatedUserId: null, impersonatedUserId: null };
+    return { authenticatedUserId: null, impersonatedUserId: null, isPreviewMode: false };
   }
 
   try {
     const parsed = JSON.parse(rawSession) as Partial<PersistedSession>;
     if (typeof parsed.authenticatedUserId === "string" || parsed.authenticatedUserId === null) {
+      const impersonatedUserId =
+        typeof parsed.impersonatedUserId === "string" ? parsed.impersonatedUserId : null;
       return {
         authenticatedUserId: parsed.authenticatedUserId ?? null,
-        impersonatedUserId:
-          typeof parsed.impersonatedUserId === "string" ? parsed.impersonatedUserId : null,
+        impersonatedUserId,
+        // Esikatselu säilyy refreshissä vain jos impersonointi on yhä voimassa.
+        isPreviewMode: Boolean(impersonatedUserId) && parsed.isPreviewMode === true,
       };
     }
   } catch {
     // Backward compatibility for legacy payload where only user id was stored as a plain string.
   }
 
-  return { authenticatedUserId: rawSession, impersonatedUserId: null };
+  return { authenticatedUserId: rawSession, impersonatedUserId: null, isPreviewMode: false };
 }
 
 export function shouldPreserveStoredSessionDuringSupabaseBootstrap(
@@ -2537,6 +2541,7 @@ export function AppStateProvider({ children }: PropsWithChildren) {
     const session = parsePersistedSession(rawSession);
     setAuthenticatedUserId(session.authenticatedUserId);
     setImpersonatedUserId(session.impersonatedUserId);
+    setIsPreviewMode(session.isPreviewMode);
 
     setIsStorageHydrated(true);
   }, []);
@@ -2558,6 +2563,7 @@ export function AppStateProvider({ children }: PropsWithChildren) {
       const session: PersistedSession = {
         authenticatedUserId,
         impersonatedUserId,
+        isPreviewMode,
       };
       window.localStorage.setItem(
         SESSION_KEY,
@@ -2595,6 +2601,7 @@ export function AppStateProvider({ children }: PropsWithChildren) {
         const session = parsePersistedSession(event.newValue);
         setAuthenticatedUserId(session.authenticatedUserId);
         setImpersonatedUserId(session.impersonatedUserId);
+        setIsPreviewMode(session.isPreviewMode);
       }
     };
 
