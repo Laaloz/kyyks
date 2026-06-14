@@ -153,9 +153,6 @@ async function runGeminiEstimate(
     return { ok: false, status: 429, message: "AI-arvioiden vuorokausiraja täynnä. Lisää ruoka haulla tai täytä arvot itse." };
   }
 
-  // Kirjataan yritys ennen kutsua, jotta kiintiö ei pala epäonnistuneilla uusinnoilla.
-  await adminClient.from("ai_usage_events").insert({ user_id: userId, kind: "food_estimate" });
-
   const model = process.env.GEMINI_MODEL || DEFAULT_MODEL;
   const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
 
@@ -177,6 +174,15 @@ async function runGeminiEstimate(
   }
 
   if (!response.ok) {
+    const errorBody = await response.text().catch(() => "");
+    console.warn(`[ai-food] Gemini ${response.status} (${model}): ${errorBody.slice(0, 500)}`);
+    if (response.status === 429) {
+      return {
+        ok: false,
+        status: 429,
+        message: "AI-palvelun kiintiö on täynnä tai ruuhkautunut. Yritä myöhemmin tai täytä arvot itse.",
+      };
+    }
     return { ok: false, status: 502, message: "AI-arvio epäonnistui. Yritä uudelleen tai täytä arvot itse." };
   }
 
@@ -199,6 +205,10 @@ async function runGeminiEstimate(
   if (!parsed.success) {
     return { ok: false, status: 502, message: "AI-arvio oli puutteellinen. Yritä uudelleen tai täytä itse." };
   }
+
+  // Kirjataan vain onnistunut kutsu — epäonnistumiset (esim. Geminin 429) eivät polta omaa
+  // vuorokausikiintiötä.
+  await adminClient.from("ai_usage_events").insert({ user_id: userId, kind: "food_estimate" });
 
   const fineliMatch = await findFineliMatch(supabase, parsed.data.name);
   return { ok: true, estimate: { ...parsed.data, fineliMatch } };
