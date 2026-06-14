@@ -31,12 +31,12 @@ import {
   useRef,
   useState,
 } from "react";
-import { createPortal } from "react-dom";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardDescription, CardTitle } from "@/components/ui/card";
 import { Input, Label, Select, Textarea } from "@/components/ui/field";
+import { Sheet } from "@/components/ui/sheet";
 import { bodyMeasurementSchema } from "@/components/workout/schemas";
 import { InfoTooltip } from "@/components/ui/tooltip";
 import { AthleteSessionPanel } from "@/components/workout/athlete/session-panel";
@@ -126,32 +126,9 @@ function CoachInstructionDialog({
   instruction: string;
   onClose: () => void;
 }) {
-  useEffect(() => {
-    const handleKeyDown = (event: globalThis.KeyboardEvent) => {
-      if (event.key === "Escape") {
-        onClose();
-      }
-    };
-
-    window.addEventListener("keydown", handleKeyDown);
-    return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [onClose]);
-
   return (
-    <div
-      className="fixed inset-0 z-40 flex items-end justify-center bg-[color:color-mix(in_srgb,var(--background)_54%,transparent)] p-4 sm:items-center"
-      role="presentation"
-      onClick={onClose}
-    >
-      <div
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="coach-instruction-title"
-        aria-describedby="coach-instruction-description"
-        className="w-full max-w-lg rounded-3xl border border-[var(--border-strong)] bg-[var(--surface)] p-4 shadow-[0_24px_60px_-24px_var(--shadow)]"
-        onClick={(event) => event.stopPropagation()}
-      >
-        <p className="text-[11px] font-semibold tracking-[0.06em] text-[var(--accent)]">Valmentajan ohje</p>
+    <Sheet onClose={onClose} ariaLabelledby="coach-instruction-title" ariaDescribedby="coach-instruction-description">
+        <p className="text-sm font-semibold text-[var(--accent)]">Valmentajan ohje</p>
         <h3
           id="coach-instruction-title"
           className="mt-2 font-[family-name:var(--font-display)] text-2xl font-semibold text-[var(--text)]"
@@ -169,8 +146,7 @@ function CoachInstructionDialog({
             Sulje
           </Button>
         </div>
-      </div>
-    </div>
+    </Sheet>
   );
 }
 
@@ -204,31 +180,8 @@ function ProgramWorkoutPreviewDialog({
 }) {
   const setCount = workout.exercises.reduce((sum, exercise) => sum + exercise.sets.length, 0);
 
-  useEffect(() => {
-    const handleKeyDown = (event: globalThis.KeyboardEvent) => {
-      if (event.key === "Escape") {
-        onClose();
-      }
-    };
-
-    window.addEventListener("keydown", handleKeyDown);
-    return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [onClose]);
-
   return (
-    <div
-      className="fixed inset-0 z-50 flex items-end justify-center bg-[color:color-mix(in_srgb,var(--background)_54%,transparent)] sm:p-4 sm:items-center"
-      role="presentation"
-      onClick={onClose}
-    >
-      <div
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="program-workout-preview-title"
-        className="w-full max-w-none rounded-t-3xl bg-[var(--surface)] p-5 pb-[max(env(safe-area-inset-bottom),1.25rem)] shadow-[0_24px_60px_-24px_var(--shadow)] sm:max-w-lg sm:rounded-3xl"
-        onClick={(event) => event.stopPropagation()}
-      >
-        <span className="mx-auto mb-3 block h-1 w-10 rounded-full bg-[var(--border-strong)]" aria-hidden="true" />
+    <Sheet onClose={onClose} ariaLabelledby="program-workout-preview-title">
         <div className="flex items-start justify-between gap-3">
           <div className="min-w-0">
             <h3
@@ -274,8 +227,7 @@ function ProgramWorkoutPreviewDialog({
             ))}
           </div>
         </div>
-      </div>
-    </div>
+    </Sheet>
   );
 }
 
@@ -312,32 +264,14 @@ function ExtraActivityDialog({
     onChangeDurationMinutes(String(Math.max(5, totalMinutes + delta)));
   };
 
-  useEffect(() => {
-    const handleKeyDown = (event: globalThis.KeyboardEvent) => {
-      if (event.key === "Escape") {
-        onClose();
-      }
-    };
-
-    window.addEventListener("keydown", handleKeyDown);
-    return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [onClose]);
-
   return (
-    <div
-      className="fixed inset-0 z-40 flex items-end justify-center bg-[color:color-mix(in_srgb,var(--background)_54%,transparent)] sm:p-4 sm:items-center"
-      role="presentation"
-      onClick={onClose}
+    <Sheet
+      onClose={onClose}
+      ariaLabelledby="extra-activity-title"
+      ariaDescribedby="extra-activity-description"
+      className="overflow-x-hidden"
     >
-      <div
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="extra-activity-title"
-        aria-describedby="extra-activity-description"
-        className="w-full max-w-none overflow-x-hidden rounded-t-3xl bg-[var(--surface)] p-5 pb-[max(env(safe-area-inset-bottom),1.25rem)] shadow-[0_24px_60px_-24px_var(--shadow)] sm:max-w-lg sm:rounded-3xl"
-        onClick={(event) => event.stopPropagation()}
-      >
-        <span className="mx-auto mb-3 block h-1 w-10 rounded-full bg-[var(--border-strong)]" aria-hidden="true" />
+      <div className="min-h-0 flex-1 overflow-y-auto">
         <h3 id="extra-activity-title" className="font-[family-name:var(--font-display)] text-2xl font-bold text-[var(--text)]">
           Extra-treeni
         </h3>
@@ -401,7 +335,7 @@ function ExtraActivityDialog({
           </Button>
         </div>
       </div>
-    </div>
+    </Sheet>
   );
 }
 
@@ -1821,21 +1755,8 @@ export function AthleteDashboard({
             </Card>
           </div>
 
-          {isMeasurementSheetOpen && typeof document !== "undefined"
-            ? createPortal(
-                <div
-                  className="fixed inset-0 z-50 flex items-end justify-center bg-[color:color-mix(in_srgb,var(--background)_48%,transparent)] p-0"
-                  role="presentation"
-                  onClick={() => setIsMeasurementSheetOpen(false)}
-                >
-                  <div
-                    role="dialog"
-                    aria-modal="true"
-                    aria-label="Uusi mittaus"
-                    className="w-full max-w-lg rounded-t-3xl bg-[var(--surface)] p-5 pb-[max(env(safe-area-inset-bottom),1.25rem)] shadow-[0_24px_60px_-24px_var(--shadow)]"
-                    onClick={(event) => event.stopPropagation()}
-                  >
-                    <span className="mx-auto mb-3 block h-1 w-10 rounded-full bg-[var(--border-strong)]" aria-hidden="true" />
+          {isMeasurementSheetOpen ? (
+              <Sheet onClose={() => setIsMeasurementSheetOpen(false)} ariaLabel="Uusi mittaus">
                     <h2 className="font-[family-name:var(--font-display)] text-2xl font-bold text-[var(--text)]">Uusi mittaus</h2>
                     <p className="mt-1 text-sm text-[var(--text-muted)]">Täytä vain ne, jotka mittasit tänään.</p>
                     <div className="mt-4 space-y-3">
@@ -1889,11 +1810,8 @@ export function AthleteDashboard({
                         Tallenna
                       </Button>
                     </div>
-                  </div>
-                </div>,
-                document.body,
-              )
-            : null}
+              </Sheet>
+            ) : null}
         </div>
       ) : null}
 

@@ -1,8 +1,7 @@
 "use client";
 
-import { createPortal } from "react-dom";
-
 import { Button } from "@/components/ui/button";
+import { Sheet } from "@/components/ui/sheet";
 
 export function MeasurementReminderDialog({
   weightDue,
@@ -15,25 +14,12 @@ export function MeasurementReminderDialog({
   onClose: () => void;
   onOpenOverview: () => void;
 }) {
-  if (typeof document === "undefined") {
-    return null;
-  }
-
-  return createPortal(
-    <div
-      className="fixed inset-0 z-50 flex items-end justify-center bg-[color:color-mix(in_srgb,var(--background)_48%,transparent)] p-0"
-      role="presentation"
-      onClick={onClose}
+  return (
+    <Sheet
+      onClose={onClose}
+      ariaLabelledby="measurement-reminder-title"
+      ariaDescribedby="measurement-reminder-description"
     >
-      <div
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="measurement-reminder-title"
-        aria-describedby="measurement-reminder-description"
-        className="w-full max-w-lg rounded-t-3xl bg-[var(--surface)] p-5 pb-[max(env(safe-area-inset-bottom),1.25rem)] shadow-[0_24px_60px_-24px_var(--shadow)]"
-        onClick={(event) => event.stopPropagation()}
-      >
-        <span className="mx-auto mb-3 block h-1 w-10 rounded-full bg-[var(--border-strong)]" aria-hidden="true" />
         <h3
           id="measurement-reminder-title"
           className="font-[family-name:var(--font-display)] text-2xl font-semibold leading-tight text-[var(--text)]"
@@ -70,8 +56,6 @@ export function MeasurementReminderDialog({
             Avaa kehon seuranta
           </Button>
         </div>
-      </div>
-    </div>,
-    document.body,
+    </Sheet>
   );
 }

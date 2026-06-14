@@ -6,6 +6,7 @@ import { useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardTitle } from "@/components/ui/card";
 import { Segmented } from "@/components/ui/segmented";
+import { Sheet } from "@/components/ui/sheet";
 import { useHeaderAction } from "@/components/workout/header-action";
 import { OwnRecipeEditor } from "@/components/workout/own-recipe-editor";
 import { useKeepScreenOnPreference, useWakeLock } from "@/lib/use-wake-lock";
@@ -607,8 +608,7 @@ function RecipeDetailSheet({
   const isEaten = Boolean(entry?.eatenAt);
 
   return (
-    <div className="fixed inset-0 z-50 flex items-end justify-center bg-[color:color-mix(in_srgb,var(--background)_48%,transparent)] p-0 sm:items-center sm:p-4" role="presentation">
-      <div role="dialog" aria-modal="true" aria-label={recipe.name} className="flex max-h-[88vh] w-full max-w-lg flex-col rounded-t-3xl bg-[var(--surface)] p-5 shadow-[0_24px_60px_-24px_var(--shadow)] sm:rounded-3xl">
+    <Sheet onClose={onClose} ariaLabel={recipe.name}>
         <div className="flex items-start justify-between gap-3">
           <div className="min-w-0">
             <p className="text-sm font-semibold text-[var(--accent)]">
@@ -701,8 +701,7 @@ function RecipeDetailSheet({
             {isEaten ? "Syöty tänään · peru merkintä" : "Merkitse syödyksi"}
           </Button>
         ) : null}
-      </div>
-    </div>
+    </Sheet>
   );
 }
 
@@ -729,8 +728,7 @@ function MealPickerSheet({
   const filtered = recipes.filter((recipe) => recipe.name.toLowerCase().includes(query.trim().toLowerCase()));
 
   return (
-    <div className="fixed inset-0 z-50 flex items-end justify-center bg-[color:color-mix(in_srgb,var(--background)_48%,transparent)] p-0 sm:items-center sm:p-4" role="presentation">
-      <div role="dialog" aria-modal="true" aria-label={title} className="flex max-h-[80vh] w-full max-w-lg flex-col rounded-t-3xl bg-[var(--surface)] p-5 shadow-[0_24px_60px_-24px_var(--shadow)] sm:rounded-3xl">
+    <Sheet onClose={onClose} ariaLabel={title}>
         <div className="flex items-center justify-between gap-3">
           <h2 className="font-[family-name:var(--font-display)] text-xl font-semibold text-[var(--text)]">{title}</h2>
           <button type="button" className="grid size-8 place-items-center rounded-full bg-[var(--surface-2)] text-[var(--text-subtle)]" aria-label="Sulje" onClick={onClose}>
@@ -792,7 +790,6 @@ function MealPickerSheet({
             })
           )}
         </div>
-      </div>
-    </div>
+    </Sheet>
   );
 }

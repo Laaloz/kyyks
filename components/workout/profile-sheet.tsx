@@ -1,8 +1,8 @@
 "use client";
 
 import { ChevronRight, LogOut } from "lucide-react";
-import { useEffect } from "react";
 
+import { Sheet } from "@/components/ui/sheet";
 import { roleLabel } from "@/components/workout/shared";
 import { useKeepScreenOnPreference } from "@/lib/use-wake-lock";
 import type { UserProfile } from "@/lib/types";
@@ -43,36 +43,13 @@ export function ProfileSheet({
 }) {
   const [keepScreenOn, setKeepScreenOn] = useKeepScreenOnPreference();
 
-  useEffect(() => {
-    const handleKeyDown = (event: globalThis.KeyboardEvent) => {
-      if (event.key === "Escape") {
-        onClose();
-      }
-    };
-    window.addEventListener("keydown", handleKeyDown);
-    return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [onClose]);
-
   const subtitle =
     user.role === "coach" || user.role === "admin"
       ? roleLabel(user.role)
       : `${roleLabel(user.role)}${coachFirstName ? ` · valmentaja ${coachFirstName}` : ""}`;
 
   return (
-    <div
-      className="fixed inset-0 z-50 flex items-end justify-center bg-[color:color-mix(in_srgb,var(--background)_48%,transparent)] p-0 sm:items-center sm:p-4"
-      role="presentation"
-      onClick={onClose}
-    >
-      <div
-        role="dialog"
-        aria-modal="true"
-        aria-label="Profiili ja asetukset"
-        className="flex max-h-[88vh] w-full max-w-lg flex-col rounded-t-3xl bg-[var(--surface)] p-5 shadow-[0_24px_60px_-24px_var(--shadow)] sm:rounded-3xl"
-        onClick={(event) => event.stopPropagation()}
-      >
-        <span className="mx-auto mb-3 h-1 w-10 shrink-0 rounded-full bg-[var(--border-strong)] sm:hidden" aria-hidden="true" />
-
+    <Sheet onClose={onClose} ariaLabel="Profiili ja asetukset">
         <div className="flex items-center gap-3">
           <span className="grid size-14 shrink-0 place-items-center overflow-hidden rounded-full border border-[var(--border-strong)] bg-[color-mix(in_srgb,var(--accent)_14%,var(--surface))] font-[family-name:var(--font-display)] text-lg font-bold text-[var(--accent)]">
             {profileImageSrc ? (
@@ -136,7 +113,6 @@ export function ProfileSheet({
             Kirjaudu ulos
           </button>
         </div>
-      </div>
-    </div>
+    </Sheet>
   );
 }
