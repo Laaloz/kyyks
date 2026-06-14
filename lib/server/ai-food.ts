@@ -151,7 +151,7 @@ async function runGeminiEstimate(
   // Rate limit: suojaa ilmaiskiintiötä per käyttäjä per vuorokausi.
   const used = await countTodaysUsage(adminClient, userId);
   if (used >= DAILY_LIMIT) {
-    return { ok: false, status: 429, message: "AI-arvioiden vuorokausiraja täynnä. Lisää ruoka haulla tai täytä arvot itse." };
+    return { ok: false, status: 429, message: "AI-arvioiden vuorokausiraja täynnä. Lisää ateriaan haulla tai täytä arvot itse." };
   }
 
   const model = process.env.GEMINI_MODEL || DEFAULT_MODEL;

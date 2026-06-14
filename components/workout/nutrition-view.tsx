@@ -402,7 +402,7 @@ export function NutritionView({
                       </Button>
                       <Button type="button" variant="secondary" className="w-full gap-2" onClick={() => setAddFoodOpen(true)}>
                         <Plus className="size-4" aria-hidden="true" />
-                        Lisää ruoka
+                        Lisää ateriaan
                       </Button>
                     </div>
                   ) : null}
@@ -418,7 +418,7 @@ export function NutritionView({
                       </Button>
                       <Button type="button" variant="secondary" className="w-full gap-2" onClick={() => setAddFoodOpen(true)}>
                         <Plus className="size-4" aria-hidden="true" />
-                        Lisää ruoka
+                        Lisää ateriaan
                       </Button>
                     </div>
                   ) : null}
@@ -556,7 +556,7 @@ export function NutritionView({
                   </Button>
                   <Button type="button" variant="secondary" className="w-full gap-2" onClick={() => setAddFoodOpen(true)}>
                     <Plus className="size-4" aria-hidden="true" />
-                    Lisää ruoka
+                    Lisää ateriaan
                   </Button>
                 </div>
               ) : null}

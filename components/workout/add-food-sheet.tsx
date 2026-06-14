@@ -35,7 +35,7 @@ function round(value: number): number {
 }
 
 /**
- * Lisää ruoka -näkymä. Yksi näkymä: hae omista tuotteista, kirjoita uusi (Enter / nappi →
+ * Lisää ateriaan -näkymä (ruoka tai juoma). Yksi näkymä: hae omista tuotteista, kirjoita uusi (Enter / nappi →
  * tekoäly täyttää taustalla) tai ota kuva. Arvojen tarkistus tapahtuu päivän kortin kautta.
  */
 export function AddFoodSheet({
@@ -133,7 +133,7 @@ export function AddFoodSheet({
             value={query}
             onChange={(event) => setQuery(event.target.value)}
             placeholder="Mitä söit tai joit?"
-            aria-label="Hae tai lisää ruoka"
+            aria-label="Hae tai lisää ateriaan"
             enterKeyHint="done"
             className="min-w-0 flex-1 bg-transparent text-sm text-[var(--text)] outline-none placeholder:text-[var(--text-subtle)]"
           />
