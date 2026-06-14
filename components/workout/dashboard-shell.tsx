@@ -45,6 +45,9 @@ type PrimaryWorkspaceView = Exclude<WorkspaceView, "settings">;
 type AthleteOverviewFocusTarget = "measurements";
 const MEASUREMENT_REMINDER_STORAGE_VERSION = "v2";
 const WORKSPACE_VIEW_STORAGE_VERSION = "v1";
+// Chat piilotettu toistaiseksi (iso uudistus tulossa) — flag säilyttää koodin ja
+// kytkennät ennallaan, kun chat palautetaan.
+const CHAT_ENABLED = false;
 function mobilePrimaryNavItemsForRole(role: Role): PrimaryWorkspaceView[] {
   // Treenaajaroolit: Tänään / Treeni / Ravinto / Keho. Treeni keskelle painottuu
   // korostetulla pillerillä; chat on yläpalkin ikoni.
@@ -561,7 +564,7 @@ export function DashboardShell() {
                     <span className="sr-only">Avaa kehon seurannan muistutus</span>
                   </Button>
                 ) : null}
-                {currentUser.role === "athlete" ? (
+                {CHAT_ENABLED && currentUser.role === "athlete" ? (
                   <Button
                     onClick={() => setView("conversation")}
                     type="button"

@@ -283,7 +283,7 @@ function ExtraActivityDialog({
                 type="button"
                 aria-pressed={active}
                 className={cn(
-                  "rounded-full px-5 py-2 text-base font-semibold transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--background)]",
+                  "rounded-full px-4 py-2 text-sm font-semibold transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--background)]",
                   active
                     ? "bg-[var(--text)] text-[var(--background)]"
                     : "bg-transparent text-[var(--text-muted)] hover:bg-[var(--surface-2)] hover:text-[var(--text)]",
@@ -296,27 +296,27 @@ function ExtraActivityDialog({
           })}
         </div>
 
-        <div className="mt-7 flex items-center justify-between gap-4">
-          <p className="font-[family-name:var(--font-display)] text-xl font-bold text-[var(--text)]">Kesto (min)</p>
-          <div className="flex h-14 shrink-0 items-center gap-3 rounded-[18px] bg-[var(--surface-2)] px-4">
+        <div className="mt-6 flex items-center justify-between gap-4">
+          <p className="text-sm font-semibold tracking-[0.02em] text-[var(--text-subtle)]">Kesto (min)</p>
+          <div className="flex h-12 shrink-0 items-center gap-2 rounded-xl bg-[var(--surface-2)] px-3">
             <button
               type="button"
               aria-label="Vähennä kestoa"
-              className="grid size-9 place-items-center rounded-full text-2xl leading-none text-[var(--text)] transition hover:bg-[var(--surface)]"
+              className="grid size-8 place-items-center rounded-full text-xl leading-none text-[var(--text)] transition hover:bg-[var(--surface)]"
               onClick={() => updateDurationBy(-5)}
             >
               -
             </button>
             <output
               aria-live="polite"
-              className="min-w-10 text-center font-[family-name:var(--font-display)] text-xl font-bold tabular-nums text-[var(--text)]"
+              className="min-w-9 text-center font-[family-name:var(--font-display)] text-base font-bold tabular-nums text-[var(--text)]"
             >
               {totalMinutes}
             </output>
             <button
               type="button"
               aria-label="Lisää kestoa"
-              className="grid size-9 place-items-center rounded-full text-2xl leading-none text-[var(--text)] transition hover:bg-[var(--surface)]"
+              className="grid size-8 place-items-center rounded-full text-xl leading-none text-[var(--text)] transition hover:bg-[var(--surface)]"
               onClick={() => updateDurationBy(5)}
             >
               +
