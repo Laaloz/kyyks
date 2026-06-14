@@ -6,6 +6,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardDescription, CardTitle } from "@/components/ui/card";
 import { Input, Label, Select, Textarea } from "@/components/ui/field";
+import { Segmented } from "@/components/ui/segmented";
 import { InlineFeedback } from "@/components/workout/inline-feedback";
 import { NutritionAthleteCard } from "@/components/workout/nutrition-athlete-card";
 import { PersonalNutritionSummaryCard } from "@/components/workout/personal-nutrition-summary-card";
@@ -1033,56 +1034,20 @@ export function NutritionAdminPanel() {
   return (
     <Card className="border-[var(--border-strong)]">
       <div className="space-y-6">
-        <div>
-          <p className="text-xs font-semibold tracking-[0.04em] text-[var(--text-subtle)]">Ravinto</p>
-          <CardTitle className="mt-2 text-2xl">Ateriapohjat ja reseptit</CardTitle>
-          <CardDescription className="mt-2">
-            Muokkaa reseptejä ja ateriapohjia. Oma ravinto löytyy samasta näkymästä.
-          </CardDescription>
-        </div>
-
+        {/* Osio-otsikko tulee yläpalkista. */}
         {message ? <InlineFeedback tone={message.tone} message={message.text} /> : null}
 
-        <div
-          role="tablist"
-          aria-label="Ravinnon työtila"
-          className="grid gap-2 rounded-[1.4rem] border border-[color-mix(in_srgb,var(--border)_88%,var(--surface))] bg-[color-mix(in_srgb,var(--surface)_80%,var(--surface-2))] p-2 md:grid-cols-2"
-        >
-          <button
-            type="button"
-            role="tab"
-            aria-selected={workspaceTab === "editor"}
-            aria-controls="nutrition-workspace-editor"
-            id="nutrition-workspace-tab-editor"
-            tabIndex={workspaceTab === "editor" ? 0 : -1}
-            className={`rounded-2xl px-4 py-3 text-left transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--background)] ${
-              workspaceTab === "editor"
-                ? "border border-[color-mix(in_srgb,var(--accent)_24%,var(--border))] bg-[color-mix(in_srgb,var(--accent)_10%,var(--surface))] text-[var(--text)] shadow-[0_10px_24px_-20px_var(--accent)]"
-                : "border border-transparent bg-transparent text-[var(--text-muted)] hover:border-[var(--border)] hover:bg-[var(--surface)] hover:text-[var(--text)]"
-            }`}
-            onClick={() => setWorkspaceTab("editor")}
-          >
-            <p className="text-sm font-semibold">Editori</p>
-            <p className="mt-1 text-xs text-[var(--text-subtle)]">Profiilit, reseptit ja ateriapohjat.</p>
-          </button>
-          <button
-            type="button"
-            role="tab"
-            aria-selected={workspaceTab === "own"}
-            aria-controls="nutrition-workspace-own"
-            id="nutrition-workspace-tab-own"
-            tabIndex={workspaceTab === "own" ? 0 : -1}
-            className={`rounded-2xl px-4 py-3 text-left transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--background)] ${
-              workspaceTab === "own"
-                ? "border border-[color-mix(in_srgb,var(--accent)_24%,var(--border))] bg-[color-mix(in_srgb,var(--accent)_10%,var(--surface))] text-[var(--text)] shadow-[0_10px_24px_-20px_var(--accent)]"
-                : "border border-transparent bg-transparent text-[var(--text-muted)] hover:border-[var(--border)] hover:bg-[var(--surface)] hover:text-[var(--text)]"
-            }`}
-            onClick={() => setWorkspaceTab("own")}
-          >
-            <p className="text-sm font-semibold">Oma ravinto</p>
-            <p className="mt-1 text-xs text-[var(--text-subtle)]">Oma energiasuositus ja päivän ateriat.</p>
-          </button>
-        </div>
+        <Segmented
+          ariaLabel="Ravinnon työtila"
+          idPrefix="nutrition-workspace-tab"
+          controlsPrefix="nutrition-workspace"
+          value={workspaceTab}
+          onChange={setWorkspaceTab}
+          options={[
+            { value: "editor", label: "Editori" },
+            { value: "own", label: "Oma ravinto" },
+          ]}
+        />
 
         {workspaceTab === "own" ? (
           <section
@@ -1106,35 +1071,15 @@ export function NutritionAdminPanel() {
         ) : null}
 
         {workspaceTab === "editor" ? (
-          <div
-            role="tablist"
-            aria-label="Ravinnon admin-osiot"
-            className={`grid gap-2 rounded-[1.4rem] border border-[color-mix(in_srgb,var(--border)_88%,var(--surface))] bg-[color-mix(in_srgb,var(--surface)_80%,var(--surface-2))] p-2 ${visibleSections.length >= 4 ? "md:grid-cols-4" : "md:grid-cols-3"}`}
-          >
-            {visibleSections.map((section) => {
-              const selected = activeSection === section.id;
-              return (
-                <button
-                  key={section.id}
-                  type="button"
-                  role="tab"
-                  aria-selected={selected}
-                  aria-controls={`nutrition-panel-${section.id}`}
-                  id={`nutrition-tab-${section.id}`}
-                  tabIndex={selected ? 0 : -1}
-                  className={`rounded-2xl px-4 py-3 text-left transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--background)] ${
-                    selected
-                      ? "border border-[color-mix(in_srgb,var(--accent)_24%,var(--border))] bg-[color-mix(in_srgb,var(--accent)_10%,var(--surface))] text-[var(--text)] shadow-[0_10px_24px_-20px_var(--accent)]"
-                      : "border border-transparent bg-transparent text-[var(--text-muted)] hover:border-[var(--border)] hover:bg-[var(--surface)] hover:text-[var(--text)]"
-                  }`}
-                  onClick={() => setActiveSection(section.id)}
-                >
-                  <p className="text-sm font-semibold">{section.label}</p>
-                  <p className="mt-1 text-xs text-[var(--text-subtle)]">{section.description}</p>
-                </button>
-              );
-            })}
-          </div>
+          <Segmented
+            scrollable
+            ariaLabel="Ravinnon admin-osiot"
+            idPrefix="nutrition-tab"
+            controlsPrefix="nutrition-panel"
+            value={activeSection}
+            onChange={setActiveSection}
+            options={visibleSections.map((section) => ({ value: section.id, label: section.label }))}
+          />
         ) : null}
 
         {workspaceTab === "editor" ? (
@@ -1519,43 +1464,19 @@ export function NutritionAdminPanel() {
 
           {activeSection === "recipes" ? (
             <div className="space-y-6">
-              <div
-                role="tablist"
-                aria-label="Reseptityötila"
-                className={`grid gap-2 rounded-[1.2rem] border border-[var(--border)] bg-[var(--surface-2)] p-2 ${canManageIngredients ? "md:grid-cols-2" : "md:grid-cols-1"}`}
-              >
-                <button
-                  type="button"
-                  role="tab"
-                  aria-selected={recipeWorkspace === "recipe"}
-                  aria-controls="nutrition-recipe-workspace"
-                  id="nutrition-recipe-tab"
-                  tabIndex={recipeWorkspace === "recipe" ? 0 : -1}
-                  className={`rounded-2xl px-4 py-3 text-left transition ${recipeWorkspace === "recipe" ? "border border-[color-mix(in_srgb,var(--accent)_24%,var(--border))] bg-[color-mix(in_srgb,var(--accent)_10%,var(--surface))] text-[var(--text)]" : "border border-transparent bg-transparent text-[var(--text-muted)] hover:border-[var(--border)] hover:bg-[var(--surface)] hover:text-[var(--text)]"}`}
-                  onClick={() => setRecipeWorkspace("recipe")}
-                >
-                  <p className="text-sm font-semibold">Reseptieditori</p>
-                  <p className="mt-1 text-xs text-[var(--text-subtle)]">Pääraaka-aineet, annokset ja skaalaus yhteen reseptiin.</p>
-                </button>
-                {canManageIngredients ? (
-                  <button
-                    type="button"
-                    role="tab"
-                    aria-selected={recipeWorkspace === "ingredients"}
-                    aria-controls="nutrition-ingredient-workspace"
-                    id="nutrition-ingredient-tab"
-                    tabIndex={recipeWorkspace === "ingredients" ? 0 : -1}
-                    className={`rounded-2xl px-4 py-3 text-left transition ${recipeWorkspace === "ingredients" ? "border border-[color-mix(in_srgb,var(--accent)_24%,var(--border))] bg-[color-mix(in_srgb,var(--accent)_10%,var(--surface))] text-[var(--text)]" : "border border-transparent bg-transparent text-[var(--text-muted)] hover:border-[var(--border)] hover:bg-[var(--surface)] hover:text-[var(--text)]"}`}
-                    onClick={() => setRecipeWorkspace("ingredients")}
-                  >
-                    <p className="text-sm font-semibold">Raaka-ainekatalogi</p>
-                    <p className="mt-1 text-xs text-[var(--text-subtle)]">Lisää puuttuva aine käsin ja tarkista mitä kirjastosta jo löytyy.</p>
-                  </button>
-                ) : null}
-              </div>
+              <Segmented
+                ariaLabel="Reseptityötila"
+                idPrefix="nutrition-recipe-ws"
+                value={recipeWorkspace}
+                onChange={setRecipeWorkspace}
+                options={[
+                  { value: "recipe" as const, label: "Reseptieditori" },
+                  ...(canManageIngredients ? [{ value: "ingredients" as const, label: "Raaka-ainekatalogi" }] : []),
+                ]}
+              />
 
               {recipeWorkspace === "recipe" ? (
-                <section id="nutrition-recipe-workspace" role="tabpanel" aria-labelledby="nutrition-recipe-tab" className="grid gap-6 xl:grid-cols-[1.15fr_0.85fr]">
+                <section id="nutrition-recipe-workspace" role="tabpanel" aria-labelledby="nutrition-recipe-ws-recipe" className="grid gap-6 xl:grid-cols-[1.15fr_0.85fr]">
                   <div className="space-y-4 rounded-3xl border border-[var(--border)] bg-[var(--surface-2)] p-4">
                     <div>
                       <p className="text-sm font-semibold text-[var(--text)]">Reseptieditori</p>
@@ -2007,7 +1928,7 @@ export function NutritionAdminPanel() {
               ) : null}
 
               {recipeWorkspace === "ingredients" ? (
-                <section id="nutrition-ingredient-workspace" role="tabpanel" aria-labelledby="nutrition-ingredient-tab" className="grid gap-6 xl:grid-cols-[0.9fr_1.1fr]">
+                <section id="nutrition-ingredient-workspace" role="tabpanel" aria-labelledby="nutrition-recipe-ws-ingredients" className="grid gap-6 xl:grid-cols-[0.9fr_1.1fr]">
                   <div className="space-y-4 rounded-3xl border border-[var(--border)] bg-[var(--surface-2)] p-4">
                     <div>
                       <p className="text-sm font-semibold text-[var(--text)]">Raaka-ainekatalogi</p>
