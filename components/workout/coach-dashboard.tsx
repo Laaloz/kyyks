@@ -2511,6 +2511,9 @@ const ROSTER_PILL_TONE: Record<"good" | "warn" | "neutral", string> = {
   neutral: "border-[var(--border)] bg-[var(--surface-3)] text-[var(--text-subtle)]",
 };
 
+const TEAM_CARD_HOVER =
+  "hover:border-[color:color-mix(in_oklab,var(--accent)_34%,var(--border))] hover:shadow-[0_8px_22px_-18px_var(--accent)]";
+
 function RosterMiniWeek({ cells }: { cells: ReturnType<typeof buildAthleteRosterSummary>["cells"] }) {
   return (
     <div className="mt-3 grid grid-cols-7 gap-1.5">
@@ -2806,7 +2809,10 @@ function CoachTeamView({
                 <button
                   key={athlete.id}
                   type="button"
-                  className="w-full rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-4 text-left shadow-[0_1px_2px_var(--shadow-soft)] transition hover:bg-[var(--surface-2)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--background)]"
+                  className={cn(
+                    "w-full rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-4 text-left shadow-[0_1px_2px_var(--shadow-soft)] transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--background)]",
+                    TEAM_CARD_HOVER,
+                  )}
                   aria-label={`${isAdmin ? "Hallitse" : "Esikatsele"}: ${athlete.fullName}`}
                   onClick={() => (isAdmin ? setManageUserId(athlete.id) : handlePreview(athlete.id))}
                 >
@@ -2863,7 +2869,10 @@ function CoachTeamView({
                     <button
                       key={coach.id}
                       type="button"
-                      className="flex w-full items-center justify-between gap-3 p-4 text-left transition hover:bg-[var(--surface-2)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--surface)]"
+                      className={cn(
+                        "flex w-full items-center justify-between gap-3 border border-transparent p-4 text-left transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--surface)]",
+                        TEAM_CARD_HOVER,
+                      )}
                       aria-label={`Hallitse: ${coach.fullName}`}
                       onClick={() => setManageUserId(coach.id)}
                     >

@@ -1,8 +1,9 @@
-import type { Metadata, Viewport } from "next";
+import type { Metadata } from "next";
 import { Manrope, Schibsted_Grotesk } from "next/font/google";
 import Script from "next/script";
 
 import { APP_SESSION_STORAGE_KEY, APP_STATE_STORAGE_KEY } from "@/lib/app-state-storage";
+import { THEME_CHROME_COLORS } from "@/lib/theme-chrome";
 import { AppStateProvider } from "@/providers/app-state-provider";
 
 import "./globals.css";
@@ -23,20 +24,19 @@ const themeInitScript = `
 (() => {
   const stateKey = "${APP_STATE_STORAGE_KEY}";
   const sessionKey = "${APP_SESSION_STORAGE_KEY}";
-  const themeColorByTheme = {
-    light: "#f3f4f0",
-    dark: "#0f1311",
-    mallu: "#f8efec",
-    camel: "#f6f0e4",
-  };
+  const themeChrome = ${JSON.stringify(THEME_CHROME_COLORS)};
   const applyTheme = (themeMode) => {
     const theme = themeMode === "dark" || themeMode === "mallu" || themeMode === "camel" ? themeMode : "light";
-    const colorScheme = theme === "dark" ? "dark" : "light";
+    const chrome = themeChrome[theme] || themeChrome.light;
     document.documentElement.dataset.theme = theme;
-    document.documentElement.style.colorScheme = colorScheme;
+    document.documentElement.style.colorScheme = chrome.colorScheme;
     const themeColorMeta = document.querySelector('meta[name="theme-color"]');
     if (themeColorMeta) {
-      themeColorMeta.setAttribute("content", themeColorByTheme[theme]);
+      themeColorMeta.setAttribute("content", chrome.themeColor);
+    }
+    const appleStatusMeta = document.querySelector('meta[name="apple-mobile-web-app-status-bar-style"]');
+    if (appleStatusMeta) {
+      appleStatusMeta.setAttribute("content", chrome.appleStatusBarStyle);
     }
   };
 
@@ -92,7 +92,6 @@ export const metadata: Metadata = {
   manifest: "/manifest.webmanifest",
   appleWebApp: {
     capable: true,
-    statusBarStyle: "default",
     title: "rooki.fit",
   },
   icons: {
@@ -100,10 +99,6 @@ export const metadata: Metadata = {
     shortcut: "/icon.svg",
     apple: "/icon.svg",
   },
-};
-
-export const viewport: Viewport = {
-  themeColor: "#f3f4f0",
 };
 
 export default function RootLayout({
@@ -115,6 +110,7 @@ export default function RootLayout({
     <html lang="fi" className={`${manrope.variable} ${schibstedGrotesk.variable}`} suppressHydrationWarning>
       <head>
         <meta id="theme-color-meta" name="theme-color" content="#f3f4f0" />
+        <meta id="apple-status-bar-style-meta" name="apple-mobile-web-app-status-bar-style" content="default" />
         <meta name="mobile-web-app-capable" content="yes" />
         <Script id="theme-init" strategy="beforeInteractive">
           {themeInitScript}

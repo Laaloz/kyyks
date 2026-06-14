@@ -82,6 +82,7 @@ import type {
   WorkoutSession,
   WorkoutUpdateInput,
 } from "@/lib/types";
+import { THEME_CHROME_COLORS, resolveThemeMode } from "@/lib/theme-chrome";
 import { makeId } from "@/lib/utils";
 import { normalizeWorkoutHistoryTitle } from "@/lib/workout-history-title";
 import {
@@ -3698,20 +3699,16 @@ function findResolvedUserIdInSnapshot(
       return;
     }
 
-    const themeMode =
-      currentUser?.settings?.themeMode === "dark" ||
-      currentUser?.settings?.themeMode === "mallu" ||
-      currentUser?.settings?.themeMode === "camel"
-        ? currentUser.settings.themeMode
-        : "light";
+    const themeMode = resolveThemeMode(currentUser?.settings?.themeMode);
+    const chrome = THEME_CHROME_COLORS[themeMode];
     document.documentElement.dataset.theme = themeMode;
-    document.documentElement.style.colorScheme = themeMode === "dark" ? "dark" : "light";
+    document.documentElement.style.colorScheme = chrome.colorScheme;
     document
       .querySelector('meta[name="theme-color"]')
-      ?.setAttribute(
-        "content",
-        themeMode === "dark" ? "#08111f" : themeMode === "mallu" ? "#fff1ef" : themeMode === "camel" ? "#FFFFE2" : "#f3f7fc",
-      );
+      ?.setAttribute("content", chrome.themeColor);
+    document
+      .querySelector('meta[name="apple-mobile-web-app-status-bar-style"]')
+      ?.setAttribute("content", chrome.appleStatusBarStyle);
   }, [currentUser?.settings?.themeMode, isHydrated]);
 
   const value = useMemo<AppStateContextValue>(() => {
