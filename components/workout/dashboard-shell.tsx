@@ -317,7 +317,7 @@ export function DashboardShell() {
       return;
     }
     // Adminin Tiimi-näkymän Hallinta-sillat (eivät välilehtipalkissa).
-    if (isAdminRole(role) && (view === "invites" || view === "users" || view === "ingredients")) {
+    if (isAdminRole(role) && (view === "invites" || view === "ingredients")) {
       return;
     }
 
@@ -770,11 +770,8 @@ export function DashboardShell() {
                 onOpenWorkoutLog={() => setView("athlete-log")}
                 onOpenSettings={() => setView("settings")}
                 onOpenInvites={currentUser.role === "admin" ? () => setView("invites") : undefined}
-                onOpenUsers={currentUser.role === "admin" ? () => setView("users") : undefined}
                 onOpenIngredients={currentUser.role === "admin" ? () => setView("ingredients") : undefined}
               />
-            ) : currentUser.role === "admin" && view === "users" ? (
-              <UserSettingsPanel adminOnly />
             ) : currentUser.role === "admin" && view === "ingredients" ? (
               <NutritionAdminPanel />
             ) : currentUser.role === "admin" && view === "invites" ? (

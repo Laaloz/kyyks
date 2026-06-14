@@ -6,14 +6,16 @@ import {
   Carrot,
   Check,
   ChevronDown,
+  ChevronLeft,
   ChevronUp,
+  Eye,
   MoreHorizontal,
   Plus,
   Search,
   UserPlus,
-  Users,
   X,
 } from "lucide-react";
+import { createPortal } from "react-dom";
 import { type CSSProperties, type ReactNode, useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { type Resolver, useFieldArray, useForm } from "react-hook-form";
 
@@ -27,6 +29,7 @@ import { InlineFeedback } from "@/components/workout/inline-feedback";
 import { CoachInvitePanel } from "@/components/workout/coach/invite-panel";
 import { ProgramWorkoutEditor } from "@/components/workout/coach/program-workout-editor";
 import { ProgramEditorOverlay } from "@/components/workout/coach/program-editor-overlay";
+import { AdminUserManagementPanel } from "@/components/workout/admin-user-management-panel";
 import {
   type ProgramComposerExerciseFormValues,
   type ProgramComposerFormValues,
@@ -783,7 +786,6 @@ export function CoachDashboard({
   onOpenWorkoutLog,
   onOpenSettings,
   onOpenInvites,
-  onOpenUsers,
   onOpenIngredients,
 }: {
   view: WorkspaceView;
@@ -791,7 +793,6 @@ export function CoachDashboard({
   onOpenWorkoutLog?: () => void;
   onOpenSettings?: () => void;
   onOpenInvites?: () => void;
-  onOpenUsers?: () => void;
   onOpenIngredients?: () => void;
 }) {
   const {
@@ -1258,7 +1259,6 @@ export function CoachDashboard({
           state={state}
           currentUser={currentUser}
           onOpenInvites={onOpenInvites}
-          onOpenUsers={onOpenUsers}
           onOpenIngredients={onOpenIngredients}
         />
       ) : null}
@@ -2578,7 +2578,6 @@ function CoachTeamView({
   state,
   currentUser,
   onOpenInvites,
-  onOpenUsers,
   onOpenIngredients,
 }: {
   athletes: Array<{ id: string; fullName: string }>;
@@ -2587,13 +2586,16 @@ function CoachTeamView({
   state: AppState;
   currentUser: UserProfile;
   onOpenInvites?: () => void;
-  onOpenUsers?: () => void;
   onOpenIngredients?: () => void;
 }) {
   const { startAthletePreview, notify, createProgram, updateProgram, setProgramStatus } = useAppState();
   const [segment, setSegment] = useState<"tiimi" | "ohjelmat">("tiimi");
   const [editorGroup, setEditorGroup] = useState<TrainingPlan[] | null>(null);
+  const [manageUserId, setManageUserId] = useState<string | null>(null);
+  const [manageMounted, setManageMounted] = useState(false);
+  useEffect(() => setManageMounted(true), []);
   const isAdmin = isAdminRole(currentUser.role);
+  const manageUser = manageUserId ? state.users.find((user) => user.id === manageUserId) ?? null : null;
 
   // Editorin urheilijavalinnat: itse + valmennettavat.
   const programTargets = useMemo(
@@ -2727,8 +2729,8 @@ function CoachTeamView({
                   key={athlete.id}
                   type="button"
                   className="w-full rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-4 text-left transition hover:border-[var(--border-strong)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--background)]"
-                  aria-label={`Esikatsele: ${athlete.fullName}`}
-                  onClick={() => handlePreview(athlete.id)}
+                  aria-label={`${isAdmin ? "Hallitse" : "Esikatsele"}: ${athlete.fullName}`}
+                  onClick={() => (isAdmin ? setManageUserId(athlete.id) : handlePreview(athlete.id))}
                 >
                   <div className="flex items-start justify-between gap-3">
                     <div className="flex min-w-0 items-center gap-2.5">
@@ -2770,7 +2772,9 @@ function CoachTeamView({
 
           {rosterEntries.length ? (
             <p className="mx-1 mt-3 text-[13px] text-pretty text-[var(--text-subtle)]">
-              Napauta urheilijaa — esikatselet hänen omaa näkymäänsä vain luku -tilassa.
+              {isAdmin
+                ? "Napauta urheilijaa — hallitset roolia, vastuuhenkilöitä ja esikatselet hänen näkymäänsä."
+                : "Napauta urheilijaa — esikatselet hänen omaa näkymäänsä vain luku -tilassa."}
             </p>
           ) : null}
 
@@ -2779,7 +2783,13 @@ function CoachTeamView({
               <SectionLabel label="Valmentajat" meta={`${otherCoaches.length} aktiivinen`} />
               <Card className="divide-y divide-[var(--border)] p-0">
                 {otherCoaches.map(({ coach, athleteCount, activePrograms }) => (
-                  <div key={coach.id} className="flex items-center justify-between gap-3 p-4">
+                  <button
+                    key={coach.id}
+                    type="button"
+                    className="flex w-full items-center justify-between gap-3 p-4 text-left transition hover:bg-[var(--surface-2)]"
+                    aria-label={`Hallitse: ${coach.fullName}`}
+                    onClick={() => setManageUserId(coach.id)}
+                  >
                     <div className="flex min-w-0 items-center gap-2.5">
                       <span className="grid size-10 shrink-0 place-items-center rounded-full bg-[var(--accent-soft)] font-[family-name:var(--font-display)] text-sm font-bold text-[var(--accent)]">
                         {rosterInitials(coach.fullName)}
@@ -2795,26 +2805,20 @@ function CoachTeamView({
                       </div>
                     </div>
                     <Badge>{coach.role === "admin" ? "Admin" : "Valmentaja"}</Badge>
-                  </div>
+                  </button>
                 ))}
               </Card>
             </>
           ) : null}
 
-          {isAdmin && (onOpenInvites || onOpenUsers || onOpenIngredients) ? (
+          {isAdmin && (onOpenInvites || onOpenIngredients) ? (
             <>
               <SectionLabel label="Hallinta" />
-              <div className="grid gap-2 sm:grid-cols-3">
+              <div className="grid gap-2 sm:grid-cols-2">
                 {onOpenInvites ? (
                   <Button type="button" variant="secondary" className="justify-start gap-2" onClick={onOpenInvites}>
                     <UserPlus className="size-4" aria-hidden="true" />
                     Kutsut
-                  </Button>
-                ) : null}
-                {onOpenUsers ? (
-                  <Button type="button" variant="secondary" className="justify-start gap-2" onClick={onOpenUsers}>
-                    <Users className="size-4" aria-hidden="true" />
-                    Käyttäjät
                   </Button>
                 ) : null}
                 {onOpenIngredients ? (
@@ -2878,6 +2882,50 @@ function CoachTeamView({
           onSave={handleSaveProgram}
         />
       ) : null}
+
+      {manageMounted && manageUser
+        ? createPortal(
+            <div className="fixed inset-0 z-50 flex flex-col overflow-y-auto overscroll-contain bg-[var(--background)] px-4 pb-[calc(env(safe-area-inset-bottom)+1.5rem)] pt-[calc(env(safe-area-inset-top)+0.75rem)]">
+              <div className="flex items-center gap-3">
+                <button
+                  type="button"
+                  className="grid size-10 shrink-0 place-items-center rounded-full bg-[var(--surface)] text-[var(--text)] shadow-[0_1px_2px_var(--shadow-soft)] transition hover:bg-[var(--surface-2)]"
+                  aria-label="Takaisin"
+                  onClick={() => setManageUserId(null)}
+                >
+                  <ChevronLeft className="size-5" aria-hidden="true" />
+                </button>
+                <div className="min-w-0">
+                  <p className="text-xs font-semibold uppercase tracking-[0.05em] text-[var(--text-subtle)]">Käyttäjän hallinta</p>
+                  <h2 className="truncate font-[family-name:var(--font-display)] text-2xl font-bold text-[var(--text)]">
+                    {manageUser.fullName}
+                  </h2>
+                </div>
+              </div>
+
+              {(manageUser.role === "athlete" || manageUser.role === "independent_athlete") && manageUser.status === "active" ? (
+                <Button
+                  type="button"
+                  variant="secondary"
+                  className="mt-4 w-full gap-2"
+                  onClick={() => {
+                    const target = manageUser.id;
+                    setManageUserId(null);
+                    handlePreview(target);
+                  }}
+                >
+                  <Eye className="size-4" aria-hidden="true" />
+                  Esikatsele urheilijan näkymä
+                </Button>
+              ) : null}
+
+              <div className="mt-4">
+                <AdminUserManagementPanel focusUserId={manageUser.id} />
+              </div>
+            </div>,
+            document.body,
+          )
+        : null}
     </div>
   );
 }

@@ -13,7 +13,7 @@ import { getAssignableCoachUsers } from "@/lib/role-access";
 import type { Role } from "@/lib/types";
 import { useAppState } from "@/providers/app-state-provider";
 
-export function AdminUserManagementPanel() {
+export function AdminUserManagementPanel({ focusUserId }: { focusUserId?: string } = {}) {
   const {
     authenticatedUser,
     currentUser,
@@ -79,7 +79,13 @@ export function AdminUserManagementPanel() {
       selectedManagedCoachIds.some((coachId) => !selectedManagedAthleteCoachIds.includes(coachId)));
 
   useEffect(() => {
-    if (currentUser?.role !== "admin") {
+    if (focusUserId) {
+      setSelectedManagedUserId(focusUserId);
+    }
+  }, [focusUserId]);
+
+  useEffect(() => {
+    if (currentUser?.role !== "admin" || focusUserId) {
       return;
     }
 
@@ -88,7 +94,7 @@ export function AdminUserManagementPanel() {
     }
 
     setSelectedManagedUserId(manageableUsers[0]?.id ?? "");
-  }, [currentUser?.role, manageableUsers, selectedManagedUserId]);
+  }, [currentUser?.role, focusUserId, manageableUsers, selectedManagedUserId]);
 
   useEffect(() => {
     if (!selectedManagedUser) {
@@ -109,6 +115,9 @@ export function AdminUserManagementPanel() {
   return (
     <div className="grid gap-6">
       <Card className="border-[var(--border-strong)]">
+        {/* Fokustilassa (avattu Tiimin kortista) näytetään vain valitun käyttäjän hallinta. */}
+        {!focusUserId ? (
+        <>
         {/* Osio-otsikko "Käyttäjät" tulee yläpalkista. */}
         <div className="flex items-center gap-2 rounded-xl bg-[var(--surface-2)] px-3 py-2.5">
           <Search className="size-4 shrink-0 text-[var(--text-subtle)]" aria-hidden="true" />
@@ -158,6 +167,8 @@ export function AdminUserManagementPanel() {
             })}
           </div>
         )}
+        </>
+        ) : null}
 
         {selectedManagedUser ? (
               <div className="mt-4 grid gap-4 rounded-2xl border-2 border-[var(--border)] bg-[var(--surface-2)] p-4">
