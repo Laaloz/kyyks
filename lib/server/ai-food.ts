@@ -6,11 +6,13 @@ import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { lookupByBarcode, searchByName, type OffMatch } from "@/lib/server/open-food-facts";
 import type { SupabaseClient } from "@supabase/supabase-js";
 
-// gemini-3.5-flash: paras Flash-laatu teksti- ja kuvahaulle (multimodaali), kulu sentit/kk
-// nykykäytöllä. Google poistaa malli-ID:itä ajoittain (esim. gemini-2.0-flash → 404
-// "no longer available"), joten GEMINI_MODEL voi ylikirjoittaa oletuksen ilman koodimuutosta.
-// Vahvista saatavuus Google AI Studiosta.
-const DEFAULT_MODEL = "gemini-3.5-flash";
+// gemini-2.5-flash: vakaa GA-malli, jolla on enemmän kapasiteettia → vähemmän 503-ruuhkavirheitä
+// kuin uudemmalla 3.5-flashilla (testattu: 2.5 nopein ja vakain). Google poistaa malli-ID:itä
+// ajoittain (esim. gemini-2.0-flash → 404), joten GEMINI_MODEL voi ylikirjoittaa oletuksen.
+const DEFAULT_MODEL = "gemini-2.5-flash";
+// Varamalli 503-ruuhkaan: eri (vanhempi GA) malli = eri kapasiteettipooli, joten kun ensisijainen
+// on hetkellisesti ylikuormitettu, vara saattaa silti vastata. Käytetään vain uusintayrityksessä.
+const FALLBACK_MODEL = "gemini-3.5-flash";
 const DAILY_LIMIT = 30;
 // Gemini-kutsun aikakatkaisut. Tekstihaku on normaalisti ~1 s → katkaistaan tiukasti, jotta
 // kortti ei jää pitkäksi aikaa "Arvioidaan…" -tilaan ruuhkassa. Kuva on epävarmempi ja kestää
@@ -141,7 +143,7 @@ async function countTodaysUsage(adminClient: SupabaseClient, userId: string): Pr
 async function runGeminiEstimate(
   userId: string,
   parts: unknown[],
-  options?: { thinkingBudget?: number; timeoutMs?: number },
+  options?: { thinkingBudget?: number; timeoutMs?: number; model?: string },
 ): Promise<AiFoodResult> {
   const apiKey = process.env.GEMINI_API_KEY;
   if (!apiKey) {
@@ -159,7 +161,7 @@ async function runGeminiEstimate(
     return { ok: false, status: 429, message: "AI-arvioiden vuorokausiraja täynnä. Lisää ateriaan haulla tai täytä arvot itse." };
   }
 
-  const model = process.env.GEMINI_MODEL || DEFAULT_MODEL;
+  const model = options?.model || process.env.GEMINI_MODEL || DEFAULT_MODEL;
   const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
 
   const generationConfig: Record<string, unknown> = {
@@ -274,7 +276,7 @@ export async function estimateFoodFromImage(args: {
 }): Promise<AiFoodResult> {
   // Ei thinkingBudgetia → malli saa ajatella: parantaa kuvan (etenkin monen tuotteen)
   // tunnistuksen luotettavuutta. Latenssi maltillinen (~3-4s), kuvalle hyväksyttävä.
-  const result = await runGeminiEstimate(
+  const result = await estimateWithModelFallback(
     args.userId,
     [{ text: IMAGE_PROMPT }, { inline_data: { mime_type: args.mimeType, data: args.imageBase64 } }],
     { timeoutMs: GEMINI_IMAGE_TIMEOUT_MS },
@@ -300,6 +302,32 @@ export async function estimateFoodFromImage(args: {
   return result;
 }
 
+// Arvio 503-sietoisesti: ensisijainen malli → tilapäisvirheessä (status 502 kattaa Googlen 503:n)
+// uusinta VARAMALLILLA (eri kapasiteettipooli) → vielä yksi yritys ensisijaisella. 429 (kiintiö) ja
+// 504 (timeout) eivät uusita. Koska 503 palaa nopeasti (~1 s), uusinnat ovat halpoja.
+async function estimateWithModelFallback(
+  userId: string,
+  parts: unknown[],
+  opts: { thinkingBudget?: number; timeoutMs: number },
+): Promise<AiFoodResult> {
+  const models = [
+    process.env.GEMINI_MODEL || DEFAULT_MODEL,
+    FALLBACK_MODEL,
+    process.env.GEMINI_MODEL || DEFAULT_MODEL,
+  ];
+  let last: AiFoodResult = { ok: false, status: 502, message: "AI-arvio epäonnistui. Yritä uudelleen." };
+  for (let i = 0; i < models.length; i += 1) {
+    last = await runGeminiEstimate(userId, parts, { ...opts, model: models[i] });
+    if (last.ok || last.status !== 502) {
+      return last;
+    }
+    if (i < models.length - 1) {
+      await new Promise((resolve) => setTimeout(resolve, 700));
+    }
+  }
+  return last;
+}
+
 export async function estimateFoodFromText(args: { userId: string; query: string }): Promise<AiFoodResult> {
   const parts = [{ text: textPrompt(args.query) }];
   const complex = isComplexQuery(args.query);
@@ -321,11 +349,11 @@ export async function estimateFoodFromText(args: { userId: string; query: string
       if (fast.ok) {
         console.warn(`[ai-food] heikko pika-arvio "${args.query}" → uusinta ajattelulla`);
       }
-      result = await runGeminiEstimate(args.userId, parts, { timeoutMs: GEMINI_TEXT_THINKING_TIMEOUT_MS });
+      result = await estimateWithModelFallback(args.userId, parts, { timeoutMs: GEMINI_TEXT_THINKING_TIMEOUT_MS });
     }
   } else {
-    // Vaikea syöte → ajatellaan heti.
-    result = await runGeminiEstimate(args.userId, parts, { timeoutMs: GEMINI_TEXT_THINKING_TIMEOUT_MS });
+    // Vaikea syöte → ajatellaan heti (503-sietoinen: ensisijainen → varamalli → ensisijainen).
+    result = await estimateWithModelFallback(args.userId, parts, { timeoutMs: GEMINI_TEXT_THINKING_TIMEOUT_MS });
   }
 
   // 2) Yksittäistuote, jolle Gemini epäonnistui/antoi heikon arvion → Open Food Facts -nimihaku.
