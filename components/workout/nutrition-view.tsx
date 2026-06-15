@@ -1,6 +1,6 @@
 "use client";
 
-import { Check, ChevronRight, Loader2, Plus, Repeat2, Search, Sparkles, Trash2 } from "lucide-react";
+import { BookOpen, Check, ChevronRight, Loader2, Plus, Repeat2, Search, Sparkles, Trash2 } from "lucide-react";
 import { useMemo, useRef, useState } from "react";
 
 import { Button } from "@/components/ui/button";
@@ -128,6 +128,8 @@ export function NutritionView({
   const [swapTarget, setSwapTarget] = useState<{ entryId: string; mealTag: MealTag; currentRecipeId: string } | null>(null);
   const [addTag, setAddTag] = useState<MealTag | null>(null);
   const [addFoodOpen, setAddFoodOpen] = useState(false);
+  // Yksi "Lisää ateriaan" -sisäänmeno → valikko (AI:lla / Reseptit).
+  const [addMenuOpen, setAddMenuOpen] = useState(false);
   const [editFoodEntry, setEditFoodEntry] = useState<DayMealPlanEntry | null>(null);
   // Ravinto-välilehden "+ Oma resepti" nostetaan yläpalkkiin (ei Tänään-dayOnly-tilassa).
   useHeaderAction(
@@ -401,13 +403,9 @@ export function NutritionView({
                           {materializeMessage}
                         </p>
                       ) : null}
-                      <Button type="button" variant="secondary" className="w-full gap-2" onClick={() => setAddTag("breakfast")}>
+                      <Button type="button" variant="secondary" className="w-full gap-2" onClick={() => setAddMenuOpen(true)}>
                         <Plus className="size-4" aria-hidden="true" />
-                        Lisää resepti
-                      </Button>
-                      <Button type="button" variant="secondary" className="w-full gap-2" onClick={() => setAddFoodOpen(true)}>
-                        <Sparkles className="size-4" aria-hidden="true" />
-                        Lisää AI:lla
+                        Lisää ateriaan
                       </Button>
                     </div>
                   ) : null}
@@ -417,13 +415,9 @@ export function NutritionView({
                   <p className="text-sm text-[var(--text-subtle)]">Ei vielä aterioita tälle päivälle.</p>
                   {!readOnly ? (
                     <div className="mt-4 grid gap-2">
-                      <Button type="button" variant="secondary" className="w-full gap-2" onClick={() => setAddTag("breakfast")}>
+                      <Button type="button" variant="secondary" className="w-full gap-2" onClick={() => setAddMenuOpen(true)}>
                         <Plus className="size-4" aria-hidden="true" />
-                        Lisää resepti
-                      </Button>
-                      <Button type="button" variant="secondary" className="w-full gap-2" onClick={() => setAddFoodOpen(true)}>
-                        <Sparkles className="size-4" aria-hidden="true" />
-                        Lisää AI:lla
+                        Lisää ateriaan
                       </Button>
                     </div>
                   ) : null}
@@ -584,13 +578,9 @@ export function NutritionView({
               </div>
               {!readOnly ? (
                 <div className="mt-4 grid gap-2">
-                  <Button type="button" variant="secondary" className="w-full gap-2" onClick={() => setAddTag("breakfast")}>
+                  <Button type="button" variant="secondary" className="w-full gap-2" onClick={() => setAddMenuOpen(true)}>
                     <Plus className="size-4" aria-hidden="true" />
-                    Lisää resepti
-                  </Button>
-                  <Button type="button" variant="secondary" className="w-full gap-2" onClick={() => setAddFoodOpen(true)}>
-                    <Sparkles className="size-4" aria-hidden="true" />
-                    Lisää AI:lla
+                    Lisää ateriaan
                   </Button>
                 </div>
               ) : null}
@@ -715,6 +705,36 @@ export function NutritionView({
             await swapDayMeal(entryId, recipeId);
           }}
         />
+      ) : null}
+
+      {addMenuOpen ? (
+        <Sheet ariaLabel="Lisää ateriaan" onClose={() => setAddMenuOpen(false)}>
+          <h2 className="font-[family-name:var(--font-display)] text-lg font-bold text-[var(--text)]">Lisää ateriaan</h2>
+          <div className="mt-3 grid gap-2">
+            <button
+              type="button"
+              className="flex items-center gap-3 rounded-xl border border-[var(--border)] bg-[var(--surface-2)] px-4 py-3 text-left transition hover:border-[var(--border-strong)]"
+              onClick={() => {
+                setAddMenuOpen(false);
+                setAddFoodOpen(true);
+              }}
+            >
+              <Sparkles className="size-5 shrink-0 text-[var(--accent)]" aria-hidden="true" />
+              <span className="text-sm font-semibold text-[var(--text)]">AI:lla</span>
+            </button>
+            <button
+              type="button"
+              className="flex items-center gap-3 rounded-xl border border-[var(--border)] bg-[var(--surface-2)] px-4 py-3 text-left transition hover:border-[var(--border-strong)]"
+              onClick={() => {
+                setAddMenuOpen(false);
+                setAddTag("breakfast");
+              }}
+            >
+              <BookOpen className="size-5 shrink-0 text-[var(--text-muted)]" aria-hidden="true" />
+              <span className="text-sm font-semibold text-[var(--text)]">Reseptit</span>
+            </button>
+          </div>
+        </Sheet>
       ) : null}
 
       {addTag ? (

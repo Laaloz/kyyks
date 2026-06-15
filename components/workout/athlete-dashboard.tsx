@@ -45,6 +45,7 @@ import { DragNumber } from "@/components/ui/drag-number";
 import { Segmented } from "@/components/ui/segmented";
 import { useHeaderAction } from "@/components/workout/header-action";
 import { ExerciseProgressView } from "@/components/workout/exercise-progress-view";
+import { MetricTrendChart } from "@/components/workout/metric-trend-chart";
 import { NutritionView } from "@/components/workout/nutrition-view";
 import { estimateStrengthCalories, getMeasurementsForUser, getWeightAtMoment } from "@/lib/body-metrics";
 import { calculateSessionDurationSeconds, getSessionProgress } from "@/lib/domain";
@@ -74,49 +75,6 @@ type WorkoutOrderMetadata = {
 // Keho-näkymän kevyt trendi (prototyyppi): siisti viiva + korostettu päätepiste.
 // SVG venyy täysleveäksi (preserveAspectRatio none + non-scaling-stroke); päätepiste
 // HTML-pisteenä jottei se vääristy venytyksessä.
-function MeasurementSparkline({ points }: { points: Array<{ date: string; value: number }> }) {
-  if (points.length < 2) {
-    return (
-      <p className="py-8 text-center text-sm text-[var(--text-subtle)]">
-        Lisää mittauksia, niin kehitys piirtyy tähän.
-      </p>
-    );
-  }
-
-  const values = points.map((point) => point.value);
-  const min = Math.min(...values);
-  const max = Math.max(...values);
-  const range = max - min || 1;
-  const px = (index: number) => (index / (points.length - 1)) * 100;
-  const py = (value: number) => 10 + (1 - (value - min) / range) * 80;
-  const path = points
-    .map((point, index) => `${index === 0 ? "M" : "L"}${px(index).toFixed(2)} ${py(point.value).toFixed(2)}`)
-    .join(" ");
-  const lastLeft = px(points.length - 1);
-  const lastTop = py(points[points.length - 1]!.value);
-
-  return (
-    <div className="relative h-24 w-full">
-      <svg viewBox="0 0 100 100" className="absolute inset-0 h-full w-full" preserveAspectRatio="none" aria-hidden="true">
-        <path
-          d={path}
-          fill="none"
-          stroke="var(--accent)"
-          strokeWidth={2.5}
-          strokeLinecap="round"
-          strokeLinejoin="round"
-          vectorEffect="non-scaling-stroke"
-        />
-      </svg>
-      <span
-        className="absolute size-3 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-[var(--surface)] bg-[var(--accent)]"
-        style={{ left: `${lastLeft}%`, top: `${lastTop}%` }}
-        aria-hidden="true"
-      />
-    </div>
-  );
-}
-
 function CoachInstructionDialog({
   exerciseName,
   instruction,
@@ -281,17 +239,16 @@ function ExtraActivityDialog({
       onClose={onClose}
       ariaLabelledby="extra-activity-title"
       ariaDescribedby="extra-activity-description"
-      className="overflow-x-hidden"
     >
-      <div className="min-h-0 flex-1 overflow-y-auto">
-        <h3 id="extra-activity-title" className="font-[family-name:var(--font-display)] text-2xl font-bold text-[var(--text)]">
-          Extra-treeni
-        </h3>
-        <p id="extra-activity-description" className="mt-1 text-sm text-[var(--text-muted)]">
-          Cardio ja muu liikunta ohjelman rinnalle — näkyy historiassa.
-        </p>
+      <h3 id="extra-activity-title" className="font-[family-name:var(--font-display)] text-2xl font-bold text-[var(--text)]">
+        Extra-treeni
+      </h3>
+      <p id="extra-activity-description" className="mt-1 text-sm text-[var(--text-muted)]">
+        Cardio ja muu liikunta ohjelman rinnalle — näkyy historiassa.
+      </p>
 
-        <div className="mt-5 flex flex-wrap gap-3" role="group" aria-label="Extra-treenin laji">
+      <div className="mt-5 min-h-0 flex-1 overflow-y-auto overflow-x-hidden">
+        <div className="flex flex-wrap gap-3" role="group" aria-label="Extra-treenin laji">
           {activityTypes.map((type) => {
             const active = activityType === type;
             return (
@@ -398,12 +355,12 @@ function ExtraActivityDialog({
             className="rounded-xl bg-[var(--surface-2)] px-3 py-2.5 text-sm text-[var(--text)] outline-none placeholder:text-[var(--text-subtle)]"
           />
         </label>
+      </div>
 
-        <div className="mt-8">
-          <Button type="button" className="w-full" loading={saving} disabled={saving} onClick={onSave}>
-            Tallenna
-          </Button>
-        </div>
+      <div className="mt-5 shrink-0">
+        <Button type="button" className="w-full" loading={saving} disabled={saving} onClick={onSave}>
+          Tallenna
+        </Button>
       </div>
     </Sheet>
   );
@@ -1544,7 +1501,7 @@ export function AthleteDashboard({
   }, [historyFocusWorkoutId]);
 
   return (
-    <div className="grid min-w-0 max-w-full gap-6 overflow-x-clip [contain:inline-size]">
+    <div className="grid grid-cols-1 min-w-0 max-w-full gap-6 overflow-x-clip [contain:inline-size]">
       {isDebugEnabled && currentUser ? (
         <Card className="border-[var(--danger)] bg-[var(--surface)]">
           <p className="text-xs font-semibold tracking-[0.04em] text-[var(--danger)]">Debug</p>
@@ -1775,9 +1732,16 @@ export function AthleteDashboard({
                 </button>
               ))}
             </div>
-            <div className="mt-3">
-              <MeasurementSparkline points={bodyMetricPoints} />
-            </div>
+            <MetricTrendChart
+              points={bodyMetricPoints}
+              ariaLabel={`${bodyMetric === "weight" ? "Paino" : "Vyötärö"} kehitystrendi`}
+              emptyMessage="Lisää mittauksia, niin kehitys piirtyy tähän."
+              helperText="Paina pistettä nähdäksesi yksittäisen mittauksen."
+              compactHelperText="Paina pistettä nähdäksesi yksittäisen mittauksen."
+              valueLabel={bodyMetric === "weight" ? "Paino" : "Vyötärö"}
+              unit={bodyMetricUnit}
+              decimals={1}
+            />
           </Card>
 
           <div className="grid grid-cols-2 gap-1 rounded-xl bg-[var(--surface-2)] p-1">
@@ -2288,7 +2252,7 @@ export function AthleteDashboard({
                     })?.id;
                     return (
                       <div key={program.id} className="mb-4">
-                        <div className="flex items-baseline justify-between px-1">
+                        <div className="flex flex-wrap items-baseline justify-between px-1">
                           <p className="font-[family-name:var(--font-display)] text-xs font-semibold uppercase tracking-[0.05em] text-[var(--text-subtle)]">
                             {program.title}
                             {program.weekCount ? ` · ${program.weekCount} vk` : ""}
