@@ -112,9 +112,10 @@ describe("exercise progress helpers", () => {
 
     const result = buildExerciseProgressCatalog(state, "athlete_1");
 
-    expect(result.exercises.map((item) => item.exerciseName)).toEqual(["Takakyykky", "Penkkipunnerrus"]);
-    expect(result.exercises[0]?.hasWeightedData).toBe(false);
-    expect(result.exercises[1]?.hasWeightedData).toBe(true);
+    // Aakkosjärjestys: Penkkipunnerrus (P) ennen Takakyykkyä (T) viimeisestä treenistä riippumatta.
+    expect(result.exercises.map((item) => item.exerciseName)).toEqual(["Penkkipunnerrus", "Takakyykky"]);
+    expect(result.exercises[0]?.hasWeightedData).toBe(true);
+    expect(result.exercises[1]?.hasWeightedData).toBe(false);
   });
 
   it("keeps the highest e1RM from each workout as the trend point", () => {
@@ -225,11 +226,11 @@ describe("exercise progress helpers", () => {
     const result = buildExerciseProgressCatalog(state, "athlete_1");
     const summary = result.summaries.get("id:exercise_bench");
 
-    // Toistoennätykset: paras paino per toistomäärä, toistot nousevasti.
+    // Toistoennätykset: paras paino per toistomäärä, toistot laskevasti (eniten toistoja ensin).
     expect(summary?.repRecords).toEqual([
-      { reps: 5, weight: 110, completedAt: "2026-04-14T09:00:00.000Z" },
-      { reps: 8, weight: 100, completedAt: "2026-04-10T09:00:00.000Z" },
       { reps: 10, weight: 100, completedAt: "2026-04-14T09:00:00.000Z" },
+      { reps: 8, weight: 100, completedAt: "2026-04-10T09:00:00.000Z" },
+      { reps: 5, weight: 110, completedAt: "2026-04-14T09:00:00.000Z" },
     ]);
     // Painoennätykset: eniten toistoja per paino, paino laskevasti.
     expect(summary?.weightRecords).toEqual([
