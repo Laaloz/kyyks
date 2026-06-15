@@ -15,6 +15,29 @@ const MEAL_TAGS: MealTag[] = ["breakfast", "lunch", "snack", "dinner", "evening_
 
 type ActionOutcome = { ok: boolean; message?: string };
 
+/** Ateriapaikan valitsin (chipit). Jaettu lisäys- ja muokkausnäkymän kesken. */
+function MealTagChips({ value, onChange }: { value: MealTag; onChange: (tag: MealTag) => void }) {
+  return (
+    <div className="flex flex-col gap-1.5">
+      <span className="text-xs font-semibold text-[var(--text-subtle)]">Ateriapaikka</span>
+      <div className="flex flex-wrap gap-1.5">
+        {MEAL_TAGS.map((tag) => (
+          <button
+            key={tag}
+            type="button"
+            className={`rounded-full px-3 py-1 text-xs font-semibold transition ${
+              value === tag ? "bg-[var(--text)] text-[var(--background)]" : "bg-[var(--surface-2)] text-[var(--text-muted)]"
+            }`}
+            onClick={() => onChange(tag)}
+          >
+            {mealTagLabel(tag)}
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 function round(value: number): number {
   return Math.round(value);
 }
@@ -27,6 +50,7 @@ export function AddFoodSheet({
   userId,
   catalog,
   aiEnabled = true,
+  defaultMealTag,
   onClose,
   onLogOwnFood,
   onQuickAdd,
@@ -35,16 +59,19 @@ export function AddFoodSheet({
   userId: string;
   catalog: AppState["ingredientsCatalog"];
   aiEnabled?: boolean;
+  // Kellonajasta päätelty oletus; käyttäjä voi vaihtaa ateriapaikan ennen lisäystä.
+  defaultMealTag: MealTag;
   onClose: () => void;
-  onLogOwnFood: (ingredientId: string, grams: number) => Promise<ActionOutcome>;
-  onQuickAdd: (name: string) => Promise<ActionOutcome>;
-  onQuickAddPhoto: (input: { imageBase64: string; mimeType: string }) => Promise<ActionOutcome>;
+  onLogOwnFood: (ingredientId: string, grams: number, mealTag: MealTag) => Promise<ActionOutcome>;
+  onQuickAdd: (name: string, mealTag: MealTag) => Promise<ActionOutcome>;
+  onQuickAddPhoto: (input: { imageBase64: string; mimeType: string; mealTag: MealTag }) => Promise<ActionOutcome>;
 }) {
   const [query, setQuery] = useState("");
   const [analyzing, setAnalyzing] = useState(false);
   const [pending, setPending] = useState(false);
   const [error, setError] = useState("");
   const [cameraOpen, setCameraOpen] = useState(false);
+  const [mealTag, setMealTag] = useState<MealTag>(defaultMealTag);
 
   // Suodata omat tuotteet koko katalogista vain kerran (ei joka näppäimenpainalluksella) —
   // koko katalogin läpikäynti per painallus aiheutti turhaa muisti-/CPU-painetta mobiilissa.
@@ -66,7 +93,7 @@ export function AddFoodSheet({
     setPending(true);
     setError("");
     try {
-      const result = await onQuickAdd(name);
+      const result = await onQuickAdd(name, mealTag);
       if (result.ok) {
         onClose();
       } else {
@@ -78,7 +105,7 @@ export function AddFoodSheet({
   };
 
   const analyzeAndAdd = async (base64: string, mimeType: string) => {
-    const result = await onQuickAddPhoto({ imageBase64: base64, mimeType });
+    const result = await onQuickAddPhoto({ imageBase64: base64, mimeType, mealTag });
     if (result.ok) {
       onClose();
     } else {
@@ -165,6 +192,10 @@ export function AddFoodSheet({
         ) : null}
       </form>
 
+      <div className="mt-3">
+        <MealTagChips value={mealTag} onChange={setMealTag} />
+      </div>
+
       {analyzing ? (
         <p className="mt-3 text-sm text-[var(--text-subtle)]" role="status">
           Analysoidaan kuvaa…
@@ -177,7 +208,7 @@ export function AddFoodSheet({
             foods={ownFoods}
             onPick={async (ingredientId, grams) => {
               setError("");
-              const result = await onLogOwnFood(ingredientId, grams);
+              const result = await onLogOwnFood(ingredientId, grams, mealTag);
               if (result.ok) {
                 onClose();
               } else {
@@ -500,26 +531,7 @@ function FoodEntryForm({
       <FoodFields state={fields} setState={setFields} />
 
       {initialMealTag !== undefined ? (
-        <div className="flex flex-col gap-1.5">
-          <span className="text-xs font-semibold text-[var(--text-subtle)]">Ateriapaikka</span>
-          <div className="flex flex-wrap gap-1.5">
-            {MEAL_TAGS.map((tag) => {
-              const active = (mealTag ?? initialMealTag) === tag;
-              return (
-                <button
-                  key={tag}
-                  type="button"
-                  className={`rounded-full px-3 py-1 text-xs font-semibold transition ${
-                    active ? "bg-[var(--text)] text-[var(--background)]" : "bg-[var(--surface-2)] text-[var(--text-muted)]"
-                  }`}
-                  onClick={() => setMealTag(tag)}
-                >
-                  {mealTagLabel(tag)}
-                </button>
-              );
-            })}
-          </div>
-        </div>
+        <MealTagChips value={mealTag ?? initialMealTag} onChange={setMealTag} />
       ) : null}
 
       {fieldError ? (

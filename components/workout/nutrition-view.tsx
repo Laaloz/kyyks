@@ -16,6 +16,7 @@ import {
   adHocEntryMacros,
   buildPersonalNutritionGoalComparison,
   getActiveMealPlanForAthlete,
+  getMealSlotGroupForTag,
   getMissingMacroProfileFields,
   getVisibleRecipesForUser,
   inferMealTagForTime,
@@ -795,7 +796,9 @@ export function NutritionView({
           mealTag={addTag}
           onChangeMealTag={setAddTag}
           recipes={visibleRecipeSource
-            .filter((recipe) => recipe.mealTag === addTag)
+            // Vaihtoryhmä (lounas↔illallinen, aamupala↔iltapala) tarkan tägin sijaan: ristiin
+            // syötävät ateriat näkyvät toistensa kohdalla, kuten appin oma ateriamalli olettaa.
+            .filter((recipe) => getMealSlotGroupForTag(addTag).tags.includes(recipe.mealTag))
             .sort((left, right) => left.name.localeCompare(right.name, "fi"))}
           catalog={catalog}
           onClose={() => setAddTag(null)}
@@ -813,20 +816,18 @@ export function NutritionView({
           userId={user.id}
           catalog={catalog}
           aiEnabled={isSupabaseConfigured}
+          // Ateriapaikan oletus kellonajasta; käyttäjä voi vaihtaa sen valitsimesta ennen lisäystä.
+          defaultMealTag={inferMealTagForTime(new Date())}
           onClose={() => setAddFoodOpen(false)}
-          onLogOwnFood={async (ingredientId, grams) => {
-            // Ateriapaikka päätellään kellonajasta (ei valitsinta lisäysnäkymässä).
-            const mealTag = inferMealTagForTime(new Date());
+          onLogOwnFood={async (ingredientId, grams, mealTag) => {
             const position = dayRows.filter((entry) => entry.mealTag === mealTag).length;
             return addDayMeal({ planDate: todayKey, mealTag, position, ingredientId, grams });
           }}
-          onQuickAdd={async (name) => {
-            const mealTag = inferMealTagForTime(new Date());
+          onQuickAdd={async (name, mealTag) => {
             const position = dayRows.filter((entry) => entry.mealTag === mealTag).length;
             return quickAddAiFood({ planDate: todayKey, mealTag, position, name });
           }}
-          onQuickAddPhoto={async ({ imageBase64, mimeType }) => {
-            const mealTag = inferMealTagForTime(new Date());
+          onQuickAddPhoto={async ({ imageBase64, mimeType, mealTag }) => {
             const position = dayRows.filter((entry) => entry.mealTag === mealTag).length;
             return quickAddAiFood({ planDate: todayKey, mealTag, position, name: "Kuva-arvio", imageBase64, mimeType });
           }}
