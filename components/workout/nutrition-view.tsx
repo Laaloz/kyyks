@@ -129,7 +129,7 @@ export function NutritionView({
   const [swapTarget, setSwapTarget] = useState<{ entryId: string; mealTag: MealTag; currentRecipeId: string } | null>(null);
   const [addTag, setAddTag] = useState<MealTag | null>(null);
   const [addFoodOpen, setAddFoodOpen] = useState(false);
-  // Yksi "Lisää ateriaan" -sisäänmeno → valikko (AI:lla / Reseptit).
+  // Yksi "Lisää ateria" -sisäänmeno → valikko (AI:lla / Reseptit).
   const [addMenuOpen, setAddMenuOpen] = useState(false);
   const [editFoodEntry, setEditFoodEntry] = useState<DayMealPlanEntry | null>(null);
   // Ravinto-välilehden "+ Oma resepti" nostetaan yläpalkkiin.
@@ -438,7 +438,7 @@ export function NutritionView({
                       ) : null}
                       <Button type="button" variant="secondary" className="w-full gap-2" onClick={() => setAddMenuOpen(true)}>
                         <Plus className="size-4" aria-hidden="true" />
-                        Lisää ateriaan
+                        Lisää ateria
                       </Button>
                     </div>
                   ) : null}
@@ -450,7 +450,7 @@ export function NutritionView({
                     <div className="mt-4 grid gap-2">
                       <Button type="button" variant="secondary" className="w-full gap-2" onClick={() => setAddMenuOpen(true)}>
                         <Plus className="size-4" aria-hidden="true" />
-                        Lisää ateriaan
+                        Lisää ateria
                       </Button>
                     </div>
                   ) : null}
@@ -613,7 +613,7 @@ export function NutritionView({
                 <div className="mt-4 grid gap-2">
                   <Button type="button" variant="secondary" className="w-full gap-2" onClick={() => setAddMenuOpen(true)}>
                     <Plus className="size-4" aria-hidden="true" />
-                    Lisää ateriaan
+                    Lisää ateria
                   </Button>
                 </div>
               ) : null}
@@ -751,8 +751,8 @@ export function NutritionView({
       ) : null}
 
       {addMenuOpen ? (
-        <Sheet ariaLabel="Lisää ateriaan" onClose={() => setAddMenuOpen(false)}>
-          <h2 className="font-[family-name:var(--font-display)] text-lg font-bold text-[var(--text)]">Lisää ateriaan</h2>
+        <Sheet ariaLabel="Lisää ateria" onClose={() => setAddMenuOpen(false)}>
+          <h2 className="font-[family-name:var(--font-display)] text-lg font-bold text-[var(--text)]">Lisää ateria</h2>
           <div className="mt-3 grid gap-2">
             <button
               type="button"
