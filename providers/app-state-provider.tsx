@@ -4194,6 +4194,104 @@ function findResolvedUserIdInSnapshot(
     void flushWorkoutMutationQueue(scheduledWorkoutId);
   }, [ensureWorkoutMutationQueue, flushWorkoutMutationQueue]);
 
+  // Aloituksen jälkeen optimistinen workout_-id vaihtuu palvelimen id:ksi. Tila
+  // (workout/session/setLogs) rekeytetään, mutta sarjojen kirjaustila on omissa
+  // refeissään scheduledWorkoutId-avaimella. Jos käyttäjä ehtii kirjata sarjoja
+  // ennen vaihtoa, draftit/jono/vahvistusleimat jäisivät vanhan avaimen alle:
+  // flush osuisi väärään URL:iin (404) eikä paikallisia arvoja suojattaisi
+  // taustasnapshotilta → ruksit ja arvot katoaisivat. Siirretään ne uudelle
+  // avaimelle ja ajetaan tuore flush oikealla id:llä.
+  const migrateWorkoutSyncRefs = useCallback(
+    (fromId: string, toId: string) => {
+      if (!fromId || !toId || fromId === toId) {
+        return;
+      }
+
+      const draftState = workoutSetDraftsRef.current.get(fromId);
+      if (draftState) {
+        workoutSetDraftsRef.current.delete(fromId);
+        const draftWakeTimeout = workoutSetDraftWakeTimeoutRef.current.get(fromId);
+        if (draftWakeTimeout) {
+          window.clearTimeout(draftWakeTimeout);
+          workoutSetDraftWakeTimeoutRef.current.delete(fromId);
+        }
+
+        const targetDraft = workoutSetDraftsRef.current.get(toId);
+        const mergedPatches = new Map(draftState.patches);
+        draftState.inFlightPatches?.forEach((patch, key) => {
+          if (!mergedPatches.has(key)) {
+            mergedPatches.set(key, patch);
+          }
+        });
+        targetDraft?.patches.forEach((patch, key) => {
+          mergedPatches.set(key, patch);
+        });
+
+        workoutSetDraftsRef.current.set(toId, {
+          scheduledWorkoutId: toId,
+          patches: mergedPatches,
+          syncing: false,
+          inFlightPatches: undefined,
+          debounceUntil: undefined,
+          retryCount: 0,
+          confirmedSessionUpdatedAt:
+            targetDraft?.confirmedSessionUpdatedAt ?? draftState.confirmedSessionUpdatedAt,
+        });
+
+        if (mergedPatches.size > 0) {
+          scheduleWorkoutSetDraftSync(toId);
+        }
+      }
+
+      const queue = workoutMutationQueueRef.current.get(fromId);
+      if (queue) {
+        workoutMutationQueueRef.current.delete(fromId);
+        const queueWakeTimeout = workoutMutationWakeTimeoutRef.current.get(fromId);
+        if (queueWakeTimeout) {
+          window.clearTimeout(queueWakeTimeout);
+          workoutMutationWakeTimeoutRef.current.delete(fromId);
+        }
+
+        const targetQueue = workoutMutationQueueRef.current.get(toId);
+        if (targetQueue) {
+          targetQueue.pending.push(...queue.pending);
+        } else {
+          workoutMutationQueueRef.current.set(toId, {
+            ...queue,
+            scheduledWorkoutId: toId,
+            inFlight: false,
+          });
+        }
+
+        if ((workoutMutationQueueRef.current.get(toId)?.pending.length ?? 0) > 0) {
+          void flushWorkoutMutationQueue(toId);
+        }
+      }
+
+      const moveLeimaString = (ref: { current: Map<string, string> }) => {
+        const value = ref.current.get(fromId);
+        if (value !== undefined) {
+          ref.current.delete(fromId);
+          if (!ref.current.has(toId)) {
+            ref.current.set(toId, value);
+          }
+        }
+      };
+      moveLeimaString(workoutConfirmedSessionUpdatedAtRef);
+      moveLeimaString(recentlyConfirmedSetLogsRef);
+      moveLeimaString(recentlyConfirmedWorkoutNotesRef);
+
+      const confirmedNote = workoutConfirmedNoteUpdatedAtRef.current.get(fromId);
+      if (confirmedNote !== undefined) {
+        workoutConfirmedNoteUpdatedAtRef.current.delete(fromId);
+        if (!workoutConfirmedNoteUpdatedAtRef.current.has(toId)) {
+          workoutConfirmedNoteUpdatedAtRef.current.set(toId, confirmedNote);
+        }
+      }
+    },
+    [scheduleWorkoutSetDraftSync, flushWorkoutMutationQueue],
+  );
+
   useEffect(() => {
     if (!isHydrated || !supabase || !authenticatedUser || !canActAsCoach(authenticatedUser.role)) {
       return;
@@ -6311,6 +6409,7 @@ function findResolvedUserIdInSnapshot(
               recentlyStartedWorkoutsRef.current.set(scheduledWorkoutId, startedAt);
               setState((current) => rekeyOptimisticWorkoutArtifacts(current, optimisticWorkoutId, scheduledWorkoutId));
               setState((current) => mergeStartedWorkoutPayload(current, payload?.scheduledWorkout, payload?.session));
+              migrateWorkoutSyncRefs(optimisticWorkoutId, scheduledWorkoutId);
             } else {
               if (scheduledWorkoutId) {
                 recentlyStartedWorkoutsRef.current.set(scheduledWorkoutId, Date.now());
