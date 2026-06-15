@@ -2076,6 +2076,20 @@ export function AthleteDashboard({
                   setIsCompletingWorkout(true);
                   setPendingWorkoutTransition({ type: "complete" });
                   console.info("[workout-ui] complete-click", { scheduledWorkoutId: completedWorkoutId });
+
+                  // Navigoi Historiaan heti, ennen palvelinkuittausta — muuten
+                  // completeWorkout:n optimistinen status="completed" ehtii
+                  // renderöidä panelin vanhan completed-näkymän odotuksen ajaksi
+                  // (välähdys). Sama kuvio kuin onDelete/onCancel; epäonnistuessa
+                  // palataan treeninäkymään.
+                  setDismissedActiveWorkoutId(null);
+                  setSelectedWorkoutId(null);
+                  setHistoryFocusWorkoutId(completedWorkoutId);
+                  setCorrectionModeWorkoutId(null);
+                  setAthleteLogTab("history");
+                  setAthleteLogReturnTab("history");
+                  setAthleteLogMode("overview");
+
                   try {
                     const result = await completeWorkout(completedWorkoutId);
                     console.info("[workout-ui] complete-result", {
@@ -2084,24 +2098,23 @@ export function AthleteDashboard({
                       message: result.ok ? undefined : result.message,
                     });
                     if (result.ok) {
-                      setDismissedActiveWorkoutId(null);
                       setWorkoutMessage(
                         completionPercent < 100
                           ? `Treeni merkittiin valmiiksi (${completionPercent}% toteutui). Kirjaa muistiinpanoihin, miksi treeni jäi osittaiseksi.`
                           : "Treeni merkittiin valmiiksi.",
                       );
                       notify({ tone: "success", message: "Treeni merkittiin valmiiksi." });
-                      setSelectedWorkoutId(null);
-                      setHistoryFocusWorkoutId(completedWorkoutId);
-                      setCorrectionModeWorkoutId(null);
-                      setAthleteLogTab("history");
-                      setAthleteLogReturnTab("history");
-                      setAthleteLogMode("overview");
                       window.setTimeout(() => setPendingWorkoutTransition(null), 900);
                       return;
                     }
 
+                    // Lopetus epäonnistui: palaa kesken olevaan treeninäkymään.
                     setPendingWorkoutTransition(null);
+                    setHistoryFocusWorkoutId(null);
+                    setSelectedWorkoutId(completedWorkoutId);
+                    setAthleteLogTab("training");
+                    setAthleteLogReturnTab("training");
+                    setAthleteLogMode("workout");
                     setWorkoutMessage(result.message);
                     notify({ tone: "danger", message: result.message });
                   } finally {
