@@ -161,6 +161,15 @@ function normalizeComparableEmail(email: string | null | undefined) {
   return email?.trim().toLowerCase() ?? "";
 }
 
+// Optimistinen workout-id (esim. "workout_ab12cd34") on paikallinen tunnus, ei
+// vielä palvelimen UUID. Sitä ei voi lähettää /api/workouts/{id}/... -reiteille
+// ennen kuin migrateWorkoutSyncRefs on vaihtanut avaimen oikeaan id:hen — muuten
+// Postgres hylkää castin ("invalid input syntax for type uuid"). Sync-jonot
+// jätetään tällöin odottamaan migraatiota, joka ajaa flushin oikealla id:llä.
+function isOptimisticWorkoutId(id: string) {
+  return id.startsWith("workout_");
+}
+
 function warnIfOptimisticServerIdLeak(kind: "workout" | "program" | "template", id: string | undefined) {
   if (process.env.NODE_ENV === "production" || !id) {
     return;
@@ -3642,6 +3651,12 @@ function findResolvedUserIdInSnapshot(
     // The server upserts by set id, so a duplicate send after resume is safe.
     const flushDraftsWithKeepalive = () => {
       workoutSetDraftsRef.current.forEach((draftState, scheduledWorkoutId) => {
+        // Optimistisia id:itä ei voi lähettää palvelimelle; migraation jälkeen
+        // patchit siirtyvät oikealle avaimelle ja synkataan normaalisti.
+        if (isOptimisticWorkoutId(scheduledWorkoutId)) {
+          return;
+        }
+
         const pendingPatches = new Map(draftState.inFlightPatches ?? []);
         draftState.patches.forEach((patch, key) => {
           pendingPatches.set(key, patch);
@@ -3796,6 +3811,12 @@ function findResolvedUserIdInSnapshot(
 
     const runner = (async () => {
       while (true) {
+        // Odota migraatiota oikealle id:lle; patchit säilyvät optimistisen
+        // avaimen alla ja migrateWorkoutSyncRefs ajaa flushin oikealla id:llä.
+        if (isOptimisticWorkoutId(scheduledWorkoutId)) {
+          return;
+        }
+
         const draftState = workoutSetDraftsRef.current.get(scheduledWorkoutId);
         if (!draftState || draftState.syncing || draftState.patches.size === 0) {
           if (draftState && !draftState.syncing && draftState.patches.size === 0) {
@@ -4134,6 +4155,12 @@ function findResolvedUserIdInSnapshot(
 
     const runner = (async () => {
       while (true) {
+        // Odota migraatiota oikealle id:lle; jonossa olevat mutaatiot siirtyvät
+        // migrateWorkoutSyncRefsissä oikealle avaimelle ja ajetaan siellä.
+        if (isOptimisticWorkoutId(scheduledWorkoutId)) {
+          return;
+        }
+
         const queue = workoutMutationQueueRef.current.get(scheduledWorkoutId);
         if (!queue || queue.inFlight || queue.pending.length === 0) {
           if (queue && queue.pending.length === 0) {
