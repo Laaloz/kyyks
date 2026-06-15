@@ -532,8 +532,11 @@ function FoodEntryForm({
       const result = await aiLookup(name.trim());
       if ("estimate" in result) {
         const e = result.estimate;
+        // Säilytä käyttäjän kirjoittama nimi otsikkona — AI päivittää vain makrot ja annoskoon.
+        // (Aiemmin e.name ylikirjoitti nimen, jolloin muokattu otsikko ei jäänyt voimaan.)
+        const keptName = name.trim();
         setFields({
-          name: e.name,
+          name: keptName,
           grams: String(round(e.grams)),
           kcal: String(round(e.kcalPer100)),
           protein: String(round(e.proteinPer100)),
@@ -542,7 +545,7 @@ function FoodEntryForm({
         });
         setUsedAi(true);
         // Arvio tehty tälle nimelle → painike palaa "Tallenna"-tilaan.
-        setEstimateBaselineName(e.name.trim());
+        setEstimateBaselineName(keptName);
       } else {
         setAiNote(result.error);
         // Arvio epäonnistui → älä jää "Arvioi"-umpikujaan: salli tallennus
@@ -574,7 +577,7 @@ function FoodEntryForm({
       }}
     >
       {aiPending ? (
-        <p className="text-sm text-[var(--text-subtle)]" role="status">
+        <p className="ai-shimmer-text text-sm" role="status">
           Haetaan ravintotietoja tekoälyllä…
         </p>
       ) : usedAi ? (
