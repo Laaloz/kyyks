@@ -2656,6 +2656,8 @@ interface AppStateContextValue {
       saveToMyFoods?: boolean;
       mealTag?: MealTag;
       position?: number;
+      // true = tallenna nimi heti ja laske makrot AI:lla taustalla (kortti "Arvioidaan…" -tilaan).
+      reestimate?: boolean;
     },
   ) => Promise<ActionResult>;
   updateWorkoutSet: (scheduledWorkoutId: string, logId: string, patch: WorkoutUpdateInput) => Promise<void>;
@@ -7620,30 +7622,51 @@ function findResolvedUserIdInSnapshot(
           return { ok: false, message: "Ateriaa ei löytynyt." };
         }
 
+        const reestimate = Boolean(input.reestimate);
         const updatedAt = new Date().toISOString();
+        // Optimistinen päivitys. Re-estimoinnissa makrot lasketaan AI:lla taustalla → näytä kortti
+        // "Arvioidaan…" (Aalto) -tilassa ja säilytä vanhat makrot kunnes arvio valmistuu. Muuten
+        // tallennetaan lomakkeen arvot suoraan.
         setState((previous) => ({
           ...previous,
           dayMealPlans: (previous.dayMealPlans ?? []).map((entry) =>
             entry.id === entryId
-              ? {
-                  ...entry,
-                  foodName: input.name,
-                  grams: input.grams,
-                  kcalPer100: input.kcalPer100,
-                  proteinPer100: input.proteinPer100,
-                  carbsPer100: input.carbsPer100,
-                  fatPer100: input.fatPer100,
-                  mealTag: input.mealTag ?? entry.mealTag,
-                  position: input.position ?? entry.position,
-                  aiStatus: null,
-                  updatedAt,
-                }
+              ? reestimate
+                ? {
+                    ...entry,
+                    foodName: input.name,
+                    mealTag: input.mealTag ?? entry.mealTag,
+                    position: input.position ?? entry.position,
+                    aiStatus: "pending" as const,
+                    updatedAt,
+                  }
+                : {
+                    ...entry,
+                    foodName: input.name,
+                    grams: input.grams,
+                    kcalPer100: input.kcalPer100,
+                    proteinPer100: input.proteinPer100,
+                    carbsPer100: input.carbsPer100,
+                    fatPer100: input.fatPer100,
+                    mealTag: input.mealTag ?? entry.mealTag,
+                    position: input.position ?? entry.position,
+                    aiStatus: null,
+                    updatedAt,
+                  }
               : entry,
           ),
         }));
 
         if (!supabase) {
-          if (input.saveToMyFoods) {
+          // Demo / ei taustapalvelua: ei AI:ta. Re-estimoinnissa jätä kortti muokattavaksi.
+          if (reestimate) {
+            setState((previous) => ({
+              ...previous,
+              dayMealPlans: (previous.dayMealPlans ?? []).map((entry) =>
+                entry.id === entryId ? { ...entry, aiStatus: "failed" as const } : entry,
+              ),
+            }));
+          } else if (input.saveToMyFoods) {
             void ensureOwnFood(input.name, "manual", input.kcalPer100, input.proteinPer100, input.carbsPer100, input.fatPer100);
           }
           return { ok: true };
@@ -7651,6 +7674,96 @@ function findResolvedUserIdInSnapshot(
 
         if (!SUPABASE_UUID_PATTERN.test(entryId)) {
           return { ok: false, message: "Odota hetki, tallennus on vielä kesken." };
+        }
+
+        if (reestimate) {
+          // Tausta: tallenna nimi + pending heti (action palaa → sheet sulkeutuu, kortti näkyy
+          // "Arvioidaan…" kunnes AI valmistuu), aja AI nimellä ja täydennä makrot. Säilytä
+          // käyttäjän kirjoittama nimi — AI päivittää vain makrot.
+          pendingDayMealMutationsRef.current.set(entryId, { updatedAt });
+          void (async () => {
+            await fetch(`/api/day-meal-plans/${encodeURIComponent(entryId)}`, {
+              method: "PATCH",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                foodName: input.name,
+                mealTag: input.mealTag,
+                position: input.position,
+                aiStatus: "pending",
+              }),
+            }).catch(() => null);
+
+            const aiResponse = await fetch("/api/nutrition/ai-estimate", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ query: input.name }),
+            }).catch(() => null);
+            const aiPayload = (aiResponse ? await aiResponse.json().catch(() => null) : null) as
+              | {
+                  estimate?: {
+                    name: string;
+                    grams: number;
+                    kcalPer100: number;
+                    proteinPer100: number;
+                    carbsPer100: number;
+                    fatPer100: number;
+                  };
+                  message?: string;
+                }
+              | null;
+
+            const settledAt = new Date().toISOString();
+            if (!aiResponse?.ok || !aiPayload?.estimate) {
+              pendingDayMealMutationsRef.current.set(entryId, { updatedAt: settledAt });
+              await fetch(`/api/day-meal-plans/${encodeURIComponent(entryId)}`, {
+                method: "PATCH",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ aiStatus: "failed" }),
+              }).catch(() => null);
+              setState((previous) => ({
+                ...previous,
+                dayMealPlans: (previous.dayMealPlans ?? []).map((entry) =>
+                  entry.id === entryId ? { ...entry, aiStatus: "failed" as const, updatedAt: settledAt } : entry,
+                ),
+              }));
+              scheduleDayMealRefresh();
+              return;
+            }
+
+            const estimate = aiPayload.estimate;
+            pendingDayMealMutationsRef.current.set(entryId, { updatedAt: settledAt });
+            await fetch(`/api/day-meal-plans/${encodeURIComponent(entryId)}`, {
+              method: "PATCH",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                grams: estimate.grams,
+                kcalPer100: estimate.kcalPer100,
+                proteinPer100: estimate.proteinPer100,
+                carbsPer100: estimate.carbsPer100,
+                fatPer100: estimate.fatPer100,
+                aiStatus: null,
+              }),
+            }).catch(() => null);
+            setState((previous) => ({
+              ...previous,
+              dayMealPlans: (previous.dayMealPlans ?? []).map((entry) =>
+                entry.id === entryId
+                  ? {
+                      ...entry,
+                      grams: estimate.grams,
+                      kcalPer100: estimate.kcalPer100,
+                      proteinPer100: estimate.proteinPer100,
+                      carbsPer100: estimate.carbsPer100,
+                      fatPer100: estimate.fatPer100,
+                      aiStatus: null,
+                      updatedAt: settledAt,
+                    }
+                  : entry,
+              ),
+            }));
+            scheduleDayMealRefresh();
+          })();
+          return { ok: true };
         }
 
         pendingDayMealMutationsRef.current.set(entryId, { updatedAt });

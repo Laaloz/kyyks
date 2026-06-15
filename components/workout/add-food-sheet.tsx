@@ -13,25 +13,6 @@ import type { AppState, DayMealPlanEntry, MealTag } from "@/lib/types";
 
 const MEAL_TAGS: MealTag[] = ["breakfast", "lunch", "snack", "dinner", "evening_snack"];
 
-type FineliMatchLite = {
-  ingredientId: string;
-  name: string;
-  kcalPer100: number;
-  proteinPer100: number;
-  carbsPer100: number;
-  fatPer100: number;
-};
-
-type AiEstimate = {
-  name: string;
-  grams: number;
-  kcalPer100: number;
-  proteinPer100: number;
-  carbsPer100: number;
-  fatPer100: number;
-  fineliMatch?: FineliMatchLite;
-};
-
 type ActionOutcome = { ok: boolean; message?: string };
 
 function round(value: number): number {
@@ -426,24 +407,6 @@ function validateFields(state: FoodFieldState): { values: FoodFormValues } | { e
   return { values: parsed.data };
 }
 
-type AiLookupResult = { estimate: AiEstimate } | { error: string };
-
-/** Tekstihaku: hakee makrot ruoan nimellä. */
-async function aiTextLookup(name: string): Promise<AiLookupResult> {
-  const response = await fetch("/api/nutrition/ai-estimate", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ query: name }),
-  }).catch(() => null);
-  const payload = (response ? await response.json().catch(() => null) : null) as
-    | { estimate?: AiEstimate; message?: string }
-    | null;
-  if (!response?.ok || !payload?.estimate) {
-    return { error: payload?.message ?? "Tekoäly ei juuri nyt vastaa — täytä arvot itse." };
-  }
-  return { estimate: payload.estimate };
-}
-
 /** Päivän ad hoc -ruoan muokkausnäkymä (avataan kortista). */
 export function FoodEntryEditSheet({
   entry,
@@ -454,7 +417,7 @@ export function FoodEntryEditSheet({
   entry: DayMealPlanEntry;
   aiEnabled?: boolean;
   onClose: () => void;
-  onSave: (values: FoodFormValues) => Promise<ActionOutcome>;
+  onSave: (values: FoodFormValues, source: "manual" | "ai") => Promise<ActionOutcome>;
 }) {
   const [error, setError] = useState("");
 
@@ -470,10 +433,10 @@ export function FoodEntryEditSheet({
         <FoodEntryForm
           initialFields={fieldsFromEntry(entry)}
           initialMealTag={entry.mealTag}
-          aiLookup={aiEnabled ? aiTextLookup : undefined}
-          onSubmit={async (values) => {
+          canReestimate={aiEnabled}
+          onSubmit={async (values, source) => {
             setError("");
-            const result = await onSave(values);
+            const result = await onSave(values, source);
             if (result.ok) {
               onClose();
             } else {
@@ -488,74 +451,32 @@ export function FoodEntryEditSheet({
 }
 
 /**
- * Muokattava ruoan lomake. AI-tekstihaku voi esitäyttää (autoLookup tai painike); muuten
- * kentät täytetään käsin.
+ * Muokattava ruoan lomake. Tallennus tallentaa lomakkeen arvot suoraan. Jos nimi on muuttunut
+ * ja AI on käytössä, tallennus ajaa ravintoarvojen uudelleenarvion taustalla (kortti näkyy
+ * "Arvioidaan…" -tilassa) — sama malli kuin pikalisäyksessä.
  */
 function FoodEntryForm({
   initialFields,
-  initialName,
   initialMealTag,
-  aiPrefilled = false,
-  aiLookup,
+  canReestimate = false,
   onSubmit,
   submitLabel,
 }: {
   initialFields?: FoodFieldState;
-  initialName?: string;
   initialMealTag?: MealTag;
-  aiPrefilled?: boolean;
-  aiLookup?: (name: string) => Promise<AiLookupResult>;
+  canReestimate?: boolean;
   onSubmit: (values: FoodFormValues, source: "manual" | "ai") => Promise<void>;
   submitLabel: string;
 }) {
   const [fields, setFields] = useState<FoodFieldState>(
-    initialFields ?? { name: initialName ?? "", grams: "100", kcal: "", protein: "", carbs: "", fat: "" },
+    initialFields ?? { name: "", grams: "100", kcal: "", protein: "", carbs: "", fat: "" },
   );
   const [mealTag, setMealTag] = useState<MealTag | undefined>(initialMealTag);
-  const [usedAi, setUsedAi] = useState(aiPrefilled);
-  // Onko nimi muuttunut viimeksi arvioidusta → alapainike morffaa "Arvioi
-  // ravintoarvot uudelleen" -toiminnoksi; muuten/arvion jälkeen "Tallenna".
-  const [estimateBaselineName, setEstimateBaselineName] = useState((initialFields?.name ?? "").trim());
-  const nameChanged = Boolean(aiLookup) && fields.name.trim().length >= 2 && fields.name.trim() !== estimateBaselineName;
+  // Nimi muuttunut viimeksi tallennetusta → tallennus ajaa AI-uudelleenarvion taustalla.
+  const baselineName = (initialFields?.name ?? "").trim();
+  const nameChanged = canReestimate && fields.name.trim().length >= 2 && fields.name.trim() !== baselineName;
   const [fieldError, setFieldError] = useState("");
-  const [aiNote, setAiNote] = useState("");
   const [pending, setPending] = useState(false);
-  const [aiPending, setAiPending] = useState(false);
-
-  const runAiLookup = async (name: string) => {
-    if (!aiLookup || name.trim().length < 2) {
-      return;
-    }
-    setAiNote("");
-    setAiPending(true);
-    try {
-      const result = await aiLookup(name.trim());
-      if ("estimate" in result) {
-        const e = result.estimate;
-        // Säilytä käyttäjän kirjoittama nimi otsikkona — AI päivittää vain makrot ja annoskoon.
-        // (Aiemmin e.name ylikirjoitti nimen, jolloin muokattu otsikko ei jäänyt voimaan.)
-        const keptName = name.trim();
-        setFields({
-          name: keptName,
-          grams: String(round(e.grams)),
-          kcal: String(round(e.kcalPer100)),
-          protein: String(round(e.proteinPer100)),
-          carbs: String(round(e.carbsPer100)),
-          fat: String(round(e.fatPer100)),
-        });
-        setUsedAi(true);
-        // Arvio tehty tälle nimelle → painike palaa "Tallenna"-tilaan.
-        setEstimateBaselineName(keptName);
-      } else {
-        setAiNote(result.error);
-        // Arvio epäonnistui → älä jää "Arvioi"-umpikujaan: salli tallennus
-        // nykyisillä (käsin täytetyillä) arvoilla.
-        setEstimateBaselineName(name.trim());
-      }
-    } finally {
-      setAiPending(false);
-    }
-  };
 
   return (
     <form
@@ -570,24 +491,12 @@ function FoodEntryForm({
         setFieldError("");
         setPending(true);
         try {
-          await onSubmit({ ...result.values, mealTag }, usedAi ? "ai" : "manual");
+          await onSubmit({ ...result.values, mealTag }, nameChanged ? "ai" : "manual");
         } finally {
           setPending(false);
         }
       }}
     >
-      {aiPending ? (
-        <p className="ai-shimmer-text text-sm" role="status">
-          Haetaan ravintotietoja tekoälyllä…
-        </p>
-      ) : usedAi ? (
-        <div className="rounded-xl bg-[color-mix(in_srgb,var(--accent)_10%,var(--surface))] px-3 py-2.5">
-          <p className="text-xs font-medium text-[var(--text-muted)]">AI-arvio — tarkista etenkin annoskoko.</p>
-        </div>
-      ) : aiNote ? (
-        <p className="text-xs text-[var(--text-subtle)]">{aiNote}</p>
-      ) : null}
-
       <FoodFields state={fields} setState={setFields} />
 
       {initialMealTag !== undefined ? (
@@ -621,19 +530,16 @@ function FoodEntryForm({
 
       {nameChanged ? (
         <>
-          <p className="text-xs text-[var(--text-muted)]">Nimi muuttui — päivitä ravintoarvot tekoälyllä.</p>
-          <Button
-            type="button"
-            className="w-full gap-2"
-            loading={aiPending}
-            onClick={() => void runAiLookup(fields.name)}
-          >
+          <p className="text-xs text-[var(--text-muted)]">
+            Nimi muuttui — tallennetaan ja ravintoarvot päivitetään tekoälyllä taustalla.
+          </p>
+          <Button type="submit" className="w-full gap-2" loading={pending}>
             <Sparkles className="size-4" aria-hidden="true" />
-            Arvioi ravintoarvot uudelleen
+            Tallenna ja arvioi uudelleen
           </Button>
         </>
       ) : (
-        <Button type="submit" className="w-full gap-2" loading={pending} disabled={aiPending}>
+        <Button type="submit" className="w-full gap-2" loading={pending}>
           <Plus className="size-4" aria-hidden="true" />
           {submitLabel}
         </Button>

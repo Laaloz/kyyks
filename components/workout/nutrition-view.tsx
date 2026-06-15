@@ -838,7 +838,7 @@ export function NutritionView({
           entry={editFoodEntry}
           aiEnabled={isSupabaseConfigured}
           onClose={() => setEditFoodEntry(null)}
-          onSave={async (values) => {
+          onSave={async (values, source) => {
             // Ateriapaikan vaihtuessa siirretään rivi kohderyhmän loppuun (uusi position).
             const tagChanged = Boolean(values.mealTag) && values.mealTag !== editFoodEntry.mealTag;
             const position = tagChanged
@@ -853,6 +853,8 @@ export function NutritionView({
               fatPer100: values.fatPer100,
               mealTag: values.mealTag,
               position,
+              // Nimi muuttui → laske makrot AI:lla taustalla (kortti näkyy "Arvioidaan…").
+              reestimate: source === "ai",
             });
           }}
         />
