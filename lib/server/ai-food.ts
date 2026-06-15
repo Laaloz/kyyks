@@ -3,6 +3,7 @@ import "server-only";
 import { z } from "zod";
 
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
+import { lookupByBarcode, searchByName, type OffMatch } from "@/lib/server/open-food-facts";
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 // gemini-3.5-flash: paras Flash-laatu teksti- ja kuvahaulle (multimodaali), kulu sentit/kk
@@ -16,31 +17,68 @@ const DAILY_LIMIT = 30;
 // ~3-4 s (oletusbudjetti), joten sille annetaan enemmän aikaa. Timeout palauttaa 504:n, jota EI
 // yritetä uudelleen.
 const GEMINI_TEXT_TIMEOUT_MS = 8_000;
+// Ajatteleva uusintayritys (vaikea/heikko tekstihaku) kestää kauemmin → väljempi katkaisu.
+const GEMINI_TEXT_THINKING_TIMEOUT_MS = 14_000;
 const GEMINI_IMAGE_TIMEOUT_MS = 12_000;
 
 const IMAGE_PROMPT = [
   "Tunnista kuvassa näkyvä ruoka tai juoma ja arvioi sen ravintosisältö.",
-  "Jos kyseessä on pakattu tuote, lue pakkauksesta brändi, tuotenimi ja mahdollinen",
-  "ravintosisältöseloste, ja käytä niitä tunnistukseen (esim. pieni Pringles-tölkki →",
-  '"Pringles Original"). Tunnista myös pienet pakkaukset ja pullot/tölkit.',
+  "Jos kuvassa näkyy pakkauksen RAVINTOSISÄLTÖTAULUKKO (ravintoarvot/näkötiedot), lue arvot",
+  "suoraan siitä äläkä arvaa. Jos taulukko on per annos, muunna arvot per 100 g.",
+  "Jos kyseessä on pakattu tuote, lue pakkauksesta brändi ja tuotenimi ja käytä niitä",
+  '(esim. pieni Pringles-tölkki → "Pringles Original"). Tunnista myös pienet pakkaukset ja pullot/tölkit.',
+  "Jos kuvassa näkyy viivakoodi, palauta sen numerot kenttään barcode (vain numerot).",
   "Palauta arvio: ruoan nimi suomeksi, arvioitu annoskoko grammoina,",
-  "sekä energia ja makrot PER 100 GRAMMAA (kcal, proteiini, hiilihydraatit, rasva).",
+  "energia ja makrot PER 100 GRAMMAA (kcal, proteiini, hiilihydraatit, rasva),",
+  "sekä confidence välillä 0–1 (kuinka varma arvio on).",
   "Jos kuvassa on useita eri ruokia tai tuotteita, nimeä ne yhdessä ja arvioi koko annos yhtenä kokonaisuutena.",
-  "Arvio on suuntaa-antava; vastaa pelkkä JSON ilman selityksiä.",
+  "Älä palauta pelkkiä nollia jos ruoka on tunnistettavissa. Vastaa pelkkä JSON ilman selityksiä.",
 ].join(" ");
 
 function textPrompt(query: string): string {
   return [
-    `Arvioi mitä käyttäjä söi tai joi: "${query}".`,
-    'Jos syöte sisältää useita ruokia tai komponentteja (esim. "päärynä ja 10 g pähkinöitä"),',
-    "yhdistä ne yhdeksi arvioksi: laske koko annoksen kokonaispaino grammoina ja makrot niin, että",
-    "PER 100 GRAMMAA -arvot vastaavat koko annoksen yhteismakroja (komponenttien painotettu keskiarvo).",
+    `Arvioi mahdollisimman tarkasti mitä käyttäjä söi tai joi: "${query}".`,
+    'Jos syöte sisältää useita komponentteja (pilkulla, sanalla "ja" tai määrillä eroteltuna,',
+    'esim. "banaani, proteiinivanukas ja 10 g cashewpähkinöitä"), pura se osiin, arvioi kunkin',
+    "komponentin paino ja makrot erikseen ja yhdistä yhdeksi annokseksi: laske kokonaispaino",
+    "grammoina ja PER 100 GRAMMAA -arvot koko annoksen painotettuna keskiarvona.",
+    'Jos mukana on brändi- tai kauppatuote (esim. "Coop proteiinivanukas"), käytä tuotteen',
+    "tyypillisiä pakkausselosteen arvoja.",
     'Säilytä käyttäjän ilmoittamat määrät ja kappalemäärät (esim. "2 banaania", "10 g pähkinöitä") nimessä',
     "ja huomioi ne annoskoossa grammoina.",
-    "Palauta: siistitty nimi suomeksi, annoskoko grammoina,",
-    "sekä energia ja makrot PER 100 GRAMMAA (kcal, proteiini, hiilihydraatit, rasva).",
-    "Arvio on suuntaa-antava; vastaa pelkkä JSON ilman selityksiä.",
+    "Palauta: siistitty nimi suomeksi, annoskoko grammoina, energia ja makrot PER 100 GRAMMAA",
+    "(kcal, proteiini, hiilihydraatit, rasva), sekä confidence välillä 0–1 (kuinka varma arvio on).",
+    "Älä palauta pelkkiä nollia jos ruoka on tunnistettavissa. Vastaa pelkkä JSON ilman selityksiä.",
   ].join(" ");
+}
+
+/** Monikomponentti/brändi/määräsyöte on epäluotettava pikapolussa → ajatellaan heti. */
+function isComplexQuery(query: string): boolean {
+  const q = query.trim();
+  if (!q) {
+    return false;
+  }
+  if (/[,+&/]/.test(q)) {
+    return true; // erotin → useita komponentteja
+  }
+  if (/\bja\b/i.test(q)) {
+    return true; // "x ja y"
+  }
+  if (/\d\s*(g|kg|dl|ml|l|kpl|rkl|tl|kcal)\b/i.test(q)) {
+    return true; // ilmoitettu määrä → komponentti
+  }
+  return q.split(/\s+/).length >= 4; // pitkä syöte → todennäköisesti monikomponentti
+}
+
+/** Heikko arvio: malli "luovutti" (kaikki makrot 0) tai ilmoitti matalan varmuuden. */
+function isWeakEstimate(estimate: AiFoodEstimate): boolean {
+  const allZero =
+    estimate.kcalPer100 === 0 &&
+    estimate.proteinPer100 === 0 &&
+    estimate.carbsPer100 === 0 &&
+    estimate.fatPer100 === 0;
+  const lowConfidence = typeof estimate.confidence === "number" && estimate.confidence < 0.35;
+  return allZero || lowConfidence;
 }
 
 const RESPONSE_SCHEMA = {
@@ -53,6 +91,8 @@ const RESPONSE_SCHEMA = {
     carbsPer100: { type: "number" },
     fatPer100: { type: "number" },
     confidence: { type: "number" },
+    // Vain kuvahaussa: pakkauksen viivakoodin numerot (EAN/UPC) tarkkaa Open Food Facts -hakua varten.
+    barcode: { type: "string" },
   },
   required: ["name", "grams", "kcalPer100", "proteinPer100", "carbsPer100", "fatPer100"],
 };
@@ -65,6 +105,7 @@ const estimateSchema = z.object({
   carbsPer100: z.coerce.number().min(0).max(100),
   fatPer100: z.coerce.number().min(0).max(100),
   confidence: z.coerce.number().min(0).max(1).optional(),
+  barcode: z.string().trim().optional(),
 });
 
 export type AiFoodEstimate = z.infer<typeof estimateSchema>;
@@ -124,6 +165,9 @@ async function runGeminiEstimate(
   const generationConfig: Record<string, unknown> = {
     responseMimeType: "application/json",
     responseSchema: RESPONSE_SCHEMA,
+    // temperature 0 = deterministinen: sama haku antaa saman tuloksen ja poistaa "joskus löytää,
+    // joskus ei" -satunnaisuuden. Ravintoarvio on faktapoiminta, ei luovuutta vaativa tehtävä.
+    temperature: 0,
   };
   // Tekstihaku on muistinvaraista poimintaa → thinking pois (thinkingBudget 0) pitää sen
   // nopeana (~1s) ilman laatuhaittaa. Kuvahaku taas on epävarmempaa visuaalista arviointia
@@ -185,6 +229,7 @@ async function runGeminiEstimate(
   }
   const text = payload?.candidates?.[0]?.content?.parts?.[0]?.text;
   if (!text) {
+    console.warn(`[ai-food] tyhjä vastaus (${model}): ${bodyText.slice(0, 300)}`);
     return { ok: false, status: 502, message: "AI-vastaus oli tyhjä. Yritä uudelleen." };
   }
 
@@ -192,11 +237,13 @@ async function runGeminiEstimate(
   try {
     parsedJson = JSON.parse(stripCodeFences(text));
   } catch {
+    console.warn(`[ai-food] jäsennysvirhe (${model}): ${text.slice(0, 300)}`);
     return { ok: false, status: 502, message: "AI-vastausta ei voitu lukea. Yritä uudelleen." };
   }
 
   const parsed = estimateSchema.safeParse(parsedJson);
   if (!parsed.success) {
+    console.warn(`[ai-food] puutteellinen arvio (${model}): ${JSON.stringify(parsedJson).slice(0, 300)}`);
     return { ok: false, status: 502, message: "AI-arvio oli puutteellinen. Yritä uudelleen tai täytä itse." };
   }
 
@@ -207,6 +254,19 @@ async function runGeminiEstimate(
   return { ok: true, estimate: parsed.data };
 }
 
+/** Open Food Facts -osuma sovelluksen arviomuotoon (korkea varmuus, pakkausselosteen arvot). */
+function offToEstimate(match: OffMatch, confidence: number): AiFoodEstimate {
+  return {
+    name: match.name,
+    grams: match.grams,
+    kcalPer100: match.kcalPer100,
+    proteinPer100: match.proteinPer100,
+    carbsPer100: match.carbsPer100,
+    fatPer100: match.fatPer100,
+    confidence,
+  };
+}
+
 export async function estimateFoodFromImage(args: {
   userId: string;
   imageBase64: string;
@@ -214,22 +274,68 @@ export async function estimateFoodFromImage(args: {
 }): Promise<AiFoodResult> {
   // Ei thinkingBudgetia → malli saa ajatella: parantaa kuvan (etenkin monen tuotteen)
   // tunnistuksen luotettavuutta. Latenssi maltillinen (~3-4s), kuvalle hyväksyttävä.
-  return runGeminiEstimate(
+  const result = await runGeminiEstimate(
     args.userId,
     [{ text: IMAGE_PROMPT }, { inline_data: { mime_type: args.mimeType, data: args.imageBase64 } }],
     { timeoutMs: GEMINI_IMAGE_TIMEOUT_MS },
   );
+  if (!result.ok) {
+    return result;
+  }
+
+  // Viivakoodi kuvassa → tarkat pakkausselosteen arvot Open Food Factsista korvaavat arvion.
+  if (result.estimate.barcode) {
+    const off = await lookupByBarcode(result.estimate.barcode);
+    if (off) {
+      return { ok: true, estimate: offToEstimate(off, 0.95) };
+    }
+  }
+  // Ei viivakoodia mutta heikko arvio → kokeile tunnistettua nimeä OFF-nimihaulla.
+  if (isWeakEstimate(result.estimate)) {
+    const off = await searchByName(result.estimate.name);
+    if (off) {
+      return { ok: true, estimate: offToEstimate(off, 0.7) };
+    }
+  }
+  return result;
 }
 
 export async function estimateFoodFromText(args: { userId: string; query: string }): Promise<AiFoodResult> {
   const parts = [{ text: textPrompt(args.query) }];
-  // Nopea yritys ilman ajattelua (~1s) kattaa valtaosan hauista.
-  const fast = await runGeminiEstimate(args.userId, parts, { thinkingBudget: 0, timeoutMs: GEMINI_TEXT_TIMEOUT_MS });
-  if (fast.ok || fast.status !== 502) {
-    return fast;
+  const complex = isComplexQuery(args.query);
+
+  // 1) Gemini: pikapolku yksinkertaiselle, ajatteleva vaikealle/heikolle.
+  let result: AiFoodResult;
+  if (!complex) {
+    const fast = await runGeminiEstimate(args.userId, parts, {
+      thinkingBudget: 0,
+      timeoutMs: GEMINI_TEXT_TIMEOUT_MS,
+    });
+    if (fast.ok && !isWeakEstimate(fast.estimate)) {
+      return fast;
+    }
+    if (!fast.ok && fast.status !== 502) {
+      // Kova virhe (429/503/504) ei hyödy ajattelevasta uusinnasta → siirry suoraan OFF-fallbackiin.
+      result = fast;
+    } else {
+      if (fast.ok) {
+        console.warn(`[ai-food] heikko pika-arvio "${args.query}" → uusinta ajattelulla`);
+      }
+      result = await runGeminiEstimate(args.userId, parts, { timeoutMs: GEMINI_TEXT_THINKING_TIMEOUT_MS });
+    }
+  } else {
+    // Vaikea syöte → ajatellaan heti.
+    result = await runGeminiEstimate(args.userId, parts, { timeoutMs: GEMINI_TEXT_THINKING_TIMEOUT_MS });
   }
-  // Vaikeampi syöte (esim. monikomponentti "päärynä ja 10 g pähkinöitä") voi palauttaa tyhjän
-  // tai jäsentymättömän vastauksen ilman ajattelua → yksi uusintayritys mallin oletusbudjetilla.
-  // Vain 502 (tyhjä/jäsennys/validointi) yritetään uudelleen; 429 (kiintiö), 503 ja 504 eivät.
-  return runGeminiEstimate(args.userId, parts, { timeoutMs: GEMINI_TEXT_TIMEOUT_MS });
+
+  // 2) Yksittäistuote, jolle Gemini epäonnistui/antoi heikon arvion → Open Food Facts -nimihaku.
+  //    Monikomponenttiaterialle OFF ei sovi (ei yhtä tuotetta) → ohitetaan ja luotetaan Geminiin.
+  if (!complex && (!result.ok || isWeakEstimate(result.estimate))) {
+    const off = await searchByName(args.query);
+    if (off) {
+      return { ok: true, estimate: offToEstimate(off, 0.7) };
+    }
+  }
+
+  return result;
 }
