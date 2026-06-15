@@ -141,14 +141,8 @@ export function buildExerciseProgressCatalog(state: AppState, athleteId: string)
   });
 
   const exercises = Array.from(summaries.values())
-    .sort((left, right) => {
-      const completedComparison = right.lastCompletedAt.localeCompare(left.lastCompletedAt);
-      if (completedComparison !== 0) {
-        return completedComparison;
-      }
-
-      return left.exerciseName.localeCompare(right.exerciseName, "fi");
-    })
+    // Aakkosjärjestys (suomi) — vakaa, ennakoitava liikelista riippumatta viimeisestä treenistä.
+    .sort((left, right) => left.exerciseName.localeCompare(right.exerciseName, "fi"))
     .map((summary) => ({
       key: summary.exerciseKey,
       exerciseId: summary.exerciseId,
@@ -168,7 +162,8 @@ export function calculateEstimatedOneRepMax(load: number, reps: number) {
   return load * (1 + reps / 30);
 }
 
-// Toistoennätykset: paras (raskain) paino per toistomäärä, nousevassa toistojärjestyksessä.
+// Toistoennätykset: paras (raskain) paino per toistomäärä, laskevassa toistojärjestyksessä
+// (eniten toistoja ensin — sama suunta kuin painoennätyksissä, joissa raskain on ensin).
 function buildRepRecords(weightedSets: WeightedExerciseSet[]): ExerciseRepRecord[] {
   const bestByReps = new Map<number, WeightedExerciseSet>();
   weightedSets.forEach((set) => {
@@ -180,7 +175,7 @@ function buildRepRecords(weightedSets: WeightedExerciseSet[]): ExerciseRepRecord
 
   return Array.from(bestByReps.entries())
     .map(([reps, set]) => ({ reps, weight: set.actualLoad, completedAt: set.completedAt }))
-    .sort((left, right) => left.reps - right.reps);
+    .sort((left, right) => right.reps - left.reps);
 }
 
 // Painoennätykset: eniten toistoja per paino, laskevassa painojärjestyksessä.

@@ -67,7 +67,8 @@ export function CameraCapture({
     if (!video || !video.videoWidth || !video.videoHeight) {
       return;
     }
-    const maxSide = 1024;
+    // 1536 px (ei 1024) jotta etiketin/ravintosisältötaulukon pieni teksti pysyy luettavana.
+    const maxSide = 1536;
     const scale = Math.min(1, maxSide / Math.max(video.videoWidth, video.videoHeight));
     const canvas = document.createElement("canvas");
     canvas.width = Math.round(video.videoWidth * scale);

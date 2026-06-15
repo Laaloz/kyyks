@@ -564,7 +564,8 @@ async function fileToScaledBase64(file: File): Promise<{ base64: string; mimeTyp
     img.src = dataUrl;
   });
 
-  const maxDim = 1024;
+  // 1536 px (ei 1024) jotta pakkauksen ravintosisältötaulukon pieni teksti pysyy luettavana.
+  const maxDim = 1536;
   const scale = Math.min(1, maxDim / Math.max(image.width, image.height));
   const width = Math.max(1, Math.round(image.width * scale));
   const height = Math.max(1, Math.round(image.height * scale));
@@ -576,6 +577,6 @@ async function fileToScaledBase64(file: File): Promise<{ base64: string; mimeTyp
     throw new Error("Kuvan käsittely epäonnistui.");
   }
   ctx.drawImage(image, 0, 0, width, height);
-  const jpeg = canvas.toDataURL("image/jpeg", 0.8);
+  const jpeg = canvas.toDataURL("image/jpeg", 0.85);
   return { base64: jpeg.split(",")[1] ?? "", mimeType: "image/jpeg" };
 }

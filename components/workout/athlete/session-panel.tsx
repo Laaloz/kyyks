@@ -1632,6 +1632,19 @@ export function AthleteSessionPanel({
             aria-labelledby={disclosureButtonId}
             className="mt-3 space-y-2"
           >
+            {/* Kevyt otsikkorivi: kertoo kumpi luku on kuorma ja kumpi toistot (kentät ovat
+                kuorma × toistot). Sama sarakejako kuin sarjariveillä. aria-hidden, koska
+                jokaisella DragNumberilla on jo oma kuvaava aria-label. */}
+            <div
+              aria-hidden="true"
+              className="grid grid-cols-[1.25rem_1fr_0.75rem_1fr_2.75rem] items-center gap-2 px-0.5 text-[10px] font-semibold uppercase tracking-[0.05em] text-[var(--text-subtle)]"
+            >
+              <span />
+              <span className="text-center">Kuorma</span>
+              <span />
+              <span className="text-center">Toistot</span>
+              <span />
+            </div>
             {logs.map((log, index) => {
               const targetMinimum = log.targetRepsMin ?? log.targetReps;
               const missed =
