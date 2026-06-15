@@ -101,7 +101,7 @@ export const addFoodFormSchema = z.object({
   proteinPer100: z.coerce.number().min(0).max(100),
   carbsPer100: z.coerce.number().min(0).max(100),
   fatPer100: z.coerce.number().min(0).max(100),
-  saveToMyFoods: z.boolean().default(true),
+  saveToMyFoods: z.boolean().default(false),
 });
 
 export type AddFoodFormValues = z.infer<typeof addFoodFormSchema>;
@@ -114,6 +114,11 @@ export type AddFoodFormValues = z.infer<typeof addFoodFormSchema>;
 export function macroEnergyWarning(kcalPer100: number, proteinPer100: number, carbsPer100: number, fatPer100: number): string | null {
   const computed = 4 * proteinPer100 + 4 * carbsPer100 + 9 * fatPer100;
   if (kcalPer100 <= 0 && computed <= 0) {
+    return null;
+  }
+  // Lähes nollakaloriset tuotteet (esim. light-juoma 2 kcal + 0 makroa) eivät saa
+  // hälyttää pelkän suhteellisen eron takia — vaaditaan myös merkittävä absoluuttinen ero.
+  if (Math.abs(computed - kcalPer100) < 5) {
     return null;
   }
   const reference = Math.max(kcalPer100, computed, 1);

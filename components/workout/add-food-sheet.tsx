@@ -5,7 +5,6 @@ import { useMemo, useState } from "react";
 
 import { Button } from "@/components/ui/button";
 import { Sheet } from "@/components/ui/sheet";
-import { Toggle } from "@/components/ui/toggle";
 import { CameraCapture } from "@/components/workout/camera-capture";
 import { addFoodFormSchema, macroEnergyWarning } from "@/components/workout/schemas";
 import { mealTagLabel } from "@/lib/nutrition";
@@ -412,7 +411,7 @@ function FoodFields({ state, setState }: { state: FoodFieldState; setState: (nex
   );
 }
 
-function validateFields(state: FoodFieldState, save: boolean): { values: FoodFormValues } | { error: string } {
+function validateFields(state: FoodFieldState): { values: FoodFormValues } | { error: string } {
   const parsed = addFoodFormSchema.safeParse({
     name: state.name,
     grams: state.grams,
@@ -420,7 +419,6 @@ function validateFields(state: FoodFieldState, save: boolean): { values: FoodFor
     proteinPer100: state.protein,
     carbsPer100: state.carbs,
     fatPer100: state.fat,
-    saveToMyFoods: save,
   });
   if (!parsed.success) {
     return { error: parsed.error.issues[0]?.message ?? "Tarkista kentät." };
@@ -450,14 +448,11 @@ async function aiTextLookup(name: string): Promise<AiLookupResult> {
 export function FoodEntryEditSheet({
   entry,
   aiEnabled = true,
-  initialRemembered = false,
   onClose,
   onSave,
 }: {
   entry: DayMealPlanEntry;
   aiEnabled?: boolean;
-  /** Onko ruoka jo omissa tuotteissa → "Muista tämä ruoka" -toggle näkyy päällä. */
-  initialRemembered?: boolean;
   onClose: () => void;
   onSave: (values: FoodFormValues) => Promise<ActionOutcome>;
 }) {
@@ -475,7 +470,6 @@ export function FoodEntryEditSheet({
         <FoodEntryForm
           initialFields={fieldsFromEntry(entry)}
           initialMealTag={entry.mealTag}
-          initialRemembered={initialRemembered}
           aiLookup={aiEnabled ? aiTextLookup : undefined}
           onSubmit={async (values) => {
             setError("");
@@ -501,7 +495,6 @@ function FoodEntryForm({
   initialFields,
   initialName,
   initialMealTag,
-  initialRemembered = false,
   aiPrefilled = false,
   aiLookup,
   onSubmit,
@@ -510,7 +503,6 @@ function FoodEntryForm({
   initialFields?: FoodFieldState;
   initialName?: string;
   initialMealTag?: MealTag;
-  initialRemembered?: boolean;
   aiPrefilled?: boolean;
   aiLookup?: (name: string) => Promise<AiLookupResult>;
   onSubmit: (values: FoodFormValues, source: "manual" | "ai") => Promise<void>;
@@ -521,10 +513,10 @@ function FoodEntryForm({
   );
   const [mealTag, setMealTag] = useState<MealTag | undefined>(initialMealTag);
   const [usedAi, setUsedAi] = useState(aiPrefilled);
-  // Muokkauksessa: onko nimi muuttunut alkuperäisestä → nostetaan AI-uudelleenarvio esiin.
-  const originalName = (initialFields?.name ?? "").trim();
-  const nameChanged = Boolean(aiLookup) && fields.name.trim().length >= 2 && fields.name.trim() !== originalName;
-  const [save, setSave] = useState(initialRemembered);
+  // Onko nimi muuttunut viimeksi arvioidusta → alapainike morffaa "Arvioi
+  // ravintoarvot uudelleen" -toiminnoksi; muuten/arvion jälkeen "Tallenna".
+  const [estimateBaselineName, setEstimateBaselineName] = useState((initialFields?.name ?? "").trim());
+  const nameChanged = Boolean(aiLookup) && fields.name.trim().length >= 2 && fields.name.trim() !== estimateBaselineName;
   const [fieldError, setFieldError] = useState("");
   const [aiNote, setAiNote] = useState("");
   const [pending, setPending] = useState(false);
@@ -549,8 +541,13 @@ function FoodEntryForm({
           fat: String(round(e.fatPer100)),
         });
         setUsedAi(true);
+        // Arvio tehty tälle nimelle → painike palaa "Tallenna"-tilaan.
+        setEstimateBaselineName(e.name.trim());
       } else {
         setAiNote(result.error);
+        // Arvio epäonnistui → älä jää "Arvioi"-umpikujaan: salli tallennus
+        // nykyisillä (käsin täytetyillä) arvoilla.
+        setEstimateBaselineName(name.trim());
       }
     } finally {
       setAiPending(false);
@@ -562,7 +559,7 @@ function FoodEntryForm({
       className="space-y-3"
       onSubmit={async (event) => {
         event.preventDefault();
-        const result = validateFields(fields, save);
+        const result = validateFields(fields);
         if ("error" in result) {
           setFieldError(result.error);
           return;
@@ -590,23 +587,6 @@ function FoodEntryForm({
 
       <FoodFields state={fields} setState={setFields} />
 
-      {aiLookup && !aiPending ? (
-        <div className="space-y-1.5">
-          {nameChanged ? (
-            <p className="text-xs text-[var(--text-muted)]">Nimi muuttui — päivitä ravintoarvot tekoälyllä?</p>
-          ) : null}
-          <Button
-            type="button"
-            variant={nameChanged ? "primary" : "secondary"}
-            className="w-full gap-2"
-            onClick={() => void runAiLookup(fields.name)}
-          >
-            <Sparkles className="size-4" aria-hidden="true" />
-            Arvioi ravintoarvot uudelleen
-          </Button>
-        </div>
-      ) : null}
-
       {initialMealTag !== undefined ? (
         <div className="flex flex-col gap-1.5">
           <span className="text-xs font-semibold text-[var(--text-subtle)]">Ateriapaikka</span>
@@ -630,23 +610,31 @@ function FoodEntryForm({
         </div>
       ) : null}
 
-      <div className="flex items-center justify-between gap-3">
-        <span id="remember-food-label" className="text-sm text-[var(--text-muted)]">
-          Muista tämä ruoka
-        </span>
-        <Toggle checked={save} onChange={setSave} labelledBy="remember-food-label" />
-      </div>
-
       {fieldError ? (
         <p className="text-sm text-[var(--danger)]" role="alert">
           {fieldError}
         </p>
       ) : null}
 
-      <Button type="submit" className="w-full gap-2" loading={pending}>
-        <Plus className="size-4" aria-hidden="true" />
-        {submitLabel}
-      </Button>
+      {nameChanged ? (
+        <>
+          <p className="text-xs text-[var(--text-muted)]">Nimi muuttui — päivitä ravintoarvot tekoälyllä.</p>
+          <Button
+            type="button"
+            className="w-full gap-2"
+            loading={aiPending}
+            onClick={() => void runAiLookup(fields.name)}
+          >
+            <Sparkles className="size-4" aria-hidden="true" />
+            Arvioi ravintoarvot uudelleen
+          </Button>
+        </>
+      ) : (
+        <Button type="submit" className="w-full gap-2" loading={pending} disabled={aiPending}>
+          <Plus className="size-4" aria-hidden="true" />
+          {submitLabel}
+        </Button>
+      )}
     </form>
   );
 }
