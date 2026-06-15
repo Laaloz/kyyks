@@ -11,6 +11,12 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 // Vahvista saatavuus Google AI Studiosta.
 const DEFAULT_MODEL = "gemini-3.5-flash";
 const DAILY_LIMIT = 30;
+// Gemini-kutsun aikakatkaisut. Tekstihaku on normaalisti ~1 s → katkaistaan tiukasti, jotta
+// kortti ei jää pitkäksi aikaa "Arvioidaan…" -tilaan ruuhkassa. Kuva on epävarmempi ja kestää
+// ~3-4 s (oletusbudjetti), joten sille annetaan enemmän aikaa. Timeout palauttaa 504:n, jota EI
+// yritetä uudelleen.
+const GEMINI_TEXT_TIMEOUT_MS = 8_000;
+const GEMINI_IMAGE_TIMEOUT_MS = 12_000;
 
 const IMAGE_PROMPT = [
   "Tunnista kuvassa näkyvä ruoka tai juoma ja arvioi sen ravintosisältö.",
@@ -61,18 +67,7 @@ const estimateSchema = z.object({
   confidence: z.coerce.number().min(0).max(1).optional(),
 });
 
-export type FineliMatch = {
-  ingredientId: string;
-  name: string;
-  kcalPer100: number;
-  proteinPer100: number;
-  carbsPer100: number;
-  fatPer100: number;
-};
-
-export type AiFoodEstimate = z.infer<typeof estimateSchema> & {
-  fineliMatch?: FineliMatch;
-};
+export type AiFoodEstimate = z.infer<typeof estimateSchema>;
 
 export type AiFoodResult =
   | { ok: true; estimate: AiFoodEstimate }
@@ -100,52 +95,12 @@ async function countTodaysUsage(adminClient: SupabaseClient, userId: string): Pr
   return count ?? 0;
 }
 
-async function findFineliMatch(supabase: SupabaseClient, name: string): Promise<FineliMatch | undefined> {
-  const term = name.trim();
-  if (term.length < 3) {
-    return undefined;
-  }
-
-  // Yksiselitteinen osuma: jos haulle löytyy tasan yksi Fineli-rivi, tarjotaan sen
-  // tarkat arvot. Useampi osuma jätetään pois (epävarma), jolloin käytetään AI-arviota.
-  const { data } = await supabase
-    .from("ingredient_catalog")
-    .select("id, name, display_name, kcal_per_100, protein_per_100, carbs_per_100, fat_per_100")
-    .eq("source", "fineli")
-    .ilike("name", `%${term}%`)
-    .limit(2);
-
-  if (!data || data.length !== 1) {
-    return undefined;
-  }
-
-  const row = data[0] as {
-    id: string;
-    name: string;
-    display_name: string | null;
-    kcal_per_100: number | string;
-    protein_per_100: number | string;
-    carbs_per_100: number | string;
-    fat_per_100: number | string;
-  };
-
-  return {
-    ingredientId: row.id,
-    name: row.display_name?.trim() || row.name,
-    kcalPer100: Number(row.kcal_per_100) || 0,
-    proteinPer100: Number(row.protein_per_100) || 0,
-    carbsPer100: Number(row.carbs_per_100) || 0,
-    fatPer100: Number(row.fat_per_100) || 0,
-  };
-}
-
-// Jaettu Gemini-kutsu: rate limit + kutsu + turvallinen parsinta + hybridi Fineli-osuma.
+// Jaettu Gemini-kutsu: rate limit + kutsu + turvallinen parsinta.
 // `parts` on Gemini-pyynnön sisältö (teksti ja/tai kuva).
 async function runGeminiEstimate(
-  supabase: SupabaseClient,
   userId: string,
   parts: unknown[],
-  options?: { thinkingBudget?: number },
+  options?: { thinkingBudget?: number; timeoutMs?: number },
 ): Promise<AiFoodResult> {
   const apiKey = process.env.GEMINI_API_KEY;
   if (!apiKey) {
@@ -178,7 +133,14 @@ async function runGeminiEstimate(
     generationConfig.thinkingConfig = { thinkingBudget: options.thinkingBudget };
   }
 
+  // Aikakatkaisu: kun Gemini on ruuhkautunut, pyyntö voi jäädä roikkumaan kymmeniä sekunteja
+  // ilman tätä → ruoka jää kortilla "Arvioidaan…" -tilaan loputtomiin. Katkaisu kattaa myös
+  // vastauksen luvun (luetaan body samassa suojatussa lohkossa) ja palauttaa 504:n ajan
+  // loppuessa — sitä EI yritetä uudelleen.
+  const controller = new AbortController();
+  const abortTimer = setTimeout(() => controller.abort(), options?.timeoutMs ?? GEMINI_TEXT_TIMEOUT_MS);
   let response: Response | null = null;
+  let bodyText = "";
   try {
     response = await fetch(url, {
       method: "POST",
@@ -187,14 +149,24 @@ async function runGeminiEstimate(
         contents: [{ parts }],
         generationConfig,
       }),
+      signal: controller.signal,
     });
-  } catch {
-    return { ok: false, status: 502, message: "AI-palveluun ei saatu yhteyttä." };
+    bodyText = await response.text();
+  } catch (caught) {
+    const timedOut = caught instanceof Error && caught.name === "AbortError";
+    return {
+      ok: false,
+      status: timedOut ? 504 : 502,
+      message: timedOut
+        ? "AI-arvio kesti liian kauan — yritä uudelleen tai täytä arvot itse."
+        : "AI-palveluun ei saatu yhteyttä.",
+    };
+  } finally {
+    clearTimeout(abortTimer);
   }
 
   if (!response.ok) {
-    const errorBody = await response.text().catch(() => "");
-    console.warn(`[ai-food] Gemini ${response.status} (${model}): ${errorBody.slice(0, 500)}`);
+    console.warn(`[ai-food] Gemini ${response.status} (${model}): ${bodyText.slice(0, 500)}`);
     if (response.status === 429) {
       return {
         ok: false,
@@ -205,9 +177,12 @@ async function runGeminiEstimate(
     return { ok: false, status: 502, message: "AI-arvio epäonnistui. Yritä uudelleen tai täytä arvot itse." };
   }
 
-  const payload = (await response.json().catch(() => null)) as
-    | { candidates?: Array<{ content?: { parts?: Array<{ text?: string }> } }> }
-    | null;
+  let payload: { candidates?: Array<{ content?: { parts?: Array<{ text?: string }> } }> } | null = null;
+  try {
+    payload = JSON.parse(bodyText);
+  } catch {
+    payload = null;
+  }
   const text = payload?.candidates?.[0]?.content?.parts?.[0]?.text;
   if (!text) {
     return { ok: false, status: 502, message: "AI-vastaus oli tyhjä. Yritä uudelleen." };
@@ -226,40 +201,35 @@ async function runGeminiEstimate(
   }
 
   // Kirjataan vain onnistunut kutsu — epäonnistumiset (esim. Geminin 429) eivät polta omaa
-  // vuorokausikiintiötä.
-  await adminClient.from("ai_usage_events").insert({ user_id: userId, kind: "food_estimate" });
+  // vuorokausikiintiötä. Fire-and-forget: kirjaus ei saa hidastaa vastausta.
+  void adminClient.from("ai_usage_events").insert({ user_id: userId, kind: "food_estimate" });
 
-  const fineliMatch = await findFineliMatch(supabase, parsed.data.name);
-  return { ok: true, estimate: { ...parsed.data, fineliMatch } };
+  return { ok: true, estimate: parsed.data };
 }
 
 export async function estimateFoodFromImage(args: {
-  supabase: SupabaseClient;
   userId: string;
   imageBase64: string;
   mimeType: string;
 }): Promise<AiFoodResult> {
   // Ei thinkingBudgetia → malli saa ajatella: parantaa kuvan (etenkin monen tuotteen)
   // tunnistuksen luotettavuutta. Latenssi maltillinen (~3-4s), kuvalle hyväksyttävä.
-  return runGeminiEstimate(args.supabase, args.userId, [
-    { text: IMAGE_PROMPT },
-    { inline_data: { mime_type: args.mimeType, data: args.imageBase64 } },
-  ]);
+  return runGeminiEstimate(
+    args.userId,
+    [{ text: IMAGE_PROMPT }, { inline_data: { mime_type: args.mimeType, data: args.imageBase64 } }],
+    { timeoutMs: GEMINI_IMAGE_TIMEOUT_MS },
+  );
 }
 
-export async function estimateFoodFromText(args: {
-  supabase: SupabaseClient;
-  userId: string;
-  query: string;
-}): Promise<AiFoodResult> {
+export async function estimateFoodFromText(args: { userId: string; query: string }): Promise<AiFoodResult> {
   const parts = [{ text: textPrompt(args.query) }];
   // Nopea yritys ilman ajattelua (~1s) kattaa valtaosan hauista.
-  const fast = await runGeminiEstimate(args.supabase, args.userId, parts, { thinkingBudget: 0 });
+  const fast = await runGeminiEstimate(args.userId, parts, { thinkingBudget: 0, timeoutMs: GEMINI_TEXT_TIMEOUT_MS });
   if (fast.ok || fast.status !== 502) {
     return fast;
   }
   // Vaikeampi syöte (esim. monikomponentti "päärynä ja 10 g pähkinöitä") voi palauttaa tyhjän
   // tai jäsentymättömän vastauksen ilman ajattelua → yksi uusintayritys mallin oletusbudjetilla.
-  // Vain 502 (tyhjä/jäsennys/validointi) yritetään uudelleen; 429 (kiintiö) ja 503 eivät.
-  return runGeminiEstimate(args.supabase, args.userId, parts, undefined);
+  // Vain 502 (tyhjä/jäsennys/validointi) yritetään uudelleen; 429 (kiintiö), 503 ja 504 eivät.
+  return runGeminiEstimate(args.userId, parts, { timeoutMs: GEMINI_TEXT_TIMEOUT_MS });
 }

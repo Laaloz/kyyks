@@ -31,7 +31,6 @@ export async function POST(request: Request) {
     }
 
     const result = await estimateFoodFromText({
-      supabase: requesterResult.supabase,
       userId: requesterResult.requester.id,
       query,
     });
@@ -57,7 +56,6 @@ export async function POST(request: Request) {
   }
 
   const result = await estimateFoodFromImage({
-    supabase: requesterResult.supabase,
     userId: requesterResult.requester.id,
     imageBase64,
     mimeType,

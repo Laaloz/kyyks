@@ -2546,8 +2546,6 @@ interface AppStateContextValue {
   saveNutritionProfile: (input: NutritionProfileInput) => Promise<ActionResult>;
   saveIngredient: (input: IngredientInput) => Promise<ActionResult>;
   deleteIngredient: (ingredientId: string) => Promise<ActionResult>;
-  // Lataa koko ainekatalogi (ml. Fineli) muistiin tarvittaessa — reseptieditori/admin.
-  ensureFullIngredientCatalog: () => Promise<void>;
   saveRecipe: (input: RecipeInput) => Promise<ActionResult>;
   deleteRecipe: (recipeId: string) => Promise<ActionResult>;
   saveMealPlanTemplate: (input: MealPlanTemplateInput) => Promise<ActionResult>;
@@ -2727,9 +2725,6 @@ export function AppStateProvider({ children }: PropsWithChildren) {
   // ottaa arvon talteen alussa ja keskeyttää, jos arvo on muuttunut awaitin aikana — näin
   // ennen toimintoa alkanut haku ei voi enää yliajaa tuoretta login/logout-tilaa (race).
   const authEpochRef = useRef(0);
-  // Oletussynkka lataa vain kevennetyn katalogin (ei koko Fineliä). Koko katalogi haetaan
-  // tarvittaessa (reseptieditori/admin); tämä lippu estää tuplahaun.
-  const fullIngredientCatalogLoadedRef = useRef(false);
   const backgroundRefreshTimeoutRef = useRef<number | null>(null);
   const backgroundRefreshModeRef = useRef<"full" | "workouts" | null>(null);
   const backgroundRefreshSettledCallbacksRef = useRef<Array<() => void>>([]);
@@ -2752,6 +2747,8 @@ export function AppStateProvider({ children }: PropsWithChildren) {
   const recentlyConfirmedMeasurementsRef = useRef<RecentlyConfirmedMeasurements>(new Map());
   const pendingDayMealCreatesRef = useRef<Map<string, PendingDayMealCreate>>(new Map());
   const pendingDayMealMutationsRef = useRef<Map<string, PendingDayMealMutation>>(new Map());
+  // Estää saman aterian päällekkäiset taustauudelleenarviot (tuplaklikkaus / nopea uudelleenavaus).
+  const reestimatingDayMealIdsRef = useRef<Set<string>>(new Set());
   const dayMealEatenMutationVersionRef = useRef<Map<string, number>>(new Map());
   const dayMealEatenMutationQueueRef = useRef<Map<string, QueuedDayMealEatenMutation>>(new Map());
   const dayMealEatenMutationInFlightRef = useRef<Set<string>>(new Set());
@@ -5009,30 +5006,6 @@ function findResolvedUserIdInSnapshot(
 
         setState((previous) => deleteIngredientFromCatalog(previous, ingredientId));
         return { ok: true };
-      },
-      async ensureFullIngredientCatalog() {
-        // Oletussynkka lataa vain kevennetyn katalogin. Reseptieditori/admin kutsuu tätä, jotta
-        // koko Fineli-valikoima on haettavissa — haetaan vain kerran per sessio.
-        if (!supabase || fullIngredientCatalogLoadedRef.current) {
-          return;
-        }
-        fullIngredientCatalogLoadedRef.current = true;
-        const response = await fetch("/api/nutrition/ingredients").catch(() => null);
-        if (!response?.ok) {
-          fullIngredientCatalogLoadedRef.current = false;
-          return;
-        }
-        const rows = (await response.json().catch(() => null)) as AppState["ingredientsCatalog"] | null;
-        if (!rows || rows.length === 0) {
-          return;
-        }
-        setState((previous) => {
-          const byId = new Map((previous.ingredientsCatalog ?? []).map((item) => [item.id, item]));
-          for (const row of rows) {
-            byId.set(row.id, row);
-          }
-          return { ...previous, ingredientsCatalog: Array.from(byId.values()) };
-        });
       },
       async saveRecipe(input) {
         if (!currentUser) {
@@ -7677,91 +7650,106 @@ function findResolvedUserIdInSnapshot(
         }
 
         if (reestimate) {
+          // Estä päällekkäinen taustakutsu samalle aterialle (tuplaklikkaus / nopea uudelleenavaus).
+          if (reestimatingDayMealIdsRef.current.has(entryId)) {
+            return { ok: true };
+          }
           // Tausta: tallenna nimi + pending heti (action palaa → sheet sulkeutuu, kortti näkyy
           // "Arvioidaan…" kunnes AI valmistuu), aja AI nimellä ja täydennä makrot. Säilytä
           // käyttäjän kirjoittama nimi — AI päivittää vain makrot.
+          reestimatingDayMealIdsRef.current.add(entryId);
           pendingDayMealMutationsRef.current.set(entryId, { updatedAt });
           void (async () => {
-            await fetch(`/api/day-meal-plans/${encodeURIComponent(entryId)}`, {
-              method: "PATCH",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({
-                foodName: input.name,
-                mealTag: input.mealTag,
-                position: input.position,
-                aiStatus: "pending",
-              }),
-            }).catch(() => null);
+            try {
+              // Pending-PATCH ja AI-kutsu ovat riippumattomia → ajetaan rinnan, jotta AI alkaa heti
+              // ilman ylimääräistä edestakaista kierrosta. Pending-PATCH odotetaan silti valmiiksi
+              // ennen lopullista PATCHia, ettei se ylikirjoita aiStatusta takaisin pendingiksi.
+              const pendingPatch = fetch(`/api/day-meal-plans/${encodeURIComponent(entryId)}`, {
+                method: "PATCH",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                  foodName: input.name,
+                  mealTag: input.mealTag,
+                  position: input.position,
+                  aiStatus: "pending",
+                }),
+              }).catch(() => null);
 
-            const aiResponse = await fetch("/api/nutrition/ai-estimate", {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ query: input.name }),
-            }).catch(() => null);
-            const aiPayload = (aiResponse ? await aiResponse.json().catch(() => null) : null) as
-              | {
-                  estimate?: {
-                    name: string;
-                    grams: number;
-                    kcalPer100: number;
-                    proteinPer100: number;
-                    carbsPer100: number;
-                    fatPer100: number;
-                  };
-                  message?: string;
-                }
-              | null;
+              const aiResponse = await fetch("/api/nutrition/ai-estimate", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ query: input.name }),
+              }).catch(() => null);
+              const aiPayload = (aiResponse ? await aiResponse.json().catch(() => null) : null) as
+                | {
+                    estimate?: {
+                      name: string;
+                      grams: number;
+                      kcalPer100: number;
+                      proteinPer100: number;
+                      carbsPer100: number;
+                      fatPer100: number;
+                    };
+                    message?: string;
+                  }
+                | null;
 
-            const settledAt = new Date().toISOString();
-            if (!aiResponse?.ok || !aiPayload?.estimate) {
+              // Varmista että pending-PATCH ehti landata ennen lopullista PATCHia.
+              await pendingPatch;
+
+              const settledAt = new Date().toISOString();
+              if (!aiResponse?.ok || !aiPayload?.estimate) {
+                pendingDayMealMutationsRef.current.set(entryId, { updatedAt: settledAt });
+                await fetch(`/api/day-meal-plans/${encodeURIComponent(entryId)}`, {
+                  method: "PATCH",
+                  headers: { "Content-Type": "application/json" },
+                  body: JSON.stringify({ aiStatus: "failed" }),
+                }).catch(() => null);
+                setState((previous) => ({
+                  ...previous,
+                  dayMealPlans: (previous.dayMealPlans ?? []).map((entry) =>
+                    entry.id === entryId ? { ...entry, aiStatus: "failed" as const, updatedAt: settledAt } : entry,
+                  ),
+                }));
+                scheduleDayMealRefresh();
+                return;
+              }
+
+              const estimate = aiPayload.estimate;
               pendingDayMealMutationsRef.current.set(entryId, { updatedAt: settledAt });
               await fetch(`/api/day-meal-plans/${encodeURIComponent(entryId)}`, {
                 method: "PATCH",
                 headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ aiStatus: "failed" }),
+                body: JSON.stringify({
+                  grams: estimate.grams,
+                  kcalPer100: estimate.kcalPer100,
+                  proteinPer100: estimate.proteinPer100,
+                  carbsPer100: estimate.carbsPer100,
+                  fatPer100: estimate.fatPer100,
+                  aiStatus: null,
+                }),
               }).catch(() => null);
               setState((previous) => ({
                 ...previous,
                 dayMealPlans: (previous.dayMealPlans ?? []).map((entry) =>
-                  entry.id === entryId ? { ...entry, aiStatus: "failed" as const, updatedAt: settledAt } : entry,
+                  entry.id === entryId
+                    ? {
+                        ...entry,
+                        grams: estimate.grams,
+                        kcalPer100: estimate.kcalPer100,
+                        proteinPer100: estimate.proteinPer100,
+                        carbsPer100: estimate.carbsPer100,
+                        fatPer100: estimate.fatPer100,
+                        aiStatus: null,
+                        updatedAt: settledAt,
+                      }
+                    : entry,
                 ),
               }));
               scheduleDayMealRefresh();
-              return;
+            } finally {
+              reestimatingDayMealIdsRef.current.delete(entryId);
             }
-
-            const estimate = aiPayload.estimate;
-            pendingDayMealMutationsRef.current.set(entryId, { updatedAt: settledAt });
-            await fetch(`/api/day-meal-plans/${encodeURIComponent(entryId)}`, {
-              method: "PATCH",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({
-                grams: estimate.grams,
-                kcalPer100: estimate.kcalPer100,
-                proteinPer100: estimate.proteinPer100,
-                carbsPer100: estimate.carbsPer100,
-                fatPer100: estimate.fatPer100,
-                aiStatus: null,
-              }),
-            }).catch(() => null);
-            setState((previous) => ({
-              ...previous,
-              dayMealPlans: (previous.dayMealPlans ?? []).map((entry) =>
-                entry.id === entryId
-                  ? {
-                      ...entry,
-                      grams: estimate.grams,
-                      kcalPer100: estimate.kcalPer100,
-                      proteinPer100: estimate.proteinPer100,
-                      carbsPer100: estimate.carbsPer100,
-                      fatPer100: estimate.fatPer100,
-                      aiStatus: null,
-                      updatedAt: settledAt,
-                    }
-                  : entry,
-              ),
-            }));
-            scheduleDayMealRefresh();
           })();
           return { ok: true };
         }

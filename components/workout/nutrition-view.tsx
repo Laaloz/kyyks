@@ -497,7 +497,7 @@ export function NutritionView({
                   const subtitle = aiPending
                     ? "Arvioidaan tekoälyllä…"
                     : aiFailed
-                      ? `${mealTagLabel(entry.mealTag)} · arvio ei onnistunut — muokkaa`
+                      ? `${mealTagLabel(entry.mealTag)} · arvio ei onnistunut — täytä makrot itse`
                       : macroLine;
                   return (
                     <div

@@ -42,41 +42,59 @@ function ingredientNutritionLine(ingredient: Ingredient) {
 }
 
 export function AdminIngredientsView({ onBack }: { onBack?: () => void }) {
-  const { currentUser, state, saveIngredient, deleteIngredient, notify, ensureFullIngredientCatalog } = useAppState();
-  // Admin hallinnoi koko katalogia → ladataan koko Fineli muistiin (oletussynkka on kevennetty).
-  useEffect(() => {
-    void ensureFullIngredientCatalog();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  const { currentUser, state, saveIngredient, deleteIngredient, notify } = useAppState();
   const [query, setQuery] = useState("");
+  const [remoteResults, setRemoteResults] = useState<Ingredient[]>([]);
+  const [isSearching, setIsSearching] = useState(false);
+  const [reloadToken, setReloadToken] = useState(0);
   const [isSheetOpen, setIsSheetOpen] = useState(false);
-  const [selectedIngredientId, setSelectedIngredientId] = useState<string>("");
+  const [selectedIngredient, setSelectedIngredient] = useState<Ingredient | null>(null);
   const [form, setForm] = useState<IngredientFormState>(emptyIngredientForm);
   const [formMessage, setFormMessage] = useState<string>("");
   const [isSaving, setIsSaving] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
 
-  const sortedIngredients = useMemo(
+  const term = query.trim();
+  const isSearchActive = term.length >= 2;
+
+  // Palvelinpuolen haku kattaa koko katalogin (ml. ~4000 Fineli-riviä) lataamatta niitä
+  // selaimeen. Ilman hakua näytetään vain kevennetty paikallinen katalogi (manuaaliset/omat
+  // ainekset) — koko Fineli-listan renderöinti kaatoi sivun.
+  useEffect(() => {
+    if (!isSearchActive) {
+      setRemoteResults([]);
+      setIsSearching(false);
+      return;
+    }
+    let active = true;
+    setIsSearching(true);
+    const handle = window.setTimeout(async () => {
+      const response = await fetch(`/api/nutrition/ingredients/search?q=${encodeURIComponent(term)}`).catch(() => null);
+      if (!active) {
+        return;
+      }
+      const payload = response?.ok
+        ? ((await response.json().catch(() => null)) as { ingredients?: Ingredient[] } | null)
+        : null;
+      if (active) {
+        setRemoteResults(payload?.ingredients ?? []);
+        setIsSearching(false);
+      }
+    }, 200);
+    return () => {
+      active = false;
+      window.clearTimeout(handle);
+    };
+  }, [term, isSearchActive, reloadToken]);
+
+  const localIngredients = useMemo(
     () =>
       [...state.ingredientsCatalog].sort((left, right) =>
         ingredientTitle(left).localeCompare(ingredientTitle(right), "fi-FI"),
       ),
     [state.ingredientsCatalog],
   );
-  const filteredIngredients = useMemo(() => {
-    const normalizedQuery = query.trim().toLowerCase();
-    if (!normalizedQuery) {
-      return sortedIngredients;
-    }
-
-    return sortedIngredients.filter((ingredient) =>
-      `${ingredient.name} ${ingredient.displayName ?? ""}`.toLowerCase().includes(normalizedQuery),
-    );
-  }, [query, sortedIngredients]);
-  const selectedIngredient = useMemo(
-    () => state.ingredientsCatalog.find((ingredient) => ingredient.id === selectedIngredientId) ?? null,
-    [selectedIngredientId, state.ingredientsCatalog],
-  );
+  const displayedIngredients = isSearchActive ? remoteResults : localIngredients;
 
   if (currentUser?.role !== "admin") {
     return null;
@@ -88,14 +106,14 @@ export function AdminIngredientsView({ onBack }: { onBack?: () => void }) {
   };
 
   const openNewIngredientSheet = () => {
-    setSelectedIngredientId("");
+    setSelectedIngredient(null);
     setForm(emptyIngredientForm);
     setFormMessage("");
     setIsSheetOpen(true);
   };
 
   const openIngredientEditor = (ingredient: Ingredient) => {
-    setSelectedIngredientId(ingredient.id);
+    setSelectedIngredient(ingredient);
     setForm({
       name: ingredient.displayName?.trim() || ingredient.name,
       kcalPer100: formatNutritionValue(ingredient.kcalPer100),
@@ -138,8 +156,10 @@ export function AdminIngredientsView({ onBack }: { onBack?: () => void }) {
       setFormMessage(result.ok ? "" : result.message);
       if (result.ok) {
         setForm(emptyIngredientForm);
-        setSelectedIngredientId("");
+        setSelectedIngredient(null);
         setIsSheetOpen(false);
+        // Päivitä aktiivinen palvelinhaku, jotta juuri muokattu rivi näkyy tuoreena.
+        setReloadToken((token) => token + 1);
       }
     } finally {
       setIsSaving(false);
@@ -168,8 +188,10 @@ export function AdminIngredientsView({ onBack }: { onBack?: () => void }) {
       setFormMessage(result.ok ? "" : result.message);
       if (result.ok) {
         setForm(emptyIngredientForm);
-        setSelectedIngredientId("");
+        setSelectedIngredient(null);
         setIsSheetOpen(false);
+        // Päivitä aktiivinen palvelinhaku, jotta juuri muokattu rivi näkyy tuoreena.
+        setReloadToken((token) => token + 1);
       }
     } finally {
       setIsDeleting(false);
@@ -211,16 +233,26 @@ export function AdminIngredientsView({ onBack }: { onBack?: () => void }) {
         />
       </div>
 
+      {!isSearchActive ? (
+        <p className="mt-2 px-1 text-xs text-[var(--text-subtle)]">
+          Näytetään manuaaliset ainekset. Hae nimellä löytääksesi koko katalogin (ml. Fineli).
+        </p>
+      ) : null}
+
       <div className="mb-2 mt-6 flex items-baseline justify-between gap-4 px-1">
-        <h2 className="text-xs font-semibold uppercase tracking-[0.06em] text-[var(--text-subtle)]">Raaka-aineet</h2>
+        <h2 className="text-xs font-semibold uppercase tracking-[0.06em] text-[var(--text-subtle)]">
+          {isSearchActive ? "Hakutulokset" : "Raaka-aineet"}
+        </h2>
         <span className="text-xs font-semibold uppercase tracking-[0.06em] text-[var(--text-subtle)]">
-          {filteredIngredients.length} kpl
+          {displayedIngredients.length} kpl
         </span>
       </div>
 
       <div className="overflow-hidden rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-0 shadow-[0_1px_2px_var(--shadow-soft)]">
-        {filteredIngredients.length ? (
-          filteredIngredients.map((ingredient) => (
+        {isSearching ? (
+          <p className="px-4 py-8 text-base text-[var(--text-muted)]">Haetaan…</p>
+        ) : displayedIngredients.length ? (
+          displayedIngredients.map((ingredient) => (
             <button
               key={ingredient.id}
               type="button"
@@ -238,7 +270,9 @@ export function AdminIngredientsView({ onBack }: { onBack?: () => void }) {
             </button>
           ))
         ) : (
-          <p className="px-4 py-8 text-base text-[var(--text-muted)]">Hakua vastaavia raaka-aineita ei löytynyt.</p>
+          <p className="px-4 py-8 text-base text-[var(--text-muted)]">
+            {isSearchActive ? "Hakua vastaavia raaka-aineita ei löytynyt." : "Ei manuaalisia raaka-aineita vielä."}
+          </p>
         )}
       </div>
 
