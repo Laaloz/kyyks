@@ -747,7 +747,13 @@ export function NutritionView({
         <MealPickerSheet
           title="Vaihda ateria"
           recipes={visibleRecipeSource
-            .filter((recipe) => recipe.mealTag === swapTarget.mealTag && recipe.id !== swapTarget.currentRecipeId)
+            // Vaihtoryhmä tarkan tägin sijaan: illallisen voi vaihtaa lounasreseptiin (ja päinvastoin),
+            // aamupala↔iltapala samoin — sama ristiin syömisen logiikka kuin lisäyspoimijassa.
+            .filter(
+              (recipe) =>
+                getMealSlotGroupForTag(swapTarget.mealTag).tags.includes(recipe.mealTag) &&
+                recipe.id !== swapTarget.currentRecipeId,
+            )
             .sort((left, right) => left.name.localeCompare(right.name, "fi"))}
           catalog={catalog}
           baselineKcal={recipeById.get(swapTarget.currentRecipeId) ? servingMacros(recipeById.get(swapTarget.currentRecipeId)!, catalog).kcal : 0}
