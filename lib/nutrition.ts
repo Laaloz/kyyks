@@ -3,6 +3,7 @@ import type {
   AssignedMealPlan,
   AssignedMealPlanInput,
   AppState,
+  DayMealFoodSource,
   DayMealPlanEntry,
   Ingredient,
   IngredientInput,
@@ -968,6 +969,110 @@ export function adHocEntryMacros(entry: DayMealPlanEntry): DayEntryMacros {
     c: (entry.carbsPer100 ?? 0) * factor,
     f: (entry.fatPer100 ?? 0) * factor,
   };
+}
+
+/**
+ * Viimeiset n paikallista päiväavainta (YYYY-MM-DD), uusin ensin, päättyen `todayKey`-päivään.
+ * Paikallinen aritmetiikka (ei UTC) jottei viikkonäkymä vuoda päivän väärälle puolelle.
+ */
+export function lastNLocalDates(n: number, todayKey: string): string[] {
+  const [year, month, day] = todayKey.split("-").map(Number);
+  const base = new Date(year, (month ?? 1) - 1, day ?? 1);
+  const keys: string[] = [];
+  for (let i = 0; i < n; i += 1) {
+    const date = new Date(base);
+    date.setDate(base.getDate() - i);
+    const yy = date.getFullYear();
+    const mm = String(date.getMonth() + 1).padStart(2, "0");
+    const dd = String(date.getDate()).padStart(2, "0");
+    keys.push(`${yy}-${mm}-${dd}`);
+  }
+  return keys;
+}
+
+/** Päiväkirjan pikalisäyksen ("Viimeksi syötyä") yksi ehdotus — joko resepti tai ad hoc -ruoka snapshotilla. */
+export type RecentFood =
+  | { key: string; label: string; mealTag: MealTag; kind: "recipe"; recipeId: string }
+  | {
+      key: string;
+      label: string;
+      mealTag: MealTag;
+      kind: "food";
+      grams: number;
+      ingredientId: string | null;
+      food: {
+        name: string;
+        kcalPer100: number;
+        proteinPer100: number;
+        carbsPer100: number;
+        fatPer100: number;
+        source?: DayMealFoodSource;
+      };
+    };
+
+/**
+ * Johtaa "Viimeksi syötyä" -pikalisäykset päiväkirjahistoriasta: yksi merkintä per
+ * resepti/ruoka, uusin ensin. Reseptirivit jätetään pois jos reseptiä ei voi nimetä
+ * (poistettu/ei näkyvissä), jottei synny rikkinäisiä pikanappeja.
+ */
+export function getRecentFoods(
+  entries: DayMealPlanEntry[],
+  options: {
+    athleteId: string;
+    excludeDate?: string;
+    limit?: number;
+    resolveRecipeName?: (recipeId: string) => string | undefined;
+  },
+): RecentFood[] {
+  const limit = options.limit ?? 8;
+  const seen = new Set<string>();
+  const result: RecentFood[] = [];
+  const sorted = entries
+    .filter((entry) => entry.athleteId === options.athleteId && entry.planDate !== options.excludeDate)
+    .sort((left, right) => (right.createdAt ?? "").localeCompare(left.createdAt ?? ""));
+
+  for (const entry of sorted) {
+    if (result.length >= limit) {
+      break;
+    }
+    if (entry.recipeId) {
+      const key = `recipe:${entry.recipeId}`;
+      if (seen.has(key)) {
+        continue;
+      }
+      const name = options.resolveRecipeName?.(entry.recipeId);
+      if (!name) {
+        continue;
+      }
+      seen.add(key);
+      result.push({ key, label: name, mealTag: entry.mealTag, kind: "recipe", recipeId: entry.recipeId });
+    } else if (entry.foodName?.trim()) {
+      const name = entry.foodName.trim();
+      const key = `food:${name.toLowerCase()}`;
+      if (seen.has(key)) {
+        continue;
+      }
+      seen.add(key);
+      result.push({
+        key,
+        label: name,
+        mealTag: entry.mealTag,
+        kind: "food",
+        grams: entry.grams ?? 0,
+        ingredientId: entry.ingredientId ?? null,
+        food: {
+          name,
+          kcalPer100: entry.kcalPer100 ?? 0,
+          proteinPer100: entry.proteinPer100 ?? 0,
+          carbsPer100: entry.carbsPer100 ?? 0,
+          fatPer100: entry.fatPer100 ?? 0,
+          source: entry.foodSource ?? undefined,
+        },
+      });
+    }
+  }
+
+  return result;
 }
 
 export function getVisibleRecipesForUser(state: AppState, user: Pick<UserProfile, "id" | "role"> | null | undefined) {

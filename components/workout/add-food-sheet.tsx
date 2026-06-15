@@ -5,9 +5,14 @@ import { useMemo, useState } from "react";
 
 import { Button } from "@/components/ui/button";
 import { Sheet } from "@/components/ui/sheet";
+import { Toggle } from "@/components/ui/toggle";
+import { CameraCapture } from "@/components/workout/camera-capture";
 import { addFoodFormSchema, macroEnergyWarning } from "@/components/workout/schemas";
+import { mealTagLabel } from "@/lib/nutrition";
 import { cn } from "@/lib/utils";
-import type { AppState, DayMealPlanEntry } from "@/lib/types";
+import type { AppState, DayMealPlanEntry, MealTag } from "@/lib/types";
+
+const MEAL_TAGS: MealTag[] = ["breakfast", "lunch", "snack", "dinner", "evening_snack"];
 
 type FineliMatchLite = {
   ingredientId: string;
@@ -59,6 +64,7 @@ export function AddFoodSheet({
   const [analyzing, setAnalyzing] = useState(false);
   const [pending, setPending] = useState(false);
   const [error, setError] = useState("");
+  const [cameraOpen, setCameraOpen] = useState(false);
 
   // Suodata omat tuotteet koko katalogista vain kerran (ei joka näppäimenpainalluksella) —
   // koko katalogin läpikäynti per painallus aiheutti turhaa muisti-/CPU-painetta mobiilissa.
@@ -91,17 +97,37 @@ export function AddFoodSheet({
     }
   };
 
+  const analyzeAndAdd = async (base64: string, mimeType: string) => {
+    const result = await onQuickAddPhoto({ imageBase64: base64, mimeType });
+    if (result.ok) {
+      onClose();
+    } else {
+      setError(result.message ?? "Lisäys epäonnistui.");
+    }
+  };
+
+  // Tiedostopolku (galleria / fallback): skaalaa ensin, sitten arvioi.
   const runPhoto = async (file: File) => {
+    setCameraOpen(false);
     setAnalyzing(true);
     setError("");
     try {
       const { base64, mimeType } = await fileToScaledBase64(file);
-      const result = await onQuickAddPhoto({ imageBase64: base64, mimeType });
-      if (result.ok) {
-        onClose();
-      } else {
-        setError(result.message ?? "Lisäys epäonnistui.");
-      }
+      await analyzeAndAdd(base64, mimeType);
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "Kuvan käsittely epäonnistui.");
+    } finally {
+      setAnalyzing(false);
+    }
+  };
+
+  // In-app-kamera: kuva on jo skaalattu canvasilla.
+  const runCapturedPhoto = async (base64: string, mimeType: string) => {
+    setCameraOpen(false);
+    setAnalyzing(true);
+    setError("");
+    try {
+      await analyzeAndAdd(base64, mimeType);
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "Kuvan käsittely epäonnistui.");
     } finally {
@@ -143,30 +169,19 @@ export function AddFoodSheet({
           />
         </div>
         {aiEnabled ? (
-          <label
+          <button
+            type="button"
             className={cn(
-              "grid size-11 shrink-0 cursor-pointer place-items-center rounded-xl bg-[var(--surface-2)] text-[var(--text)]",
+              "grid size-11 shrink-0 place-items-center rounded-xl bg-[var(--surface-2)] text-[var(--text)]",
               analyzing && "opacity-50",
             )}
             aria-label="Lisää kuvasta"
             title="Lisää kuvasta"
+            disabled={analyzing}
+            onClick={() => setCameraOpen(true)}
           >
             <Camera className="size-5" aria-hidden="true" />
-            <input
-              type="file"
-              accept="image/*"
-              capture="environment"
-              className="sr-only"
-              disabled={analyzing}
-              onChange={(event) => {
-                const file = event.target.files?.[0];
-                if (file) {
-                  void runPhoto(file);
-                }
-                event.target.value = "";
-              }}
-            />
-          </label>
+          </button>
         ) : null}
       </form>
 
@@ -205,6 +220,14 @@ export function AddFoodSheet({
           </Button>
         ) : null}
       </div>
+
+      {cameraOpen ? (
+        <CameraCapture
+          onCapture={({ base64, mimeType }) => void runCapturedPhoto(base64, mimeType)}
+          onPickFile={(file) => void runPhoto(file)}
+          onClose={() => setCameraOpen(false)}
+        />
+      ) : null}
     </Sheet>
   );
 }
@@ -311,6 +334,7 @@ export type FoodFormValues = {
   carbsPer100: number;
   fatPer100: number;
   saveToMyFoods: boolean;
+  mealTag?: MealTag;
 };
 
 type FoodFieldState = {
@@ -426,11 +450,14 @@ async function aiTextLookup(name: string): Promise<AiLookupResult> {
 export function FoodEntryEditSheet({
   entry,
   aiEnabled = true,
+  initialRemembered = false,
   onClose,
   onSave,
 }: {
   entry: DayMealPlanEntry;
   aiEnabled?: boolean;
+  /** Onko ruoka jo omissa tuotteissa → "Muista tämä ruoka" -toggle näkyy päällä. */
+  initialRemembered?: boolean;
   onClose: () => void;
   onSave: (values: FoodFormValues) => Promise<ActionOutcome>;
 }) {
@@ -447,6 +474,8 @@ export function FoodEntryEditSheet({
       <div className="mt-4 min-h-0 flex-1 overflow-y-auto">
         <FoodEntryForm
           initialFields={fieldsFromEntry(entry)}
+          initialMealTag={entry.mealTag}
+          initialRemembered={initialRemembered}
           aiLookup={aiEnabled ? aiTextLookup : undefined}
           onSubmit={async (values) => {
             setError("");
@@ -471,6 +500,8 @@ export function FoodEntryEditSheet({
 function FoodEntryForm({
   initialFields,
   initialName,
+  initialMealTag,
+  initialRemembered = false,
   aiPrefilled = false,
   aiLookup,
   onSubmit,
@@ -478,6 +509,8 @@ function FoodEntryForm({
 }: {
   initialFields?: FoodFieldState;
   initialName?: string;
+  initialMealTag?: MealTag;
+  initialRemembered?: boolean;
   aiPrefilled?: boolean;
   aiLookup?: (name: string) => Promise<AiLookupResult>;
   onSubmit: (values: FoodFormValues, source: "manual" | "ai") => Promise<void>;
@@ -486,8 +519,12 @@ function FoodEntryForm({
   const [fields, setFields] = useState<FoodFieldState>(
     initialFields ?? { name: initialName ?? "", grams: "100", kcal: "", protein: "", carbs: "", fat: "" },
   );
+  const [mealTag, setMealTag] = useState<MealTag | undefined>(initialMealTag);
   const [usedAi, setUsedAi] = useState(aiPrefilled);
-  const [save, setSave] = useState(true);
+  // Muokkauksessa: onko nimi muuttunut alkuperäisestä → nostetaan AI-uudelleenarvio esiin.
+  const originalName = (initialFields?.name ?? "").trim();
+  const nameChanged = Boolean(aiLookup) && fields.name.trim().length >= 2 && fields.name.trim() !== originalName;
+  const [save, setSave] = useState(initialRemembered);
   const [fieldError, setFieldError] = useState("");
   const [aiNote, setAiNote] = useState("");
   const [pending, setPending] = useState(false);
@@ -533,7 +570,7 @@ function FoodEntryForm({
         setFieldError("");
         setPending(true);
         try {
-          await onSubmit(result.values, usedAi ? "ai" : "manual");
+          await onSubmit({ ...result.values, mealTag }, usedAi ? "ai" : "manual");
         } finally {
           setPending(false);
         }
@@ -554,19 +591,51 @@ function FoodEntryForm({
       <FoodFields state={fields} setState={setFields} />
 
       {aiLookup && !aiPending ? (
-        <button
-          type="button"
-          className="text-xs font-semibold text-[var(--accent)] underline-offset-2 hover:underline"
-          onClick={() => void runAiLookup(fields.name)}
-        >
-          Täytä tekoälyllä
-        </button>
+        <div className="space-y-1.5">
+          {nameChanged ? (
+            <p className="text-xs text-[var(--text-muted)]">Nimi muuttui — päivitä ravintoarvot tekoälyllä?</p>
+          ) : null}
+          <Button
+            type="button"
+            variant={nameChanged ? "primary" : "secondary"}
+            className="w-full gap-2"
+            onClick={() => void runAiLookup(fields.name)}
+          >
+            <Sparkles className="size-4" aria-hidden="true" />
+            Arvioi ravintoarvot uudelleen
+          </Button>
+        </div>
       ) : null}
 
-      <label className="flex items-center gap-2 text-sm text-[var(--text-muted)]">
-        <input type="checkbox" checked={save} onChange={(event) => setSave(event.target.checked)} className="size-4" />
-        Tallenna omiin tuotteisiin
-      </label>
+      {initialMealTag !== undefined ? (
+        <div className="flex flex-col gap-1.5">
+          <span className="text-xs font-semibold text-[var(--text-subtle)]">Ateriapaikka</span>
+          <div className="flex flex-wrap gap-1.5">
+            {MEAL_TAGS.map((tag) => {
+              const active = (mealTag ?? initialMealTag) === tag;
+              return (
+                <button
+                  key={tag}
+                  type="button"
+                  className={`rounded-full px-3 py-1 text-xs font-semibold transition ${
+                    active ? "bg-[var(--text)] text-[var(--background)]" : "bg-[var(--surface-2)] text-[var(--text-muted)]"
+                  }`}
+                  onClick={() => setMealTag(tag)}
+                >
+                  {mealTagLabel(tag)}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      ) : null}
+
+      <div className="flex items-center justify-between gap-3">
+        <span id="remember-food-label" className="text-sm text-[var(--text-muted)]">
+          Muista tämä ruoka
+        </span>
+        <Toggle checked={save} onChange={setSave} labelledBy="remember-food-label" />
+      </div>
 
       {fieldError ? (
         <p className="text-sm text-[var(--danger)]" role="alert">

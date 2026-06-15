@@ -1,9 +1,10 @@
 import { NextResponse } from "next/server";
 
-import type { DayMealSource } from "@/lib/types";
+import type { DayMealSource, MealTag } from "@/lib/types";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 
 const SOURCES: DayMealSource[] = ["plan", "swapped", "added"];
+const MEAL_TAGS: MealTag[] = ["breakfast", "lunch", "snack", "dinner", "evening_snack"];
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 export async function DELETE(
@@ -51,6 +52,9 @@ type PatchBodyPayload = {
   aiStatus?: "pending" | "failed" | null;
   // null = merkitse syömättömäksi; ISO-aikaleima = merkitse syödyksi.
   eatenAt?: string | null;
+  // Ad hoc -ruoan siirto toiseen ateriapaikkaan + uusi järjestyspaikka kohderyhmässä.
+  mealTag?: MealTag;
+  position?: number;
 };
 
 const PER_100_FIELDS: Array<{ key: "kcalPer100" | "proteinPer100" | "carbsPer100" | "fatPer100"; column: string; max: number }> = [
@@ -100,6 +104,21 @@ export async function PATCH(
       return NextResponse.json({ message: "Tuntematon aterian lähde." }, { status: 400 });
     }
     update.source = body.source;
+  }
+
+  if (body.mealTag !== undefined) {
+    if (!MEAL_TAGS.includes(body.mealTag)) {
+      return NextResponse.json({ message: "Tuntematon ateriapaikka." }, { status: 400 });
+    }
+    update.meal_tag = body.mealTag;
+  }
+
+  if (body.position !== undefined) {
+    const position = Number(body.position);
+    if (!Number.isFinite(position) || position < 0) {
+      return NextResponse.json({ message: "Virheellinen järjestys." }, { status: 400 });
+    }
+    update.position = position;
   }
 
   if (body.servings !== undefined) {

@@ -17,17 +17,22 @@ import {
   buildPersonalNutritionGoalComparison,
   getActiveMealPlanForAthlete,
   getMissingMacroProfileFields,
+  getRecentFoods,
   getVisibleRecipesForUser,
   inferMealTagForTime,
+  lastNLocalDates,
   mealTagLabel,
   resolveRecipeNutritionPreview,
   splitRecipeInstructions,
 } from "@/lib/nutrition";
+import type { RecentFood } from "@/lib/nutrition";
+import { WeekOverview, type WeekDay } from "@/components/workout/nutrition/week-overview";
 import type { AppState, DayMealPlanEntry, MealTag, Recipe, UserProfile } from "@/lib/types";
 import { isSupabaseConfigured } from "@/lib/config";
 import { useAppState } from "@/providers/app-state-provider";
 
 const MEAL_TAG_ORDER: MealTag[] = ["breakfast", "lunch", "snack", "dinner", "evening_snack"];
+const WEEKDAY_LABELS = ["Su", "Ma", "Ti", "Ke", "To", "Pe", "La"];
 
 const missingFieldLabel: Record<"age" | "sex" | "heightCm" | "weightKg", string> = {
   age: "ikä",
@@ -118,8 +123,8 @@ export function NutritionView({
   onOpenSettings?: () => void;
   onOpenMeasurements?: () => void;
 }) {
-  const { state, addDayMeal, swapDayMeal, removeDayMeal, setDayMealEaten, quickAddAiFood, saveDayMealFood } = useAppState();
-  const [seg, setSeg] = useState<"day" | "recipes">("day");
+  const { state, addDayMeal, swapDayMeal, removeDayMeal, setDayMealEaten, quickAddAiFood, saveDayMealFood, deleteIngredient } = useAppState();
+  const [seg, setSeg] = useState<"day" | "week" | "recipes">("day");
   const [filter, setFilter] = useState<MealTag | "all">("all");
   const [query, setQuery] = useState("");
   const [editorOpen, setEditorOpen] = useState(false);
@@ -128,6 +133,7 @@ export function NutritionView({
   const [swapTarget, setSwapTarget] = useState<{ entryId: string; mealTag: MealTag; currentRecipeId: string } | null>(null);
   const [addTag, setAddTag] = useState<MealTag | null>(null);
   const [addFoodOpen, setAddFoodOpen] = useState(false);
+  const [repeatingKey, setRepeatingKey] = useState<string | null>(null);
   // Yksi "Lisää ateriaan" -sisäänmeno → valikko (AI:lla / Reseptit).
   const [addMenuOpen, setAddMenuOpen] = useState(false);
   const [editFoodEntry, setEditFoodEntry] = useState<DayMealPlanEntry | null>(null);
@@ -238,6 +244,93 @@ export function NutritionView({
     { kcal: 0, p: 0, c: 0, f: 0 },
   );
 
+  // Päiväkirjarivin näyttönimi: reseptin nimi tai ad hoc -ruoan nimi.
+  const entryLabel = (entry: DayMealPlanEntry): string =>
+    entry.recipeId ? (recipeById.get(entry.recipeId)?.name ?? "Resepti") : (entry.foodName?.trim() || "Ruoka");
+
+  // Viikkokatsaus: 7 päivän kcal-yhteenveto jo ladatusta day_meal_plans -datasta (client-aggregaatio).
+  const weekTargetKcal = macroTarget?.kcal ?? null;
+  const weekDays: WeekDay[] = (() => {
+    const dates = lastNLocalDates(7, todayKey);
+    const byDate = new Map<string, DayMealPlanEntry[]>();
+    for (const entry of state.dayMealPlans ?? []) {
+      if (entry.athleteId !== user.id) continue;
+      const list = byDate.get(entry.planDate);
+      if (list) list.push(entry);
+      else byDate.set(entry.planDate, [entry]);
+    }
+    return dates.map((date) => {
+      const entries = (byDate.get(date) ?? []).slice().sort((left, right) => {
+        const tagDelta = MEAL_TAG_ORDER.indexOf(left.mealTag) - MEAL_TAG_ORDER.indexOf(right.mealTag);
+        return tagDelta !== 0 ? tagDelta : left.position - right.position;
+      });
+      const items = entries.map((entry) => ({
+        id: entry.id,
+        label: entryLabel(entry),
+        kcal: entryMacros(entry)?.kcal ?? 0,
+        mealTag: entry.mealTag,
+        eaten: Boolean(entry.eatenAt),
+      }));
+      const kcal = items.reduce((sum, item) => sum + item.kcal, 0);
+      const date0 = new Date(`${date}T00:00:00`);
+      return {
+        date,
+        weekdayLabel: WEEKDAY_LABELS[date0.getDay()],
+        dateLabel: `${date0.getDate()}.${date0.getMonth() + 1}.`,
+        isToday: date === todayKey,
+        kcal,
+        items,
+      };
+    });
+  })();
+  const loggedWeekDays = weekDays.filter((day) => day.items.length > 0);
+  const weekAvgKcal = loggedWeekDays.length
+    ? loggedWeekDays.reduce((sum, day) => sum + day.kcal, 0) / loggedWeekDays.length
+    : 0;
+
+  // "Viimeksi syötyä" -pikalisäys: johdetaan aiempien päivien historiasta (ei tämä päivä).
+  const recentFoods = useMemo(
+    () =>
+      getRecentFoods(state.dayMealPlans ?? [], {
+        athleteId: user.id,
+        excludeDate: todayKey,
+        limit: 8,
+        resolveRecipeName: (recipeId) => recipeById.get(recipeId)?.name,
+      }),
+    [state.dayMealPlans, user.id, todayKey, recipeById],
+  );
+
+  // Onko muokattava ad hoc -ruoka jo omissa tuotteissa (nimellä) → "Muista tämä ruoka" -toggle päälle.
+  const rememberedOwnFood = useMemo(
+    () =>
+      editFoodEntry
+        ? (catalog.find(
+            (item) =>
+              item.ownerUserId === user.id &&
+              (item.displayName || item.name).trim().toLowerCase() === (editFoodEntry.foodName ?? "").trim().toLowerCase(),
+          ) ?? null)
+        : null,
+    [editFoodEntry, catalog, user.id],
+  );
+
+  const handleQuickRepeat = async (food: RecentFood) => {
+    if (repeatingKey) return;
+    setRepeatingKey(food.key);
+    try {
+      const mealTag = inferMealTagForTime(new Date());
+      const position = dayRows.filter((entry) => entry.mealTag === mealTag).length;
+      if (food.kind === "recipe") {
+        await addDayMeal({ planDate: todayKey, mealTag, recipeId: food.recipeId, source: "added", position });
+      } else if (food.ingredientId && food.grams > 0) {
+        await addDayMeal({ planDate: todayKey, mealTag, position, ingredientId: food.ingredientId, grams: food.grams });
+      } else {
+        await addDayMeal({ planDate: todayKey, mealTag, position, grams: food.grams, food: food.food });
+      }
+    } finally {
+      setRepeatingKey(null);
+    }
+  };
+
   const visibleRecipes = useMemo(
     () =>
       visibleRecipeSource
@@ -304,6 +397,7 @@ export function NutritionView({
           onChange={setSeg}
           options={[
             { value: "day", label: "Päivä" },
+            { value: "week", label: "Viikko" },
             { value: "recipes", label: "Reseptit" },
           ]}
         />
@@ -369,6 +463,32 @@ export function NutritionView({
               </p>
             ) : null}
           </div>
+
+          {!dayOnly && !readOnly && recentFoods.length > 0 ? (
+            <div className="mt-3">
+              <p className="text-xs font-semibold uppercase tracking-[0.05em] text-[var(--text-subtle)]">
+                Viimeksi syötyä
+              </p>
+              <div className="mt-2 flex flex-wrap gap-1.5">
+                {recentFoods.map((food) => (
+                  <button
+                    key={food.key}
+                    type="button"
+                    disabled={repeatingKey !== null}
+                    onClick={() => void handleQuickRepeat(food)}
+                    className="inline-flex items-center gap-1.5 rounded-full border border-[var(--border)] bg-[var(--surface-2)] px-3 py-1.5 text-sm font-medium text-[var(--text)] transition hover:bg-[var(--surface-3)] disabled:opacity-50"
+                  >
+                    {repeatingKey === food.key ? (
+                      <Loader2 className="size-3.5 animate-spin" aria-hidden="true" />
+                    ) : (
+                      <Plus className="size-3.5 text-[var(--text-subtle)]" aria-hidden="true" />
+                    )}
+                    <span className="max-w-[10rem] truncate">{food.label}</span>
+                  </button>
+                ))}
+              </div>
+            </div>
+          ) : null}
 
           {!hasDay ? (
             <div className="mt-3">
@@ -587,6 +707,10 @@ export function NutritionView({
             </>
           )}
         </div>
+      ) : seg === "week" ? (
+        <div className="mt-5">
+          <WeekOverview days={weekDays} targetKcal={weekTargetKcal} avgKcal={weekAvgKcal} />
+        </div>
       ) : (
         <div className="mt-5">
           {/* "+ Oma resepti" on nyt yläpalkissa (useHeaderAction). */}
@@ -785,9 +909,15 @@ export function NutritionView({
         <FoodEntryEditSheet
           entry={editFoodEntry}
           aiEnabled={isSupabaseConfigured}
+          initialRemembered={Boolean(rememberedOwnFood)}
           onClose={() => setEditFoodEntry(null)}
-          onSave={async (values) =>
-            saveDayMealFood(editFoodEntry.id, {
+          onSave={async (values) => {
+            // Ateriapaikan vaihtuessa siirretään rivi kohderyhmän loppuun (uusi position).
+            const tagChanged = Boolean(values.mealTag) && values.mealTag !== editFoodEntry.mealTag;
+            const position = tagChanged
+              ? dayRows.filter((entry) => entry.mealTag === values.mealTag).length
+              : undefined;
+            const result = await saveDayMealFood(editFoodEntry.id, {
               name: values.name,
               grams: values.grams,
               kcalPer100: values.kcalPer100,
@@ -795,8 +925,15 @@ export function NutritionView({
               carbsPer100: values.carbsPer100,
               fatPer100: values.fatPer100,
               saveToMyFoods: values.saveToMyFoods,
-            })
-          }
+              mealTag: values.mealTag,
+              position,
+            });
+            // Pysyvä "Muista tämä ruoka": käännettiin pois ja ruoka oli muistissa → poista oma tuote.
+            if (result.ok && !values.saveToMyFoods && rememberedOwnFood) {
+              await deleteIngredient(rememberedOwnFood.id);
+            }
+            return result;
+          }}
         />
       ) : null}
 

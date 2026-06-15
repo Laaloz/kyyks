@@ -2640,6 +2640,8 @@ interface AppStateContextValue {
       carbsPer100: number;
       fatPer100: number;
       saveToMyFoods?: boolean;
+      mealTag?: MealTag;
+      position?: number;
     },
   ) => Promise<ActionResult>;
   updateWorkoutSet: (scheduledWorkoutId: string, logId: string, patch: WorkoutUpdateInput) => Promise<void>;
@@ -4847,7 +4849,14 @@ function findResolvedUserIdInSnapshot(
         return { ok: true };
       },
       async deleteIngredient(ingredientId) {
-        if (!currentUser || currentUser.role !== "admin") {
+        if (!currentUser) {
+          return { ok: false, message: "Kirjaudu sisään." };
+        }
+        // Admin hallitsee kaikkia; muut voivat poistaa vain omia tuotteitaan (serveri valvoo myös).
+        const ownsIngredient = (stateRef.current.ingredientsCatalog ?? []).some(
+          (item) => item.id === ingredientId && item.ownerUserId === currentUser.id,
+        );
+        if (currentUser.role !== "admin" && !ownsIngredient) {
           return { ok: false, message: "Vain admin voi hallita raaka-aineita." };
         }
 
@@ -7463,7 +7472,9 @@ function findResolvedUserIdInSnapshot(
           ),
         }));
 
-        void ensureOwnFood(estimate.name, "ai", estimate.kcalPer100, estimate.proteinPer100, estimate.carbsPer100, estimate.fatPer100);
+        // Ei enää auto-tallenneta jokaista AI-ruokaa omiin tuotteisiin: "Viimeksi syötyä"
+        // kattaa viimeaikaiset uudelleenlisäykset, ja omat tuotteet pidetään kuratoituna
+        // listana (käyttäjä valitsee "Muista tämä ruoka" muokkauksessa).
         scheduleDayMealRefresh({ onSettled: () => pendingDayMealCreatesRef.current.delete(optimisticId) });
         })();
 
@@ -7491,6 +7502,8 @@ function findResolvedUserIdInSnapshot(
                   proteinPer100: input.proteinPer100,
                   carbsPer100: input.carbsPer100,
                   fatPer100: input.fatPer100,
+                  mealTag: input.mealTag ?? entry.mealTag,
+                  position: input.position ?? entry.position,
                   aiStatus: null,
                   updatedAt,
                 }
@@ -7520,6 +7533,8 @@ function findResolvedUserIdInSnapshot(
             proteinPer100: input.proteinPer100,
             carbsPer100: input.carbsPer100,
             fatPer100: input.fatPer100,
+            mealTag: input.mealTag,
+            position: input.position,
             aiStatus: null,
           }),
         }).catch(() => null);

@@ -11,6 +11,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardDescription, CardTitle } from "@/components/ui/card";
 import { Input, Label, Select } from "@/components/ui/field";
 import { Segmented } from "@/components/ui/segmented";
+import { Toggle } from "@/components/ui/toggle";
 import { InlineFeedback } from "@/components/workout/inline-feedback";
 import type { ProfileSheetSection } from "@/components/workout/profile-sheet";
 import { bodyMeasurementSchema, userSettingsSchema } from "@/components/workout/schemas";
@@ -71,7 +72,7 @@ function resolveDefaultView(role: Role, value: DashboardHomeView | undefined): D
   return getDefaultDashboardView(role);
 }
 
-// Toggle-kytkin (sama tyyli kuin profiilisheetin "Pidä näyttö päällä").
+// Toggle-kytkin (jaettu ui/Toggle; mt-0.5 säilyttää aiemman asettelun).
 function SettingToggle({
   checked,
   disabled,
@@ -84,23 +85,7 @@ function SettingToggle({
   onChange: (next: boolean) => void;
 }) {
   return (
-    <button
-      type="button"
-      role="switch"
-      aria-checked={checked}
-      aria-labelledby={labelledBy}
-      disabled={disabled}
-      className={`relative mt-0.5 inline-flex h-6 w-11 shrink-0 items-center rounded-full border transition disabled:opacity-60 ${
-        checked ? "border-[var(--accent)] bg-[var(--accent)]" : "border-[var(--border)] bg-[var(--surface-3)]"
-      }`}
-      onClick={() => onChange(!checked)}
-    >
-      <span
-        className={`pointer-events-none inline-block size-5 rounded-full bg-[var(--surface)] shadow-[0_1px_4px_-2px_var(--shadow)] transition-transform ${
-          checked ? "translate-x-5" : "translate-x-0.5"
-        }`}
-      />
-    </button>
+    <Toggle checked={checked} disabled={disabled} labelledBy={labelledBy} onChange={onChange} className="mt-0.5" />
   );
 }
 
