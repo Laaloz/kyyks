@@ -1578,7 +1578,7 @@ export function AthleteDashboard({
                 onOpenWorkoutLog?.();
               }}
             >
-              Aloita treeni
+              Avaa treenit
             </Button>
           )}
         </Card>
