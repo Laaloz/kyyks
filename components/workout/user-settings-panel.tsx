@@ -240,11 +240,23 @@ export function UserSettingsPanel({
         : (["overview"] as DashboardHomeView[]),
     [currentUser],
   );
+  const lastResetUserIdRef = useRef<string | null>(null);
   useEffect(() => {
     if (!currentUser) {
       return;
     }
 
+    // Käyttäjän vaihtuessa (tai ensilatauksessa) resetoidaan aina lomake tilasta.
+    // Samalle käyttäjälle EI resetoida kun tallennus on kesken (isSubmitting) tai
+    // lomakkeessa on paikallisia muutoksia (isDirty): muuten taustasynkan tuoma
+    // ohimenevä currentUser-päivitys voisi revertoida juuri auto-tallennetun
+    // valinnan (muistutukset/yksiköt/aloitusnäkymä) hetkellisesti.
+    const isUserSwitch = lastResetUserIdRef.current !== currentUser.id;
+    if (!isUserSwitch && (form.formState.isSubmitting || form.formState.isDirty)) {
+      return;
+    }
+
+    lastResetUserIdRef.current = currentUser.id;
     form.reset({
       fullName: currentUser.fullName,
       profileImageUrl: currentUser.profileImageUrl ?? "",
