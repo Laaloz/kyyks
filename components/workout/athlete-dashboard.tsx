@@ -1529,8 +1529,8 @@ export function AthleteDashboard({
       ) : null}
 
       {view === "overview" && (
-        <Card className="max-w-full overflow-x-clip border-[var(--text)] bg-[var(--text)] text-[var(--background)] [contain:inline-size]">
-          <p className="text-xs font-semibold tracking-[0.04em] text-[color:color-mix(in_srgb,var(--background)_62%,transparent)]">
+        <Card className="today-hero max-w-full overflow-x-clip border-[var(--hero-border)] bg-[var(--hero-bg)] text-[var(--hero-fg)] [contain:inline-size]">
+          <p className="text-xs font-semibold tracking-[0.04em] text-[color:color-mix(in_srgb,var(--hero-fg)_62%,transparent)]">
             {highlightedWorkoutState === "active"
               ? "Treeni kesken"
               : highlightedWorkoutState === "resumable"
@@ -1539,14 +1539,14 @@ export function AthleteDashboard({
                   ? "Seuraava treeni"
                   : "Aloita tästä"}
           </p>
-          <h2 className="mt-1.5 font-[family-name:var(--font-display)] text-[1.75rem] font-bold leading-tight tracking-[-0.01em] text-[var(--background)]">
+          <h2 className="mt-1.5 font-[family-name:var(--font-display)] text-[1.75rem] font-bold leading-tight tracking-[-0.01em] text-[var(--hero-fg)]">
             {highlightedWorkout
               ? normalizeWorkoutHistoryTitle(highlightedWorkout.title)
               : heroNextWorkout
                 ? heroNextWorkout.name
                 : "Ei ohjelmaa vielä"}
           </h2>
-          <p className="mt-1 text-sm text-[color:color-mix(in_srgb,var(--background)_72%,transparent)]">
+          <p className="mt-1 text-sm text-[color:color-mix(in_srgb,var(--hero-fg)_72%,transparent)]">
             {highlightedWorkout
               ? `${highlightedLoggedSetCount} ${highlightedLoggedSetCount === 1 ? "sarja" : "sarjaa"} kirjattu — jatka siitä mihin jäit`
               : heroNextWorkout
