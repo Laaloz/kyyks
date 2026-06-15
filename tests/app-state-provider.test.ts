@@ -344,6 +344,85 @@ describe("shouldPreserveStoredSessionDuringSupabaseBootstrap", () => {
     expect(nextState.scheduledWorkouts[0]?.updatedAt).toBe("2026-03-24T08:10:00.000Z");
   });
 
+  it("preserves local set inputs when the server session arrives under a different id than the optimistic one", () => {
+    // Toistaa juuri aloitetun treenin tilanteen: paikallisella sessiolla on
+    // optimistinen id (session_local), mutta palvelin palauttaa saman treenin
+    // session oikealla id:llä (session_server). Ilman scheduledWorkoutId-
+    // varatäsmäystä id-haku ei löytäisi paikallista sessiota ja palvelimen
+    // tuore sessio nollaisi juuri syötetyt arvot.
+    const state = cloneDemoState();
+    const localSession: WorkoutSession = {
+      id: "session_local",
+      scheduledWorkoutId: "workout_active",
+      athleteId: "user_athlete_1",
+      startedAt: "2026-03-24T08:00:00.000Z",
+      updatedAt: "2026-03-24T08:10:00.000Z",
+      setLogs: [
+        {
+          id: "log_local",
+          scheduledWorkoutId: "workout_active",
+          templateExerciseId: "exercise_1",
+          setId: "set_1",
+          exerciseId: "exercise_1",
+          exerciseName: "Kyykky",
+          setLabel: "1",
+          targetReps: 5,
+          actualReps: 8,
+          actualLoad: 120,
+          done: true,
+        },
+      ],
+    };
+
+    state.scheduledWorkouts = [
+      {
+        id: "workout_active",
+        athleteId: "user_athlete_1",
+        coachId: "user_coach_1",
+        title: "Jalkapäivä",
+        scheduledDate: "2026-03-24T08:00:00.000Z",
+        status: "in_progress",
+        createdAt: "2026-03-24T08:00:00.000Z",
+        updatedAt: "2026-03-24T08:10:00.000Z",
+      },
+    ];
+    state.sessions = [localSession];
+
+    const nextState = reconcileSupabaseVisibleState(state, {
+      users: state.users,
+      bodyMeasurements: state.bodyMeasurements,
+      assignments: state.assignments,
+      exercises: state.exercises,
+      templates: state.templates,
+      plans: state.plans,
+      scheduledWorkouts: [state.scheduledWorkouts[0]!],
+      sessions: [
+        {
+          ...localSession,
+          id: "session_server",
+          updatedAt: "2026-03-24T08:11:00.000Z",
+          setLogs: localSession.setLogs.map((log) => ({
+            ...log,
+            id: "log_server",
+            actualReps: 5,
+            actualLoad: undefined,
+            done: false,
+          })),
+        },
+      ],
+      notes: state.notes,
+      conversationEntries: state.conversationEntries,
+    });
+
+    expect(nextState.sessions).toHaveLength(1);
+    expect(nextState.sessions[0]?.id).toBe("session_server");
+    expect(nextState.sessions[0]?.setLogs[0]).toMatchObject({
+      actualReps: 8,
+      actualLoad: 120,
+      done: true,
+    });
+  });
+
   it("preserves pending optimistic set updates even when a newer stale server session snapshot arrives", () => {
     const state = cloneDemoState();
     const localSession: WorkoutSession = {

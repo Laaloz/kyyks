@@ -2032,7 +2032,12 @@ export function reconcileSupabaseVisibleState(
         : workout;
     }),
     sessions: withActiveWorkoutShells.sessions.map((session) => {
-      const localSession = previousSessionsById.get(session.id);
+      // Varatäsmäys scheduledWorkoutId:llä: juuri aloitetulla optimistisella
+      // sessiolla on eri (väliaikainen) id kuin palvelimella, joten pelkkä
+      // id-haku ei löytäisi paikallisia sarja-arvoja ja palvelimen sessio
+      // ylikirjoittaisi ne hiljaa.
+      const localSession =
+        previousSessionsById.get(session.id) ?? previousSessionsByWorkoutId.get(session.scheduledWorkoutId);
       if (!localSession) {
         return session;
       }

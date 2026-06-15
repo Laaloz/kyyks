@@ -1372,7 +1372,12 @@ export async function startProgramWorkoutOnServer({
         autoCancelledWorkoutTitle = "Aiempi treeni";
       }
     } else {
-      return { ok: true as const, scheduledWorkoutId: existingActive.data.id };
+      const existingPayload = await fetchStartedWorkoutPayload(admin, existingActive.data.id);
+      return {
+        ok: true as const,
+        scheduledWorkoutId: existingActive.data.id,
+        payload: existingPayload ?? undefined,
+      };
     }
   }
   timer.checkpoint("blocking-query");
@@ -1427,10 +1432,12 @@ export async function startProgramWorkoutOnServer({
       });
       timer.checkpoint("compat-start-fallback");
       if (fallbackResult.ok) {
+        const fallbackPayload = await fetchStartedWorkoutPayload(admin, fallbackResult.scheduledWorkoutId);
         return {
           ok: true as const,
           scheduledWorkoutId: fallbackResult.scheduledWorkoutId,
           autoCancelledWorkoutTitle,
+          payload: fallbackPayload ?? undefined,
         };
       }
     }
@@ -1438,11 +1445,15 @@ export async function startProgramWorkoutOnServer({
     return startResult;
   }
 
+  // Palauta täysi sessio heti, jotta klientin ei tarvitse hakea sitä viiveellä
+  // taustasnapshotilla (joka muuten ylikirjoittaisi juuri syötetyt sarja-arvot).
+  const payload = await fetchStartedWorkoutPayload(admin, startResult.scheduledWorkoutId);
   timer.checkpoint("done");
   return {
     ok: true as const,
     scheduledWorkoutId: startResult.scheduledWorkoutId,
     autoCancelledWorkoutTitle,
+    payload: payload ?? undefined,
   };
 }
 
