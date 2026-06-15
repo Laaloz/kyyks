@@ -758,6 +758,7 @@ export function DashboardShell() {
                 onOpenWorkoutLog={() => setView("athlete-log")}
                 onOpenSettings={() => setView("settings")}
                 onOpenMeasurements={openMeasurementsOverview}
+                onOpenNutrition={() => setView("nutrition")}
                 onOpenProgramEditor={() => setView(PROGRAMS_WORKSPACE_VIEW)}
                 onWorkoutDetailModeChange={setIsMobileWorkoutDetailOpen}
                 overviewFocusTarget={athleteOverviewFocusTarget}
@@ -772,6 +773,7 @@ export function DashboardShell() {
                 onOpenWorkoutLog={() => setView("athlete-log")}
                 onOpenSettings={() => setView("settings")}
                 onOpenMeasurements={openMeasurementsOverview}
+                onOpenNutrition={() => setView("nutrition")}
                 onOpenProgramEditor={() => setView(PROGRAMS_WORKSPACE_VIEW)}
                 onWorkoutDetailModeChange={setIsMobileWorkoutDetailOpen}
                 overviewFocusTarget={athleteOverviewFocusTarget}
@@ -801,6 +803,7 @@ export function DashboardShell() {
                 onOpenWorkoutLog={() => setView("athlete-log")}
                 onOpenSettings={() => setView("settings")}
                 onOpenMeasurements={openMeasurementsOverview}
+                onOpenNutrition={() => setView("nutrition")}
                 onOpenProgramEditor={() => setView(PROGRAMS_WORKSPACE_VIEW)}
                 onWorkoutDetailModeChange={setIsMobileWorkoutDetailOpen}
                 overviewFocusTarget={athleteOverviewFocusTarget}

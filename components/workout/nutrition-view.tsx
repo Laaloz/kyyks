@@ -4,7 +4,7 @@ import { BookOpen, Check, ChevronRight, Loader2, Plus, Repeat2, Search, Sparkles
 import { useMemo, useRef, useState } from "react";
 
 import { Button } from "@/components/ui/button";
-import { Card, CardTitle } from "@/components/ui/card";
+import { Card } from "@/components/ui/card";
 import { Segmented } from "@/components/ui/segmented";
 import { Sheet } from "@/components/ui/sheet";
 import { AddFoodSheet, FoodEntryEditSheet } from "@/components/workout/add-food-sheet";
@@ -111,14 +111,11 @@ function EnergySplit({ macros }: { macros: Macros }) {
 export function NutritionView({
   user,
   readOnly = false,
-  dayOnly = false,
   onOpenSettings,
   onOpenMeasurements,
 }: {
   user: UserProfile;
   readOnly?: boolean;
-  // Tänään-näkymä: vain Päivä-osio (sama komponentti kuin Ravinto-välilehdellä).
-  dayOnly?: boolean;
   onOpenSettings?: () => void;
   onOpenMeasurements?: () => void;
 }) {
@@ -135,10 +132,10 @@ export function NutritionView({
   // Yksi "Lisää ateriaan" -sisäänmeno → valikko (AI:lla / Reseptit).
   const [addMenuOpen, setAddMenuOpen] = useState(false);
   const [editFoodEntry, setEditFoodEntry] = useState<DayMealPlanEntry | null>(null);
-  // Ravinto-välilehden "+ Oma resepti" nostetaan yläpalkkiin (ei Tänään-dayOnly-tilassa).
+  // Ravinto-välilehden "+ Oma resepti" nostetaan yläpalkkiin.
   useHeaderAction(
     "nutrition",
-    !dayOnly && !readOnly
+    !readOnly
       ? {
           label: "Oma resepti",
           icon: Plus,
@@ -336,31 +333,20 @@ export function NutritionView({
 
   return (
     <Card className="max-w-full overflow-x-clip [contain:inline-size]">
-      {dayOnly ? (
-        <div className="flex items-baseline justify-between gap-3">
-          <CardTitle>Päivän ateriat</CardTitle>
-          {hasDay ? (
-            <span className="shrink-0 font-[family-name:var(--font-display)] text-sm font-semibold tabular-nums text-[var(--accent)]">
-              {eatenRows.length}/{dayRows.length} syöty
-            </span>
-          ) : null}
-        </div>
-      ) : (
-        <Segmented
-          ariaLabel="Päivä tai reseptit"
-          value={seg}
-          onChange={setSeg}
-          options={[
-            { value: "day", label: "Päivä" },
-            { value: "week", label: "Viikko" },
-            { value: "recipes", label: "Reseptit" },
-          ]}
-        />
-      )}
+      <Segmented
+        ariaLabel="Päivä tai reseptit"
+        value={seg}
+        onChange={setSeg}
+        options={[
+          { value: "day", label: "Päivä" },
+          { value: "week", label: "Viikko" },
+          { value: "recipes", label: "Reseptit" },
+        ]}
+      />
 
-      {dayOnly || seg === "day" ? (
-        <div className={dayOnly ? "" : "mt-5"}>
-          {!dayOnly && macroTarget ? (
+      {seg === "day" ? (
+        <div className="mt-5">
+          {macroTarget ? (
             <div className="rounded-2xl bg-[var(--surface-2)] p-4">
               <p className="font-[family-name:var(--font-display)] text-4xl font-bold leading-none tabular-nums text-[var(--text)]">
                 {Math.round(consumed.kcal)}
@@ -375,7 +361,7 @@ export function NutritionView({
                 <MacroBar label="Rasva" value={consumed.f} target={macroTarget.fatG} />
               </div>
             </div>
-          ) : !dayOnly ? (
+          ) : (
             <div className="rounded-2xl bg-[color-mix(in_srgb,var(--warning)_10%,var(--surface))] p-4">
               <p className="text-sm font-semibold text-[var(--text)]">Täydennä tiedot, niin saat makrot näkyviin</p>
               <p className="mt-1 text-sm leading-5 text-[var(--text-muted)]">
@@ -404,15 +390,13 @@ export function NutritionView({
                 ) : null}
               </div>
             </div>
-          ) : null}
+          )}
 
-          <div className={`flex items-baseline justify-between gap-3 ${dayOnly ? "mt-1" : "mt-5"}`}>
-            {dayOnly ? null : (
-              <p className="font-[family-name:var(--font-display)] text-xs font-semibold uppercase tracking-[0.05em] text-[var(--text-subtle)]">
-                Päivän ateriat
-              </p>
-            )}
-            {!dayOnly && hasDay ? (
+          <div className="flex items-baseline justify-between gap-3 mt-5">
+            <p className="font-[family-name:var(--font-display)] text-xs font-semibold uppercase tracking-[0.05em] text-[var(--text-subtle)]">
+              Päivän ateriat
+            </p>
+            {hasDay ? (
               <p className="font-[family-name:var(--font-display)] text-sm font-semibold tabular-nums text-[var(--text-subtle)]">
                 {eatenRows.length}/{dayRows.length} syöty
               </p>

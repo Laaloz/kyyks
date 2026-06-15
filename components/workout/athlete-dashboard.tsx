@@ -47,6 +47,7 @@ import { useHeaderAction } from "@/components/workout/header-action";
 import { ExerciseProgressView } from "@/components/workout/exercise-progress-view";
 import { MetricTrendChart } from "@/components/workout/metric-trend-chart";
 import { NutritionView } from "@/components/workout/nutrition-view";
+import { DayMealsSummary } from "@/components/workout/nutrition/day-meals-summary";
 import { estimateStrengthCalories, getMeasurementsForUser, getWeightAtMoment } from "@/lib/body-metrics";
 import { calculateSessionDurationSeconds, getSessionProgress } from "@/lib/domain";
 import { buildExerciseProgressCatalog, type ExerciseProgressCatalog } from "@/lib/exercise-progress";
@@ -427,6 +428,7 @@ export function AthleteDashboard({
   onOpenWorkoutLog,
   onOpenSettings,
   onOpenMeasurements,
+  onOpenNutrition,
   onOpenProgramEditor,
   onWorkoutDetailModeChange,
   overviewFocusTarget,
@@ -439,6 +441,7 @@ export function AthleteDashboard({
   onOpenWorkoutLog?: () => void;
   onOpenSettings?: () => void;
   onOpenMeasurements?: () => void;
+  onOpenNutrition?: () => void;
   onOpenProgramEditor?: () => void;
   onWorkoutDetailModeChange?: (isOpen: boolean) => void;
   overviewFocusTarget?: AthleteOverviewFocusTarget | null;
@@ -1663,7 +1666,7 @@ export function AthleteDashboard({
         </Card>
       )}
 
-      {view === "overview" && currentUser ? <NutritionView user={currentUser} readOnly={readOnly} dayOnly /> : null}
+      {view === "overview" && currentUser ? <DayMealsSummary user={currentUser} onOpen={onOpenNutrition} /> : null}
 
       {view === "measurements" && canTrackOwnMeasurements ? (
         <div ref={measurementsSectionRef} id="overview-measurements" className="scroll-mt-24 space-y-4">
