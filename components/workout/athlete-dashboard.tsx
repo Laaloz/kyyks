@@ -2948,13 +2948,14 @@ export function AthleteDashboard({
                 notes: extraActivityNotes,
               };
               try {
-                const result = editingExtraActivityId
-                  ? await updateExtraActivity(editingExtraActivityId, payload)
+                const wasEditing = Boolean(editingExtraActivityId);
+                const result = wasEditing
+                  ? await updateExtraActivity(editingExtraActivityId!, payload)
                   : await addExtraActivity(payload);
                 if (result.ok) {
                   notify({
                     tone: "success",
-                    message: editingExtraActivityId ? "Extra-treeni päivitetty." : "Extra-treeni lisätty historiaan.",
+                    message: wasEditing ? "Extra-treeni päivitetty." : "Extra-treeni lisätty historiaan.",
                   });
                   setExtraActivityDurationMinutes("30");
                   setExtraActivityNotes("");
@@ -2962,6 +2963,15 @@ export function AthleteDashboard({
                   setManualExtraActivityKcal("");
                   setIsExtraActivityDialogOpen(false);
                   setEditingExtraActivityId(null);
+                  // Lisäys ohjaa Historiaan (toast lupaa "lisätty historiaan", ja
+                  // treenin lopetus toimii samoin). Muokkaus avataan jo Historiasta,
+                  // joten silloin pysytään paikallaan.
+                  if (!wasEditing) {
+                    setHistoryFocusWorkoutId(null);
+                    setAthleteLogTab("history");
+                    setAthleteLogReturnTab("history");
+                    setAthleteLogMode("overview");
+                  }
                 } else {
                   notify({ tone: "danger", message: result.message });
                 }
