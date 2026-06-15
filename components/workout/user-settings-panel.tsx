@@ -270,7 +270,11 @@ export function UserSettingsPanel({
       return;
     }
 
-    const result = await withMinimumDelay(updateCurrentUserSettings(values));
+    // Ei withMinimumDelaytä: nämä asetukset tallentuvat automaattisesti ja
+    // kontrolli päivittyy heti (form.watch) ilman spinneriä, joten keinotekoinen
+    // minimiviive pitäisi kontrollit turhaan disabloituina. Lukko (disabled=
+    // isSavingSettings) serialisoi yhä tallennukset, joten rinnakkaisuusrace ei synny.
+    const result = await updateCurrentUserSettings(values);
     setMessage(result.ok ? "Tallennettu." : result.message);
     setMessageTone(result.ok ? "success" : "danger");
     if (!result.ok) {
