@@ -558,7 +558,7 @@ export function AthleteDashboard({
   const [showAllMeasurementEntries, setShowAllMeasurementEntries] = useState(false);
   const [extraActivityType, setExtraActivityType] = useState<ExtraActivityType>("run");
   const [extraActivityDurationMinutes, setExtraActivityDurationMinutes] = useState("30");
-  const [extraActivityDate, setExtraActivityDate] = useState(() => new Date().toISOString().slice(0, 10));
+  const [extraActivityDate, setExtraActivityDate] = useState(() => toLocalDateKey(new Date()));
   const [extraActivityNotes, setExtraActivityNotes] = useState("");
   const [isManualExtraActivityKcalEnabled, setIsManualExtraActivityKcalEnabled] = useState(false);
   const [manualExtraActivityKcal, setManualExtraActivityKcal] = useState("");
@@ -598,7 +598,7 @@ export function AthleteDashboard({
   useEffect(() => {
     setExtraActivityType("run");
     setExtraActivityDurationMinutes("30");
-    setExtraActivityDate(new Date().toISOString().slice(0, 10));
+    setExtraActivityDate(toLocalDateKey(new Date()));
     setExtraActivityNotes("");
     setIsManualExtraActivityKcalEnabled(false);
     setManualExtraActivityKcal("");

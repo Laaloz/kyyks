@@ -252,7 +252,7 @@ type NutritionProfileRow = {
   updated_at: string;
 };
 
-type IngredientRow = {
+export type IngredientRow = {
   id: string;
   name: string;
   display_name: string | null;
@@ -343,7 +343,7 @@ type AssignedMealPlanRow = {
   updated_at: string;
 };
 
-const INGREDIENT_SELECT_COLUMNS =
+export const INGREDIENT_SELECT_COLUMNS =
   "id, name, display_name, source, source_external_id, owner_role, owner_user_id, created_by, default_purchase_unit, grams_per_unit, kcal_per_100, protein_per_100, carbs_per_100, fat_per_100, created_at, updated_at";
 
 // Kevennetty katalogilataus: vain ei-Fineli-ainekset + käyttäjän omat tuotteet + reseptien
@@ -849,6 +849,8 @@ export async function loadVisibleSupabaseAppState(
           .select("id, athlete_id, plan_date, meal_tag, recipe_id, source, servings, eaten_at, position, ingredient_id, grams, food_name, kcal_per_100, protein_per_100, carbs_per_100, fat_per_100, food_source, ai_status, created_at, updated_at")
           .limit(lite ? 120 : isAdminViewer ? 1000 : 500)
           .order("plan_date", { ascending: false })
+          .order("position", { ascending: true })
+          .order("created_at", { ascending: true })
       : Promise.resolve({ data: [] as DayMealPlanRow[], error: null }),
     mode === "full"
       ? supabase

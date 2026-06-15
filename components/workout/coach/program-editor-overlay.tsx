@@ -119,6 +119,8 @@ export function ProgramEditorOverlay({
   currentUserId,
   onClose,
   onSave,
+  onArchive,
+  onDelete,
 }: {
   /** Saman program_group_id:n (tai yksittäisen ohjelman) aktiiviset rivit; tyhjä = uusi ohjelma. */
   groupPlans: TrainingPlan[];
@@ -134,6 +136,10 @@ export function ProgramEditorOverlay({
     assignedAthleteIds: string[];
     groupPlans: TrainingPlan[];
   }) => Promise<{ ok: boolean; message?: string }>;
+  /** Arkistoi ohjelman (palautettavissa "Aiemmista ohjelmista"). Vain muokkausnäkymässä. */
+  onArchive?: () => Promise<{ ok: boolean; message?: string }>;
+  /** Poistaa ohjelman näkyvistä pysyvästi (historia säilyy autofillille). Vain muokkausnäkymässä. */
+  onDelete?: () => Promise<{ ok: boolean; message?: string }>;
 }) {
   const isNew = groupPlans.length === 0;
   const basePlan = groupPlans[0] ?? null;
@@ -147,9 +153,17 @@ export function ProgramEditorOverlay({
   const [newMuscle, setNewMuscle] = useState<MuscleGroupKey | "">("");
   const [openInstructionUid, setOpenInstructionUid] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
+  const [isArchiving, setIsArchiving] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const weekCount = basePlan?.weekCount ?? 8;
+  const [durationWeeks, setDurationWeeks] = useState(() => {
+    const base = basePlan?.weekCount;
+    return base && base > 0 ? base : 8;
+  });
+  const [isPermanentProgram, setIsPermanentProgram] = useState(() => basePlan?.weekCount === 0);
+  // 0 = pysyvä ohjelma (ei kestoa).
+  const weekCount = isPermanentProgram ? 0 : durationWeeks;
 
   const updateWorkout = (uid: string, patch: Partial<DraftWorkout>) =>
     setWorkouts((current) => current.map((workout) => (workout.uid === uid ? { ...workout, ...patch } : workout)));
@@ -291,6 +305,48 @@ export function ProgramEditorOverlay({
     onClose();
   };
 
+  const programLabel = name.trim() || "Nimetön ohjelma";
+
+  const handleArchive = async () => {
+    if (!onArchive) return;
+    if (
+      !window.confirm(
+        `Arkistoidaanko ohjelma "${programLabel}"? Se siirtyy aiempiin ohjelmiin ja voidaan ottaa myöhemmin takaisin käyttöön.`,
+      )
+    ) {
+      return;
+    }
+    setIsArchiving(true);
+    setError(null);
+    const result = await onArchive();
+    setIsArchiving(false);
+    if (!result.ok) {
+      setError(result.message ?? "Ohjelman arkistointi epäonnistui.");
+      return;
+    }
+    onClose();
+  };
+
+  const handleDelete = async () => {
+    if (!onDelete) return;
+    if (
+      !window.confirm(
+        `Poistetaanko ohjelma "${programLabel}" pysyvästi näkyvistä? Treenihistoria säilyy autofillia varten, mutta ohjelmaa ei voi palauttaa.`,
+      )
+    ) {
+      return;
+    }
+    setIsDeleting(true);
+    setError(null);
+    const result = await onDelete();
+    setIsDeleting(false);
+    if (!result.ok) {
+      setError(result.message ?? "Ohjelman poisto epäonnistui.");
+      return;
+    }
+    onClose();
+  };
+
   return (
     <FullScreenOverlay onClose={onClose} ariaLabel="Ohjelman muokkaus" closeOnEscape={false} scroll={false}>
       <div className="flex items-center gap-3 px-4 pt-[calc(env(safe-area-inset-top)+0.75rem)] pb-2">
@@ -354,6 +410,42 @@ export function ProgramEditorOverlay({
               </button>
             </div>
           </div>
+
+          <div className="mt-4 flex items-center justify-between gap-3">
+            <span className="text-sm font-bold text-[var(--text)]">Ohjelman kesto</span>
+            <div className="flex items-center gap-1 rounded-xl border border-[var(--border)] bg-[var(--surface-2)] p-1">
+              <button
+                type="button"
+                className="grid size-9 place-items-center rounded-lg text-[var(--text)] transition hover:bg-[var(--surface-3)] disabled:opacity-40"
+                aria-label="Vähennä ohjelman kestoa"
+                disabled={isPermanentProgram || durationWeeks <= 1}
+                onClick={() => setDurationWeeks((current) => clampInt(current - 1, 1, 104))}
+              >
+                −
+              </button>
+              <span className="min-w-16 text-center font-[family-name:var(--font-display)] text-lg font-bold tabular-nums text-[var(--text)]">
+                {isPermanentProgram ? "Pysyvä" : `${durationWeeks} vk`}
+              </span>
+              <button
+                type="button"
+                className="grid size-9 place-items-center rounded-lg text-[var(--text)] transition hover:bg-[var(--surface-3)] disabled:opacity-40"
+                aria-label="Lisää ohjelman kestoa"
+                disabled={isPermanentProgram || durationWeeks >= 104}
+                onClick={() => setDurationWeeks((current) => clampInt(current + 1, 1, 104))}
+              >
+                +
+              </button>
+            </div>
+          </div>
+          <label className="mt-2 flex items-center justify-between gap-3">
+            <span className="text-xs text-[var(--text-subtle)]">Pysyvä ohjelma (ei kestoa, jatkuu kunnes vaihdetaan)</span>
+            <input
+              type="checkbox"
+              className="size-5 shrink-0 accent-[var(--accent)]"
+              checked={isPermanentProgram}
+              onChange={(event) => setIsPermanentProgram(event.target.checked)}
+            />
+          </label>
 
           <p className="mt-4 text-sm font-bold text-[var(--text)]">Käytössä urheilijoilla</p>
           <div className="mt-2 flex flex-wrap gap-1.5">
@@ -530,6 +622,41 @@ export function ProgramEditorOverlay({
         </Button>
 
         {error ? <p className="mt-3 text-sm font-semibold text-[var(--danger)]">{error}</p> : null}
+
+        {!isNew && (onArchive || onDelete) ? (
+          <div className="mt-6 border-t border-[var(--border)] pt-4">
+            <p className="text-sm font-semibold text-[var(--text)]">Ohjelman hallinta</p>
+            <p className="mt-1 text-xs text-[var(--text-subtle)]">
+              Arkistointi siirtää ohjelman aiempiin (palautettavissa). Poisto piilottaa sen kokonaan;
+              treenihistoria säilyy autofillia varten.
+            </p>
+            <div className="mt-3 flex flex-wrap gap-2">
+              {onArchive ? (
+                <Button
+                  type="button"
+                  variant="secondary"
+                  loading={isArchiving}
+                  loadingText="Arkistoidaan…"
+                  onClick={handleArchive}
+                >
+                  Arkistoi ohjelma
+                </Button>
+              ) : null}
+              {onDelete ? (
+                <Button
+                  type="button"
+                  variant="ghost"
+                  className="text-[var(--danger)] hover:text-[var(--danger)]"
+                  loading={isDeleting}
+                  loadingText="Poistetaan…"
+                  onClick={handleDelete}
+                >
+                  Poista pysyvästi
+                </Button>
+              ) : null}
+            </div>
+          </div>
+        ) : null}
       </div>
 
       <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-[var(--background)] from-40% to-transparent px-4 pb-[calc(env(safe-area-inset-bottom)+1rem)] pt-5">
@@ -560,7 +687,7 @@ export function ProgramEditorOverlay({
               <div className="mt-2 flex items-center gap-2">
                 <Select
                   aria-label="Oman liikkeen lihasryhmä"
-                  className="h-10 min-w-0 flex-1"
+                  className="h-10 min-w-0 flex-1 py-0 text-[15px]"
                   value={newMuscle}
                   onChange={(event) => setNewMuscle(event.target.value as MuscleGroupKey | "")}
                 >

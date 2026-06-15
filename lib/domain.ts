@@ -308,6 +308,7 @@ export function updateProgram(plan: TrainingPlan, patch: ProgramUpdateInput): Tr
     description,
     athleteId: patch.athleteId ?? plan.athleteId,
     programGroupId: patch.programGroupId ?? plan.programGroupId,
+    weekCount: patch.weekCount ?? plan.weekCount,
     workouts: patch.workouts
       ? buildProgramWorkouts(patch.workouts, plan.workouts ?? [])
       : plan.workouts,

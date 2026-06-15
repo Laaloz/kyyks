@@ -1175,6 +1175,7 @@ export async function updateProgramOnServer({
       program_group_id: updatedProgram.programGroupId ?? null,
       title: updatedProgram.title,
       description: updatedProgram.description ?? null,
+      week_count: updatedProgram.weekCount,
       workouts: updatedProgram.workouts ?? [],
       updated_at: updatedAt,
     })

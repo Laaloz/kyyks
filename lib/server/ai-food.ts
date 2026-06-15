@@ -13,7 +13,10 @@ const DEFAULT_MODEL = "gemini-3.5-flash";
 const DAILY_LIMIT = 30;
 
 const IMAGE_PROMPT = [
-  "Tunnista kuvassa näkyvä ruoka ja arvioi sen ravintosisältö.",
+  "Tunnista kuvassa näkyvä ruoka tai juoma ja arvioi sen ravintosisältö.",
+  "Jos kyseessä on pakattu tuote, lue pakkauksesta brändi, tuotenimi ja mahdollinen",
+  "ravintosisältöseloste, ja käytä niitä tunnistukseen (esim. pieni Pringles-tölkki →",
+  '"Pringles Original"). Tunnista myös pienet pakkaukset ja pullot/tölkit.',
   "Palauta arvio: ruoan nimi suomeksi, arvioitu annoskoko grammoina,",
   "sekä energia ja makrot PER 100 GRAMMAA (kcal, proteiini, hiilihydraatit, rasva).",
   "Jos kuvassa on useita eri ruokia tai tuotteita, nimeä ne yhdessä ja arvioi koko annos yhtenä kokonaisuutena.",
@@ -22,11 +25,14 @@ const IMAGE_PROMPT = [
 
 function textPrompt(query: string): string {
   return [
-    `Arvioi ruoan "${query}" ravintosisältö.`,
-    "Palauta: siistitty nimi suomeksi, tyypillinen annoskoko grammoina,",
+    `Arvioi mitä käyttäjä söi tai joi: "${query}".`,
+    'Jos syöte sisältää useita ruokia tai komponentteja (esim. "päärynä ja 10 g pähkinöitä"),',
+    "yhdistä ne yhdeksi arvioksi: laske koko annoksen kokonaispaino grammoina ja makrot niin, että",
+    "PER 100 GRAMMAA -arvot vastaavat koko annoksen yhteismakroja (komponenttien painotettu keskiarvo).",
+    'Säilytä käyttäjän ilmoittamat määrät ja kappalemäärät (esim. "2 banaania", "10 g pähkinöitä") nimessä',
+    "ja huomioi ne annoskoossa grammoina.",
+    "Palauta: siistitty nimi suomeksi, annoskoko grammoina,",
     "sekä energia ja makrot PER 100 GRAMMAA (kcal, proteiini, hiilihydraatit, rasva).",
-    'Jos käyttäjä ilmoitti määrän tai kappalemäärän (esim. "2 banaania"), säilytä se nimessä',
-    "ja huomioi se annoskoossa grammoina.",
     "Arvio on suuntaa-antava; vastaa pelkkä JSON ilman selityksiä.",
   ].join(" ");
 }
@@ -246,5 +252,14 @@ export async function estimateFoodFromText(args: {
   userId: string;
   query: string;
 }): Promise<AiFoodResult> {
-  return runGeminiEstimate(args.supabase, args.userId, [{ text: textPrompt(args.query) }], { thinkingBudget: 0 });
+  const parts = [{ text: textPrompt(args.query) }];
+  // Nopea yritys ilman ajattelua (~1s) kattaa valtaosan hauista.
+  const fast = await runGeminiEstimate(args.supabase, args.userId, parts, { thinkingBudget: 0 });
+  if (fast.ok || fast.status !== 502) {
+    return fast;
+  }
+  // Vaikeampi syöte (esim. monikomponentti "päärynä ja 10 g pähkinöitä") voi palauttaa tyhjän
+  // tai jäsentymättömän vastauksen ilman ajattelua → yksi uusintayritys mallin oletusbudjetilla.
+  // Vain 502 (tyhjä/jäsennys/validointi) yritetään uudelleen; 429 (kiintiö) ja 503 eivät.
+  return runGeminiEstimate(args.supabase, args.userId, parts, undefined);
 }

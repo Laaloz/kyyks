@@ -342,19 +342,26 @@ function mergeStartedWorkoutPayload(
       ]
     : previous.scheduledWorkouts;
 
-  const nextSessions = session
-    ? [
-        {
-          ...previous.sessions.find(
-            (item) => item.id === session.id || item.scheduledWorkoutId === session.scheduledWorkoutId,
-          ),
-          ...session,
-        },
-        ...previous.sessions.filter(
-          (item) => item.id !== session.id && item.scheduledWorkoutId !== session.scheduledWorkoutId,
-        ),
-      ]
-    : previous.sessions;
+  let nextSessions = previous.sessions;
+  if (session) {
+    const localSession = previous.sessions.find(
+      (item) => item.id === session.id || item.scheduledWorkoutId === session.scheduledWorkoutId,
+    );
+    const mergedBase = { ...localSession, ...session } as WorkoutSession;
+    // Säilytä aloituksen aikana syötetyt sarja-arvot (juuri raahatut load/reps): palvelimen
+    // tuore sessio ei niitä vielä sisällä, joten pelkkä spread nollaisi ne. Täsmäys
+    // rakenneavaimella, koska optimistisilla riveillä on eri (väliaikainen) id kuin palvelimella.
+    const mergedSession =
+      localSession && localSession.setLogs.length > 0
+        ? mergeServerSessionWithLocalSetInputs(mergedBase, localSession)
+        : mergedBase;
+    nextSessions = [
+      mergedSession,
+      ...previous.sessions.filter(
+        (item) => item.id !== session.id && item.scheduledWorkoutId !== session.scheduledWorkoutId,
+      ),
+    ];
+  }
 
   const nextNotes = session
     ? previous.notes.filter((note) => note.sessionId !== session.id)

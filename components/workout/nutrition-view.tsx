@@ -1,6 +1,6 @@
 "use client";
 
-import { Check, ChevronRight, Loader2, Plus, Repeat2, Search, Trash2 } from "lucide-react";
+import { Check, ChevronRight, Loader2, Plus, Repeat2, Search, Sparkles, Trash2 } from "lucide-react";
 import { useMemo, useRef, useState } from "react";
 
 import { Button } from "@/components/ui/button";
@@ -198,7 +198,12 @@ export function NutritionView({
         .filter((entry) => entry.athleteId === user.id && entry.planDate === todayKey)
         .sort((left, right) => {
           const tagDelta = MEAL_TAG_ORDER.indexOf(left.mealTag) - MEAL_TAG_ORDER.indexOf(right.mealTag);
-          return tagDelta !== 0 ? tagDelta : left.position - right.position;
+          if (tagDelta !== 0) return tagDelta;
+          if (left.position !== right.position) return left.position - right.position;
+          // Tasapelin (esim. nopeat lisäykset samalla positiolla) deterministinen ratkaisu,
+          // jottei järjestys sekoa refetchissä.
+          const createdDelta = (left.createdAt ?? "").localeCompare(right.createdAt ?? "");
+          return createdDelta !== 0 ? createdDelta : left.id.localeCompare(right.id);
         }),
     [state.dayMealPlans, todayKey, user.id],
   );
@@ -401,8 +406,8 @@ export function NutritionView({
                         Lisää resepti
                       </Button>
                       <Button type="button" variant="secondary" className="w-full gap-2" onClick={() => setAddFoodOpen(true)}>
-                        <Plus className="size-4" aria-hidden="true" />
-                        Lisää ateriaan
+                        <Sparkles className="size-4" aria-hidden="true" />
+                        Lisää AI:lla
                       </Button>
                     </div>
                   ) : null}
@@ -417,8 +422,8 @@ export function NutritionView({
                         Lisää resepti
                       </Button>
                       <Button type="button" variant="secondary" className="w-full gap-2" onClick={() => setAddFoodOpen(true)}>
-                        <Plus className="size-4" aria-hidden="true" />
-                        Lisää ateriaan
+                        <Sparkles className="size-4" aria-hidden="true" />
+                        Lisää AI:lla
                       </Button>
                     </div>
                   ) : null}
@@ -584,8 +589,8 @@ export function NutritionView({
                     Lisää resepti
                   </Button>
                   <Button type="button" variant="secondary" className="w-full gap-2" onClick={() => setAddFoodOpen(true)}>
-                    <Plus className="size-4" aria-hidden="true" />
-                    Lisää ateriaan
+                    <Sparkles className="size-4" aria-hidden="true" />
+                    Lisää AI:lla
                   </Button>
                 </div>
               ) : null}

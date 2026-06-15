@@ -1,6 +1,6 @@
 "use client";
 
-import { Camera, Check, Plus, Search } from "lucide-react";
+import { Camera, Check, Plus, Search, Sparkles } from "lucide-react";
 import { useMemo, useState } from "react";
 
 import { Button } from "@/components/ui/button";
@@ -110,8 +110,12 @@ export function AddFoodSheet({
   };
 
   return (
-    <Sheet ariaLabel="Lisää ateriaan" onClose={onClose}>
-      <h2 className="font-[family-name:var(--font-display)] text-lg font-bold text-[var(--text)]">Lisää ateriaan</h2>
+    <Sheet ariaLabel="Lisää ateriaan AI:lla" onClose={onClose}>
+      <h2 className="flex items-center gap-2 font-[family-name:var(--font-display)] text-lg font-bold text-[var(--text)]">
+        <Sparkles className="size-5 text-[var(--accent)]" aria-hidden="true" />
+        Lisää ateriaan AI:lla
+      </h2>
+      <p className="mt-1 text-sm text-[var(--text-muted)]">Kirjoita tai kuvaa ruoka — AI arvioi ravintoarvot.</p>
 
       {error ? (
         <p className="mt-3 text-sm text-[var(--danger)]" role="alert">

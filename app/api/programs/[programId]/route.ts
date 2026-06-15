@@ -48,6 +48,7 @@ const patchSchema = z.object({
   programGroupId: z.string().optional(),
   workouts: z.array(workoutSchema).optional(),
   customExercises: z.array(customExerciseSchema).optional(),
+  weekCount: z.number().int().min(0).max(104).optional(),
 });
 
 async function getRequester() {
@@ -100,6 +101,7 @@ export async function PATCH(request: Request, context: { params: Promise<{ progr
       athleteEmail: parsed.data.athleteEmail,
       programGroupId: parsed.data.programGroupId,
       workouts: parsed.data.workouts,
+      weekCount: parsed.data.weekCount,
     },
     customExercises: parsed.data.customExercises,
   });

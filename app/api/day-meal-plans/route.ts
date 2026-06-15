@@ -34,6 +34,8 @@ export async function GET(request: Request) {
 
   const { data, error } = await query
     .order("plan_date", { ascending: false })
+    .order("position", { ascending: true })
+    .order("created_at", { ascending: true })
     .limit(500)
     .returns<DayMealPlanRow[]>();
 

@@ -2568,7 +2568,8 @@ function CoachTeamView({
   onOpenInvites?: () => void;
   onOpenIngredients?: () => void;
 }) {
-  const { startAthletePreview, notify, createProgram, updateProgram, setProgramStatus, createInvite } = useAppState();
+  const { startAthletePreview, notify, createProgram, updateProgram, setProgramStatus, deleteProgram, createInvite } =
+    useAppState();
   const [segment, setSegment] = useState<"tiimi" | "ohjelmat">("tiimi");
   const [editorGroup, setEditorGroup] = useState<TrainingPlan[] | null>(null);
   const [manageUserId, setManageUserId] = useState<string | null>(null);
@@ -2609,7 +2610,7 @@ function CoachTeamView({
     for (const athleteId of assignedAthleteIds) {
       const existing = planByAthlete.get(athleteId);
       const result = existing
-        ? await updateProgram(existing.id, { title, workouts, programGroupId: groupId })
+        ? await updateProgram(existing.id, { title, workouts, programGroupId: groupId, weekCount })
         : await createProgram({ title, athleteId, workouts, programGroupId: groupId, weekCount });
       if (!result.ok) {
         return result;
@@ -2626,6 +2627,38 @@ function CoachTeamView({
     }
 
     notify({ tone: "success", message: `Ohjelma "${title}" tallennettiin.` });
+    return { ok: true };
+  };
+
+  // Muokkausnäkymän ohjelman hallinta: arkistointi (palautettava) ja poisto (piilotus).
+  // Ohjelmaryhmä voi kattaa monta urheilijariviä → toiminto ajetaan jokaiselle.
+  const handleArchiveEditorProgram = async (): Promise<{ ok: boolean; message?: string }> => {
+    const target = editorGroup;
+    if (!target?.length) {
+      return { ok: false, message: "Ohjelmaa ei löytynyt." };
+    }
+    for (const plan of target) {
+      const result = await setProgramStatus(plan.id, "archived");
+      if (!result.ok) {
+        return result;
+      }
+    }
+    notify({ tone: "success", message: `Ohjelma "${target[0].title}" arkistoitiin aiempiin ohjelmiin.` });
+    return { ok: true };
+  };
+
+  const handleDeleteEditorProgram = async (): Promise<{ ok: boolean; message?: string }> => {
+    const target = editorGroup;
+    if (!target?.length) {
+      return { ok: false, message: "Ohjelmaa ei löytynyt." };
+    }
+    for (const plan of target) {
+      const result = await deleteProgram(plan.id);
+      if (!result.ok) {
+        return result;
+      }
+    }
+    notify({ tone: "success", message: `Ohjelma "${target[0].title}" poistettiin näkyvistä.` });
     return { ok: true };
   };
 
@@ -3007,6 +3040,8 @@ function CoachTeamView({
           currentUserId={currentUser.id}
           onClose={() => setEditorGroup(null)}
           onSave={handleSaveProgram}
+          onArchive={handleArchiveEditorProgram}
+          onDelete={handleDeleteEditorProgram}
         />
       ) : null}
 

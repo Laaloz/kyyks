@@ -573,6 +573,8 @@ export interface ProgramUpdateInput {
   athleteEmail?: string;
   programGroupId?: string;
   workouts?: ProgramWorkoutInput[];
+  /** Ohjelman kesto viikkoina. 0 = pysyvä (ei kestoa). */
+  weekCount?: number;
 }
 
 export interface InviteInput {

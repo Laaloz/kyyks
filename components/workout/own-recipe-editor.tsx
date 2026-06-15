@@ -12,7 +12,7 @@ import {
   resolveRecipeIngredientNormalizedQuantity,
   resolveRecipeNutritionPreview,
 } from "@/lib/nutrition";
-import type { MealTag, Recipe, RecipeIngredient, RecipeInput } from "@/lib/types";
+import type { Ingredient, MealTag, Recipe, RecipeIngredient, RecipeInput } from "@/lib/types";
 import { useAppState } from "@/providers/app-state-provider";
 
 const MEAL_TAG_ORDER: MealTag[] = ["breakfast", "lunch", "snack", "dinner", "evening_snack"];
@@ -39,13 +39,7 @@ export function OwnRecipeEditor({
   onClose: () => void;
   onSaved?: (recipeName: string) => void;
 }) {
-  const { state, saveRecipe, ensureFullIngredientCatalog } = useAppState();
-  // Reseptieditori tarvitsee koko aineskatalogin (ml. Fineli) ainesten hakuun — oletussynkka
-  // lataa vain kevennetyn version, joten haetaan koko katalogi tässä.
-  useEffect(() => {
-    void ensureFullIngredientCatalog();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  const { state, saveRecipe } = useAppState();
   const isEditing = Boolean(initialRecipe);
   const [name, setName] = useState(() => initialRecipe?.name ?? "");
   const [mealTag, setMealTag] = useState<MealTag>(initialRecipe?.mealTag ?? initialMealTag);
@@ -68,6 +62,18 @@ export function OwnRecipeEditor({
   const [query, setQuery] = useState("");
   const [altSearchRowKey, setAltSearchRowKey] = useState<string | null>(null);
   const [altQuery, setAltQuery] = useState("");
+  // Ainesosahaku tehdään palvelimella (ei koko katalogia muistissa) → vain pieni tulosjoukko.
+  const [remoteResults, setRemoteResults] = useState<Ingredient[]>([]);
+  const [altRemoteResults, setAltRemoteResults] = useState<Ingredient[]>([]);
+  // Hausta valitut ainekset, jotta live-makrot resolvoituvat ilman koko katalogia.
+  const [pickedById, setPickedById] = useState<Map<string, Ingredient>>(() => new Map());
+  const rememberPicked = (item: Ingredient) =>
+    setPickedById((previous) => {
+      if (previous.has(item.id)) return previous;
+      const next = new Map(previous);
+      next.set(item.id, item);
+      return next;
+    });
 
   // Reseptin osiot ehdotuksina (Pohja, Kastike, ...) — datalist-pohjaiset.
   const groupSuggestions = useMemo(
@@ -77,37 +83,87 @@ export function OwnRecipeEditor({
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState("");
 
+  // Live-makroja varten yhdistetään kevennetty katalogi + hausta valitut ainekset.
+  const mergedCatalog = useMemo(() => {
+    if (pickedById.size === 0) {
+      return state.ingredientsCatalog;
+    }
+    const byId = new Map(state.ingredientsCatalog.map((item) => [item.id, item]));
+    for (const item of pickedById.values()) {
+      if (!byId.has(item.id)) {
+        byId.set(item.id, item);
+      }
+    }
+    return Array.from(byId.values());
+  }, [pickedById, state.ingredientsCatalog]);
+
   const catalogById = useMemo(
-    () => new Map(state.ingredientsCatalog.map((item) => [item.id, item])),
-    [state.ingredientsCatalog],
+    () => new Map(mergedCatalog.map((item) => [item.id, item])),
+    [mergedCatalog],
   );
 
-  const searchResults = useMemo(() => {
-    const trimmed = query.trim().toLowerCase();
-    if (!trimmed) {
-      return [];
-    }
-    return state.ingredientsCatalog
-      .filter((item) => item.name.toLowerCase().includes(trimmed))
-      .sort((left, right) => left.name.localeCompare(right.name, "fi"))
-      .slice(0, 8);
-  }, [query, state.ingredientsCatalog]);
+  // Palvelinhaku on jo rajattu ja lajiteltu → näytetään suoraan pieni tulosjoukko.
+  const searchResults = useMemo(() => remoteResults.slice(0, 8), [remoteResults]);
 
-  // Vaihtoehtoisen aineksen haku (yhdelle ainekselle kerrallaan).
+  // Vaihtoehtoisen aineksen haku (yhdelle ainekselle kerrallaan): suodatetaan jo lisätyt pois.
   const altSearchResults = useMemo(() => {
-    const trimmed = altQuery.trim().toLowerCase();
-    if (!trimmed || !altSearchRowKey) {
+    if (!altSearchRowKey) {
       return [];
     }
     const activeRow = rows.find((row) => row.key === altSearchRowKey);
     const excludeIds = new Set(
       [activeRow?.ingredientId, ...(activeRow?.alternatives.map((alt) => alt.ingredientId) ?? [])].filter(Boolean),
     );
-    return state.ingredientsCatalog
-      .filter((item) => item.name.toLowerCase().includes(trimmed) && !excludeIds.has(item.id))
-      .sort((left, right) => left.name.localeCompare(right.name, "fi"))
-      .slice(0, 6);
-  }, [altQuery, altSearchRowKey, rows, state.ingredientsCatalog]);
+    return altRemoteResults.filter((item) => !excludeIds.has(item.id)).slice(0, 6);
+  }, [altRemoteResults, altSearchRowKey, rows]);
+
+  // Debouncattu palvelinhaku pääainekselle.
+  useEffect(() => {
+    const term = query.trim();
+    if (term.length < 2) {
+      setRemoteResults([]);
+      return;
+    }
+    let active = true;
+    const handle = window.setTimeout(async () => {
+      const response = await fetch(`/api/nutrition/ingredients/search?q=${encodeURIComponent(term)}`).catch(() => null);
+      if (!active || !response?.ok) {
+        return;
+      }
+      const payload = (await response.json().catch(() => null)) as { ingredients?: Ingredient[] } | null;
+      if (active && payload?.ingredients) {
+        setRemoteResults(payload.ingredients);
+      }
+    }, 200);
+    return () => {
+      active = false;
+      window.clearTimeout(handle);
+    };
+  }, [query]);
+
+  // Debouncattu palvelinhaku vaihtoehtoiselle ainekselle.
+  useEffect(() => {
+    const term = altQuery.trim();
+    if (term.length < 2 || !altSearchRowKey) {
+      setAltRemoteResults([]);
+      return;
+    }
+    let active = true;
+    const handle = window.setTimeout(async () => {
+      const response = await fetch(`/api/nutrition/ingredients/search?q=${encodeURIComponent(term)}`).catch(() => null);
+      if (!active || !response?.ok) {
+        return;
+      }
+      const payload = (await response.json().catch(() => null)) as { ingredients?: Ingredient[] } | null;
+      if (active && payload?.ingredients) {
+        setAltRemoteResults(payload.ingredients);
+      }
+    }, 200);
+    return () => {
+      active = false;
+      window.clearTimeout(handle);
+    };
+  }, [altQuery, altSearchRowKey]);
 
   // Live-makrot: rakennetaan pseudoresepti ja lasketaan annoskohtaiset makrot.
   const preview = useMemo(() => {
@@ -134,9 +190,9 @@ export function OwnRecipeEditor({
 
     return resolveRecipeNutritionPreview(
       { defaultServings: 1, ingredients: previewIngredients, nutritionPerServing: undefined, nutritionPerRecipe: undefined },
-      state.ingredientsCatalog,
+      mergedCatalog,
     ).nutritionPerServing;
-  }, [rows, catalogById, state.ingredientsCatalog]);
+  }, [rows, catalogById, mergedCatalog]);
 
   const canSave = name.trim().length > 0 && rows.some((row) => row.ingredientId && Number(row.grams) > 0);
 
@@ -355,6 +411,7 @@ export function OwnRecipeEditor({
                               type="button"
                               className="flex w-full items-center justify-between gap-2 py-2 text-left"
                               onClick={() => {
+                                rememberPicked(item);
                                 setRows((previous) =>
                                   previous.map((candidate) =>
                                     candidate.key === row.key
@@ -408,6 +465,7 @@ export function OwnRecipeEditor({
                     type="button"
                     className="flex w-full items-center justify-between gap-2 py-2 text-left"
                     onClick={() => {
+                      rememberPicked(item);
                       setRows((previous) =>
                         previous.some((row) => row.ingredientId === item.id)
                           ? previous
