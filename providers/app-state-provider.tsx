@@ -84,7 +84,7 @@ import type {
   WorkoutSession,
   WorkoutUpdateInput,
 } from "@/lib/types";
-import { applyThemeToDocument } from "@/lib/theme-chrome";
+import { applyThemeToDocument, readStoredThemeMode, setThemePreference } from "@/lib/theme-chrome";
 import { makeId } from "@/lib/utils";
 import { normalizeWorkoutHistoryTitle } from "@/lib/workout-history-title";
 import {
@@ -4358,8 +4358,17 @@ function findResolvedUserIdInSnapshot(
       return;
     }
 
-    applyThemeToDocument(currentUser?.settings?.themeMode);
-  }, [currentUser?.settings?.themeMode, isHydrated]);
+    // Teema sovelletaan laitekohtaisesta cachesta, joka on DOM:n auktoriteetti
+    // istunnon ajan. Palvelimen arvo seedaa cachen vain kirjautuessa / käyttäjän
+    // vaihtuessa (cross-device-synkka latauksessa). Koska tämä ei riipu
+    // settings.themeMode:sta, taustasynkan ohimenevät flipit eivät enää revertoi
+    // käyttäjän tekemää teemavalintaa (valinta kirjoittaa cachen + DOM:n suoraan).
+    if (currentUser?.id) {
+      setThemePreference(currentUser.settings?.themeMode);
+    } else {
+      applyThemeToDocument(readStoredThemeMode());
+    }
+  }, [currentUser?.id, isHydrated]);
 
   const value = useMemo<AppStateContextValue>(() => {
       const signInWithSupabasePassword = async (

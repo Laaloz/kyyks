@@ -34,6 +34,41 @@ export function resolveThemeMode(themeMode: string | null | undefined): AppTheme
   return themeMode === "dark" || themeMode === "mallu" || themeMode === "camel" ? themeMode : "light";
 }
 
+// Teema talletetaan myös laitekohtaisesti localStorageen (kuten aksenttiväri).
+// Tämä cache on DOM-teeman auktoriteetti istunnon ajan: taustasynkan ohimenevät
+// settings.themeMode-flipit eivät pääse revertoimaan käyttäjän valintaa. Palvelin
+// pysyy lähteenä kirjautuessa (seed) ja synkkaa muille laitteille latauksessa.
+export const THEME_STORAGE_KEY = "app-theme-mode";
+
+export function readStoredThemeMode(): AppThemeMode | null {
+  if (typeof window === "undefined") {
+    return null;
+  }
+  try {
+    const value = window.localStorage.getItem(THEME_STORAGE_KEY);
+    return value === "light" || value === "dark" || value === "mallu" || value === "camel" ? value : null;
+  } catch {
+    return null;
+  }
+}
+
+export function writeStoredThemeMode(themeMode: string | null | undefined) {
+  if (typeof window === "undefined") {
+    return;
+  }
+  try {
+    window.localStorage.setItem(THEME_STORAGE_KEY, resolveThemeMode(themeMode));
+  } catch {
+    // Ignore storage failures; DOM theme still applies.
+  }
+}
+
+// Aseta laitekohtainen teema: talleta cacheen ja sovella heti DOMiin.
+export function setThemePreference(themeMode: string | null | undefined) {
+  writeStoredThemeMode(themeMode);
+  applyThemeToDocument(themeMode);
+}
+
 // Sovella teema heti documentElementiin (data-theme + color-scheme + selaimen
 // chrome-värit). Käytetään sekä reaktiivisesti tilasta että optimistisesti
 // suoraan käyttäjän valinnasta, jolloin vaihto näkyy ilman palvelinkutsun viivettä.

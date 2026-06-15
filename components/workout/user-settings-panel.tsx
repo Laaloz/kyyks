@@ -17,7 +17,7 @@ import type { ProfileSheetSection } from "@/components/workout/profile-sheet";
 import { bodyMeasurementSchema, userSettingsSchema } from "@/components/workout/schemas";
 import { roleLabel } from "@/components/workout/shared";
 import { useAccentColorPreference, type AccentColor } from "@/lib/use-accent-color";
-import { applyThemeToDocument } from "@/lib/theme-chrome";
+import { setThemePreference } from "@/lib/theme-chrome";
 import { getMeasurementsForUser } from "@/lib/body-metrics";
 import { withMinimumDelay } from "@/lib/min-delay";
 import { calculateMacroTarget, getMissingMacroProfileFields } from "@/lib/nutrition";
@@ -282,7 +282,7 @@ export function UserSettingsPanel({
       // Teema sovelletaan optimistisesti heti valinnasta, joten epäonnistuneen
       // tallennuksen jälkeen palautetaan DOM ja valinta vastaamaan tallennettua tilaa.
       const savedTheme = currentUser.settings?.themeMode ?? "light";
-      applyThemeToDocument(savedTheme);
+      setThemePreference(savedTheme);
       if (values.themeMode !== savedTheme) {
         form.setValue("themeMode", savedTheme, { shouldDirty: false });
       }
@@ -788,9 +788,10 @@ export function UserSettingsPanel({
                 value={settingsThemeMode}
                 onChange={(event) => {
                   const nextTheme = event.target.value as ThemeMode;
-                  // Sovella teema heti DOMiin (kuten aksenttiväri), jotta vaihto näkyy
-                  // välittömästi. Tallennus jatkuu taustalla autoSaveSettingsin kautta.
-                  applyThemeToDocument(nextTheme);
+                  // Talleta laitekohtaiseen cacheen ja sovella heti DOMiin (kuten
+                  // aksenttiväri), jotta vaihto näkyy välittömästi eikä taustasynkka
+                  // revertoi sitä. Tallennus palvelimelle jatkuu autoSaveSettingsin kautta.
+                  setThemePreference(nextTheme);
                   autoSaveSettings(() => form.setValue("themeMode", nextTheme, { shouldDirty: true }));
                 }}
               >

@@ -3,7 +3,7 @@ import { Manrope, Schibsted_Grotesk } from "next/font/google";
 import Script from "next/script";
 
 import { APP_SESSION_STORAGE_KEY, APP_STATE_STORAGE_KEY } from "@/lib/app-state-storage";
-import { THEME_CHROME_COLORS } from "@/lib/theme-chrome";
+import { THEME_CHROME_COLORS, THEME_STORAGE_KEY } from "@/lib/theme-chrome";
 import { AppStateProvider } from "@/providers/app-state-provider";
 
 import "./globals.css";
@@ -48,6 +48,16 @@ const themeInitScript = `
       document.documentElement.dataset.accent = dataAccent;
     } else {
       delete document.documentElement.dataset.accent;
+    }
+  } catch {}
+
+  // Laitekohtainen teema-cache on DOM:n auktoriteetti: käytä sitä ensisijaisesti,
+  // jotta ensipaint vastaa käyttäjän valintaa eikä vilahda väärää teemaa.
+  try {
+    const storedTheme = window.localStorage.getItem("${THEME_STORAGE_KEY}");
+    if (storedTheme === "light" || storedTheme === "dark" || storedTheme === "mallu" || storedTheme === "camel") {
+      applyTheme(storedTheme);
+      return;
     }
   } catch {}
 
