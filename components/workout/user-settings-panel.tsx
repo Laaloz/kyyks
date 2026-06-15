@@ -31,6 +31,21 @@ const themeModeLabel: Record<ThemeMode, string> = {
   camel: "Camel",
 };
 
+// Aloitusnäkymän valinnan nimet. Samat termit kuin navigaatiopalkissa, jotta
+// käyttäjä tunnistaa mihin välilehteen valinta viittaa. Kattaa kaikki näkymät,
+// joita getDashboardViewsForRole voi palauttaa (roolikohtainen alijoukko).
+const dashboardViewLabel: Partial<Record<DashboardHomeView, string>> = {
+  overview: "Tänään",
+  nutrition: "Ravinto",
+  "athlete-log": "Treeni",
+  measurements: "Keho",
+  athletes: "Tiimi",
+};
+
+function dashboardViewLabelFor(view: DashboardHomeView): string {
+  return dashboardViewLabel[view] ?? view;
+}
+
 const loadIncrementLabel: Record<1 | 2.5 | 5, string> = {
   1: "1 kg",
   2.5: "2,5 kg",
@@ -785,6 +800,27 @@ export function UserSettingsPanel({
                 </Select>
               </div>
             ) : null}
+
+            <div>
+              <Label htmlFor="settings-default-view">Aloitusnäkymä</Label>
+              <Select
+                id="settings-default-view"
+                disabled={isSavingSettings}
+                value={settingsDefaultView}
+                onChange={(event) =>
+                  autoSaveSettings(() =>
+                    form.setValue("defaultDashboardView", event.target.value as DashboardHomeView, { shouldDirty: true }),
+                  )
+                }
+              >
+                {allowedViewOptions.map((view) => (
+                  <option key={view} value={view}>
+                    {dashboardViewLabelFor(view)}
+                  </option>
+                ))}
+              </Select>
+              <p className="mt-1.5 text-xs text-[var(--text-subtle)]">Näkymä, joka avautuu kun käynnistät sovelluksen.</p>
+            </div>
 
             {message ? <InlineFeedback message={message} tone={messageTone} className="text-sm" /> : null}
           </div>
