@@ -443,7 +443,7 @@ function mergeServerDayMealPlansWithLocalState(
       .map(([entryId]) => entryId),
   );
   const previousById = new Map((previousDayMealPlans ?? []).map((entry) => [entry.id, entry]));
-  const isMutationProtected = (entryId: string, serverUpdatedAt: string | undefined) => {
+  const isMutationProtected = (entryId: string, serverEntry: DayMealPlanEntry | undefined) => {
     const pendingMutation = pendingDayMealMutations.get(entryId);
     if (!pendingMutation) {
       return false;
@@ -454,14 +454,18 @@ function mergeServerDayMealPlansWithLocalState(
       return false;
     }
 
-    const serverUpdatedAtMs = Date.parse(serverUpdatedAt ?? "");
+    if (pendingDayMealMutationHasEatenAt(pendingMutation)) {
+      return (serverEntry?.eatenAt ?? null) !== (pendingMutation.eatenAt ?? null);
+    }
+
+    const serverUpdatedAtMs = Date.parse(serverEntry?.updatedAt ?? "");
     return !Number.isFinite(serverUpdatedAtMs) || serverUpdatedAtMs < pendingUpdatedAtMs;
   };
   const merged = serverEntries
     .filter((entry) => !recentlyRemovedIds.has(entry.id))
     .map((entry) => {
       const localEntry = previousById.get(entry.id);
-      return localEntry && isMutationProtected(entry.id, entry.updatedAt) ? localEntry : entry;
+      return localEntry && isMutationProtected(entry.id, entry) ? localEntry : entry;
     });
 
   pendingDayMealCreates.forEach((pending, optimisticId) => {
@@ -1808,6 +1812,7 @@ type PendingDayMealCreate = {
 };
 type PendingDayMealMutation = {
   updatedAt: string;
+  eatenAt?: string | null;
 };
 type QueuedDayMealEatenMutation = {
   eatenAt: string | null;
@@ -1815,6 +1820,33 @@ type QueuedDayMealEatenMutation = {
   updatedAt: string;
   version: number;
 };
+
+function pendingDayMealMutationHasEatenAt(mutation: PendingDayMealMutation) {
+  return Object.prototype.hasOwnProperty.call(mutation, "eatenAt");
+}
+
+function isDayMealMutationConfirmedByServer(
+  entry: DayMealPlanEntry,
+  mutation: PendingDayMealMutation,
+  now = Date.now(),
+) {
+  const pendingUpdatedAt = Date.parse(mutation.updatedAt);
+  const isExpired = Number.isFinite(pendingUpdatedAt) && now - pendingUpdatedAt >= LOCAL_SYNC_PROTECTION_MS;
+
+  if (pendingDayMealMutationHasEatenAt(mutation)) {
+    const serverMatchesLatestEatenAt = (entry.eatenAt ?? null) === (mutation.eatenAt ?? null);
+    if (!serverMatchesLatestEatenAt) {
+      return isExpired;
+    }
+    return true;
+  }
+
+  const serverUpdatedAt = Date.parse(entry.updatedAt);
+  return (
+    (Number.isFinite(serverUpdatedAt) && Number.isFinite(pendingUpdatedAt) && serverUpdatedAt >= pendingUpdatedAt) ||
+    isExpired
+  );
+}
 
 export function reconcileSupabaseInviteDirectory(
   previous: AppState,
@@ -3259,14 +3291,7 @@ function findResolvedUserIdInSnapshot(
             return;
           }
 
-          const serverUpdatedAt = Date.parse(entry.updatedAt);
-          const pendingUpdatedAt = Date.parse(pendingMutation.updatedAt);
-          if (
-            (Number.isFinite(serverUpdatedAt) &&
-              Number.isFinite(pendingUpdatedAt) &&
-              serverUpdatedAt >= pendingUpdatedAt) ||
-            (Number.isFinite(pendingUpdatedAt) && now - pendingUpdatedAt >= LOCAL_SYNC_PROTECTION_MS)
-          ) {
+          if (isDayMealMutationConfirmedByServer(entry, pendingMutation, now)) {
             nextPendingDayMealMutations.delete(entry.id);
           }
         });
@@ -3409,12 +3434,7 @@ function findResolvedUserIdInSnapshot(
         if (!pending) {
           return;
         }
-        const serverUpdatedAt = Date.parse(entry.updatedAt);
-        const pendingUpdatedAt = Date.parse(pending.updatedAt);
-        if (
-          (Number.isFinite(serverUpdatedAt) && Number.isFinite(pendingUpdatedAt) && serverUpdatedAt >= pendingUpdatedAt) ||
-          (Number.isFinite(pendingUpdatedAt) && now - pendingUpdatedAt >= LOCAL_SYNC_PROTECTION_MS)
-        ) {
+        if (isDayMealMutationConfirmedByServer(entry, pending, now)) {
           nextPendingMutations.delete(entry.id);
         }
       });
@@ -7408,7 +7428,7 @@ function findResolvedUserIdInSnapshot(
 
         const version = (dayMealEatenMutationVersionRef.current.get(entryId) ?? 0) + 1;
         dayMealEatenMutationVersionRef.current.set(entryId, version);
-        pendingDayMealMutationsRef.current.set(entryId, { updatedAt });
+        pendingDayMealMutationsRef.current.set(entryId, { updatedAt, eatenAt });
         applyOptimistic();
 
         queueDayMealEatenSync(entryId, {

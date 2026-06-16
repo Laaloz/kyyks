@@ -496,16 +496,12 @@ export function NutritionView({
                           className={`grid size-9 shrink-0 place-items-center rounded-full transition ${
                             isEaten ? "bg-[var(--success)] text-white" : "border border-[var(--border-strong)] text-transparent"
                           } disabled:cursor-not-allowed`}
-                          aria-pressed={isEaten}
+                          role="checkbox"
+                          aria-checked={isEaten}
                           aria-label={isEaten ? "Merkitse syömättömäksi" : "Merkitse syödyksi"}
-                          disabled={isPending || aiDisabled}
-                          onClick={async () => {
-                            setPendingId(entry.id);
-                            try {
-                              await setDayMealEaten(entry.id, !isEaten);
-                            } finally {
-                              setPendingId(null);
-                            }
+                          disabled={aiDisabled}
+                          onClick={() => {
+                            void setDayMealEaten(entry.id, !isEaten);
                           }}
                         >
                           <Check className="size-4 stroke-[2.5]" aria-hidden="true" />

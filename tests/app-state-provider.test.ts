@@ -1599,6 +1599,53 @@ describe("reconcileSupabaseVisibleState local sync protection", () => {
     expect(nextState.dayMealPlans).toContainEqual(localMeal);
   });
 
+  it("keeps the latest local day meal eaten toggle over a stale refetch", () => {
+    const state = cloneDemoState();
+    const pendingUpdatedAt = new Date().toISOString();
+    const localMeal: DayMealPlanEntry = {
+      id: "550e8400-e29b-41d4-a716-446655440000",
+      athleteId: "user_athlete_1",
+      planDate: "2026-03-24",
+      mealTag: "breakfast",
+      recipeId: "recipe_skyr_oats",
+      source: "plan",
+      servings: 1,
+      eatenAt: null,
+      position: 0,
+      createdAt: "2026-03-24T08:00:00.000Z",
+      updatedAt: pendingUpdatedAt,
+    };
+    const staleServerMeal: DayMealPlanEntry = {
+      ...localMeal,
+      eatenAt: "2026-03-24T08:30:00.000Z",
+      updatedAt: new Date(Date.now() + 1000).toISOString(),
+    };
+    state.dayMealPlans = [localMeal];
+
+    const nextState = reconcileSupabaseVisibleState(
+      state,
+      {
+        users: state.users,
+        bodyMeasurements: state.bodyMeasurements,
+        dayMealPlans: [staleServerMeal],
+        conversationEntries: state.conversationEntries,
+      },
+      new Map(),
+      new Map(),
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      "full",
+      new Map(),
+      new Map(),
+      new Map(),
+      new Map([[localMeal.id, { updatedAt: pendingUpdatedAt, eatenAt: null }]]),
+    );
+
+    expect((nextState.dayMealPlans ?? []).find((entry) => entry.id === localMeal.id)?.eatenAt).toBeNull();
+  });
+
   it("keeps a recently saved measurement over an older full snapshot", () => {
     const state = cloneDemoState();
     const athlete = state.users.find((user) => user.id === "user_athlete_1")!;
