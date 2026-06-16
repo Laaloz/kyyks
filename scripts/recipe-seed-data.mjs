@@ -223,10 +223,10 @@ export const recipeSeedData = [
     ],
     instructions: [
       "Mausta kana suolalla, paprikalla, valkosipulimausteella, chilillä ja oreganolla.",
-      "Paista kana öljyssä kypsäksi, lisää loppuvaiheessa hunaja ja BBQ-kastike.",
+      "Paista kana öljyssä kypsäksi, lisää loppuvaiheessa hunaja ja BBQ-kastike ja siirrä sivuun.",
       "Keitä makaroni pakkauksen ohjeen mukaan.",
-      "Lämmitä maito kattilassa ja sekoita joukkoon tuorejuusto, juustoraaste ja kanafondi tasaiseksi kastikkeeksi.",
-      "Yhdistä makaroni, kastike ja kana.",
+      "Lämmitä maito kattilassa ja sekoita joukkoon tuorejuusto, juustoraaste ja kanafondi tasaiseksi juustokastikkeeksi.",
+      "Sekoita makaroni juustokastikkeeseen ja annostele BBQ-hunajakana päälle tai rinnalle.",
     ],
   }),
 
@@ -487,7 +487,7 @@ export const recipeSeedData = [
     instructions: [
       "Mausta kana kuivamausteilla ja paista kypsäksi.",
       "Keitä pasta pakkauksen ohjeen mukaan.",
-      "Kuullota valkosipuli voissa, lisää chilihiutaleet, tomaattimurska, kerma, tuorejuusto, kanaliemi ja vesi.",
+      "Kuullota valkosipuli voissa, lisää chilihiutaleet, tomaattimurska, kerma, tuorejuusto, kanaliemikuutio ja vesi.",
       "Anna kastikkeen kiehua hetki ja lisää kana joukkoon.",
       "Yhdistä pasta kastikkeeseen ja viimeistele parmesaanilla sekä pilkotulla paprikalla.",
     ],
@@ -572,17 +572,19 @@ export const recipeSeedData = [
     ingredients: [
       ingredient("Voi suolaamaton", 15, "g", { groupLabel: "Kana" }),
       ingredient("Hunaja", 25, "g", { groupLabel: "Kastike" }),
-      ingredient("Maissitärkkelys", 30, "g", { groupLabel: "Kana" }),
+      ingredient("Maissitärkkelys", 30, "g", { groupLabel: "Kastike" }),
+      ingredient("Vesi", 60, "ml", { groupLabel: "Kastike" }),
       ingredient("Gochujang pippuritahna", 35, "g", { groupLabel: "Kastike" }),
       ingredient("Basmatiriisi", 300, "g", { groupLabel: "Lisuke" }),
       ingredient("Kanan rintafilee", 700, "g", { groupLabel: "Kana" }),
     ],
     instructions: [
       "Keitä riisi pakkauksen ohjeen mukaan.",
-      "Leikkaa kana paloiksi ja pyörittele maissitärkkelyksessä.",
-      "Paista kana voissa rapeaksi.",
+      "Leikkaa kana paloiksi ja paista voissa kypsäksi.",
+      "Sekoita maissitärkkelys kylmään veteen tasaiseksi suurusteeksi.",
       "Sekoita hunaja ja gochujang, kaada pannulle kanan joukkoon.",
-      "Anna kastikkeen tarttua kanaan ja tarjoile heti riisin kanssa.",
+      "Lisää suuruste pannulle koko ajan sekoittaen ja kuumenna, kunnes kastike paksuuntuu ja tarttuu kanaan.",
+      "Tarjoile heti riisin kanssa.",
     ],
   }),
   recipe({
@@ -606,7 +608,7 @@ export const recipeSeedData = [
     ],
     instructions: [
       "Kuullota valkosipuli ja chili öljyssä kattilassa.",
-      "Lisää misokeittopohja, soijakastike ja vesi, ja kiehauta liemi.",
+      "Lisää vesi, misokeittopohja ja soijakastike, ja kiehauta liemi.",
       "Keitä kananmunat erikseen pehmeiksi ja kuori ne.",
       "Lisää udon-nuudelit ja katkaravut liemeen ja lämmitä kypsiksi.",
       "Jaa kulhoihin ja viimeistele maapähkinöillä, seesaminsiemenillä, kevätsipulilla, korianterilla ja kananmunalla.",
