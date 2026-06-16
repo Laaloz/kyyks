@@ -35,6 +35,7 @@ import { Button } from "@/components/ui/button";
 import { isConversationEntryNotifiable } from "@/lib/conversation";
 import { getCoachConversationAthletes } from "@/lib/domain";
 import { getMeasurementReminderState } from "@/lib/measurement-reminder";
+import { isVirtualKeyboardOpen } from "@/lib/mobile-keyboard";
 import { canActAsCoach, canManagePrograms, getDashboardViewsForRole, getDefaultDashboardView, isAdminRole, isAthleteRole } from "@/lib/role-access";
 import type { Role } from "@/lib/types";
 import { useAppState } from "@/providers/app-state-provider";
@@ -371,14 +372,14 @@ export function DashboardShell() {
     }
 
     const computeKeyboardState = () => {
-      const active = document.activeElement;
-      const focusOnTextInput =
-        active instanceof HTMLInputElement ||
-        active instanceof HTMLTextAreaElement ||
-        (active instanceof HTMLElement && active.isContentEditable);
       const viewport = window.visualViewport;
-      const viewportReduced = viewport ? viewport.height < window.innerHeight * 0.8 : false;
-      setIsMobileKeyboardOpen(focusOnTextInput || viewportReduced);
+      setIsMobileKeyboardOpen(
+        isVirtualKeyboardOpen({
+          activeElement: document.activeElement,
+          visualViewportHeight: viewport ? viewport.height : null,
+          layoutViewportHeight: window.innerHeight,
+        }),
+      );
     };
 
     const handleFocusIn = () => computeKeyboardState();
