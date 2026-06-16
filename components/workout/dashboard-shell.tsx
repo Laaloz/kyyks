@@ -35,6 +35,7 @@ import { Button } from "@/components/ui/button";
 import { isConversationEntryNotifiable } from "@/lib/conversation";
 import { getCoachConversationAthletes } from "@/lib/domain";
 import { getMeasurementReminderState } from "@/lib/measurement-reminder";
+import { isVirtualKeyboardOpen } from "@/lib/mobile-keyboard";
 import { canActAsCoach, canManagePrograms, getDashboardViewsForRole, getDefaultDashboardView, isAdminRole, isAthleteRole } from "@/lib/role-access";
 import type { Role } from "@/lib/types";
 import { useAppState } from "@/providers/app-state-provider";
@@ -49,9 +50,15 @@ const WORKSPACE_VIEW_STORAGE_VERSION = "v1";
 // kytkennät ennallaan, kun chat palautetaan.
 const CHAT_ENABLED = false;
 function mobilePrimaryNavItemsForRole(role: Role): PrimaryWorkspaceView[] {
+  // Itsenäinen treenaaja ohjelmoi itse → mukaan Ohjelma-välilehti. Treeni pidetään
+  // keskellä korostettuna: Tänään / Ohjelma / Treeni / Ravinto / Keho.
+  if (role === "independent_athlete") {
+    return ["overview", PROGRAMS_WORKSPACE_VIEW, "athlete-log", "nutrition", "measurements"];
+  }
+
   // Treenaajaroolit: Tänään / Treeni / Ravinto / Keho. Treeni keskelle painottuu
   // korostetulla pillerillä; chat on yläpalkin ikoni.
-  if (role === "athlete" || role === "independent_athlete") {
+  if (role === "athlete") {
     return ["overview", "athlete-log", "nutrition", "measurements"];
   }
 
@@ -365,14 +372,14 @@ export function DashboardShell() {
     }
 
     const computeKeyboardState = () => {
-      const active = document.activeElement;
-      const focusOnTextInput =
-        active instanceof HTMLInputElement ||
-        active instanceof HTMLTextAreaElement ||
-        (active instanceof HTMLElement && active.isContentEditable);
       const viewport = window.visualViewport;
-      const viewportReduced = viewport ? viewport.height < window.innerHeight * 0.8 : false;
-      setIsMobileKeyboardOpen(focusOnTextInput || viewportReduced);
+      setIsMobileKeyboardOpen(
+        isVirtualKeyboardOpen({
+          activeElement: document.activeElement,
+          visualViewportHeight: viewport ? viewport.height : null,
+          layoutViewportHeight: window.innerHeight,
+        }),
+      );
     };
 
     const handleFocusIn = () => computeKeyboardState();
@@ -758,6 +765,7 @@ export function DashboardShell() {
                 onOpenWorkoutLog={() => setView("athlete-log")}
                 onOpenSettings={() => setView("settings")}
                 onOpenMeasurements={openMeasurementsOverview}
+                onOpenNutrition={() => setView("nutrition")}
                 onOpenProgramEditor={() => setView(PROGRAMS_WORKSPACE_VIEW)}
                 onWorkoutDetailModeChange={setIsMobileWorkoutDetailOpen}
                 overviewFocusTarget={athleteOverviewFocusTarget}
@@ -772,6 +780,7 @@ export function DashboardShell() {
                 onOpenWorkoutLog={() => setView("athlete-log")}
                 onOpenSettings={() => setView("settings")}
                 onOpenMeasurements={openMeasurementsOverview}
+                onOpenNutrition={() => setView("nutrition")}
                 onOpenProgramEditor={() => setView(PROGRAMS_WORKSPACE_VIEW)}
                 onWorkoutDetailModeChange={setIsMobileWorkoutDetailOpen}
                 overviewFocusTarget={athleteOverviewFocusTarget}
@@ -801,6 +810,7 @@ export function DashboardShell() {
                 onOpenWorkoutLog={() => setView("athlete-log")}
                 onOpenSettings={() => setView("settings")}
                 onOpenMeasurements={openMeasurementsOverview}
+                onOpenNutrition={() => setView("nutrition")}
                 onOpenProgramEditor={() => setView(PROGRAMS_WORKSPACE_VIEW)}
                 onWorkoutDetailModeChange={setIsMobileWorkoutDetailOpen}
                 overviewFocusTarget={athleteOverviewFocusTarget}

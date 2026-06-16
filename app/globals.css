@@ -140,6 +140,24 @@
   --button-disabled-text: var(--text-subtle);
 }
 
+/* Tänään-näkymän hero-kortti ("Seuraava treeni") on tarkoituksella käännetty
+   korkeakontrastinen kortti: tausta = --text (tumma vaaleassa/mallussa/camelissa,
+   vaalea teksti). Tummassa teemassa --text on lähes valkoinen, jolloin kortista
+   tulisi iso valkoinen lohko. Siksi tummassa teemassa käytetään aksenttisävytettyä
+   kohotettua tummaa pintaa: kortti pysyy tummana ja erottuu, ja kirkas
+   primary-nappi (aksentti) säilyy selvästi esillä. */
+.today-hero {
+  --hero-bg: var(--text);
+  --hero-fg: var(--background);
+  --hero-border: var(--text);
+}
+
+:root[data-theme="dark"] .today-hero {
+  --hero-bg: color-mix(in srgb, var(--accent) 16%, var(--surface-2));
+  --hero-fg: var(--text);
+  --hero-border: color-mix(in srgb, var(--accent) 45%, var(--border-strong));
+}
+
 html,
 body {
   overflow-x: hidden;

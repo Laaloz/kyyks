@@ -84,7 +84,7 @@ import type {
   WorkoutSession,
   WorkoutUpdateInput,
 } from "@/lib/types";
-import { THEME_CHROME_COLORS, resolveThemeMode } from "@/lib/theme-chrome";
+import { applyThemeToDocument, readStoredThemeMode, setThemePreference } from "@/lib/theme-chrome";
 import { makeId } from "@/lib/utils";
 import { normalizeWorkoutHistoryTitle } from "@/lib/workout-history-title";
 import {
@@ -4358,17 +4358,17 @@ function findResolvedUserIdInSnapshot(
       return;
     }
 
-    const themeMode = resolveThemeMode(currentUser?.settings?.themeMode);
-    const chrome = THEME_CHROME_COLORS[themeMode];
-    document.documentElement.dataset.theme = themeMode;
-    document.documentElement.style.colorScheme = chrome.colorScheme;
-    document
-      .querySelector('meta[name="theme-color"]')
-      ?.setAttribute("content", chrome.themeColor);
-    document
-      .querySelector('meta[name="apple-mobile-web-app-status-bar-style"]')
-      ?.setAttribute("content", chrome.appleStatusBarStyle);
-  }, [currentUser?.settings?.themeMode, isHydrated]);
+    // Teema sovelletaan laitekohtaisesta cachesta, joka on DOM:n auktoriteetti
+    // istunnon ajan. Palvelimen arvo seedaa cachen vain kirjautuessa / käyttäjän
+    // vaihtuessa (cross-device-synkka latauksessa). Koska tämä ei riipu
+    // settings.themeMode:sta, taustasynkan ohimenevät flipit eivät enää revertoi
+    // käyttäjän tekemää teemavalintaa (valinta kirjoittaa cachen + DOM:n suoraan).
+    if (currentUser?.id) {
+      setThemePreference(currentUser.settings?.themeMode);
+    } else {
+      applyThemeToDocument(readStoredThemeMode());
+    }
+  }, [currentUser?.id, isHydrated]);
 
   const value = useMemo<AppStateContextValue>(() => {
       const signInWithSupabasePassword = async (

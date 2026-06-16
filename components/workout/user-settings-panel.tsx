@@ -17,6 +17,7 @@ import type { ProfileSheetSection } from "@/components/workout/profile-sheet";
 import { bodyMeasurementSchema, userSettingsSchema } from "@/components/workout/schemas";
 import { roleLabel } from "@/components/workout/shared";
 import { useAccentColorPreference, type AccentColor } from "@/lib/use-accent-color";
+import { setThemePreference } from "@/lib/theme-chrome";
 import { getMeasurementsForUser } from "@/lib/body-metrics";
 import { withMinimumDelay } from "@/lib/min-delay";
 import { calculateMacroTarget, getMissingMacroProfileFields } from "@/lib/nutrition";
@@ -30,6 +31,21 @@ const themeModeLabel: Record<ThemeMode, string> = {
   mallu: "Mallu",
   camel: "Camel",
 };
+
+// Aloitusnäkymän valinnan nimet. Samat termit kuin navigaatiopalkissa, jotta
+// käyttäjä tunnistaa mihin välilehteen valinta viittaa. Kattaa kaikki näkymät,
+// joita getDashboardViewsForRole voi palauttaa (roolikohtainen alijoukko).
+const dashboardViewLabel: Partial<Record<DashboardHomeView, string>> = {
+  overview: "Tänään",
+  nutrition: "Ravinto",
+  "athlete-log": "Treeni",
+  measurements: "Keho",
+  athletes: "Tiimi",
+};
+
+function dashboardViewLabelFor(view: DashboardHomeView): string {
+  return dashboardViewLabel[view] ?? view;
+}
 
 const loadIncrementLabel: Record<1 | 2.5 | 5, string> = {
   1: "1 kg",
@@ -224,11 +240,23 @@ export function UserSettingsPanel({
         : (["overview"] as DashboardHomeView[]),
     [currentUser],
   );
+  const lastResetUserIdRef = useRef<string | null>(null);
   useEffect(() => {
     if (!currentUser) {
       return;
     }
 
+    // Käyttäjän vaihtuessa (tai ensilatauksessa) resetoidaan aina lomake tilasta.
+    // Samalle käyttäjälle EI resetoida kun tallennus on kesken (isSubmitting) tai
+    // lomakkeessa on paikallisia muutoksia (isDirty): muuten taustasynkan tuoma
+    // ohimenevä currentUser-päivitys voisi revertoida juuri auto-tallennetun
+    // valinnan (muistutukset/yksiköt/aloitusnäkymä) hetkellisesti.
+    const isUserSwitch = lastResetUserIdRef.current !== currentUser.id;
+    if (!isUserSwitch && (form.formState.isSubmitting || form.formState.isDirty)) {
+      return;
+    }
+
+    lastResetUserIdRef.current = currentUser.id;
     form.reset({
       fullName: currentUser.fullName,
       profileImageUrl: currentUser.profileImageUrl ?? "",
@@ -254,11 +282,22 @@ export function UserSettingsPanel({
       return;
     }
 
-    const result = await withMinimumDelay(updateCurrentUserSettings(values));
+    // Ei withMinimumDelaytä: nämä asetukset tallentuvat automaattisesti ja
+    // kontrolli päivittyy heti (form.watch) ilman spinneriä, joten keinotekoinen
+    // minimiviive pitäisi kontrollit turhaan disabloituina. Lukko (disabled=
+    // isSavingSettings) serialisoi yhä tallennukset, joten rinnakkaisuusrace ei synny.
+    const result = await updateCurrentUserSettings(values);
     setMessage(result.ok ? "Tallennettu." : result.message);
     setMessageTone(result.ok ? "success" : "danger");
     if (!result.ok) {
       notify({ tone: "danger", message: result.message });
+      // Teema sovelletaan optimistisesti heti valinnasta, joten epäonnistuneen
+      // tallennuksen jälkeen palautetaan DOM ja valinta vastaamaan tallennettua tilaa.
+      const savedTheme = currentUser.settings?.themeMode ?? "light";
+      setThemePreference(savedTheme);
+      if (values.themeMode !== savedTheme) {
+        form.setValue("themeMode", savedTheme, { shouldDirty: false });
+      }
     }
   });
   const isSavingSettings = form.formState.isSubmitting;
@@ -759,9 +798,14 @@ export function UserSettingsPanel({
                 id="settings-theme-mode"
                 disabled={isSavingSettings}
                 value={settingsThemeMode}
-                onChange={(event) =>
-                  autoSaveSettings(() => form.setValue("themeMode", event.target.value as ThemeMode, { shouldDirty: true }))
-                }
+                onChange={(event) => {
+                  const nextTheme = event.target.value as ThemeMode;
+                  // Talleta laitekohtaiseen cacheen ja sovella heti DOMiin (kuten
+                  // aksenttiväri), jotta vaihto näkyy välittömästi eikä taustasynkka
+                  // revertoi sitä. Tallennus palvelimelle jatkuu autoSaveSettingsin kautta.
+                  setThemePreference(nextTheme);
+                  autoSaveSettings(() => form.setValue("themeMode", nextTheme, { shouldDirty: true }));
+                }}
               >
                 {Object.entries(themeModeLabel).map(([value, label]) => (
                   <option key={value} value={value}>
@@ -785,6 +829,27 @@ export function UserSettingsPanel({
                 </Select>
               </div>
             ) : null}
+
+            <div>
+              <Label htmlFor="settings-default-view">Aloitusnäkymä</Label>
+              <Select
+                id="settings-default-view"
+                disabled={isSavingSettings}
+                value={settingsDefaultView}
+                onChange={(event) =>
+                  autoSaveSettings(() =>
+                    form.setValue("defaultDashboardView", event.target.value as DashboardHomeView, { shouldDirty: true }),
+                  )
+                }
+              >
+                {allowedViewOptions.map((view) => (
+                  <option key={view} value={view}>
+                    {dashboardViewLabelFor(view)}
+                  </option>
+                ))}
+              </Select>
+              <p className="mt-1.5 text-xs text-[var(--text-subtle)]">Näkymä, joka avautuu kun käynnistät sovelluksen.</p>
+            </div>
 
             {message ? <InlineFeedback message={message} tone={messageTone} className="text-sm" /> : null}
           </div>

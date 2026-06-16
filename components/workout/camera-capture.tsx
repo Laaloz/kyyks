@@ -6,10 +6,17 @@ import { createPortal } from "react-dom";
 
 import { Button } from "@/components/ui/button";
 
+// "denied" = käyttäjä on estänyt kameraluvan (selaimen/laitteen asetukset), "no-camera" = laitteessa
+// ei kameraa, "error" = muu virhe. Eroteltu, koska denied vaatii erilaisen ohjeen kuin tekninen vika.
+type CaptureStatus = "starting" | "ready" | "unsupported" | "denied" | "no-camera" | "error";
+
 /**
  * Sovelluksen sisäinen kamera (getUserMedia). Toimii myös asennetussa Android-PWA:ssa,
  * jossa <input capture> ei avaa kameraa. Ottaa ruudun talteen canvasilla → skaalattu JPEG
  * base64. Jos kameraa ei voi avata (ei tukea / lupa evätty), tarjoaa tiedosto-fallbackin.
+ *
+ * Huom: live-stream sytyttää iOS:n vihreän kamerapisteen — siksi tracket pysäytetään aina
+ * näkymää suljettaessa, jotta indikaattori sammuu.
  */
 export function CameraCapture({
   onCapture,
@@ -24,7 +31,10 @@ export function CameraCapture({
   const streamRef = useRef<MediaStream | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
   const [facing, setFacing] = useState<"environment" | "user">("environment");
-  const [status, setStatus] = useState<"starting" | "ready" | "unsupported" | "denied">("starting");
+  const [status, setStatus] = useState<CaptureStatus>("starting");
+  // Kasvatetaan "Yritä uudelleen" -napista → effect ajaa getUserMedian uudelleen (esim. kun
+  // käyttäjä on juuri sallinut luvan asetuksista). Pysyvästi estetty lupa ei silti palaudu ilman tätä.
+  const [attempt, setAttempt] = useState(0);
 
   useEffect(() => {
     let cancelled = false;
@@ -36,6 +46,21 @@ export function CameraCapture({
         setStatus("unsupported");
         return;
       }
+
+      // Paras saatavilla oleva ennakkotarkistus: jos lupa on jo pysyvästi estetty, näytä ohje
+      // heti ilman getUserMedia-välähdystä. Permissions-API ei ole kaikkialla (mm. osa iOS-Safarista),
+      // joten tämä on vain best-effort — varsinainen totuus tulee getUserMedian tuloksesta.
+      try {
+        const permission = await navigator.permissions?.query({ name: "camera" as PermissionName });
+        if (cancelled) return;
+        if (permission?.state === "denied") {
+          setStatus("denied");
+          return;
+        }
+      } catch {
+        // Permissions-APIn puuttuminen ei ole virhe — jatketaan suoraan getUserMediaan.
+      }
+
       try {
         const stream = await media.getUserMedia({ video: { facingMode: facing }, audio: false });
         if (cancelled) {
@@ -49,8 +74,16 @@ export function CameraCapture({
           await video.play().catch(() => {});
         }
         setStatus("ready");
-      } catch {
-        if (!cancelled) setStatus("denied");
+      } catch (caught) {
+        if (cancelled) return;
+        const name = caught instanceof DOMException ? caught.name : "";
+        if (name === "NotAllowedError" || name === "SecurityError") {
+          setStatus("denied");
+        } else if (name === "NotFoundError" || name === "OverconstrainedError" || name === "DevicesNotFoundError") {
+          setStatus("no-camera");
+        } else {
+          setStatus("error");
+        }
       }
     };
 
@@ -60,7 +93,7 @@ export function CameraCapture({
       streamRef.current?.getTracks().forEach((track) => track.stop());
       streamRef.current = null;
     };
-  }, [facing]);
+  }, [facing, attempt]);
 
   const capture = () => {
     const video = videoRef.current;
@@ -93,17 +126,34 @@ export function CameraCapture({
           <p className="absolute inset-0 grid place-items-center text-sm text-white/80">Avataan kameraa…</p>
         ) : null}
 
-        {status === "unsupported" || status === "denied" ? (
+        {status === "unsupported" || status === "denied" || status === "no-camera" || status === "error" ? (
           <div className="absolute inset-0 grid place-items-center px-8 text-center">
-            <div>
-              <p className="text-sm text-white/90">
+            <div className="max-w-xs">
+              <p className="text-sm font-semibold text-white/90">
                 {status === "unsupported"
-                  ? "Kameraa ei tueta tässä selaimessa. Valitse kuva alta."
-                  : "Kameran käyttö on estetty. Salli kamera laitteen asetuksista (Asetukset → selain/sovellus → Kamera) tai valitse kuva alta."}
+                  ? "Kameraa ei tueta tässä selaimessa."
+                  : status === "no-camera"
+                    ? "Kameraa ei löytynyt tästä laitteesta."
+                    : status === "error"
+                      ? "Kameran avaaminen ei onnistunut."
+                      : "Kameran käyttöoikeus on estetty."}
               </p>
-              <Button type="button" variant="secondary" className="mt-4" onClick={() => fileRef.current?.click()}>
-                Valitse kuva
-              </Button>
+              {status === "denied" ? (
+                <p className="mt-2 text-xs leading-relaxed text-white/70">
+                  Salli kamera osoitepalkin kamerakuvakkeesta tai laitteen asetuksista
+                  (esim. Asetukset → selain/sovellus → Kamera) ja yritä uudelleen. Voit myös valita valmiin kuvan.
+                </p>
+              ) : null}
+              <div className="mt-4 flex flex-col items-center gap-2">
+                {status === "denied" || status === "error" ? (
+                  <Button type="button" variant="secondary" onClick={() => setAttempt((value) => value + 1)}>
+                    Yritä uudelleen
+                  </Button>
+                ) : null}
+                <Button type="button" variant="secondary" onClick={() => fileRef.current?.click()}>
+                  Valitse kuva
+                </Button>
+              </div>
             </div>
           </div>
         ) : null}

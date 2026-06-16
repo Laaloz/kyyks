@@ -24,10 +24,18 @@ const adminWorkspaceViews: DashboardHomeView[] = [
 ];
 
 // Treenaajaroolien alapalkki: Tänään / Treeni / Ravinto / Keho (4 tasakokoista).
-// Chat siirtyy yläpalkin ikoniksi; itsenäisen ohjelmamuokkaus avataan Treeni-näkymästä
-// (vaiheen 9 sisäinen editori — siihen asti Treeni-näkymän silta).
+// Chat siirtyy yläpalkin ikoniksi.
 const athleteWorkspaceViews: DashboardHomeView[] = ["overview", "athlete-log", "nutrition", "measurements"];
-const independentAthleteWorkspaceViews: DashboardHomeView[] = ["overview", "athlete-log", "nutrition", "measurements"];
+// Itsenäinen treenaaja vastaa itse ohjelmoinnistaan → Ohjelma on oma välilehti,
+// jotta omia ohjelmia voi luoda ja muokata suoraan navista eikä vain Treeni-näkymän
+// sillan kautta. Järjestys pitää Treenin keskellä: Tänään / Ohjelma / Treeni / Ravinto / Keho.
+const independentAthleteWorkspaceViews: DashboardHomeView[] = [
+  "overview",
+  PROGRAMS_DASHBOARD_VIEW,
+  "athlete-log",
+  "nutrition",
+  "measurements",
+];
 
 export function isAthleteRole(role: Role | null | undefined): role is AthleteRole {
   return role === "athlete" || role === "independent_athlete";

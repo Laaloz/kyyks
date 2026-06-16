@@ -85,14 +85,21 @@ describe("role access helpers", () => {
     expect(coachViews).not.toContain("templates");
   });
 
-  it("gives both athlete roles the same four-tab workspace (Tänään/Treeni/Ravinto/Keho)", () => {
+  it("gives the coached athlete the four-tab workspace (Tänään/Treeni/Ravinto/Keho)", () => {
     const expected = ["overview", "athlete-log", "nutrition", "measurements"];
     expect(getDashboardViewsForRole("athlete")).toEqual(expected);
-    expect(getDashboardViewsForRole("independent_athlete")).toEqual(expected);
-    // Chat moves to the top bar; program editing is reached from the Treeni view.
+    // Chat moves to the top bar; coached athletes have no program tab.
     expect(getDashboardViewsForRole("athlete")).not.toContain("conversation");
-    expect(getDashboardViewsForRole("independent_athlete")).not.toContain("templates");
+    expect(getDashboardViewsForRole("athlete")).not.toContain("templates");
     expect(getDefaultDashboardView("athlete")).toBe("overview");
+  });
+
+  it("gives the independent athlete a program tab with Treeni in the middle", () => {
+    const views = getDashboardViewsForRole("independent_athlete");
+    // Itse ohjelmoiva treenaaja saa oman Ohjelma-välilehden; Treeni pysyy keskellä.
+    expect(views).toEqual(["overview", "templates", "athlete-log", "nutrition", "measurements"]);
+    expect(views.indexOf("athlete-log")).toBe(2);
+    expect(views).not.toContain("conversation");
     expect(getDefaultDashboardView("independent_athlete")).toBe("overview");
   });
 

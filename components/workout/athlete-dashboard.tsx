@@ -47,6 +47,7 @@ import { useHeaderAction } from "@/components/workout/header-action";
 import { ExerciseProgressView } from "@/components/workout/exercise-progress-view";
 import { MetricTrendChart } from "@/components/workout/metric-trend-chart";
 import { NutritionView } from "@/components/workout/nutrition-view";
+import { DayMealsSummary } from "@/components/workout/nutrition/day-meals-summary";
 import { estimateStrengthCalories, getMeasurementsForUser, getWeightAtMoment } from "@/lib/body-metrics";
 import { calculateSessionDurationSeconds, getSessionProgress } from "@/lib/domain";
 import { buildExerciseProgressCatalog, type ExerciseProgressCatalog } from "@/lib/exercise-progress";
@@ -427,6 +428,7 @@ export function AthleteDashboard({
   onOpenWorkoutLog,
   onOpenSettings,
   onOpenMeasurements,
+  onOpenNutrition,
   onOpenProgramEditor,
   onWorkoutDetailModeChange,
   overviewFocusTarget,
@@ -439,6 +441,7 @@ export function AthleteDashboard({
   onOpenWorkoutLog?: () => void;
   onOpenSettings?: () => void;
   onOpenMeasurements?: () => void;
+  onOpenNutrition?: () => void;
   onOpenProgramEditor?: () => void;
   onWorkoutDetailModeChange?: (isOpen: boolean) => void;
   overviewFocusTarget?: AthleteOverviewFocusTarget | null;
@@ -1526,8 +1529,8 @@ export function AthleteDashboard({
       ) : null}
 
       {view === "overview" && (
-        <Card className="max-w-full overflow-x-clip border-[var(--text)] bg-[var(--text)] text-[var(--background)] [contain:inline-size]">
-          <p className="text-xs font-semibold tracking-[0.04em] text-[color:color-mix(in_srgb,var(--background)_62%,transparent)]">
+        <Card className="today-hero max-w-full overflow-x-clip border-[var(--hero-border)] bg-[var(--hero-bg)] text-[var(--hero-fg)] [contain:inline-size]">
+          <p className="text-xs font-semibold tracking-[0.04em] text-[color:color-mix(in_srgb,var(--hero-fg)_62%,transparent)]">
             {highlightedWorkoutState === "active"
               ? "Treeni kesken"
               : highlightedWorkoutState === "resumable"
@@ -1536,14 +1539,14 @@ export function AthleteDashboard({
                   ? "Seuraava treeni"
                   : "Aloita tästä"}
           </p>
-          <h2 className="mt-1.5 font-[family-name:var(--font-display)] text-[1.75rem] font-bold leading-tight tracking-[-0.01em] text-[var(--background)]">
+          <h2 className="mt-1.5 font-[family-name:var(--font-display)] text-[1.75rem] font-bold leading-tight tracking-[-0.01em] text-[var(--hero-fg)]">
             {highlightedWorkout
               ? normalizeWorkoutHistoryTitle(highlightedWorkout.title)
               : heroNextWorkout
                 ? heroNextWorkout.name
                 : "Ei ohjelmaa vielä"}
           </h2>
-          <p className="mt-1 text-sm text-[color:color-mix(in_srgb,var(--background)_72%,transparent)]">
+          <p className="mt-1 text-sm text-[color:color-mix(in_srgb,var(--hero-fg)_72%,transparent)]">
             {highlightedWorkout
               ? `${highlightedLoggedSetCount} ${highlightedLoggedSetCount === 1 ? "sarja" : "sarjaa"} kirjattu — jatka siitä mihin jäit`
               : heroNextWorkout
@@ -1575,7 +1578,7 @@ export function AthleteDashboard({
                 onOpenWorkoutLog?.();
               }}
             >
-              Aloita treeni
+              Avaa treenit
             </Button>
           )}
         </Card>
@@ -1663,7 +1666,7 @@ export function AthleteDashboard({
         </Card>
       )}
 
-      {view === "overview" && currentUser ? <NutritionView user={currentUser} readOnly={readOnly} dayOnly /> : null}
+      {view === "overview" && currentUser ? <DayMealsSummary user={currentUser} onOpen={onOpenNutrition} /> : null}
 
       {view === "measurements" && canTrackOwnMeasurements ? (
         <div ref={measurementsSectionRef} id="overview-measurements" className="scroll-mt-24 space-y-4">
