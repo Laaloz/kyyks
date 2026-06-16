@@ -325,10 +325,10 @@ export const recipeSeedData = [
     mealTag: "lunch",
     ...batchServe,
     ingredients: [
-      ingredient("Pasta", 300, "g"),
-      ingredient("Kanan rintafilee", 650, "g"),
-      ingredient("Pesto", 80, "g", { alternatives: ["Vihreä pesto", "Punainen pesto"] }),
-      ingredient("Kirsikkatomaatti", 250, "g"),
+      ingredient("Pasta", 280, "g"),
+      ingredient("Kanan rintafilee", 520, "g"),
+      ingredient("Pesto", 160, "g", { alternatives: ["Vihreä pesto", "Punainen pesto"] }),
+      ingredient("Kirsikkatomaatti", 240, "g", { displayQuantity: "4", displayUnit: "kourallista" }),
     ],
     instructions: [
       "Keitä pasta.",
