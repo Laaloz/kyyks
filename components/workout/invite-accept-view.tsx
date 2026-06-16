@@ -145,11 +145,25 @@ export function InviteAcceptView({ token, initialInvite }: { token: string; init
           >
             <fieldset className="space-y-4">
               <div>
-                <Label htmlFor={`${formId}-full-name`}>Koko nimi</Label>
+                <Label htmlFor={`${formId}-email`} required>Sähköposti</Label>
+                {/* Kutsuun sidottu sähköposti. Näytetään readonly-kenttänä, jotta selaimen/iOS:n
+                    salasananhallinta tallentaa tunnuksen sähköpostiin (ei nimikenttään). */}
+                <Input
+                  id={`${formId}-email`}
+                  type="email"
+                  autoComplete="username"
+                  inputMode="email"
+                  value={invite.email}
+                  readOnly
+                  className="bg-[var(--surface-2)] text-[var(--text-muted)]"
+                />
+              </div>
+              <div>
+                <Label htmlFor={`${formId}-full-name`} required>Koko nimi</Label>
                 <Input id={`${formId}-full-name`} autoComplete="name" {...form.register("fullName")} />
               </div>
               <div>
-                <Label htmlFor={`${formId}-new-password`}>Salasana</Label>
+                <Label htmlFor={`${formId}-new-password`} required>Salasana</Label>
                 <Input id={`${formId}-new-password`} type="password" autoComplete="new-password" {...form.register("password")} />
               </div>
             </fieldset>

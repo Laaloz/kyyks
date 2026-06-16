@@ -5416,7 +5416,11 @@ function findResolvedUserIdInSnapshot(
               : user,
           ),
           assignments: previous.assignments.filter((assignment) => {
-            if (role === "admin") {
+            // Itsenäisellä treenaajalla ei ole valmentajaa eikä valmennettavia → poista
+            // molemmat suunnat. (Sama tulos kuin palvelimen ensureAdminAssignments…-polku;
+            // muuten vanha valmentaja-linkki jää roikkumaan ja estää valmentajan roolinvaihdon
+            // virheellisesti "valmennettava asetettuna" -varoituksella.)
+            if (role === "admin" || role === "independent_athlete") {
               return assignment.coachId !== targetUser.id && assignment.athleteId !== targetUser.id;
             }
 

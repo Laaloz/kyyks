@@ -19,6 +19,8 @@ type DraftExercise = {
   sets: number;
   repsMin: number;
   repsMax: number;
+  /** Liikekohtainen lepoaika sekunteina (näkyy treenin lepoajastimessa). */
+  restSeconds: number;
   /** Liikkeen ohje (cue) urheilijalle — näkyy treenissä. */
   instruction?: string;
   /** Pankista puuttuva oma liike — luodaan coach_custom-liikkeeksi tallennettaessa. */
@@ -69,6 +71,7 @@ function planWorkoutsToDraft(plan: TrainingPlan | null, exercises: Exercise[]): 
         sets: Math.max(1, exercise.sets.length || 3),
         repsMin: min,
         repsMax: Math.max(min, max),
+        restSeconds: firstSet?.restSeconds ?? workout.defaultRestSeconds ?? 90,
         supersetGroup: (exercise.supersetGroup ?? "") as DraftExercise["supersetGroup"],
       };
     }),
@@ -90,6 +93,7 @@ function draftToWorkoutInputs(workouts: DraftWorkout[]): ProgramWorkoutInput[] {
         targetReps: exercise.repsMin,
         targetRepsMin: exercise.repsMin,
         targetRepsMax: exercise.repsMax,
+        restSeconds: exercise.restSeconds,
         supersetGroup: exercise.supersetGroup || undefined,
       };
       // Oma liike: ei exerciseId:tä → provider (resolveProgramWorkouts) luo coach_custom.
@@ -117,6 +121,7 @@ export function ProgramEditorOverlay({
   athletes,
   exercises,
   currentUserId,
+  selfAssignOnly = false,
   onClose,
   onSave,
   onArchive,
@@ -127,6 +132,8 @@ export function ProgramEditorOverlay({
   athletes: Array<{ id: string; fullName: string }>;
   exercises: Exercise[];
   currentUserId: string;
+  /** Itsenäinen treenaaja: ohjelma kohdistuu aina vain häneen itseensä → piilota urheilijavalinta. */
+  selfAssignOnly?: boolean;
   onClose: () => void;
   onSave: (input: {
     groupId: string;
@@ -146,7 +153,14 @@ export function ProgramEditorOverlay({
   const groupId = useMemo(() => basePlan?.programGroupId ?? basePlan?.id ?? makeGroupId(), [basePlan]);
 
   const [name, setName] = useState(basePlan?.title ?? "");
-  const [assigned, setAssigned] = useState<string[]>(() => groupPlans.map((plan) => plan.athleteId));
+  const [assigned, setAssigned] = useState<string[]>(() => {
+    const existing = groupPlans.map((plan) => plan.athleteId);
+    if (existing.length) {
+      return existing;
+    }
+    // Itsenäinen treenaaja: uusi ohjelma kohdistuu suoraan häneen itseensä.
+    return selfAssignOnly ? [currentUserId] : [];
+  });
   const [workouts, setWorkouts] = useState<DraftWorkout[]>(() => planWorkoutsToDraft(basePlan, exercises));
   const [pickerForWorkout, setPickerForWorkout] = useState<string | null>(null);
   const [pickerQuery, setPickerQuery] = useState("");
@@ -240,7 +254,7 @@ export function ProgramEditorOverlay({
 
   const addExerciseFromBank = (exercise: Exercise) =>
     // Tuo liikkeen oma vakio-ohje (cue) valmiiksi kenttään — muokattavissa.
-    appendExercise({ exerciseId: exercise.id, name: exercise.name, instruction: exercise.cue, sets: 3, repsMin: 8, repsMax: 8, supersetGroup: "" });
+    appendExercise({ exerciseId: exercise.id, name: exercise.name, instruction: exercise.cue, sets: 3, repsMin: 8, repsMax: 8, restSeconds: 90, supersetGroup: "" });
 
   const addCustomExercise = () => {
     const name = pickerQuery.trim();
@@ -252,6 +266,7 @@ export function ProgramEditorOverlay({
       sets: 3,
       repsMin: 8,
       repsMax: 8,
+      restSeconds: 90,
       isCustom: true,
       muscleGroup: newMuscle || undefined,
       supersetGroup: "",
@@ -378,7 +393,7 @@ export function ProgramEditorOverlay({
           </label>
           <input
             id="program-editor-name"
-            className="mt-1.5 w-full rounded-xl border border-[var(--border)] bg-[var(--surface-2)] px-3 py-2.5 text-[15px] text-[var(--text)] outline-none focus-visible:border-[var(--accent)]"
+            className="mt-1.5 w-full rounded-xl border border-[var(--border)] bg-[var(--surface-2)] px-3 py-2.5 text-sm text-[var(--text)] outline-none focus-visible:border-[var(--accent)]"
             placeholder="esim. Voima 3"
             value={name}
             onChange={(event) => setName(event.target.value)}
@@ -396,7 +411,7 @@ export function ProgramEditorOverlay({
               >
                 −
               </button>
-              <span className="min-w-8 text-center font-[family-name:var(--font-display)] text-lg font-bold tabular-nums text-[var(--text)]">
+              <span className="min-w-8 text-center font-[family-name:var(--font-display)] text-base font-bold tabular-nums text-[var(--text)]">
                 {workouts.length}
               </span>
               <button
@@ -423,7 +438,7 @@ export function ProgramEditorOverlay({
               >
                 −
               </button>
-              <span className="min-w-16 text-center font-[family-name:var(--font-display)] text-lg font-bold tabular-nums text-[var(--text)]">
+              <span className="min-w-16 text-center font-[family-name:var(--font-display)] text-base font-bold tabular-nums text-[var(--text)]">
                 {isPermanentProgram ? "Pysyvä" : `${durationWeeks} vk`}
               </span>
               <button
@@ -447,44 +462,48 @@ export function ProgramEditorOverlay({
             />
           </label>
 
-          <p className="mt-4 text-sm font-bold text-[var(--text)]">Käytössä urheilijoilla</p>
-          <div className="mt-2 flex flex-wrap gap-1.5">
-            {athletes.map((athlete) => {
-              const isOn = assigned.includes(athlete.id);
-              return (
-                <button
-                  key={athlete.id}
-                  type="button"
-                  aria-pressed={isOn}
-                  className={cn(
-                    "rounded-full px-3.5 py-1.5 text-sm font-semibold transition",
-                    isOn
-                      ? "bg-[var(--text)] text-[var(--background)]"
-                      : "bg-[var(--surface-2)] text-[var(--text-muted)] hover:bg-[var(--surface-3)]",
-                  )}
-                  onClick={() =>
-                    setAssigned((current) =>
-                      current.includes(athlete.id)
-                        ? current.filter((id) => id !== athlete.id)
-                        : [...current, athlete.id],
-                    )
-                  }
-                >
-                  {athlete.id === currentUserId ? `${athlete.fullName} (sinä)` : athlete.fullName}
-                </button>
-              );
-            })}
-          </div>
-          <p className="mt-2.5 text-[12.5px] text-pretty text-[var(--text-subtle)]">
-            Urheilijalla voi olla yksi aktiivinen ohjelma — valinta siirtää hänet tähän ohjelmaan.
-          </p>
+          {selfAssignOnly ? null : (
+            <>
+              <p className="mt-4 text-sm font-bold text-[var(--text)]">Käytössä urheilijoilla</p>
+              <div className="mt-2 flex flex-wrap gap-1.5">
+                {athletes.map((athlete) => {
+                  const isOn = assigned.includes(athlete.id);
+                  return (
+                    <button
+                      key={athlete.id}
+                      type="button"
+                      aria-pressed={isOn}
+                      className={cn(
+                        "rounded-full px-3.5 py-1.5 text-sm font-semibold transition",
+                        isOn
+                          ? "bg-[var(--text)] text-[var(--background)]"
+                          : "bg-[var(--surface-2)] text-[var(--text-muted)] hover:bg-[var(--surface-3)]",
+                      )}
+                      onClick={() =>
+                        setAssigned((current) =>
+                          current.includes(athlete.id)
+                            ? current.filter((id) => id !== athlete.id)
+                            : [...current, athlete.id],
+                        )
+                      }
+                    >
+                      {athlete.id === currentUserId ? `${athlete.fullName} (sinä)` : athlete.fullName}
+                    </button>
+                  );
+                })}
+              </div>
+              <p className="mt-2.5 text-xs text-pretty text-[var(--text-subtle)]">
+                Urheilijalla voi olla yksi aktiivinen ohjelma — valinta siirtää hänet tähän ohjelmaan.
+              </p>
+            </>
+          )}
         </div>
 
         {workouts.map((workout) => (
           <div key={workout.uid} className="mt-3 rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-4">
             <div className="flex items-center gap-2">
               <input
-                className="min-w-0 flex-1 rounded-xl border border-[var(--border)] bg-[var(--surface-2)] px-3 py-2.5 text-[15px] font-bold text-[var(--text)] outline-none focus-visible:border-[var(--accent)]"
+                className="min-w-0 flex-1 rounded-xl border border-[var(--border)] bg-[var(--surface-2)] px-3 py-2.5 text-sm font-bold text-[var(--text)] outline-none focus-visible:border-[var(--accent)]"
                 aria-label="Treenipäivän nimi"
                 value={workout.title}
                 onChange={(event) => updateWorkout(workout.uid, { title: event.target.value })}
@@ -500,11 +519,11 @@ export function ProgramEditorOverlay({
             </div>
 
             {workout.exercises.length ? (
-              <p className="mt-2.5 px-0.5 text-[11.5px] text-[var(--text-subtle)]">
-                Sarjat × toistohaarukka — vedä numerosta tai napauta. · ~{estimatedMinutes(workout)} min
+              <p className="mt-2.5 px-0.5 text-xs text-[var(--text-subtle)]">
+                Sarjat × toistohaarukka — vedä kahvasta tai napauta. · ~{estimatedMinutes(workout)} min
               </p>
             ) : (
-              <p className="mt-3 px-0.5 text-[13px] text-[var(--text-subtle)]">Ei vielä liikkeitä.</p>
+              <p className="mt-3 px-0.5 text-sm text-[var(--text-subtle)]">Ei vielä liikkeitä.</p>
             )}
 
             {workout.exercises.map((exercise, index) => (
@@ -573,6 +592,36 @@ export function ProgramEditorOverlay({
                       updateExercise(workout.uid, exercise.uid, { repsMax: max, repsMin: Math.min(max, exercise.repsMin) });
                     }}
                   />
+                </div>
+                <div className="mt-2 flex items-center justify-between gap-2">
+                  <span className="shrink-0 text-[11px] font-semibold uppercase tracking-[0.05em] text-[var(--text-subtle)]">Lepo</span>
+                  <div className="flex items-center gap-1 rounded-xl border border-[var(--border)] bg-[var(--surface-2)] p-1">
+                    <button
+                      type="button"
+                      aria-label={`Vähennä lepoaikaa: ${exercise.name}`}
+                      className="grid size-8 place-items-center rounded-lg text-[var(--text)] transition hover:bg-[var(--surface-3)] disabled:opacity-40"
+                      disabled={exercise.restSeconds <= 15}
+                      onClick={() =>
+                        updateExercise(workout.uid, exercise.uid, { restSeconds: clampInt(exercise.restSeconds - 15, 15, 600) })
+                      }
+                    >
+                      −
+                    </button>
+                    <span className="min-w-14 text-center font-[family-name:var(--font-display)] text-sm font-bold tabular-nums text-[var(--text)]">
+                      {exercise.restSeconds} s
+                    </span>
+                    <button
+                      type="button"
+                      aria-label={`Lisää lepoaikaa: ${exercise.name}`}
+                      className="grid size-8 place-items-center rounded-lg text-[var(--text)] transition hover:bg-[var(--surface-3)] disabled:opacity-40"
+                      disabled={exercise.restSeconds >= 600}
+                      onClick={() =>
+                        updateExercise(workout.uid, exercise.uid, { restSeconds: clampInt(exercise.restSeconds + 15, 15, 600) })
+                      }
+                    >
+                      +
+                    </button>
+                  </div>
                 </div>
                 <div className="mt-2 flex items-center gap-2 overflow-x-auto pb-0.5 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
                   <span className="shrink-0 text-[11px] font-semibold uppercase tracking-[0.05em] text-[var(--text-subtle)]">Superset</span>
@@ -675,7 +724,7 @@ export function ProgramEditorOverlay({
             <div className="relative mt-2">
               <Search className="pointer-events-none absolute left-3.5 top-1/2 size-[18px] -translate-y-1/2 text-[var(--text-subtle)]" aria-hidden="true" />
               <input
-                className="w-full rounded-xl border border-[var(--border)] bg-[var(--surface-2)] py-2.5 pl-10 pr-3 text-[15px] text-[var(--text)] outline-none focus-visible:border-[var(--accent)]"
+                className="w-full rounded-xl border border-[var(--border)] bg-[var(--surface-2)] py-2.5 pl-10 pr-3 text-sm text-[var(--text)] outline-none focus-visible:border-[var(--accent)]"
                 placeholder="Hae tai nimeä uusi liike…"
                 value={pickerQuery}
                 onChange={(event) => setPickerQuery(event.target.value)}
@@ -687,7 +736,7 @@ export function ProgramEditorOverlay({
               <div className="mt-2 flex items-center gap-2">
                 <Select
                   aria-label="Oman liikkeen lihasryhmä"
-                  className="h-10 min-w-0 flex-1 py-0 text-[15px]"
+                  className="h-10 min-w-0 flex-1 py-0 text-sm"
                   value={newMuscle}
                   onChange={(event) => setNewMuscle(event.target.value as MuscleGroupKey | "")}
                 >
@@ -720,13 +769,13 @@ export function ProgramEditorOverlay({
                 >
                   <div className="min-w-0">
                     <p className="truncate text-sm font-bold text-[var(--text)]">{exercise.name}</p>
-                    <p className="truncate text-[12.5px] text-[var(--text-subtle)]">{exercise.category}</p>
+                    <p className="truncate text-xs text-[var(--text-subtle)]">{exercise.category}</p>
                   </div>
                   <Plus className="size-5 shrink-0 text-[var(--accent)]" aria-hidden="true" />
                 </button>
               ))}
               {bankResults.length === 0 ? (
-                <p className="py-3 text-[13.5px] text-[var(--text-subtle)]">Ei liikkeitä tällä haulla.</p>
+                <p className="py-3 text-sm text-[var(--text-subtle)]">Ei liikkeitä tällä haulla.</p>
               ) : null}
             </div>
           </div>

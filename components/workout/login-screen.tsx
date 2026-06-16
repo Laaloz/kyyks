@@ -102,7 +102,7 @@ export function LoginScreen() {
           })}
         >
           <div>
-            <Label htmlFor={`${formId}-email`}>Sähköposti</Label>
+            <Label htmlFor={`${formId}-email`} required>Sähköposti</Label>
             <Input
               id={`${formId}-email`}
               type="email"
@@ -122,7 +122,7 @@ export function LoginScreen() {
             ) : null}
           </div>
           <div>
-            <Label htmlFor={`${formId}-password`}>Salasana</Label>
+            <Label htmlFor={`${formId}-password`} required>Salasana</Label>
             <Input
               id={`${formId}-password`}
               type="password"

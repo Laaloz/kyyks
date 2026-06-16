@@ -98,8 +98,8 @@ export function CameraCapture({
             <div>
               <p className="text-sm text-white/90">
                 {status === "unsupported"
-                  ? "Kameraa ei tueta tässä selaimessa."
-                  : "Kameran käyttöoikeus puuttuu — salli kamera tai valitse kuva."}
+                  ? "Kameraa ei tueta tässä selaimessa. Valitse kuva alta."
+                  : "Kameran käyttö on estetty. Salli kamera laitteen asetuksista (Asetukset → selain/sovellus → Kamera) tai valitse kuva alta."}
               </p>
               <Button type="button" variant="secondary" className="mt-4" onClick={() => fileRef.current?.click()}>
                 Valitse kuva

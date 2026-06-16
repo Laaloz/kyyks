@@ -6,12 +6,24 @@ import type {
   TextareaHTMLAttributes,
 } from "react";
 
-export function Label({ className, ...props }: LabelHTMLAttributes<HTMLLabelElement>) {
+export function Label({
+  className,
+  required,
+  children,
+  ...props
+}: LabelHTMLAttributes<HTMLLabelElement> & { required?: boolean }) {
   return (
     <label
       className={cn("mb-2 block text-sm font-semibold tracking-[0.02em] text-[var(--text-subtle)]", className)}
       {...props}
-    />
+    >
+      {children}
+      {required ? (
+        <span className="text-[var(--danger)]" aria-hidden="true">
+          {" *"}
+        </span>
+      ) : null}
+    </label>
   );
 }
 

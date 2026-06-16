@@ -1,6 +1,6 @@
 "use client";
 
-import { Plus, Search, Trash2, X } from "lucide-react";
+import { Loader2, Plus, Search, Trash2, X } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 
 import { Button } from "@/components/ui/button";
@@ -65,6 +65,8 @@ export function OwnRecipeEditor({
   // Ainesosahaku tehdään palvelimella (ei koko katalogia muistissa) → vain pieni tulosjoukko.
   const [remoteResults, setRemoteResults] = useState<Ingredient[]>([]);
   const [altRemoteResults, setAltRemoteResults] = useState<Ingredient[]>([]);
+  const [isSearching, setIsSearching] = useState(false);
+  const [isAltSearching, setIsAltSearching] = useState(false);
   // Hausta valitut ainekset, jotta live-makrot resolvoituvat ilman koko katalogia.
   const [pickedById, setPickedById] = useState<Map<string, Ingredient>>(() => new Map());
   const rememberPicked = (item: Ingredient) =>
@@ -122,18 +124,27 @@ export function OwnRecipeEditor({
     const term = query.trim();
     if (term.length < 2) {
       setRemoteResults([]);
+      setIsSearching(false);
       return;
     }
     let active = true;
+    setIsSearching(true);
     const handle = window.setTimeout(async () => {
       const response = await fetch(`/api/nutrition/ingredients/search?q=${encodeURIComponent(term)}`).catch(() => null);
-      if (!active || !response?.ok) {
+      if (!active) {
+        return;
+      }
+      if (!response?.ok) {
+        setRemoteResults([]);
+        setIsSearching(false);
         return;
       }
       const payload = (await response.json().catch(() => null)) as { ingredients?: Ingredient[] } | null;
-      if (active && payload?.ingredients) {
-        setRemoteResults(payload.ingredients);
+      if (!active) {
+        return;
       }
+      setRemoteResults(payload?.ingredients ?? []);
+      setIsSearching(false);
     }, 200);
     return () => {
       active = false;
@@ -146,18 +157,27 @@ export function OwnRecipeEditor({
     const term = altQuery.trim();
     if (term.length < 2 || !altSearchRowKey) {
       setAltRemoteResults([]);
+      setIsAltSearching(false);
       return;
     }
     let active = true;
+    setIsAltSearching(true);
     const handle = window.setTimeout(async () => {
       const response = await fetch(`/api/nutrition/ingredients/search?q=${encodeURIComponent(term)}`).catch(() => null);
-      if (!active || !response?.ok) {
+      if (!active) {
+        return;
+      }
+      if (!response?.ok) {
+        setAltRemoteResults([]);
+        setIsAltSearching(false);
         return;
       }
       const payload = (await response.json().catch(() => null)) as { ingredients?: Ingredient[] } | null;
-      if (active && payload?.ingredients) {
-        setAltRemoteResults(payload.ingredients);
+      if (!active) {
+        return;
       }
+      setAltRemoteResults(payload?.ingredients ?? []);
+      setIsAltSearching(false);
     }, 200);
     return () => {
       active = false;
@@ -403,7 +423,12 @@ export function OwnRecipeEditor({
                           className="min-w-0 flex-1 bg-transparent text-sm text-[var(--text)] outline-none placeholder:text-[var(--text-subtle)]"
                         />
                       </div>
-                      {altSearchResults.length > 0 ? (
+                      {isAltSearching ? (
+                        <div className="mt-1 flex items-center gap-2 px-1 py-2 text-xs text-[var(--text-subtle)]" aria-live="polite">
+                          <Loader2 className="size-3.5 animate-spin" aria-hidden="true" />
+                          Haetaan…
+                        </div>
+                      ) : altSearchResults.length > 0 ? (
                         <div className="mt-1 divide-y divide-[var(--border)]">
                           {altSearchResults.map((item) => (
                             <button
@@ -457,7 +482,12 @@ export function OwnRecipeEditor({
                 className="min-w-0 flex-1 bg-transparent text-sm text-[var(--text)] outline-none placeholder:text-[var(--text-subtle)]"
               />
             </div>
-            {searchResults.length > 0 ? (
+            {isSearching ? (
+              <div className="mt-2 flex items-center gap-2 px-1 py-2 text-xs text-[var(--text-subtle)]" aria-live="polite">
+                <Loader2 className="size-3.5 animate-spin" aria-hidden="true" />
+                Haetaan raaka-aineita…
+              </div>
+            ) : searchResults.length > 0 ? (
               <div className="mt-2 divide-y divide-[var(--border)]">
                 {searchResults.map((item) => (
                   <button
@@ -479,6 +509,8 @@ export function OwnRecipeEditor({
                   </button>
                 ))}
               </div>
+            ) : query.trim().length >= 2 ? (
+              <p className="mt-2 px-1 py-2 text-xs text-[var(--text-subtle)]">Ei osumia haulla.</p>
             ) : null}
           </div>
         </div>
