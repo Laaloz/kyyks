@@ -49,9 +49,15 @@ const WORKSPACE_VIEW_STORAGE_VERSION = "v1";
 // kytkennät ennallaan, kun chat palautetaan.
 const CHAT_ENABLED = false;
 function mobilePrimaryNavItemsForRole(role: Role): PrimaryWorkspaceView[] {
+  // Itsenäinen treenaaja ohjelmoi itse → mukaan Ohjelma-välilehti. Treeni pidetään
+  // keskellä korostettuna: Tänään / Ohjelma / Treeni / Ravinto / Keho.
+  if (role === "independent_athlete") {
+    return ["overview", PROGRAMS_WORKSPACE_VIEW, "athlete-log", "nutrition", "measurements"];
+  }
+
   // Treenaajaroolit: Tänään / Treeni / Ravinto / Keho. Treeni keskelle painottuu
   // korostetulla pillerillä; chat on yläpalkin ikoni.
-  if (role === "athlete" || role === "independent_athlete") {
+  if (role === "athlete") {
     return ["overview", "athlete-log", "nutrition", "measurements"];
   }
 
