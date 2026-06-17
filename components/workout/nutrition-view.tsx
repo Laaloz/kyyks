@@ -15,6 +15,8 @@ import { cn } from "@/lib/utils";
 import {
   adHocEntryMacros,
   buildPersonalNutritionGoalComparison,
+  formatRecipeIngredientAmount,
+  formatScaledQuantity,
   getActiveMealPlanForAthlete,
   getMealSlotGroupForTag,
   getMissingMacroProfileFields,
@@ -990,64 +992,65 @@ function RecipeDetailSheet({
                 ) : null}
                 <div className="divide-y divide-[var(--border)]">
                   {group.items.map((ing) => {
-              const options = ing.alternativeOptions ?? [];
-              const selectedIndex = altByIngredient[ing.id] ?? -1;
-              const activeName = selectedIndex >= 0 ? options[selectedIndex]?.ingredientName ?? ing.ingredientName : ing.ingredientName;
-              const activeGrams = selectedIndex >= 0 ? options[selectedIndex]?.grams : ing.quantity;
-              const activeUnit = selectedIndex >= 0 ? "g" : ing.unit;
-              return (
-                <div key={ing.id} className="py-2.5">
-                  <div className="flex items-center justify-between gap-3">
-                    <span className="text-sm font-medium text-[var(--text)]">{activeName}</span>
-                    {activeGrams !== undefined ? (
-                      <span className="shrink-0 font-[family-name:var(--font-display)] text-sm tabular-nums text-[var(--text-subtle)]">
-                        {Math.round(activeGrams * perServingScale)} {activeUnit}
-                      </span>
-                    ) : null}
-                  </div>
-                  {options.length > 0 ? (
-                    <div className="mt-1.5 flex flex-wrap gap-1.5">
-                      <button
-                        type="button"
-                        aria-pressed={selectedIndex === -1}
-                        onClick={() => setAltByIngredient((previous) => ({ ...previous, [ing.id]: -1 }))}
-                        className={cn(
-                          "rounded-full px-2.5 py-0.5 text-xs font-medium transition",
-                          selectedIndex === -1
-                            ? "bg-[var(--accent)] text-[var(--accent-contrast)]"
-                            : "bg-[var(--surface-2)] text-[var(--text-muted)] hover:text-[var(--text)]",
-                        )}
-                      >
-                        {ing.ingredientName}
-                      </button>
-                      {options.map((option, index) => (
-                        <button
-                          key={`${ing.id}-alt-${index}`}
-                          type="button"
-                          aria-pressed={selectedIndex === index}
-                          onClick={() => setAltByIngredient((previous) => ({ ...previous, [ing.id]: index }))}
-                          className={cn(
-                            "rounded-full px-2.5 py-0.5 text-xs font-medium transition",
-                            selectedIndex === index
-                              ? "bg-[var(--accent)] text-[var(--accent-contrast)]"
-                              : "bg-[var(--surface-2)] text-[var(--text-muted)] hover:text-[var(--text)]",
-                          )}
-                        >
-                          ⇄ {option.ingredientName}
-                        </button>
-                      ))}
-                    </div>
-                  ) : ing.alternatives && ing.alternatives.length > 0 ? (
-                    <div className="mt-1.5 flex flex-wrap gap-1.5">
-                      {ing.alternatives.map((alt) => (
-                        <span key={alt} className="rounded-full bg-[var(--surface-2)] px-2.5 py-0.5 text-xs text-[var(--text-muted)]">
-                          ⇄ {alt}
-                        </span>
-                      ))}
-                    </div>
-                  ) : null}
-                </div>
-              );
+                    const options = ing.alternativeOptions ?? [];
+                    const selectedIndex = altByIngredient[ing.id] ?? -1;
+                    const activeName = selectedIndex >= 0 ? options[selectedIndex]?.ingredientName ?? ing.ingredientName : ing.ingredientName;
+                    const activeAmount = selectedIndex >= 0
+                      ? `${formatScaledQuantity((options[selectedIndex]?.grams ?? 0) * perServingScale)} g`
+                      : formatRecipeIngredientAmount(ing, perServingScale);
+                    return (
+                      <div key={ing.id} className="py-2.5">
+                        <div className="flex items-center justify-between gap-3">
+                          <span className="text-sm font-medium text-[var(--text)]">{activeName}</span>
+                          {activeAmount ? (
+                            <span className="shrink-0 font-[family-name:var(--font-display)] text-sm tabular-nums text-[var(--text-subtle)]">
+                              {activeAmount}
+                            </span>
+                          ) : null}
+                        </div>
+                        {options.length > 0 ? (
+                          <div className="mt-1.5 flex flex-wrap gap-1.5">
+                            <button
+                              type="button"
+                              aria-pressed={selectedIndex === -1}
+                              onClick={() => setAltByIngredient((previous) => ({ ...previous, [ing.id]: -1 }))}
+                              className={cn(
+                                "rounded-full px-2.5 py-0.5 text-xs font-medium transition",
+                                selectedIndex === -1
+                                  ? "bg-[var(--accent)] text-[var(--accent-contrast)]"
+                                  : "bg-[var(--surface-2)] text-[var(--text-muted)] hover:text-[var(--text)]",
+                              )}
+                            >
+                              {ing.ingredientName}
+                            </button>
+                            {options.map((option, index) => (
+                              <button
+                                key={`${ing.id}-alt-${index}`}
+                                type="button"
+                                aria-pressed={selectedIndex === index}
+                                onClick={() => setAltByIngredient((previous) => ({ ...previous, [ing.id]: index }))}
+                                className={cn(
+                                  "rounded-full px-2.5 py-0.5 text-xs font-medium transition",
+                                  selectedIndex === index
+                                    ? "bg-[var(--accent)] text-[var(--accent-contrast)]"
+                                    : "bg-[var(--surface-2)] text-[var(--text-muted)] hover:text-[var(--text)]",
+                                )}
+                              >
+                                ⇄ {option.ingredientName}
+                              </button>
+                            ))}
+                          </div>
+                        ) : ing.alternatives && ing.alternatives.length > 0 ? (
+                          <div className="mt-1.5 flex flex-wrap gap-1.5">
+                            {ing.alternatives.map((alt) => (
+                              <span key={alt} className="rounded-full bg-[var(--surface-2)] px-2.5 py-0.5 text-xs text-[var(--text-muted)]">
+                                ⇄ {alt}
+                              </span>
+                            ))}
+                          </div>
+                        ) : null}
+                      </div>
+                    );
                   })}
                 </div>
               </div>

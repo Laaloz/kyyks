@@ -105,7 +105,7 @@ const ingredientNameAliases: Record<string, readonly string[]> = {
   "jasmiiniriisi kuiva": ["riisi", "basmatiriisi"],
   "kevyt juustoraaste 12": ["juustoraaste 12%", "kadett lempeä 12% juustoraaste"],
   "kevyt juusto": ["juusto 17%", "juusto alle 10%"],
-  "kot go kanafileepyorykat": ["kanafileepyörykät", "kanapyörykät"],
+  "kot go kanafileepyorykat": ["kot&go kanafileepyörykät", "kanafileepyörykät", "kanapyörykät"],
   "maapahkinavoi 99": ["maapähkinävoi"],
   "maissikakku chian siemenia ja suolaa friggs": ["maissikakku", "riisikakku"],
   "margariini alle 50 rasvaa": ["margariini"],
@@ -164,6 +164,66 @@ export function joinRecipeInstructionSteps(steps: string[]) {
   }
 
   return sanitized.map((step, index) => `${index + 1}. ${step}`).join("\n");
+}
+
+export function formatRecipeUnit(unit: string) {
+  return unit === "pcs" ? "kpl" : unit;
+}
+
+function parseDisplayQuantity(value: string | undefined) {
+  if (!value) {
+    return null;
+  }
+
+  const normalized = value.trim().replace(",", ".");
+  const vulgarFractions: Record<string, number> = {
+    "¼": 0.25,
+    "½": 0.5,
+    "¾": 0.75,
+  };
+
+  if (vulgarFractions[normalized] !== undefined) {
+    return vulgarFractions[normalized];
+  }
+
+  const fractionMatch = normalized.match(/^(\d+)\/(\d+)$/);
+  if (fractionMatch) {
+    const numerator = Number(fractionMatch[1]);
+    const denominator = Number(fractionMatch[2]);
+    return denominator > 0 ? numerator / denominator : null;
+  }
+
+  const numericValue = Number(normalized);
+  return Number.isFinite(numericValue) ? numericValue : null;
+}
+
+export function formatScaledQuantity(value: number) {
+  const rounded = Math.round(value * 10) / 10;
+  return Number.isInteger(rounded) ? String(rounded) : String(rounded).replace(".", ",");
+}
+
+export function formatRecipeIngredientAmount(
+  ingredient: Pick<RecipeIngredient, "quantity" | "unit" | "displayQuantity" | "displayUnit">,
+  scale: number,
+) {
+  const displayUnit = ingredient.displayUnit?.trim();
+  const displayQuantity = ingredient.displayQuantity?.trim();
+
+  if (displayQuantity && displayUnit) {
+    const numericDisplayQuantity = parseDisplayQuantity(displayQuantity);
+    if (scale === 1) {
+      return `${displayQuantity} ${displayUnit}`;
+    }
+    if (numericDisplayQuantity !== null) {
+      return `${formatScaledQuantity(numericDisplayQuantity * scale)} ${displayUnit}`;
+    }
+  }
+
+  if (ingredient.quantity === undefined) {
+    return null;
+  }
+
+  return `${formatScaledQuantity(ingredient.quantity * scale)} ${formatRecipeUnit(ingredient.unit)}`;
 }
 
 function roundNutrition(value: number) {

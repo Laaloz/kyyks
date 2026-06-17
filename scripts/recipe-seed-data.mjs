@@ -153,7 +153,7 @@ export const recipeSeedData = [
     ...singleServe,
     ingredients: [
       ingredient("Maitorahka 0,2%", 200, "g", { alternatives: ["Muu noin 150 kcal maitorahka"] }),
-      ingredient("Banaani", 120, "g"),
+      ingredient("Banaani", 1, "pcs", { displayQuantity: "1", displayUnit: "kpl" }),
       ingredient("Vadelma", 80, "g"),
       ingredient("Maapähkinävoi 99%", 15, "g"),
       ingredient("Sokeroimaton mehukeitto", 150, "ml"),
@@ -344,7 +344,7 @@ export const recipeSeedData = [
     ...batchServe,
     ingredients: [
       ingredient("Riisi", 320, "g", { groupLabel: "Lisuke" }),
-      ingredient("Kot&go kanafileepyörykät", 600, "g", { groupLabel: "Pääosa" }),
+      ingredient("Kot&go kanafileepyörykät", 640, "g", { groupLabel: "Pääosa", displayQuantity: "2", displayUnit: "pkt" }),
       ingredient("Sweet chili -kastike vähemmän sokeria", 80, "g", { groupLabel: "Pääosa" }),
       ingredient("Ananas", 200, "g", { groupLabel: "Pääosa" }),
     ],
@@ -401,7 +401,7 @@ export const recipeSeedData = [
     ...singleServe,
     ingredients: [
       ingredient("Heraproteiinijauhe", 30, "g", { alternatives: ["Muu heraproteiini"] }),
-      ingredient("Banaani", 120, "g", { alternatives: ["Muu hedelmä"] }),
+      ingredient("Banaani", 1, "pcs", { displayQuantity: "1", displayUnit: "kpl", alternatives: ["Muu hedelmä"] }),
       ingredient("Cashewpähkinät suolattomat", 20, "g"),
     ],
     instructions: [
@@ -432,7 +432,7 @@ export const recipeSeedData = [
     ...singleServe,
     ingredients: [
       ingredient("Skyrdrik", 250, "ml"),
-      ingredient("Banaani", 120, "g"),
+      ingredient("Banaani", 1, "pcs", { displayQuantity: "1", displayUnit: "kpl" }),
       ingredient("Cashewpähkinät suolattomat", 15, "g", { alternatives: ["Muut suolaamattomat pähkinät", "Tumma suklaa 70%"] }),
     ],
     instructions: [
@@ -659,7 +659,7 @@ export const recipeSeedData = [
       ingredient("Omena", 80, "g", { groupLabel: "Hedelmäkulho", alternatives: ["Muut hedelmät"] }),
       ingredient("Viinirypäleet", 60, "g", { groupLabel: "Hedelmäkulho", alternatives: ["Muut hedelmät"] }),
       ingredient("Ananas", 80, "g", { groupLabel: "Hedelmäkulho", alternatives: ["Tuore ananas"] }),
-      ingredient("Skyr", 200, "g", { groupLabel: "Lisäksi", alternatives: ["Muu vähärasvainen rahka", "Proteiinivanukas"] }),
+      ingredient("Skyr", 250, "g", { groupLabel: "Lisäksi", alternatives: ["Muu vähärasvainen rahka", "Proteiinivanukas"] }),
     ],
     instructions: [
       "Pilko hedelmät kulhoon.",
@@ -668,7 +668,7 @@ export const recipeSeedData = [
   }),
   recipe({
     name: "Munakas",
-    description: "Yksinkertainen iltamunakas kalkkunalla ja kirsikkatomaateilla.",
+    description: "Yksinkertainen iltamunakas kalkkunalla, kirsikkatomaateilla ja kauraleivällä.",
     mealTag: "evening_snack",
     ...singleServe,
     ingredients: [
@@ -676,11 +676,12 @@ export const recipeSeedData = [
       ingredient("Kalkkunaviipaleet", 50, "g"),
       ingredient("Oliiviöljy", 5, "g"),
       ingredient("Kirsikkatomaatti", 100, "g"),
+      ingredient("100% kauraleipä", 1, "pcs"),
     ],
     instructions: [
       "Vatkaa kananmunat kulhossa.",
       "Paista munakas öljyssä ja lisää kalkkuna joukkoon.",
-      "Tarjoile kirsikkatomaattien kanssa.",
+      "Tarjoile kirsikkatomaattien ja kauraleivän kanssa.",
     ],
   }),
   recipe({
@@ -689,7 +690,7 @@ export const recipeSeedData = [
     mealTag: "evening_snack",
     ...singleServe,
     ingredients: [
-      ingredient("Banaani", 100, "g", { groupLabel: "Pannukakut" }),
+      ingredient("Banaani", 1, "pcs", { groupLabel: "Pannukakut", displayQuantity: "1", displayUnit: "kpl" }),
       ingredient("Kananmuna", 1, "pcs", { groupLabel: "Pannukakut" }),
       ingredient("Vehnäjauho", 20, "g", { groupLabel: "Pannukakut" }),
       gentleIngredient("Leivinjauhe", 4, "g", { groupLabel: "Pannukakut", ingredientRole: "spice" }),
@@ -698,7 +699,7 @@ export const recipeSeedData = [
       ingredient("Skyr wanhanajan vanilja", 120, "g", { groupLabel: "Päälle", alternatives: ["Muu vähärasvainen rahka", "Proteiinivanukas"] }),
     ],
     instructions: [
-      "Soseuta banaani ja sekoita joukkoon kananmunat, jauho, leivinjauhe ja vaniljasokeri.",
+      "Soseuta banaani ja sekoita joukkoon kananmuna, jauho, leivinjauhe ja vaniljasokeri.",
       "Paista taikinasta pieniä pannukakkuja pannulla.",
       "Tarjoile mustikoiden ja vaniljaskyrin kanssa.",
     ],
@@ -746,7 +747,7 @@ export const recipeSeedData = [
       ingredient("Profeel proteiinivanukas suklaa", 150, "g", { groupLabel: "Tuorepuuro" }),
       ingredient("Chian siemenet", 12, "g", { groupLabel: "Tuorepuuro" }),
       ingredient("Rasvaton maito", 120, "ml", { groupLabel: "Tuorepuuro" }),
-      ingredient("Banaani", 70, "g", { groupLabel: "Päälle" }),
+      ingredient("Banaani", 0.5, "pcs", { groupLabel: "Päälle", displayQuantity: "½", displayUnit: "kpl" }),
     ],
     instructions: [
       "Sekoita kaurahiutaleet, proteiinivanukas, chian siemenet ja maito kulhossa tai rasiassa.",
@@ -782,30 +783,29 @@ export const recipeSeedData = [
   }),
   recipe({
     name: "Banaani-tuorepuuro",
-    description: "Banaanilla muussattu tuorepuuro, kreikkalaista jogurttia ja tummasuklaakuorrute.",
+    description: "Banaanilla muussattu tuorepuuro, kreikkalaista jogurttia ja kevyt tummasuklaakuorrute.",
     mealTag: "breakfast",
     ...singleServe,
     ingredients: [
       ingredient("Kaurahiutale", 40, "g", { groupLabel: "Pohja" }),
-      ingredient("Maapähkinäproteiinijauhe", 20, "g", { groupLabel: "Pohja", alternatives: ["Jätä pois"] }),
-      ingredient("Kasvimaito", 80, "ml", { groupLabel: "Pohja", alternatives: ["Rasvaton maito"] }),
-      ingredient("Banaani", 60, "g", { groupLabel: "Pohja", displayQuantity: "½", displayUnit: "kpl" }),
-      ingredient("Chian siemenet", 12, "g", { groupLabel: "Pohja" }),
+      ingredient("Maapähkinäproteiinijauhe", 15, "g", { groupLabel: "Pohja", alternatives: ["Suklaaproteiinijauhe", "Vaniljaproteiinijauhe", "Jätä pois"] }),
+      ingredient("Kasvimaito", 70, "ml", { groupLabel: "Pohja", alternatives: ["Rasvaton maito"] }),
+      ingredient("Banaani", 0.5, "pcs", { groupLabel: "Pohja", displayQuantity: "½", displayUnit: "kpl" }),
+      ingredient("Chian siemenet", 8, "g", { groupLabel: "Pohja" }),
       textIngredient("Kaneli", "1", "tl", { groupLabel: "Pohja" }),
-      ingredient("Saksanpähkinä", 10, "g", { groupLabel: "Pohja", displayQuantity: "2–3", displayUnit: "kpl" }),
       textIngredient("Suola", "ripaus", "", { groupLabel: "Pohja" }),
-      ingredient("Kreikkalainen jogurtti", 100, "g", { groupLabel: "Kermainen kerros" }),
-      ingredient("Banaani", 60, "g", { groupLabel: "Hedelmäkerros", displayQuantity: "½", displayUnit: "kpl" }),
+      ingredient("Kreikkalainen jogurtti", 80, "g", { groupLabel: "Kermainen kerros" }),
+      ingredient("Banaani", 0.5, "pcs", { groupLabel: "Hedelmäkerros", displayQuantity: "½", displayUnit: "kpl" }),
       ingredient("Tumma suklaa", 10, "g", { groupLabel: "Suklaakuorrute" }),
-      ingredient("Voi", 2, "g", { groupLabel: "Suklaakuorrute", displayQuantity: "½", displayUnit: "tl", alternatives: ["Rypsiöljy"] }),
+      ingredient("Voi", 1, "g", { groupLabel: "Suklaakuorrute", displayQuantity: "¼", displayUnit: "tl", alternatives: ["Kookosöljy", "Rypsiöljy"] }),
     ],
     instructions: [
-      "Muussaa puolikas banaani kulhossa.",
-      "Lisää kaurahiutaleet, maapähkinäproteiini, chian siemenet, kaneli, murskatut saksanpähkinät ja suola.",
+      "Muussaa puolet banaanista kulhossa.",
+      "Lisää kaurahiutaleet, maapähkinäproteiini, chian siemenet, kaneli ja suola.",
       "Kaada joukkoon kasvimaito ja sekoita tasaiseksi.",
-      "Anna tekeytyä jääkaapissa vähintään yön yli.",
-      "Lisää päälle kreikkalainen jogurtti ja viipaloitu banaani.",
+      "Levitä päälle kreikkalainen jogurtti ja viipaloi loput banaanista jogurtin päälle.",
       "Sulata tumma suklaa ja voi, ja valuta seos kuorrutteeksi päälle.",
+      "Anna tekeytyä jääkaapissa vähintään yön yli.",
     ],
   }),
   recipe({

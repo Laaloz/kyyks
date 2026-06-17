@@ -7,6 +7,7 @@ import {
   buildRecipeGoalComparison,
   calculateMacroTarget,
   calculateRecipeNutrition,
+  formatRecipeIngredientAmount,
   getActiveMealPlanForAthlete,
   getMealSlotGroupForTag,
   getMealSlotGroupKcalRange,
@@ -226,6 +227,13 @@ describe("nutrition helpers", () => {
 
     expect(linear.quantity).toBe(1200);
     expect(fixed.quantity).toBe(5);
+  });
+
+  it("formats recipe ingredient units for Finnish recipe display", () => {
+    expect(formatRecipeIngredientAmount({ quantity: 2, unit: "pcs" }, 1)).toBe("2 kpl");
+    expect(formatRecipeIngredientAmount({ quantity: 0.5, unit: "pcs", displayQuantity: "½", displayUnit: "kpl" }, 1)).toBe("½ kpl");
+    expect(formatRecipeIngredientAmount({ quantity: 640, unit: "g", displayQuantity: "2", displayUnit: "pkt" }, 1)).toBe("2 pkt");
+    expect(formatRecipeIngredientAmount({ quantity: 640, unit: "g", displayQuantity: "2", displayUnit: "pkt" }, 2)).toBe("4 pkt");
   });
 
   it("ignores text-only spices in recipe nutrition", () => {

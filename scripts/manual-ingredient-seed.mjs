@@ -151,6 +151,7 @@ const manualIngredientSeedBase = [
   { name: "Kasvimaito", source: "manual", defaultPurchaseUnit: "l", kcalPer100: 45, proteinPer100: 1.0, carbsPer100: 6.6, fatPer100: 1.5 },
   { name: "Saksanpähkinä", source: "manual", defaultPurchaseUnit: "g", kcalPer100: 654, proteinPer100: 15.2, carbsPer100: 13.7, fatPer100: 65.2 },
   { name: "Voi", source: "manual", defaultPurchaseUnit: "g", kcalPer100: 737, proteinPer100: 0.7, carbsPer100: 0.6, fatPer100: 81.5 },
+  { name: "Kookosöljy", source: "manual", defaultPurchaseUnit: "g", kcalPer100: 892, proteinPer100: 0, carbsPer100: 0, fatPer100: 99 },
   { name: "Espresso", source: "manual", defaultPurchaseUnit: "l", kcalPer100: 2, proteinPer100: 0.1, carbsPer100: 0, fatPer100: 0 },
 ];
 
