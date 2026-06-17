@@ -255,7 +255,7 @@ export const recipeSeedData = [
     ...batchServe,
     ingredients: [
       ingredient("Tortilla original large", 4, "pcs", { groupLabel: "Tortillat" }),
-      ingredient("Kanan rintafilee", 700, "g", { groupLabel: "Täyte" }),
+      ingredient("Kanan rintafilee", 600, "g", { groupLabel: "Täyte" }),
       gentleIngredient("Fajita mausteseos", 28, "g", { groupLabel: "Täyte", ingredientRole: "spice" }),
       ingredient("Juustoraaste 12%", 80, "g", { groupLabel: "Täyte" }),
       ingredient("Salsa", 120, "g", { groupLabel: "Täyte" }),
@@ -265,7 +265,7 @@ export const recipeSeedData = [
       ingredient("Sipuli", 120, "g", { groupLabel: "Täyte" }),
     ],
     instructions: [
-      "Paista kanat fajita-mausteella kypsiksi ja suikaloi.",
+      "Suikaloi kana, mausta fajita-mausteella ja paista kypsäksi.",
       "Pilko kasvikset valmiiksi.",
       "Lämmitä tortillat ja kokoa niihin kana, kasvikset, juustoraaste ja salsa.",
       "Rullaa tortillat tiiviiksi ja tarjoile heti.",
@@ -344,7 +344,7 @@ export const recipeSeedData = [
     ...batchServe,
     ingredients: [
       ingredient("Riisi", 320, "g", { groupLabel: "Lisuke" }),
-      ingredient("Kot&go kanafileepyörykät", 640, "g", { groupLabel: "Pääosa", displayQuantity: "2", displayUnit: "pkt" }),
+      ingredient("Kot&go kanafileepyörykät", 600, "g", { groupLabel: "Pääosa", displayQuantity: "2", displayUnit: "pkt" }),
       ingredient("Sweet chili -kastike vähemmän sokeria", 80, "g", { groupLabel: "Pääosa" }),
       ingredient("Ananas", 200, "g", { groupLabel: "Pääosa" }),
     ],

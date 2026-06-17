@@ -96,7 +96,7 @@ const manualIngredientSeedBase = [
   { name: "Kreikkalainen jogurtti 2%", source: "manual", defaultPurchaseUnit: "pack", gramsPerUnit: 200, kcalPer100: 73, proteinPer100: 9.5, carbsPer100: 3.8, fatPer100: 2 },
   { name: "Sitruunamehu", source: "manual", defaultPurchaseUnit: "pack", gramsPerUnit: 250, kcalPer100: 22, proteinPer100: 0.4, carbsPer100: 6.5, fatPer100: 0.2 },
   { name: "Pesto", source: "manual", defaultPurchaseUnit: "pack", gramsPerUnit: 185, kcalPer100: 470, proteinPer100: 4, carbsPer100: 6, fatPer100: 46 },
-  { name: "Kot&go kanafileepyörykät", source: "manual", defaultPurchaseUnit: "pack", gramsPerUnit: 320, kcalPer100: 165, proteinPer100: 18, carbsPer100: 8, fatPer100: 6 },
+  { name: "Kot&go kanafileepyörykät", source: "manual", defaultPurchaseUnit: "pack", gramsPerUnit: 300, kcalPer100: 165, proteinPer100: 18, carbsPer100: 8, fatPer100: 6 },
   { name: "Sweet chili -kastike vähemmän sokeria", source: "manual", defaultPurchaseUnit: "pack", gramsPerUnit: 250, kcalPer100: 120, proteinPer100: 0.5, carbsPer100: 28, fatPer100: 0.3 },
   { name: "Ananas", source: "manual", defaultPurchaseUnit: "pcs", gramsPerUnit: 150, kcalPer100: 50, proteinPer100: 0.5, carbsPer100: 11, fatPer100: 0.1 },
   { name: "Kalkkunanakki kevyt 5%", source: "manual", defaultPurchaseUnit: "pack", gramsPerUnit: 250, kcalPer100: 145, proteinPer100: 14, carbsPer100: 6, fatPer100: 5 },

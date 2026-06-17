@@ -146,6 +146,23 @@ describe("recipe seed data", () => {
     expect(steps.at(-1)).toContain("Anna tekeytyä jääkaapissa");
   });
 
+  it("keeps chicken tortilla preparation order and portion size practical", () => {
+    const recipe = (recipeSeedData as RecipeSeed[]).find((item) => item.name === "Kanatortillat");
+
+    expect(recipe).toBeDefined();
+    if (!recipe) {
+      return;
+    }
+
+    const chicken = recipe.ingredients.find((item) => item.ingredientName === "Kanan rintafilee");
+    const steps = recipe.instructions.split("\n").map((line) => line.replace(/^\d+\.\s+/, ""));
+
+    expect(chicken?.quantity).toBe(600);
+    expect((chicken?.quantity ?? 0) / recipe.defaultServings).toBe(150);
+    expect(steps[0]).toContain("Suikaloi kana");
+    expect(steps[0]).toContain("paista kypsäksi");
+  });
+
   it("keeps Kot&go chicken ball macros tied to the branded product and store-friendly packs", () => {
     const recipe = (recipeSeedData as RecipeSeed[]).find((item) => item.name === "Kanapyörykät ja riisi");
 
@@ -158,11 +175,12 @@ describe("recipe seed data", () => {
     const macros = calculateRecipeMacros(recipe);
 
     expect(chickenBalls).toMatchObject({
-      quantity: 640,
+      quantity: 600,
       unit: "g",
       displayQuantity: "2",
       displayUnit: "pkt",
     });
+    expect((chickenBalls?.quantity ?? 0) / recipe.defaultServings).toBe(150);
     expect(resolveIngredient(buildIngredientCatalogMap(), "Kot&go kanafileepyörykät")?.name).toBe("Kot&go kanafileepyörykät");
     expect(macros.missingIngredients).toEqual([]);
     expect(macros.kcal).toBeGreaterThanOrEqual(500);
