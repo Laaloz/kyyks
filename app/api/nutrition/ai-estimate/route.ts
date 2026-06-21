@@ -3,6 +3,12 @@ import { NextResponse } from "next/server";
 import { estimateFoodFromImage, estimateFoodFromText } from "@/lib/server/ai-food";
 import { getNutritionRequester } from "@/lib/server/nutrition";
 
+// AI-arvio kutsuu Geminiä (teksti ajatteluineen jopa ~20 s, kuva ~12 s) ja voi vielä tehdä Open
+// Food Facts -varahaun. Ilman tätä alustan serverless-oletus (esim. Vercel 10 s) katkaisee funktion
+// ennen koodin omaa aikakatkaisua → etenkin monikomponenttihaku "ei palauta tuloksia". Itse
+// hostatuilla (next start) tämä on harmiton no-op.
+export const maxDuration = 30;
+
 // Base64-katto: ~6 MB kuva (kerroin 4/3). Asiakas pienentää kuvan ennen lähetystä.
 const MAX_BASE64_LENGTH = 8_000_000;
 const ALLOWED_MIME = /^image\/(jpeg|png|webp|heic|heif)$/i;

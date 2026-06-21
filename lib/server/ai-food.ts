@@ -20,7 +20,9 @@ const DAILY_LIMIT = 30;
 // yritetä uudelleen.
 const GEMINI_TEXT_TIMEOUT_MS = 8_000;
 // Ajatteleva uusintayritys (vaikea/heikko tekstihaku) kestää kauemmin → väljempi katkaisu.
-const GEMINI_TEXT_THINKING_TIMEOUT_MS = 14_000;
+// Monikomponenttihaku ("piirakka, leipä, rahka") vaatii mallilta purkamista, joka voi viedä yli
+// 14 s → annetaan reilusti aikaa (route maxDuration kattaa tämän + mahdollisen OFF-varahaun).
+const GEMINI_TEXT_THINKING_TIMEOUT_MS = 20_000;
 const GEMINI_IMAGE_TIMEOUT_MS = 12_000;
 
 // Kuvaprompti: selkeä tärkeysjärjestys (taulukko → viivakoodi → brändi → visuaalinen arvio) ohjaa
