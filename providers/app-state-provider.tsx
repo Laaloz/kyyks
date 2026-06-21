@@ -1809,6 +1809,9 @@ type RecentlyConfirmedMeasurements = Map<string, string>;
 type PendingDayMealCreate = {
   canceled: boolean;
   serverId?: string;
+  // Käyttäjä ehti merkitä juuri lisätyn rivin syödyksi/syömättömäksi ennen kuin palvelimen id
+  // valmistui. Tallennetaan viimeisin haluttu tila tähän ja synkataan se heti id:n valmistuttua.
+  pendingEatenAt?: string | null;
 };
 type PendingDayMealMutation = {
   updatedAt: string;
@@ -1823,6 +1826,10 @@ type QueuedDayMealEatenMutation = {
 
 function pendingDayMealMutationHasEatenAt(mutation: PendingDayMealMutation) {
   return Object.prototype.hasOwnProperty.call(mutation, "eatenAt");
+}
+
+function pendingDayMealCreateHasEatenIntent(create: PendingDayMealCreate) {
+  return Object.prototype.hasOwnProperty.call(create, "pendingEatenAt");
 }
 
 function isDayMealMutationConfirmedByServer(
@@ -3531,6 +3538,46 @@ function findResolvedUserIdInSnapshot(
   function queueDayMealEatenSync(entryId: string, mutation: QueuedDayMealEatenMutation) {
     dayMealEatenMutationQueueRef.current.set(entryId, mutation);
     void flushQueuedDayMealEatenSync(entryId);
+  }
+
+  // Versioi ja jonota syödyksi-merkinnän palvelinsynkka. Optimistinen tilan päivitys tehdään
+  // kutsujassa; tämä hoitaa pelkän taustasynkan (versiointi + suojaus + jono).
+  function triggerDayMealEatenSync(
+    entryId: string,
+    eatenAt: string | null,
+    previousEntry: DayMealPlanEntry,
+    updatedAt: string,
+  ) {
+    const version = (dayMealEatenMutationVersionRef.current.get(entryId) ?? 0) + 1;
+    dayMealEatenMutationVersionRef.current.set(entryId, version);
+    pendingDayMealMutationsRef.current.set(entryId, { updatedAt, eatenAt });
+    queueDayMealEatenSync(entryId, { eatenAt, previousEntry, updatedAt, version });
+  }
+
+  // Juuri lisätty rivi ehdittiin merkitä syödyksi ennen kuin serverId valmistui → synkataan
+  // tallennettu syöty-tila heti id:n valmistuttua (poistaa "kuolleen napautuksen" viiveen).
+  // Optimistinen tila on jo asetettu setDayMealEatenissa ja säilyy id:n vaihdossa.
+  function applyPendingDayMealEatenAfterCreate(
+    optimisticId: string,
+    serverId: string,
+    create: PendingDayMealCreate,
+  ) {
+    if (!supabase || !pendingDayMealCreateHasEatenIntent(create)) {
+      return;
+    }
+    const eatenAt = create.pendingEatenAt ?? null;
+    // stateRef päivittyy vasta seuraavalla renderillä, joten id:n vaihto ei vielä näy täällä →
+    // etsi rivi optimisticId:llä ja rakenna palautuspohja serverId:llä (epäonnistumisen varalle).
+    const optimisticEntry = (stateRef.current.dayMealPlans ?? []).find((entry) => entry.id === optimisticId);
+    if (!optimisticEntry) {
+      return;
+    }
+    triggerDayMealEatenSync(
+      serverId,
+      eatenAt,
+      { ...optimisticEntry, id: serverId, eatenAt: null },
+      new Date().toISOString(),
+    );
   }
 
   async function flushQueuedDayMealEatenSync(entryId: string) {
@@ -7295,6 +7342,9 @@ function findResolvedUserIdInSnapshot(
               entry.id === optimisticId ? { ...entry, id: serverId } : entry,
             ),
           }));
+          if (pendingCreate) {
+            applyPendingDayMealEatenAfterCreate(optimisticId, serverId, pendingCreate);
+          }
         }
 
         scheduleDayMealRefresh({
@@ -7420,23 +7470,22 @@ function findResolvedUserIdInSnapshot(
           return { ok: true };
         }
 
-        // Juuri lisätty rivi (ei vielä palvelimen UUID:ta) — ei voi synkata vielä. Estä
-        // optimistinen merkintä, jotta taustasynkka ei kumoa sitä; serverId valmistuu hetkessä.
+        // Juuri lisätty rivi (ei vielä palvelimen UUID:ta): päivitä tila optimistisesti heti ja
+        // tallenna haluttu syöty-tila pending-create-tietueeseen — synkka ajetaan heti kun
+        // serverId valmistuu. Näin napautus tuntuu välittömältä eikä jää "odota hetki" -kuolleeksi.
         if (!SUPABASE_UUID_PATTERN.test(entryId)) {
+          const create = pendingDayMealCreatesRef.current.get(entryId);
+          if (create && !create.serverId) {
+            create.pendingEatenAt = eatenAt;
+            pendingDayMealCreatesRef.current.set(entryId, create);
+            applyOptimistic();
+            return { ok: true };
+          }
           return { ok: false, message: "Odota hetki, aterian tallennus on vielä kesken." };
         }
 
-        const version = (dayMealEatenMutationVersionRef.current.get(entryId) ?? 0) + 1;
-        dayMealEatenMutationVersionRef.current.set(entryId, version);
-        pendingDayMealMutationsRef.current.set(entryId, { updatedAt, eatenAt });
         applyOptimistic();
-
-        queueDayMealEatenSync(entryId, {
-          eatenAt,
-          previousEntry: target,
-          updatedAt,
-          version,
-        });
+        triggerDayMealEatenSync(entryId, eatenAt, target, updatedAt);
         return { ok: true };
       },
       async quickAddAiFood(input) {
@@ -7528,6 +7577,7 @@ function findResolvedUserIdInSnapshot(
         if (pendingCreate) {
           pendingCreate.serverId = serverId;
           pendingDayMealCreatesRef.current.set(optimisticId, pendingCreate);
+          applyPendingDayMealEatenAfterCreate(optimisticId, serverId, pendingCreate);
         }
 
         // 2) Aja AI-arvio (teksti tai kuva).

@@ -153,6 +153,10 @@ export function NutritionView({
   const isMaterializingRef = useRef(false);
   const [materializeMessage, setMaterializeMessage] = useState("");
   const [pendingId, setPendingId] = useState<string | null>(null);
+  // Estä vahinko-tuplanapautus syödyksi-napissa: kaksi nopeaa napautusta kumoaisi juuri tehdyn
+  // valinnan. Ohitetaan toinen napautus lyhyen ikkunan sisällä — tarkoituksellinen poisto onnistuu
+  // hetken kuluttua normaalisti.
+  const lastEatenToggleRef = useRef<Map<string, number>>(new Map());
 
   const todayKey = useMemo(() => localDateKey(new Date()), []);
   const catalog = state.ingredientsCatalog;
@@ -503,6 +507,11 @@ export function NutritionView({
                           aria-label={isEaten ? "Merkitse syömättömäksi" : "Merkitse syödyksi"}
                           disabled={aiDisabled}
                           onClick={() => {
+                            const now = Date.now();
+                            if (now - (lastEatenToggleRef.current.get(entry.id) ?? 0) < 400) {
+                              return;
+                            }
+                            lastEatenToggleRef.current.set(entry.id, now);
                             void setDayMealEaten(entry.id, !isEaten);
                           }}
                         >
