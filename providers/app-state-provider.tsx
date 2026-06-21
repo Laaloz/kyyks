@@ -7605,6 +7605,12 @@ function findResolvedUserIdInSnapshot(
           | null;
 
         if (!aiResponse?.ok || !aiPayload?.estimate) {
+          // Näytä todellinen syy (esim. vuorokausiraja, aikakatkaisu, ruuhka) — muuten kortti jää
+          // vain "ei onnistunut" -tilaan eikä käyttäjä tiedä mistä on kyse.
+          notify({
+            tone: "danger",
+            message: aiPayload?.message ?? "AI-arvio epäonnistui. Täytä makrot itse tai yritä uudelleen.",
+          });
           await fetch(`/api/day-meal-plans/${encodeURIComponent(serverId)}`, {
             method: "PATCH",
             headers: { "Content-Type": "application/json" },
