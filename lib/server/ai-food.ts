@@ -23,34 +23,36 @@ const GEMINI_TEXT_TIMEOUT_MS = 8_000;
 const GEMINI_TEXT_THINKING_TIMEOUT_MS = 14_000;
 const GEMINI_IMAGE_TIMEOUT_MS = 12_000;
 
+// Kuvaprompti: selkeä tärkeysjärjestys (taulukko → viivakoodi → brändi → visuaalinen arvio) ohjaa
+// mallin nopeasti oikeaan lähteeseen → vähemmän heikkoja arvioita ja siten vähemmän hidasta OFF-/
+// uusintapolkua. "Anna AINA paras arvio" + kalibroitu confidence pitävät tulokset löydettävinä.
 const IMAGE_PROMPT = [
-  "Tunnista kuvassa näkyvä ruoka tai juoma ja arvioi sen ravintosisältö.",
-  "Jos kuvassa näkyy pakkauksen RAVINTOSISÄLTÖTAULUKKO (ravintoarvot/näkötiedot), lue arvot",
-  "suoraan siitä äläkä arvaa. Jos taulukko on per annos, muunna arvot per 100 g.",
-  "Jos kyseessä on pakattu tuote, lue pakkauksesta brändi ja tuotenimi ja käytä niitä",
-  '(esim. pieni Pringles-tölkki → "Pringles Original"). Tunnista myös pienet pakkaukset ja pullot/tölkit.',
-  "Jos kuvassa näkyy viivakoodi, palauta sen numerot kenttään barcode (vain numerot).",
-  "Palauta arvio: ruoan nimi suomeksi, arvioitu annoskoko grammoina,",
-  "energia ja makrot PER 100 GRAMMAA (kcal, proteiini, hiilihydraatit, rasva),",
-  "sekä confidence välillä 0–1 (kuinka varma arvio on).",
-  "Jos kuvassa on useita eri ruokia tai tuotteita, nimeä ne yhdessä ja arvioi koko annos yhtenä kokonaisuutena.",
-  "Älä palauta pelkkiä nollia jos ruoka on tunnistettavissa. Vastaa pelkkä JSON ilman selityksiä.",
+  "Olet ravitsemusasiantuntija. Tunnista kuvan ruoka tai juoma ja arvioi ravintosisältö mahdollisimman tarkasti.",
+  "Etene tässä tärkeysjärjestyksessä ja käytä ensimmäistä saatavilla olevaa lähdettä:",
+  "1) Jos näkyy pakkauksen RAVINTOSISÄLTÖTAULUKKO, lue arvot suoraan siitä äläkä arvaa; jos arvot ovat per annos, muunna ne per 100 g.",
+  "2) Jos näkyy viivakoodi, palauta sen numerot kenttään barcode (vain numerot).",
+  '3) Jos tuote on pakattu, lue brändi ja tuotenimi pakkauksesta ja käytä niitä nimessä (esim. pieni Pringles-tölkki → "Pringles Original"). Tunnista myös pienet pakkaukset, pullot ja tölkit.',
+  "4) Muuten arvioi ruoka visuaalisesti suomalaisen ruokakulttuurin tyypillisillä arvoilla.",
+  "Jos kuvassa on useita ruokia, nimeä ne yhdessä ja arvioi koko annos yhtenä kokonaisuutena: yhteispaino grammoina ja makrot per 100 g annoksen painotettuna keskiarvona.",
+  "Anna AINA paras mahdollinen arvio tunnistettavasta ruoasta — älä koskaan palauta pelkkiä nollia.",
+  "Palauta: nimi suomeksi, annoskoko grammoina sekä energia ja makrot PER 100 GRAMMAA (kcal, proteiini, hiilihydraatit, rasva).",
+  "confidence välillä 0–1: 0.9+ kun arvot on luettu pakkausselosteesta, 0.6–0.8 selkeästi tunnistettu ruoka, alle 0.5 epävarma.",
+  "Vastaa pelkkä JSON ilman selityksiä.",
 ].join(" ");
 
+// Tekstiprompti: pidetään tiiviinä ja yksiselitteisenä, jotta pikapolku (thinking pois) palauttaa
+// hyvän, ei-nollan arvion jo ensimmäisellä yrityksellä → ei hidasta ajattelevaa uusintaa.
 function textPrompt(query: string): string {
   return [
-    `Arvioi mahdollisimman tarkasti mitä käyttäjä söi tai joi: "${query}".`,
-    'Jos syöte sisältää useita komponentteja (pilkulla, sanalla "ja" tai määrillä eroteltuna,',
-    'esim. "banaani, proteiinivanukas ja 10 g cashewpähkinöitä"), pura se osiin, arvioi kunkin',
-    "komponentin paino ja makrot erikseen ja yhdistä yhdeksi annokseksi: laske kokonaispaino",
-    "grammoina ja PER 100 GRAMMAA -arvot koko annoksen painotettuna keskiarvona.",
-    'Jos mukana on brändi- tai kauppatuote (esim. "Coop proteiinivanukas"), käytä tuotteen',
-    "tyypillisiä pakkausselosteen arvoja.",
-    'Säilytä käyttäjän ilmoittamat määrät ja kappalemäärät (esim. "2 banaania", "10 g pähkinöitä") nimessä',
-    "ja huomioi ne annoskoossa grammoina.",
-    "Palauta: siistitty nimi suomeksi, annoskoko grammoina, energia ja makrot PER 100 GRAMMAA",
-    "(kcal, proteiini, hiilihydraatit, rasva), sekä confidence välillä 0–1 (kuinka varma arvio on).",
-    "Älä palauta pelkkiä nollia jos ruoka on tunnistettavissa. Vastaa pelkkä JSON ilman selityksiä.",
+    `Olet ravitsemusasiantuntija. Arvioi mahdollisimman tarkasti mitä käyttäjä söi tai joi: "${query}".`,
+    'Jos syöte sisältää useita komponentteja (eroteltu pilkulla, sanalla "ja" tai määrillä, esim. "banaani, proteiinivanukas ja 10 g cashewpähkinöitä"), pura se osiin, arvioi kunkin paino ja makrot erikseen ja yhdistä yhdeksi annokseksi: laske yhteispaino grammoina ja per 100 g annoksen painotettuna keskiarvona.',
+    'Jos mukana on brändi- tai kauppatuote (esim. "Coop proteiinivanukas", "Valio"), käytä tuotteen pakkausselosteen tyypillisiä arvoja.',
+    'Säilytä käyttäjän ilmoittamat määrät ja kappalemäärät (esim. "2 banaania", "10 g pähkinöitä") nimessä ja huomioi ne annoskoossa grammoina.',
+    'Tulkitse yleiset suomalaiset ruokanimet, lyhenteet ja puhekieli (esim. "rahka", "pyttipannu", "prkl").',
+    "Anna AINA paras mahdollinen arvio tunnistettavasta ruoasta — älä koskaan palauta pelkkiä nollia.",
+    "Palauta: siistitty nimi suomeksi, annoskoko grammoina sekä energia ja makrot PER 100 GRAMMAA (kcal, proteiini, hiilihydraatit, rasva).",
+    "confidence välillä 0–1: 0.8+ kun tunnet tuotteen hyvin, 0.5–0.7 yleisarvio, alle 0.5 epävarma.",
+    "Vastaa pelkkä JSON ilman selityksiä.",
   ].join(" ");
 }
 
