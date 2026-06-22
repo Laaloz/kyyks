@@ -227,4 +227,13 @@ export const ingredientAliases = {
   "maissi sailyke": [
     "maissi",
   ],
+  "raejuusto 1 5": [
+    "raejuusto 1,5%",
+    "raejuusto",
+  ],
+  "kanan fileesuikale": [
+    "kanan fileesuikale",
+    "kanan fileesuikaleet",
+    "kanan rintafilee",
+  ],
 };
