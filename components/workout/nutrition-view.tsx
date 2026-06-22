@@ -1056,6 +1056,16 @@ function RecipeDetailSheet({
                                 ⇄ {option.ingredientName}
                               </button>
                             ))}
+                            {/* Grammattomat vapaatekstivaihtoehdot näytetään staattisina kun samalla
+                                aineksella on myös rakenteisia swappeja (ei makrolaskentaa näille). */}
+                            {(ing.alternatives ?? []).map((alt) => (
+                              <span
+                                key={`${ing.id}-text-${alt}`}
+                                className="rounded-full bg-[var(--surface-2)] px-2.5 py-0.5 text-xs text-[var(--text-muted)]"
+                              >
+                                ⇄ {alt}
+                              </span>
+                            ))}
                           </div>
                         ) : ing.alternatives && ing.alternatives.length > 0 ? (
                           <div className="mt-1.5 flex flex-wrap gap-1.5">

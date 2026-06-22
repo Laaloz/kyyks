@@ -217,6 +217,21 @@ async function upsertRecipe(supabase, recipe, createdBy, ingredientCatalogMap, t
       ingredient_name: row.ingredientName?.trim() || "",
       group_label: row.groupLabel?.trim() || null,
       alternatives: row.alternatives?.map((value) => value.trim()).filter(Boolean) ?? [],
+      alternative_options: (row.alternativeOptions ?? [])
+        .map((option) => {
+          const optionMatch = option.ingredientName
+            ? resolveIngredientId(ingredientCatalogMap, option.ingredientName)
+            : null;
+          if (option.ingredientName && !optionMatch) {
+            unresolvedIngredients.push(option.ingredientName);
+          }
+          return {
+            ingredientId: optionMatch?.id ?? null,
+            ingredientName: option.ingredientName?.trim() ?? "",
+            grams: Math.max(0, Math.round(Number(option.grams) || 0)),
+          };
+        })
+        .filter((option) => option.ingredientName.length > 0 && option.grams > 0),
       quantity: row.quantity ?? null,
       unit: row.unit,
       display_quantity: row.displayQuantity?.trim() || null,

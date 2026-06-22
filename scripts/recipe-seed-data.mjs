@@ -1,3 +1,33 @@
+// Vaihtoehto, jossa on sulkeissa grammamäärä ("Margariini alle 50% rasvaa (13 g)"),
+// on rakenteinen swap: nimi + oma grammamäärä. Se nostetaan alternativeOptions-kenttään,
+// jotta esikatselu voi laskea makrot uudelleen. Grammattomat vaihtoehdot jäävät
+// vapaatekstiksi alternatives-kenttään (geneeriset, esim. "Muut marjat").
+const GRAM_ALTERNATIVE_RE = /^(.*?)\s*\(\s*(\d+(?:[.,]\d+)?)\s*g\s*\)\s*$/i;
+
+function splitAlternatives(alternatives) {
+  const textAlternatives = [];
+  const alternativeOptions = [];
+
+  for (const raw of alternatives ?? []) {
+    const value = String(raw).trim();
+    if (!value) {
+      continue;
+    }
+
+    const match = value.match(GRAM_ALTERNATIVE_RE);
+    if (match) {
+      alternativeOptions.push({
+        ingredientName: match[1].trim(),
+        grams: Number(match[2].replace(",", ".")),
+      });
+    } else {
+      textAlternatives.push(value);
+    }
+  }
+
+  return { alternatives: textAlternatives, alternativeOptions };
+}
+
 function ingredient(ingredientName, quantity, unit = "g", options = {}) {
   const {
     ingredientRole = "main",
@@ -8,6 +38,8 @@ function ingredient(ingredientName, quantity, unit = "g", options = {}) {
     alternatives,
   } = options;
 
+  const { alternatives: textAlternatives, alternativeOptions } = splitAlternatives(alternatives);
+
   return {
     ingredientName,
     quantity,
@@ -15,7 +47,8 @@ function ingredient(ingredientName, quantity, unit = "g", options = {}) {
     ingredientRole,
     scalingMode,
     ...(groupLabel ? { groupLabel } : {}),
-    ...(alternatives?.length ? { alternatives } : {}),
+    ...(textAlternatives.length ? { alternatives: textAlternatives } : {}),
+    ...(alternativeOptions.length ? { alternativeOptions } : {}),
     ...(displayQuantity !== undefined ? { displayQuantity: String(displayQuantity) } : {}),
     ...(displayUnit !== undefined ? { displayUnit } : {}),
   };
