@@ -88,6 +88,7 @@ import {
   type WorkoutOrderMetadata,
 } from "@/components/workout/athlete/dashboard-insights";
 import { useExtraActivityForm } from "@/components/workout/athlete/use-extra-activity-form";
+import { useMeasurementTrend } from "@/components/workout/athlete/use-measurement-trend";
 import { useWorkoutWakeLock } from "@/components/workout/athlete/use-workout-wake-lock";
 import {
   CoachInstructionDialog,
@@ -192,9 +193,6 @@ export function AthleteDashboard({
   const [isMeasurementSheetOpen, setIsMeasurementSheetOpen] = useState(false);
   const isMeasurementDraftDirtyRef = useRef(false);
   const initializedMeasurementSheetUserIdRef = useRef<string | null>(null);
-  const [activeMeasurementTrend, setActiveMeasurementTrend] = useState<"weight" | "waist">("weight");
-  const [bodyMetricRange, setBodyMetricRange] = useState<"3m" | "1y" | "all">("3m");
-  const [showAllMeasurementEntries, setShowAllMeasurementEntries] = useState(false);
   const {
     activityType: extraActivityType,
     setActivityType: setExtraActivityType,
@@ -287,7 +285,6 @@ export function AthleteDashboard({
   }, [currentUser?.id]);
   useEffect(() => {
     setIsMeasurementSheetOpen(false);
-    setActiveMeasurementTrend("weight");
   }, [currentUser?.id]);
   useEffect(() => {
     onWorkoutDetailModeChange?.(view === "athlete-log" && athleteLogMode === "workout");
@@ -589,54 +586,26 @@ export function AthleteDashboard({
   const weeklyRemindersEnabled = currentUser?.settings?.weeklyMeasurementReminders ?? true;
   const showMeasurementReminderCard =
     !readOnly && weeklyRemindersEnabled && Boolean(measurementReminderState?.isDue);
-  const bodyMetric = activeMeasurementTrend; // "weight" | "waist"
-  const bodyMetricUnit = bodyMetric === "weight" ? "kg" : "cm";
-  // Koko historia uusin ensin (lista) ja erikseen vanhin→uusin (kaavio).
-  const bodyMetricEntries = useMemo(
-    () => bodyMeasurements.filter((entry) => (bodyMetric === "weight" ? entry.weightKg : entry.waistCm) !== undefined),
-    [bodyMeasurements, bodyMetric],
-  );
-  const bodyMetricSeries = useMemo(
-    () =>
-      [...bodyMetricEntries]
-        .reverse()
-        .map((entry) => ({
-          date: entry.measuredAt,
-          value: (bodyMetric === "weight" ? entry.weightKg : entry.waistCm) as number,
-        })),
-    [bodyMetricEntries, bodyMetric],
-  );
-  const bodyMetricCurrentValue =
-    bodyMetricSeries.length > 0
-      ? bodyMetricSeries[bodyMetricSeries.length - 1]!.value
-      : bodyMetric === "weight"
-        ? currentUser?.weightKg
-        : latestWaistCm;
-  // Aikavälivalitsin (3 kk / 1 v / kaikki) rajaa kaavion ja muutospillerin.
-  const bodyMetricPoints = useMemo(() => {
-    if (bodyMetricRange === "all") {
-      return bodyMetricSeries;
-    }
-    const days = bodyMetricRange === "3m" ? 90 : 365;
-    const cutoff = Date.now() - days * 24 * 60 * 60 * 1000;
-    const windowed = bodyMetricSeries.filter((point) => Date.parse(point.date) >= cutoff);
-    return windowed.length >= 2 ? windowed : bodyMetricSeries.slice(-2);
-  }, [bodyMetricSeries, bodyMetricRange]);
-  const bodyMetricDelta =
-    bodyMetricPoints.length >= 2
-      ? bodyMetricPoints[bodyMetricPoints.length - 1]!.value - bodyMetricPoints[0]!.value
-      : null;
-  const bodyMetricWeeks =
-    bodyMetricPoints.length >= 2
-      ? Math.max(
-          1,
-          Math.round(
-            (Date.parse(bodyMetricPoints[bodyMetricPoints.length - 1]!.date) - Date.parse(bodyMetricPoints[0]!.date)) /
-              (7 * 24 * 60 * 60 * 1000),
-          ),
-        )
-      : null;
-  const visibleMeasurementEntries = showAllMeasurementEntries ? bodyMetricEntries : bodyMetricEntries.slice(0, 12);
+  const {
+    trend: bodyMetric,
+    setTrend: setActiveMeasurementTrend,
+    range: bodyMetricRange,
+    setRange: setBodyMetricRange,
+    showAllEntries: showAllMeasurementEntries,
+    setShowAllEntries: setShowAllMeasurementEntries,
+    unit: bodyMetricUnit,
+    entries: bodyMetricEntries,
+    currentValue: bodyMetricCurrentValue,
+    points: bodyMetricPoints,
+    delta: bodyMetricDelta,
+    weeks: bodyMetricWeeks,
+    visibleEntries: visibleMeasurementEntries,
+  } = useMeasurementTrend({
+    bodyMeasurements,
+    currentUserId: currentUser?.id,
+    currentWeightKg: currentUser?.weightKg,
+    latestWaistCm,
+  });
   const handleSaveMeasurement = async () => {
     // Estä tuplatallennus (sama-tick-klikkaus ennen kuin nappi ehtii disabloitua).
     if (savingMeasurementRef.current) {
