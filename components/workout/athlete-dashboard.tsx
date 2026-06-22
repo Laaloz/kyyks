@@ -59,7 +59,7 @@ import { canManageOwnPrograms, canTrackOwnTraining } from "@/lib/role-access";
 import { buildScheduledWorkoutExerciseOrder } from "@/lib/workout-exercise-order";
 import { buildWorkoutHistoryTitleMap, normalizeWorkoutHistoryTitle } from "@/lib/workout-history-title";
 import { cn } from "@/lib/utils";
-import { estimateExtraActivityKcal, extraActivityCatalog } from "@/lib/extra-activities";
+import { extraActivityCatalog } from "@/lib/extra-activities";
 import type { AppState, ConversationEntry, ExtraActivity, ExtraActivityType, ProgramWorkout, WorkoutSession } from "@/lib/types";
 import { formatDate, formatDateWithWeekday, formatRelativeDate } from "@/lib/utils";
 import { resolveBlockingWorkoutStart, useAppState } from "@/providers/app-state-provider";
@@ -87,6 +87,7 @@ import {
   resolveScheduledProgramWorkout,
   type WorkoutOrderMetadata,
 } from "@/components/workout/athlete/dashboard-insights";
+import { useExtraActivityForm } from "@/components/workout/athlete/use-extra-activity-form";
 import { useWorkoutWakeLock } from "@/components/workout/athlete/use-workout-wake-lock";
 import {
   CoachInstructionDialog,
@@ -136,7 +137,6 @@ export function AthleteDashboard({
     updateCurrentUserMeasurements,
     updateWorkoutDate,
     updateWorkoutDuration,
-    addExtraActivity,
     updateExtraActivity,
     deleteExtraActivity,
     updateWorkoutSet,
@@ -195,16 +195,35 @@ export function AthleteDashboard({
   const [activeMeasurementTrend, setActiveMeasurementTrend] = useState<"weight" | "waist">("weight");
   const [bodyMetricRange, setBodyMetricRange] = useState<"3m" | "1y" | "all">("3m");
   const [showAllMeasurementEntries, setShowAllMeasurementEntries] = useState(false);
-  const [extraActivityType, setExtraActivityType] = useState<ExtraActivityType>("run");
-  const [extraActivityDurationMinutes, setExtraActivityDurationMinutes] = useState("30");
-  const [extraActivityDate, setExtraActivityDate] = useState(() => toLocalDateKey(new Date()));
-  const [extraActivityNotes, setExtraActivityNotes] = useState("");
-  const [isManualExtraActivityKcalEnabled, setIsManualExtraActivityKcalEnabled] = useState(false);
-  const [manualExtraActivityKcal, setManualExtraActivityKcal] = useState("");
-  const [isSavingExtraActivity, setIsSavingExtraActivity] = useState(false);
-  const savingExtraActivityRef = useRef(false);
-  const [isExtraActivityDialogOpen, setIsExtraActivityDialogOpen] = useState(false);
-  const [editingExtraActivityId, setEditingExtraActivityId] = useState<string | null>(null);
+  const {
+    activityType: extraActivityType,
+    setActivityType: setExtraActivityType,
+    durationMinutes: extraActivityDurationMinutes,
+    setDurationMinutes: setExtraActivityDurationMinutes,
+    date: extraActivityDate,
+    setDate: setExtraActivityDate,
+    notes: extraActivityNotes,
+    setNotes: setExtraActivityNotes,
+    isManualKcalEnabled: isManualExtraActivityKcalEnabled,
+    setIsManualKcalEnabled: setIsManualExtraActivityKcalEnabled,
+    manualKcal: manualExtraActivityKcal,
+    setManualKcal: setManualExtraActivityKcal,
+    isSaving: isSavingExtraActivity,
+    isDialogOpen: isExtraActivityDialogOpen,
+    open: openExtraActivityDialog,
+    close: closeExtraActivityDialog,
+    estimatedKcalPreview: extraActivityEstimatedKcalPreview,
+    submit: submitExtraActivity,
+  } = useExtraActivityForm({
+    currentUserId: currentUser?.id,
+    weightKg: currentUser?.weightKg,
+    onAdded: () => {
+      setHistoryFocusWorkoutId(null);
+      setAthleteLogTab("history");
+      setAthleteLogReturnTab("history");
+      setAthleteLogMode("overview");
+    },
+  });
   const [showAllExtraActivities, setShowAllExtraActivities] = useState(false);
   const [isCompletingWorkout, setIsCompletingWorkout] = useState(false);
   const {
@@ -236,14 +255,6 @@ export function AthleteDashboard({
   };
   useEffect(() => {
     setExpandedHistoryGroups({});
-  }, [currentUser?.id]);
-  useEffect(() => {
-    setExtraActivityType("run");
-    setExtraActivityDurationMinutes("30");
-    setExtraActivityDate(toLocalDateKey(new Date()));
-    setExtraActivityNotes("");
-    setIsManualExtraActivityKcalEnabled(false);
-    setManualExtraActivityKcal("");
   }, [currentUser?.id]);
   useEffect(() => {
     // Esitäytä lomake vain kun mittaus-sheet avataan. EI saa riippua
@@ -1094,14 +1105,6 @@ export function AthleteDashboard({
     [currentUser?.id, state.extraActivities],
   );
   const visibleExtraActivities = showAllExtraActivities ? extraActivities : extraActivities.slice(0, 5);
-  const extraActivityDurationValue = Number(extraActivityDurationMinutes);
-  const extraActivityEstimatedKcalPreview = Number.isFinite(extraActivityDurationValue) && extraActivityDurationValue > 0
-    ? estimateExtraActivityKcal({
-        activityType: extraActivityType,
-        durationMinutes: extraActivityDurationValue,
-        weightKg: currentUser?.weightKg,
-      })
-    : 0;
   useEffect(() => {
     if (view !== "athlete-log" || athleteLogMode !== "overview" || athleteLogTab !== "history" || !historyFocusWorkoutId) {
       return;
@@ -2011,10 +2014,7 @@ export function AthleteDashboard({
                   type="button"
                   variant="secondary"
                   className="mt-1 w-full gap-2"
-                  onClick={() => {
-                    setEditingExtraActivityId(null);
-                    setIsExtraActivityDialogOpen(true);
-                  }}
+                  onClick={openExtraActivityDialog}
                 >
                   <Plus className="size-4" aria-hidden="true" />
                   Lisää extra-treeni
@@ -2565,59 +2565,8 @@ export function AthleteDashboard({
           onChangeNotes={setExtraActivityNotes}
           onToggleManualKcal={setIsManualExtraActivityKcalEnabled}
           onChangeManualKcal={setManualExtraActivityKcal}
-          onClose={() => {
-            setIsExtraActivityDialogOpen(false);
-            setEditingExtraActivityId(null);
-          }}
-          onSave={() => {
-            // Estä tuplatallennus: ohita jos edellinen tallennus on yhä kesken.
-            if (savingExtraActivityRef.current) {
-              return;
-            }
-            savingExtraActivityRef.current = true;
-            setIsSavingExtraActivity(true);
-            void (async () => {
-              const payload = {
-                activityType: extraActivityType,
-                durationMinutes: Number(extraActivityDurationMinutes),
-                manualKcal: isManualExtraActivityKcalEnabled ? Number(manualExtraActivityKcal) : undefined,
-                occurredAt: new Date(`${extraActivityDate}T12:00:00`).toISOString(),
-                notes: extraActivityNotes,
-              };
-              try {
-                const wasEditing = Boolean(editingExtraActivityId);
-                const result = wasEditing
-                  ? await updateExtraActivity(editingExtraActivityId!, payload)
-                  : await addExtraActivity(payload);
-                if (result.ok) {
-                  notify({
-                    tone: "success",
-                    message: wasEditing ? "Extra-treeni päivitetty." : "Extra-treeni lisätty historiaan.",
-                  });
-                  setExtraActivityDurationMinutes("30");
-                  setExtraActivityNotes("");
-                  setIsManualExtraActivityKcalEnabled(false);
-                  setManualExtraActivityKcal("");
-                  setIsExtraActivityDialogOpen(false);
-                  setEditingExtraActivityId(null);
-                  // Lisäys ohjaa Historiaan (toast lupaa "lisätty historiaan", ja
-                  // treenin lopetus toimii samoin). Muokkaus avataan jo Historiasta,
-                  // joten silloin pysytään paikallaan.
-                  if (!wasEditing) {
-                    setHistoryFocusWorkoutId(null);
-                    setAthleteLogTab("history");
-                    setAthleteLogReturnTab("history");
-                    setAthleteLogMode("overview");
-                  }
-                } else {
-                  notify({ tone: "danger", message: result.message });
-                }
-              } finally {
-                savingExtraActivityRef.current = false;
-                setIsSavingExtraActivity(false);
-              }
-            })();
-          }}
+          onClose={closeExtraActivityDialog}
+          onSave={submitExtraActivity}
         />
       ) : null}
     </div>
