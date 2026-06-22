@@ -130,7 +130,7 @@ const manualIngredientSeedBase = [
   { name: "Katkarapu", source: "manual", defaultPurchaseUnit: "pack", gramsPerUnit: 250, kcalPer100: 85, proteinPer100: 18, carbsPer100: 0.5, fatPer100: 0.8 },
   { name: "Saitaku misokeitto", source: "manual", defaultPurchaseUnit: "pack", gramsPerUnit: 72, kcalPer100: 45, proteinPer100: 2.5, carbsPer100: 6, fatPer100: 1 },
   { name: "Soijakastike", source: "manual", defaultPurchaseUnit: "pack", gramsPerUnit: 150, kcalPer100: 53, proteinPer100: 8, carbsPer100: 4, fatPer100: 0.1 },
-  { name: "Udon-nuudeli", source: "manual", defaultPurchaseUnit: "pack", gramsPerUnit: 200, kcalPer100: 155, proteinPer100: 4.2, carbsPer100: 31, fatPer100: 0.8 },
+  { name: "Udon-nuudeli", source: "manual", defaultPurchaseUnit: "pack", gramsPerUnit: 200, kcalPer100: 350, proteinPer100: 12, carbsPer100: 71, fatPer100: 1.5 },
   { name: "Maapähkinät", source: "manual", defaultPurchaseUnit: "pack", gramsPerUnit: 200, kcalPer100: 585, proteinPer100: 25, carbsPer100: 16, fatPer100: 49 },
   { name: "Seesaminsiemenet", source: "manual", defaultPurchaseUnit: "pack", gramsPerUnit: 150, kcalPer100: 575, proteinPer100: 18, carbsPer100: 12, fatPer100: 49 },
   { name: "Kevätsipuli", source: "manual", defaultPurchaseUnit: "pack", gramsPerUnit: 100, kcalPer100: 32, proteinPer100: 1.8, carbsPer100: 4.5, fatPer100: 0.2 },
@@ -153,6 +153,11 @@ const manualIngredientSeedBase = [
   { name: "Voi", source: "manual", defaultPurchaseUnit: "g", kcalPer100: 737, proteinPer100: 0.7, carbsPer100: 0.6, fatPer100: 81.5 },
   { name: "Kookosöljy", source: "manual", defaultPurchaseUnit: "g", kcalPer100: 892, proteinPer100: 0, carbsPer100: 0, fatPer100: 99 },
   { name: "Espresso", source: "manual", defaultPurchaseUnit: "l", kcalPer100: 2, proteinPer100: 0.1, carbsPer100: 0, fatPer100: 0 },
+  { name: "Maissi", source: "manual", defaultPurchaseUnit: "pack", gramsPerUnit: 150, kcalPer100: 86, proteinPer100: 3.0, carbsPer100: 16, fatPer100: 1.2 },
+  { name: "Apetina juustokuutiot 10%", source: "manual", defaultPurchaseUnit: "pack", gramsPerUnit: 200, kcalPer100: 140, proteinPer100: 12.5, carbsPer100: 1.5, fatPer100: 9.5 },
+  { name: "Rypsiöljy", source: "manual", defaultPurchaseUnit: "l", kcalPer100: 884, proteinPer100: 0, carbsPer100: 0, fatPer100: 100 },
+  { name: "Kermaviili 6%", source: "manual", defaultPurchaseUnit: "pack", gramsPerUnit: 200, kcalPer100: 84, proteinPer100: 2.9, carbsPer100: 4.0, fatPer100: 6.0 },
+  { name: "Risella valmisriisi", source: "manual", defaultPurchaseUnit: "pack", gramsPerUnit: 250, kcalPer100: 165, proteinPer100: 3.5, carbsPer100: 35, fatPer100: 1.2 },
 ];
 
 const displayNameOverrides = {

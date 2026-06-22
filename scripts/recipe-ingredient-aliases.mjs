@@ -212,4 +212,19 @@ export const ingredientAliases = {
     "sweet chili kastike vähemmän sokeria",
     "sweet chili kastike",
   ],
+  "lohi": [
+    "lohifilee",
+    "lohi",
+  ],
+  "jasmiiniriisi": [
+    "jasmiiniriisi, kuiva",
+    "jasmiiniriisi kuiva",
+  ],
+  "risella valmisriisi": [
+    "risella valmisriisi",
+    "riisi",
+  ],
+  "maissi sailyke": [
+    "maissi",
+  ],
 };
