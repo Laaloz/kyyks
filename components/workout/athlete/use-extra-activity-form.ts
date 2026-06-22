@@ -59,42 +59,53 @@ export function useExtraActivityForm({
   };
 
   const submit = () => {
-    // Estä tuplatallennus: ohita jos edellinen tallennus on yhä kesken.
+    const payload = {
+      activityType,
+      durationMinutes: Number(durationMinutes),
+      manualKcal: isManualKcalEnabled ? Number(manualKcal) : undefined,
+      occurredAt: new Date(`${date}T12:00:00`).toISOString(),
+      notes,
+    };
+
+    if (!editingId) {
+      // Välitön lisäys: sulje dialogi + ohjaa Historiaan heti (addExtraActivity
+      // tekee optimistisen insertin, joka näkyy saman tien) ja aja POST taustalla.
+      // Epäonnistuessa provider rollbackaa rivin ja näytetään virhetoast.
+      setDurationMinutes("30");
+      setNotes("");
+      setIsManualKcalEnabled(false);
+      setManualKcal("");
+      setIsDialogOpen(false);
+      onAdded();
+      void (async () => {
+        const result = await addExtraActivity(payload);
+        notify(
+          result.ok
+            ? { tone: "success", message: "Extra-treeni lisätty historiaan." }
+            : { tone: "danger", message: result.message },
+        );
+      })();
+      return;
+    }
+
+    // Muokkaus avataan Historiasta: odota palvelinvahvistus, jotta dialogi jää
+    // virhetilanteessa auki uudelleenyritystä varten. Estä myös tuplatallennus.
     if (savingRef.current) {
       return;
     }
     savingRef.current = true;
     setIsSaving(true);
     void (async () => {
-      const payload = {
-        activityType,
-        durationMinutes: Number(durationMinutes),
-        manualKcal: isManualKcalEnabled ? Number(manualKcal) : undefined,
-        occurredAt: new Date(`${date}T12:00:00`).toISOString(),
-        notes,
-      };
       try {
-        const wasEditing = Boolean(editingId);
-        const result = wasEditing
-          ? await updateExtraActivity(editingId!, payload)
-          : await addExtraActivity(payload);
+        const result = await updateExtraActivity(editingId, payload);
         if (result.ok) {
-          notify({
-            tone: "success",
-            message: wasEditing ? "Extra-treeni päivitetty." : "Extra-treeni lisätty historiaan.",
-          });
+          notify({ tone: "success", message: "Extra-treeni päivitetty." });
           setDurationMinutes("30");
           setNotes("");
           setIsManualKcalEnabled(false);
           setManualKcal("");
           setIsDialogOpen(false);
           setEditingId(null);
-          // Lisäys ohjaa Historiaan (toast lupaa "lisätty historiaan", ja
-          // treenin lopetus toimii samoin). Muokkaus avataan jo Historiasta,
-          // joten silloin pysytään paikallaan.
-          if (!wasEditing) {
-            onAdded();
-          }
         } else {
           notify({ tone: "danger", message: result.message });
         }
