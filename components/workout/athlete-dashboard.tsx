@@ -74,6 +74,7 @@ import {
   type WorkoutOrderMetadata,
 } from "@/components/workout/athlete/dashboard-insights";
 import { useExtraActivityForm } from "@/components/workout/athlete/use-extra-activity-form";
+import { useHistoryInlineEdit } from "@/components/workout/athlete/use-history-inline-edit";
 import { renderCalendarActivityIcon } from "@/components/workout/athlete/calendar-activity-icon";
 import { useMeasurementForm } from "@/components/workout/athlete/use-measurement-form";
 import { useMeasurementTrend } from "@/components/workout/athlete/use-measurement-trend";
@@ -124,7 +125,6 @@ export function AthleteDashboard({
     startProgramWorkout,
     updateWorkoutDate,
     updateWorkoutDuration,
-    updateExtraActivity,
     deleteExtraActivity,
     updateWorkoutSet,
     updateWorkoutExerciseStructure,
@@ -145,24 +145,6 @@ export function AthleteDashboard({
   const [historyFocusWorkoutId, setHistoryFocusWorkoutId] = useState<string | null>(null);
   const [pendingStartWorkoutId, setPendingStartWorkoutId] = useState<string | null>(null);
   const [correctionModeWorkoutId, setCorrectionModeWorkoutId] = useState<string | null>(null);
-  const [expandedHistoryGroups, setExpandedHistoryGroups] = useState<Record<string, boolean>>({});
-  // Historian inline-muokkaus (kuvat 1+3): luonnos valitusta toteutuksesta.
-  const [historyEditDraft, setHistoryEditDraft] = useState<{
-    workoutId: string;
-    durationMin: number;
-    exercises: Array<{ name: string; target: string; sets: Array<{ logId: string; load: number; reps: number; targetMin?: number }> }>;
-  } | null>(null);
-  const [isSavingHistoryEdit, setIsSavingHistoryEdit] = useState(false);
-  // Extra-treenin inline-muokkaus historiassa (sama tyyppi kuin normaalitreenillä).
-  const [extraEditDraft, setExtraEditDraft] = useState<{
-    activityId: string;
-    activityType: ExtraActivityType;
-    durationMin: number;
-    kcal: number;
-    occurredDate: string;
-    notes: string;
-  } | null>(null);
-  const [isSavingExtraEdit, setIsSavingExtraEdit] = useState(false);
   const sessionByWorkoutId = useMemo(
     () => new Map(state.sessions.map((session) => [session.scheduledWorkoutId, session])),
     [state.sessions],
@@ -243,9 +225,6 @@ export function AthleteDashboard({
     setAthleteLogMode("overview");
     setAthleteLogTab(athleteLogReturnTab);
   };
-  useEffect(() => {
-    setExpandedHistoryGroups({});
-  }, [currentUser?.id]);
   useEffect(() => {
     onWorkoutDetailModeChange?.(view === "athlete-log" && athleteLogMode === "workout");
   }, [athleteLogMode, onWorkoutDetailModeChange, view]);
@@ -451,6 +430,25 @@ export function AthleteDashboard({
     [selectedWorkout, state.plans],
   );
   const workoutInsights = useMemo(() => buildWorkoutInsights(state), [state]);
+  const {
+    expandedHistoryGroups,
+    setExpandedHistoryGroups,
+    historyEditDraft,
+    setHistoryEditDraft,
+    isSavingHistoryEdit,
+    extraEditDraft,
+    setExtraEditDraft,
+    isSavingExtraEdit,
+    startHistoryEdit,
+    saveHistoryEdit,
+    startExtraEdit,
+    saveExtraEdit,
+  } = useHistoryInlineEdit({
+    sessionByWorkoutId,
+    workoutInsights,
+    currentUserId: currentUser?.id,
+    setWorkoutMessage,
+  });
   const selectedWorkoutStatus = selectedWorkout ? resolveWorkoutStatus(selectedWorkout) : undefined;
   // Aktiivinen kirjaus: paneli renderöi prototyypin oman headerin (takaisin +
   // KÄYNNISSÄ·aika + otsikko + x/y), joten emon raskas Card-header piilotetaan.
@@ -582,84 +580,6 @@ export function AthleteDashboard({
       [groupKey]: nextExpanded,
     }));
     setHistoryFocusWorkoutId(null);
-  };
-  const startHistoryEdit = (workoutId: string) => {
-    const session = sessionByWorkoutId.get(workoutId);
-    const insight = workoutInsights.get(workoutId);
-    const exercises: Array<{ name: string; target: string; sets: Array<{ logId: string; load: number; reps: number; targetMin?: number }> }> = [];
-    (session?.setLogs ?? []).forEach((log) => {
-      const name = log.exerciseName?.trim() || "Liike";
-      const repMin = log.targetRepsMin ?? log.targetReps;
-      const repMax = log.targetRepsMax ?? log.targetReps;
-      const target =
-        repMin !== undefined && repMax !== undefined && repMax > repMin ? `${repMin}-${repMax}` : `${repMin ?? log.targetReps ?? ""}`;
-      const group = exercises.find((item) => item.name === name);
-      const entry = { logId: log.id, load: log.actualLoad ?? 0, reps: log.actualReps ?? 0, targetMin: repMin };
-      if (group) {
-        group.sets.push(entry);
-      } else {
-        exercises.push({ name, target, sets: [entry] });
-      }
-    });
-    setHistoryEditDraft({
-      workoutId,
-      durationMin: Math.max(1, Math.round((insight?.durationSeconds ?? 0) / 60)),
-      exercises,
-    });
-  };
-  const saveHistoryEdit = async () => {
-    if (!historyEditDraft) {
-      return;
-    }
-    setIsSavingHistoryEdit(true);
-    try {
-      for (const exercise of historyEditDraft.exercises) {
-        for (const set of exercise.sets) {
-          await updateWorkoutSet(historyEditDraft.workoutId, set.logId, { actualLoad: set.load, actualReps: set.reps });
-        }
-      }
-      const result = await updateWorkoutDuration(historyEditDraft.workoutId, historyEditDraft.durationMin * 60);
-      setWorkoutMessage(result.ok ? "Muutokset tallennettu." : result.message);
-      if (result.ok) {
-        setHistoryEditDraft(null);
-      }
-    } finally {
-      setIsSavingHistoryEdit(false);
-    }
-  };
-  const startExtraEdit = (activity: ExtraActivity) => {
-    setExpandedHistoryGroups((current) => ({ ...current, [`extra-${activity.id}`]: true }));
-    setExtraEditDraft({
-      activityId: activity.id,
-      activityType: activity.activityType,
-      durationMin: Math.max(1, activity.durationMinutes),
-      kcal: activity.estimatedKcal,
-      occurredDate: activity.occurredAt.slice(0, 10),
-      notes: activity.notes ?? "",
-    });
-  };
-  const saveExtraEdit = async () => {
-    if (!extraEditDraft) {
-      return;
-    }
-    setIsSavingExtraEdit(true);
-    try {
-      const result = await updateExtraActivity(extraEditDraft.activityId, {
-        activityType: extraEditDraft.activityType,
-        durationMinutes: extraEditDraft.durationMin,
-        manualKcal: extraEditDraft.kcal,
-        occurredAt: new Date(`${extraEditDraft.occurredDate}T12:00:00`).toISOString(),
-        notes: extraEditDraft.notes,
-      });
-      if (result.ok) {
-        notify({ tone: "success", message: "Extra-treeni päivitetty." });
-        setExtraEditDraft(null);
-      } else {
-        notify({ tone: "danger", message: result.message });
-      }
-    } finally {
-      setIsSavingExtraEdit(false);
-    }
   };
   const startWorkoutFromProgram = async (programId: string, workoutId: string, workoutName: string, sourceKey: string) => {
     setPendingWorkoutTransition({ type: "start", workoutId, workoutName, sourceKey });
