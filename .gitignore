@@ -12,3 +12,6 @@ dist
 
 # Redesign-referenssimateriaali (ei committiin)
 handoff/
+
+# Supabase CLI -työtila (välimuisti, ei committiin)
+supabase/.temp/

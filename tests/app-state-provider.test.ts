@@ -210,7 +210,7 @@ describe("shouldPreserveStoredSessionDuringSupabaseBootstrap", () => {
 
     expect(schema).toContain("'admin_message'");
     expect(schema).toContain("profile.role = 'admin'");
-    expect(schema).toContain("role in ('coach', 'admin') and public.is_athlete_of(id)");
+    expect(schema).toContain(`(ARRAY['coach'::"public"."app_role", 'admin'::"public"."app_role"])) AND "public"."is_athlete_of"("id")`);
     expect(schema).toContain("from public.training_plans plan");
     expect(schema).toContain("from public.scheduled_workouts workout");
   });
