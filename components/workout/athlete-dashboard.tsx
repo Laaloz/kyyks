@@ -447,7 +447,6 @@ export function AthleteDashboard({
     sessionByWorkoutId,
     workoutInsights,
     currentUserId: currentUser?.id,
-    setWorkoutMessage,
   });
   const selectedWorkoutStatus = selectedWorkout ? resolveWorkoutStatus(selectedWorkout) : undefined;
   // Aktiivinen kirjaus: paneli renderöi prototyypin oman headerin (takaisin +

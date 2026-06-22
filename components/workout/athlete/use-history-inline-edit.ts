@@ -32,12 +32,10 @@ export function useHistoryInlineEdit({
   sessionByWorkoutId,
   workoutInsights,
   currentUserId,
-  setWorkoutMessage,
 }: {
   sessionByWorkoutId: Map<string, WorkoutSession>;
   workoutInsights: Map<string, WorkoutInsight>;
   currentUserId: string | undefined;
-  setWorkoutMessage: (message: string) => void;
 }) {
   const { updateWorkoutSet, updateWorkoutDuration, updateExtraActivity, notify } = useAppState();
 
@@ -88,9 +86,11 @@ export function useHistoryInlineEdit({
         }
       }
       const result = await updateWorkoutDuration(historyEditDraft.workoutId, historyEditDraft.durationMin * 60);
-      setWorkoutMessage(result.ok ? "Muutokset tallennettu." : result.message);
       if (result.ok) {
+        notify({ tone: "success", message: "Muutokset tallennettu." });
         setHistoryEditDraft(null);
+      } else {
+        notify({ tone: "danger", message: result.message });
       }
     } finally {
       setIsSavingHistoryEdit(false);
