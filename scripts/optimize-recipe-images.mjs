@@ -8,6 +8,7 @@
 //   node --env-file=.env scripts/optimize-recipe-images.mjs --dry-run
 //   node --env-file=.env scripts/optimize-recipe-images.mjs
 //   node --env-file=.env scripts/optimize-recipe-images.mjs --only "<recipe-id>"
+//   node --env-file=.env scripts/optimize-recipe-images.mjs --recache   # korjaa vain cache-control
 //
 // Tarvitsee NEXT_PUBLIC_SUPABASE_URL + SUPABASE_SERVICE_ROLE_KEY sekä cwebp:n (brew install webp).
 
@@ -38,13 +39,43 @@ function toOptimizedWebp(inputBuffer) {
 }
 
 function parseArgs(argv) {
-  const args = { dryRun: false, only: null, keepOriginal: false };
+  const args = { dryRun: false, only: null, keepOriginal: false, recache: false };
   for (let i = 0; i < argv.length; i += 1) {
     if (argv[i] === "--dry-run") args.dryRun = true;
     else if (argv[i] === "--keep-original") args.keepOriginal = true;
+    else if (argv[i] === "--recache") args.recache = true;
     else if (argv[i] === "--only") { args.only = argv[i + 1]; i += 1; }
   }
   return args;
+}
+
+// HUOM: Supabase storage-js etuliittää cacheControl-arvon "public, max-age=":lla,
+// joten arvon TÄYTYY olla pelkkä sekuntimäärä. Täysi merkkijono tuottaa rikkinäisen
+// "public, max-age=public, max-age=..." -headerin. --recache korjaa olemassa olevat
+// WebP-kuvat lataamatta/enkoodaamatta uudelleen (sama tavusisältö, korjattu header).
+async function recacheExisting(supabase, recipes, args) {
+  const results = { recached: 0, errors: [] };
+  for (const r of recipes) {
+    if (args.only && r.id !== args.only) continue;
+    const path = r.image_url.split("/").pop();
+    try {
+      if (args.dryRun) { console.log(`[dry] recache ${r.name} (${path})`); results.recached += 1; continue; }
+      const { data: dl, error: dlErr } = await supabase.storage.from(BUCKET).download(path);
+      if (dlErr) { results.errors.push(`${r.name}: download ${dlErr.message}`); continue; }
+      const buf = Buffer.from(await dl.arrayBuffer());
+      const up = await supabase.storage.from(BUCKET).upload(path, buf, {
+        contentType: "image/webp",
+        cacheControl: CACHE_CONTROL,
+        upsert: true,
+      });
+      if (up.error) { results.errors.push(`${r.name}: upload ${up.error.message}`); continue; }
+      console.log(`recached ${r.name}: ${Math.round(buf.length / 1024)}KB`);
+      results.recached += 1;
+    } catch (e) {
+      results.errors.push(`${r.name}: ${e.message}`);
+    }
+  }
+  return results;
 }
 
 async function main() {
@@ -61,6 +92,14 @@ async function main() {
     .select("id,name,image_url")
     .not("image_url", "is", null);
   if (error) throw new Error(`reseptien haku epäonnistui: ${error.message}`);
+
+  // --recache: korjaa vain cache-control olemassa oleville WebP-kuville (ei enkoodausta).
+  if (args.recache) {
+    const webp = recipes.filter((r) => r.image_url.endsWith(".webp"));
+    const res = await recacheExisting(supabase, webp, args);
+    console.log("\n" + JSON.stringify(res, null, 2));
+    return;
+  }
 
   const targets = recipes.filter((r) => (!args.only || r.id === args.only) && !r.image_url.endsWith(".webp"));
   const results = { optimized: 0, skipped: recipes.length - targets.length, errors: [], bytesBefore: 0, bytesAfter: 0 };
