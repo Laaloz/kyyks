@@ -2,26 +2,13 @@
 
 import {
   ArrowLeft,
-  Bike,
   Check,
-  CircleDot,
   ChevronDown,
   ChevronRight,
   ChevronUp,
-  Dumbbell,
-  Flame,
-  Footprints,
-  HeartPulse,
   Info,
-  Mountain,
-  Music,
-  PersonStanding,
   Plus,
-  Snowflake,
-  Swords,
   Trash2,
-  Waves,
-  Activity,
   Clock3,
 } from "lucide-react";
 import {
@@ -87,6 +74,7 @@ import {
   type WorkoutOrderMetadata,
 } from "@/components/workout/athlete/dashboard-insights";
 import { useExtraActivityForm } from "@/components/workout/athlete/use-extra-activity-form";
+import { renderCalendarActivityIcon } from "@/components/workout/athlete/calendar-activity-icon";
 import { useMeasurementForm } from "@/components/workout/athlete/use-measurement-form";
 import { useMeasurementTrend } from "@/components/workout/athlete/use-measurement-trend";
 import { useWorkoutWakeLock } from "@/components/workout/athlete/use-workout-wake-lock";
@@ -2455,25 +2443,3 @@ export function AthleteDashboard({
 }
 
 
-function renderCalendarActivityIcon(activityType: string) {
-  if (activityType === "strength") return <Dumbbell className="size-3.5" aria-hidden="true" />;
-  if (activityType === "run") return <Footprints className="size-3.5" aria-hidden="true" />;
-  if (activityType === "walk") return <PersonStanding className="size-3.5" aria-hidden="true" />;
-  if (activityType === "cycle") return <Bike className="size-3.5" aria-hidden="true" />;
-  if (activityType === "indoor_cycle") return <Bike className="size-3.5" aria-hidden="true" />;
-  if (activityType === "mtb") return <Bike className="size-3.5" aria-hidden="true" />;
-  if (activityType === "treadmill") return <Footprints className="size-3.5" aria-hidden="true" />;
-  if (activityType === "stair_climber") return <Mountain className="size-3.5" aria-hidden="true" />;
-  if (activityType === "elliptical") return <Activity className="size-3.5" aria-hidden="true" />;
-  if (activityType === "swim") return <Waves className="size-3.5" aria-hidden="true" />;
-  if (activityType === "paddle") return <Waves className="size-3.5" aria-hidden="true" />;
-  if (activityType === "climb" || activityType === "hike") return <Mountain className="size-3.5" aria-hidden="true" />;
-  if (activityType === "row") return <Activity className="size-3.5" aria-hidden="true" />;
-  if (activityType === "ski" || activityType === "downhill_ski" || activityType === "skate") return <Snowflake className="size-3.5" aria-hidden="true" />;
-  if (activityType === "disc_golf") return <CircleDot className="size-3.5" aria-hidden="true" />;
-  if (activityType === "yoga" || activityType === "mobility") return <HeartPulse className="size-3.5" aria-hidden="true" />;
-  if (activityType === "hiit") return <Flame className="size-3.5" aria-hidden="true" />;
-  if (activityType === "combat") return <Swords className="size-3.5" aria-hidden="true" />;
-  if (activityType === "dance") return <Music className="size-3.5" aria-hidden="true" />;
-  return <CircleDot className="size-3.5" aria-hidden="true" />;
-}
