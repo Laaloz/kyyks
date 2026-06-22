@@ -87,6 +87,7 @@ import {
   resolveScheduledProgramWorkout,
   type WorkoutOrderMetadata,
 } from "@/components/workout/athlete/dashboard-insights";
+import { useWorkoutWakeLock } from "@/components/workout/athlete/use-workout-wake-lock";
 import {
   CoachInstructionDialog,
   ExtraActivityDialog,
@@ -206,10 +207,13 @@ export function AthleteDashboard({
   const [editingExtraActivityId, setEditingExtraActivityId] = useState<string | null>(null);
   const [showAllExtraActivities, setShowAllExtraActivities] = useState(false);
   const [isCompletingWorkout, setIsCompletingWorkout] = useState(false);
-  const [keepWorkoutScreenOn, setKeepWorkoutScreenOn] = useState(false);
-  const [workoutWakeLockSupported, setWorkoutWakeLockSupported] = useState(false);
-  const [workoutWakeLockError, setWorkoutWakeLockError] = useState("");
-  const [workoutWakeLockSentinel, setWorkoutWakeLockSentinel] = useState<{ release: () => Promise<void> } | null>(null);
+  const {
+    keepScreenOn: keepWorkoutScreenOn,
+    setKeepScreenOn: setKeepWorkoutScreenOn,
+    supported: workoutWakeLockSupported,
+    error: workoutWakeLockError,
+    clearError: clearWorkoutWakeLockError,
+  } = useWorkoutWakeLock(athleteLogMode === "workout" && Boolean(selectedWorkoutId));
   const [pendingWorkoutTransition, setPendingWorkoutTransition] = useState<
     | { type: "open"; scheduledWorkoutId: string; workoutName: string; sourceKey: string }
     | { type: "start"; workoutId: string; workoutName: string; sourceKey: string }
@@ -274,54 +278,6 @@ export function AthleteDashboard({
     setIsMeasurementSheetOpen(false);
     setActiveMeasurementTrend("weight");
   }, [currentUser?.id]);
-  useEffect(() => {
-    setWorkoutWakeLockSupported(typeof navigator !== "undefined" && "wakeLock" in navigator);
-  }, []);
-  useEffect(() => {
-    const shouldKeepAwake = keepWorkoutScreenOn && athleteLogMode === "workout" && Boolean(selectedWorkoutId);
-    if (!workoutWakeLockSupported || !shouldKeepAwake) {
-      if (workoutWakeLockSentinel) {
-        void workoutWakeLockSentinel.release().catch(() => undefined);
-        setWorkoutWakeLockSentinel(null);
-      }
-      return;
-    }
-    if (workoutWakeLockSentinel) {
-      return;
-    }
-
-    let cancelled = false;
-    const requestWakeLock = async () => {
-      try {
-        const lock = await (navigator as Navigator & {
-          wakeLock: { request: (type: "screen") => Promise<{ release: () => Promise<void> }> };
-        }).wakeLock.request("screen");
-        if (cancelled) {
-          await lock.release().catch(() => undefined);
-          return;
-        }
-        setWorkoutWakeLockError("");
-        setWorkoutWakeLockSentinel(lock);
-      } catch {
-        if (!cancelled) {
-          setWorkoutWakeLockError("Näytön päälläpito ei onnistunut tällä laitteella.");
-          setKeepWorkoutScreenOn(false);
-        }
-      }
-    };
-    void requestWakeLock();
-
-    return () => {
-      cancelled = true;
-    };
-  }, [athleteLogMode, keepWorkoutScreenOn, selectedWorkoutId, workoutWakeLockSentinel, workoutWakeLockSupported]);
-  useEffect(() => {
-    return () => {
-      if (workoutWakeLockSentinel) {
-        void workoutWakeLockSentinel.release().catch(() => undefined);
-      }
-    };
-  }, [workoutWakeLockSentinel]);
   useEffect(() => {
     onWorkoutDetailModeChange?.(view === "athlete-log" && athleteLogMode === "workout");
   }, [athleteLogMode, onWorkoutDetailModeChange, view]);
@@ -1638,7 +1594,7 @@ export function AthleteDashboard({
                     if (!workoutWakeLockSupported) {
                       return;
                     }
-                    setWorkoutWakeLockError("");
+                    clearWorkoutWakeLockError();
                     setKeepWorkoutScreenOn((current) => !current);
                   }}
                 >
