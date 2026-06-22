@@ -37,7 +37,6 @@ import { Button } from "@/components/ui/button";
 import { Card, CardDescription, CardTitle } from "@/components/ui/card";
 import { Input, Label, Select, Textarea } from "@/components/ui/field";
 import { Sheet } from "@/components/ui/sheet";
-import { bodyMeasurementSchema } from "@/components/workout/schemas";
 import { InfoTooltip } from "@/components/ui/tooltip";
 import { AthleteSessionPanel } from "@/components/workout/athlete/session-panel";
 import { ConversationPanel } from "@/components/workout/conversation-panel";
@@ -88,6 +87,7 @@ import {
   type WorkoutOrderMetadata,
 } from "@/components/workout/athlete/dashboard-insights";
 import { useExtraActivityForm } from "@/components/workout/athlete/use-extra-activity-form";
+import { useMeasurementForm } from "@/components/workout/athlete/use-measurement-form";
 import { useMeasurementTrend } from "@/components/workout/athlete/use-measurement-trend";
 import { useWorkoutWakeLock } from "@/components/workout/athlete/use-workout-wake-lock";
 import {
@@ -101,7 +101,6 @@ type WorkoutSelectionPriority = 0 | 2 | 3;
 type AthleteLogMode = "overview" | "workout";
 type AthleteLogTab = "training" | "history" | "exercises";
 type AthleteOverviewFocusTarget = "measurements";
-type MeasurementMessageTone = "info" | "success" | "error";
 
 export function AthleteDashboard({
   view,
@@ -135,7 +134,6 @@ export function AthleteDashboard({
     notify,
     startWorkout,
     startProgramWorkout,
-    updateCurrentUserMeasurements,
     updateWorkoutDate,
     updateWorkoutDuration,
     updateExtraActivity,
@@ -181,18 +179,24 @@ export function AthleteDashboard({
     () => new Map(state.sessions.map((session) => [session.scheduledWorkoutId, session])),
     [state.sessions],
   );
-  const [measurementDraft, setMeasurementDraft] = useState({
-    weightKg: "",
-    waistCm: "",
+  const {
+    draft: measurementDraft,
+    message: measurementMessage,
+    messageTone: measurementMessageTone,
+    isSaving: isSavingMeasurements,
+    isSheetOpen: isMeasurementSheetOpen,
+    clearMessage: clearMeasurementMessage,
+    openSheet: openMeasurementSheet,
+    closeSheet: closeMeasurementSheet,
+    changeWeight: changeMeasurementWeight,
+    changeWaist: changeMeasurementWaist,
+    save: handleSaveMeasurement,
+  } = useMeasurementForm({
+    state,
+    currentUserId: currentUser?.id,
+    currentWeightKg: currentUser?.weightKg,
   });
-  const [measurementMessage, setMeasurementMessage] = useState("");
-  const [measurementMessageTone, setMeasurementMessageTone] = useState<MeasurementMessageTone>("info");
-  const [isSavingMeasurements, setIsSavingMeasurements] = useState(false);
-  const savingMeasurementRef = useRef(false);
   const completingWorkoutRef = useRef(false);
-  const [isMeasurementSheetOpen, setIsMeasurementSheetOpen] = useState(false);
-  const isMeasurementDraftDirtyRef = useRef(false);
-  const initializedMeasurementSheetUserIdRef = useRef<string | null>(null);
   const {
     activityType: extraActivityType,
     setActivityType: setExtraActivityType,
@@ -255,38 +259,6 @@ export function AthleteDashboard({
     setExpandedHistoryGroups({});
   }, [currentUser?.id]);
   useEffect(() => {
-    // Esitäytä lomake vain kun mittaus-sheet avataan. EI saa riippua
-    // state.bodyMeasurements/weightKg:sta — muuten taustasynkka uudelleen-
-    // initialisoisi kentät kesken kirjoittamisen ja pyyhkisi syötetyt arvot.
-    if (!isMeasurementSheetOpen) {
-      initializedMeasurementSheetUserIdRef.current = null;
-      isMeasurementDraftDirtyRef.current = false;
-      return;
-    }
-    if (!currentUser || initializedMeasurementSheetUserIdRef.current === currentUser.id || isMeasurementDraftDirtyRef.current) {
-      return;
-    }
-
-    const latestWaistValue =
-      currentUser
-        ? getMeasurementsForUser(state, currentUser.id).find((entry) => entry.waistCm !== undefined)?.waistCm
-        : undefined;
-
-    setMeasurementDraft({
-      weightKg: currentUser?.weightKg !== undefined ? String(currentUser.weightKg) : "",
-      waistCm: latestWaistValue !== undefined ? String(latestWaistValue) : "",
-    });
-    initializedMeasurementSheetUserIdRef.current = currentUser.id;
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isMeasurementSheetOpen, currentUser?.id]);
-  useEffect(() => {
-    setMeasurementMessage("");
-    setMeasurementMessageTone("info");
-  }, [currentUser?.id]);
-  useEffect(() => {
-    setIsMeasurementSheetOpen(false);
-  }, [currentUser?.id]);
-  useEffect(() => {
     onWorkoutDetailModeChange?.(view === "athlete-log" && athleteLogMode === "workout");
   }, [athleteLogMode, onWorkoutDetailModeChange, view]);
   useEffect(() => {
@@ -295,7 +267,7 @@ export function AthleteDashboard({
     }
 
     // Muistutuksen "Avaa kehon seuranta" avaa Uusi mittaus -sheetin heti.
-    setIsMeasurementSheetOpen(true);
+    openMeasurementSheet();
     onOverviewFocusHandled?.();
   }, [view, overviewFocusTarget, onOverviewFocusHandled]);
   const athletePrograms = state.plans.filter(
@@ -570,9 +542,8 @@ export function AthleteDashboard({
           label: "Mittaus",
           icon: Plus,
           onClick: () => {
-            setMeasurementMessage("");
-            setMeasurementMessageTone("info");
-            setIsMeasurementSheetOpen(true);
+            clearMeasurementMessage();
+            openMeasurementSheet();
           },
         }
       : null,
@@ -606,50 +577,6 @@ export function AthleteDashboard({
     currentWeightKg: currentUser?.weightKg,
     latestWaistCm,
   });
-  const handleSaveMeasurement = async () => {
-    // Estä tuplatallennus (sama-tick-klikkaus ennen kuin nappi ehtii disabloitua).
-    if (savingMeasurementRef.current) {
-      return;
-    }
-    const parsed = bodyMeasurementSchema.safeParse({
-      heightCm: "",
-      weightKg: measurementDraft.weightKg,
-      waistCm: measurementDraft.waistCm,
-    });
-    if (!parsed.success) {
-      setMeasurementMessage(parsed.error.issues[0]?.message ?? "Tarkista mittatiedot ja yritä uudelleen.");
-      setMeasurementMessageTone("error");
-      return;
-    }
-
-    savingMeasurementRef.current = true;
-    setIsSavingMeasurements(true);
-    try {
-      const measurementInput: { heightCm?: number; weightKg?: number; waistCm?: number } = {};
-      if (parsed.data.weightKg !== undefined) {
-        measurementInput.weightKg = parsed.data.weightKg;
-      }
-      if (parsed.data.waistCm !== undefined) {
-        measurementInput.waistCm = parsed.data.waistCm;
-      }
-
-      const result = await withMinimumDelay(updateCurrentUserMeasurements(measurementInput));
-      setMeasurementMessage(result.ok ? "Mittatiedot tallennettu." : result.message);
-      setMeasurementMessageTone(result.ok ? "success" : "error");
-      if (result.ok) {
-        isMeasurementDraftDirtyRef.current = false;
-        initializedMeasurementSheetUserIdRef.current = null;
-        setMeasurementDraft((previous) => ({ ...previous, weightKg: "", waistCm: "" }));
-        setIsMeasurementSheetOpen(false);
-        notify({ tone: "success", message: "Mittaus tallennettu." });
-      } else {
-        notify({ tone: "danger", message: result.message });
-      }
-    } finally {
-      savingMeasurementRef.current = false;
-      setIsSavingMeasurements(false);
-    }
-  };
   const openWorkoutView = (
     scheduledWorkoutId: string,
     options?: { correctionMode?: boolean; returnTab?: AthleteLogTab },
@@ -1283,9 +1210,8 @@ export function AthleteDashboard({
               type="button"
               className="flex w-full items-center gap-3 rounded-2xl border border-[var(--border)] bg-[var(--surface)] px-4 py-3 text-left shadow-[0_1px_2px_var(--shadow-soft)] transition hover:border-[var(--border-strong)]"
               onClick={() => {
-                setMeasurementMessage("");
-                setMeasurementMessageTone("info");
-                setIsMeasurementSheetOpen(true);
+                clearMeasurementMessage();
+                openMeasurementSheet();
               }}
             >
               <span className="size-2.5 shrink-0 rounded-full bg-[var(--success)]" aria-hidden="true" />
@@ -1428,11 +1354,7 @@ export function AthleteDashboard({
 
           {isMeasurementSheetOpen ? (
               <Sheet
-                onClose={() => {
-                  isMeasurementDraftDirtyRef.current = false;
-                  initializedMeasurementSheetUserIdRef.current = null;
-                  setIsMeasurementSheetOpen(false);
-                }}
+                onClose={closeMeasurementSheet}
                 ariaLabel="Uusi mittaus"
               >
                     <h2 className="font-[family-name:var(--font-display)] text-2xl font-bold text-[var(--text)]">Uusi mittaus</h2>
@@ -1449,12 +1371,7 @@ export function AthleteDashboard({
                           step="0.1"
                           placeholder={currentUser?.weightKg !== undefined ? String(currentUser.weightKg) : "Esim. 72.4"}
                           value={measurementDraft.weightKg}
-                          onChange={(event) => {
-                            isMeasurementDraftDirtyRef.current = true;
-                            setMeasurementDraft((previous) => ({ ...previous, weightKg: event.target.value }));
-                            setMeasurementMessage("");
-                            setMeasurementMessageTone("info");
-                          }}
+                          onChange={(event) => changeMeasurementWeight(event.target.value)}
                         />
                       </div>
                       <div>
@@ -1468,12 +1385,7 @@ export function AthleteDashboard({
                           step="0.5"
                           placeholder={latestWaistCm !== undefined ? String(latestWaistCm) : "Esim. 81"}
                           value={measurementDraft.waistCm}
-                          onChange={(event) => {
-                            isMeasurementDraftDirtyRef.current = true;
-                            setMeasurementDraft((previous) => ({ ...previous, waistCm: event.target.value }));
-                            setMeasurementMessage("");
-                            setMeasurementMessageTone("info");
-                          }}
+                          onChange={(event) => changeMeasurementWaist(event.target.value)}
                         />
                       </div>
                       {measurementMessage && measurementMessageTone === "error" ? (
