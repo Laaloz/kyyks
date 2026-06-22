@@ -6,14 +6,28 @@
 //   node --env-file=.env scripts/generate-recipe-images.mjs --only "Munakas,Banaanipannukakut"
 //   node --env-file=.env scripts/generate-recipe-images.mjs --upload    # lataa Supabaseen + asettaa recipes.image_url
 //
-// Tarvitsee GEMINI_API_KEY:n. --upload lisäksi NEXT_PUBLIC_SUPABASE_URL + SUPABASE_SERVICE_ROLE_KEY.
+// Tarvitsee GEMINI_API_KEY:n. --upload lisäksi NEXT_PUBLIC_SUPABASE_URL + SUPABASE_SERVICE_ROLE_KEY
+// sekä cwebp:n (brew install webp) — kuvat ladataan optimoituna WebP:nä ({id}.webp).
 
-import { mkdirSync, writeFileSync, existsSync } from "node:fs";
+import { execFileSync } from "node:child_process";
+import { mkdirSync, writeFileSync, readFileSync, existsSync } from "node:fs";
 import { recipeSeedData } from "./recipe-seed-data.mjs";
 
 const MODEL = "imagen-4.0-fast-generate-001";
 const OUT_DIR = process.env.RECIPE_IMAGE_DIR || "/tmp/recipe-images";
 const BUCKET = "recipe-images";
+// Latausoptimointi (--upload): skaalaa <= MAX_PX ja koodaa WebP:ksi (cwebp). 1024px PNG
+// ~1,5 MB → ~50 KB WebP (kortti näyttää vain ~164px). Vaatii cwebp:n (brew install webp).
+const MAX_PX = 800;
+const WEBP_QUALITY = 75;
+const CACHE_CONTROL = "31536000";
+
+// Koodaa annettu kuvatiedosto optimoiduksi WebP-bufferiksi cwebp:llä.
+function toOptimizedWebp(pngPath) {
+  const outPath = `${pngPath}.webp`;
+  execFileSync("cwebp", ["-q", String(WEBP_QUALITY), "-resize", String(MAX_PX), "0", "-mt", "-quiet", pngPath, "-o", outPath]);
+  return readFileSync(outPath);
+}
 
 const STYLE =
   "Professional overhead (top-down) food photograph, light neutral background, soft natural light, " +
@@ -157,14 +171,19 @@ async function main() {
       if (args.upload) {
         const id = recipeIdByName.get(r.name);
         if (!id) { results.errors.push(`${r.name}: ei recipe_id:tä kannassa`); continue; }
-        const { readFileSync } = await import("node:fs");
-        const body = readFileSync(file);
-        const path = `${id}.png`;
-        const up = await supabase.storage.from(BUCKET).upload(path, body, { contentType: "image/png", upsert: true });
+        const body = toOptimizedWebp(file);
+        const path = `${id}.webp`;
+        const up = await supabase.storage.from(BUCKET).upload(path, body, {
+          contentType: "image/webp",
+          cacheControl: CACHE_CONTROL,
+          upsert: true,
+        });
         if (up.error) { results.errors.push(`${r.name}: upload ${up.error.message}`); continue; }
         const { data: pub } = supabase.storage.from(BUCKET).getPublicUrl(path);
         const { error: updErr } = await supabase.from("recipes").update({ image_url: pub.publicUrl }).eq("id", id);
         if (updErr) { results.errors.push(`${r.name}: image_url ${updErr.message}`); continue; }
+        // Poista mahdollinen vanha PNG-orpo (aiemmat lataukset käyttivät {id}.png).
+        await supabase.storage.from(BUCKET).remove([`${id}.png`]);
         results.uploaded += 1;
       }
     } catch (e) {
