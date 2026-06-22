@@ -669,11 +669,11 @@ export function NutritionView({
                       src={recipe.imageUrl}
                       alt={recipe.name}
                       loading="lazy"
-                      className="h-16 w-full rounded-xl object-cover"
+                      className="aspect-video w-full rounded-xl object-cover"
                     />
                   ) : (
                     <span
-                      className="grid h-16 place-items-center rounded-xl text-[10px] font-medium text-[var(--text-subtle)]"
+                      className="grid aspect-video place-items-center rounded-xl text-[10px] font-medium text-[var(--text-subtle)]"
                       style={{
                         // Raidat kontrastaavat surface-2-kortin kanssa (pohja oli ennen sama → näkymätön).
                         backgroundImage:
@@ -1032,7 +1032,7 @@ function RecipeDetailSheet({
                               aria-pressed={selectedIndex === -1}
                               onClick={() => setAltByIngredient((previous) => ({ ...previous, [ing.id]: -1 }))}
                               className={cn(
-                                "rounded-full px-2.5 py-0.5 text-xs font-medium transition",
+                                "rounded-full px-2 py-0.5 text-xs! font-medium transition",
                                 selectedIndex === -1
                                   ? "bg-[var(--accent)] text-[var(--accent-contrast)]"
                                   : "bg-[var(--surface-2)] text-[var(--text-muted)] hover:text-[var(--text)]",
@@ -1047,7 +1047,7 @@ function RecipeDetailSheet({
                                 aria-pressed={selectedIndex === index}
                                 onClick={() => setAltByIngredient((previous) => ({ ...previous, [ing.id]: index }))}
                                 className={cn(
-                                  "rounded-full px-2.5 py-0.5 text-xs font-medium transition",
+                                  "rounded-full px-2 py-0.5 text-xs! font-medium transition",
                                   selectedIndex === index
                                     ? "bg-[var(--accent)] text-[var(--accent-contrast)]"
                                     : "bg-[var(--surface-2)] text-[var(--text-muted)] hover:text-[var(--text)]",
@@ -1061,7 +1061,7 @@ function RecipeDetailSheet({
                             {(ing.alternatives ?? []).map((alt) => (
                               <span
                                 key={`${ing.id}-text-${alt}`}
-                                className="rounded-full bg-[var(--surface-2)] px-2.5 py-0.5 text-xs text-[var(--text-muted)]"
+                                className="rounded-full bg-[var(--surface-2)] px-2 py-0.5 text-xs text-[var(--text-muted)]"
                               >
                                 ⇄ {alt}
                               </span>
@@ -1070,7 +1070,7 @@ function RecipeDetailSheet({
                         ) : ing.alternatives && ing.alternatives.length > 0 ? (
                           <div className="mt-1.5 flex flex-wrap gap-1.5">
                             {ing.alternatives.map((alt) => (
-                              <span key={alt} className="rounded-full bg-[var(--surface-2)] px-2.5 py-0.5 text-xs text-[var(--text-muted)]">
+                              <span key={alt} className="rounded-full bg-[var(--surface-2)] px-2 py-0.5 text-xs text-[var(--text-muted)]">
                                 ⇄ {alt}
                               </span>
                             ))}
