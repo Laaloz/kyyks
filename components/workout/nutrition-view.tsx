@@ -664,16 +664,25 @@ export function NutritionView({
                   className="flex flex-col gap-2 rounded-2xl bg-[var(--surface-2)] p-3 text-left"
                   onClick={() => setDetail({ recipeId: recipe.id })}
                 >
-                  <span
-                    className="grid h-16 place-items-center rounded-xl text-[10px] font-medium text-[var(--text-subtle)]"
-                    style={{
-                      // Raidat kontrastaavat surface-2-kortin kanssa (pohja oli ennen sama → näkymätön).
-                      backgroundImage:
-                        "repeating-linear-gradient(-45deg, var(--surface) 0 8px, var(--surface-3) 8px 16px)",
-                    }}
-                  >
-                    ruokakuva
-                  </span>
+                  {recipe.imageUrl ? (
+                    <img
+                      src={recipe.imageUrl}
+                      alt={recipe.name}
+                      loading="lazy"
+                      className="h-16 w-full rounded-xl object-cover"
+                    />
+                  ) : (
+                    <span
+                      className="grid h-16 place-items-center rounded-xl text-[10px] font-medium text-[var(--text-subtle)]"
+                      style={{
+                        // Raidat kontrastaavat surface-2-kortin kanssa (pohja oli ennen sama → näkymätön).
+                        backgroundImage:
+                          "repeating-linear-gradient(-45deg, var(--surface) 0 8px, var(--surface-3) 8px 16px)",
+                      }}
+                    >
+                      ruokakuva
+                    </span>
+                  )}
                   <span>
                     <span className="block text-sm font-semibold leading-tight text-[var(--text)] [overflow-wrap:anywhere]">{recipe.name}</span>
                     <span className="mt-0.5 block text-xs text-[var(--text-subtle)]">{m.kcal} kcal · P {m.p} g</span>
@@ -964,6 +973,14 @@ function RecipeDetailSheet({
         </div>
 
         <div className="mt-3 min-h-0 flex-1 overflow-y-auto">
+          {recipe.imageUrl ? (
+            <img
+              src={recipe.imageUrl}
+              alt={recipe.name}
+              loading="lazy"
+              className="mb-4 aspect-[4/3] w-full rounded-2xl object-cover"
+            />
+          ) : null}
           <p className="font-[family-name:var(--font-display)] text-4xl font-bold leading-none tabular-nums text-[var(--text)]">
             {macros.kcal}
             <span className="ml-1.5 text-base font-semibold text-[var(--text-subtle)]">kcal / annos</span>
