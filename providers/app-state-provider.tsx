@@ -428,6 +428,32 @@ function mergeServerSessionWithLocalSetInputs(
   return { ...serverSession, setLogs: mergedSetLogs };
 }
 
+// Suodata palvelimen snapshotista pois extra-treenit jotka käyttäjä juuri poisti
+// optimistisesti — muuten lennossa ollut (poistoa edeltänyt) refresh palauttaisi
+// poistetun rivin takaisin. Aikaikkuna kuten muillakin optimistisilla poistoilla.
+function filterRecentlyDeletedExtraActivities(
+  serverExtraActivities: AppState["extraActivities"] | undefined,
+  previousExtraActivities: AppState["extraActivities"] | undefined,
+  recentlyDeletedExtraActivityIds: ReadonlyMap<string, number>,
+) {
+  const serverEntries = serverExtraActivities ?? previousExtraActivities ?? [];
+  if (recentlyDeletedExtraActivityIds.size === 0) {
+    return serverEntries;
+  }
+
+  const now = Date.now();
+  const recentlyDeletedIds = new Set(
+    Array.from(recentlyDeletedExtraActivityIds.entries())
+      .filter(([, removedAt]) => now - removedAt < LOCAL_SYNC_PROTECTION_MS)
+      .map(([activityId]) => activityId),
+  );
+  if (recentlyDeletedIds.size === 0) {
+    return serverEntries;
+  }
+
+  return serverEntries.filter((activity) => !recentlyDeletedIds.has(activity.id));
+}
+
 function mergeServerDayMealPlansWithLocalState(
   serverDayMealPlans: AppState["dayMealPlans"] | undefined,
   previousDayMealPlans: AppState["dayMealPlans"] | undefined,
@@ -1921,6 +1947,7 @@ export function reconcileSupabaseVisibleState(
   pendingDayMealCreates: ReadonlyMap<string, PendingDayMealCreate> = new Map(),
   recentlyRemovedDayMealIds: ReadonlyMap<string, number> = new Map(),
   pendingDayMealMutations: ReadonlyMap<string, PendingDayMealMutation> = new Map(),
+  recentlyDeletedExtraActivityIds: ReadonlyMap<string, number> = new Map(),
 ) {
   const suppressedWorkoutIds = new Set(
     Array.from(recentlyDeletedWorkoutIds?.entries() ?? [])
@@ -2176,7 +2203,11 @@ export function reconcileSupabaseVisibleState(
 
       return mergedNotes;
     })(),
-    extraActivities: filteredSnapshot.extraActivities ?? previous.extraActivities ?? [],
+    extraActivities: filterRecentlyDeletedExtraActivities(
+      filteredSnapshot.extraActivities,
+      previous.extraActivities,
+      recentlyDeletedExtraActivityIds,
+    ),
     dayMealPlans: snapshotMode === "workouts"
       ? previous.dayMealPlans ?? []
       : mergeServerDayMealPlansWithLocalState(
@@ -2792,6 +2823,7 @@ export function AppStateProvider({ children }: PropsWithChildren) {
   const dayMealEatenMutationQueueRef = useRef<Map<string, QueuedDayMealEatenMutation>>(new Map());
   const dayMealEatenMutationInFlightRef = useRef<Set<string>>(new Set());
   const recentlyRemovedDayMealIdsRef = useRef<Map<string, number>>(new Map());
+  const recentlyDeletedExtraActivityIdsRef = useRef<Map<string, number>>(new Map());
   const recentlyDeletedWorkoutsRef = useRef<Map<string, number>>(new Map());
   const recentlyStartedWorkoutsRef = useRef<RecentlyStartedWorkouts>(new Map());
   const isHydrated =
@@ -3046,6 +3078,7 @@ export function AppStateProvider({ children }: PropsWithChildren) {
             pendingDayMealCreatesRef.current,
             recentlyRemovedDayMealIdsRef.current,
             pendingDayMealMutationsRef.current,
+            recentlyDeletedExtraActivityIdsRef.current,
           ),
         );
         resolvedUserId = findResolvedUserIdInSnapshot(snapshot, authUser);
@@ -3291,6 +3324,11 @@ function findResolvedUserIdInSnapshot(
             recentlyRemovedDayMealIdsRef.current.delete(entryId);
           }
         });
+        recentlyDeletedExtraActivityIdsRef.current.forEach((removedAt, activityId) => {
+          if (now - removedAt >= LOCAL_SYNC_PROTECTION_MS) {
+            recentlyDeletedExtraActivityIdsRef.current.delete(activityId);
+          }
+        });
         const nextPendingDayMealMutations = new Map(pendingDayMealMutationsRef.current);
         (payload.dayMealPlans ?? []).forEach((entry) => {
           const pendingMutation = nextPendingDayMealMutations.get(entry.id);
@@ -3325,6 +3363,7 @@ function findResolvedUserIdInSnapshot(
             pendingDayMealCreatesRef.current,
             recentlyRemovedDayMealIdsRef.current,
             pendingDayMealMutationsRef.current,
+            recentlyDeletedExtraActivityIdsRef.current,
           ),
         );
         if (options?.mode !== "workouts") {
@@ -4540,6 +4579,7 @@ function findResolvedUserIdInSnapshot(
             pendingDayMealCreatesRef.current,
             recentlyRemovedDayMealIdsRef.current,
             pendingDayMealMutationsRef.current,
+            recentlyDeletedExtraActivityIdsRef.current,
           ),
         );
       }
@@ -7081,6 +7121,9 @@ function findResolvedUserIdInSnapshot(
           ...previous,
           extraActivities: (previous.extraActivities ?? []).filter((activity) => activity.id !== activityId),
         }));
+        // Suojaa optimistinen poisto lennossa olevalta (poistoa edeltäneeltä)
+        // refreshiltä, joka muuten palauttaisi rivin takaisin.
+        recentlyDeletedExtraActivityIdsRef.current.set(activityId, Date.now());
 
         if (!supabase) {
           return { ok: true };
@@ -7092,6 +7135,7 @@ function findResolvedUserIdInSnapshot(
         const payload = (response ? await response.json().catch(() => null) : null) as { message?: string } | null;
 
         if (!response?.ok) {
+          recentlyDeletedExtraActivityIdsRef.current.delete(activityId);
           setState(previousState);
           return { ok: false, message: payload?.message ?? "Extra-treenin poisto epäonnistui." };
         }
