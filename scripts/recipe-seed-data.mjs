@@ -315,13 +315,14 @@ export const recipeSeedData = [
       ingredient("Sipuli", 160, "g", { groupLabel: "Kastike" }),
       ingredient("Sinappi", 60, "g", { groupLabel: "Kastike" }),
       ingredient("Ketsuppi vähemmän suolaa ja sokeria", 60, "g", { groupLabel: "Kastike" }),
+      textIngredient("Lihaliemikuutio", "1–2", "kpl", { groupLabel: "Kastike" }),
       ingredient("Peruna", 800, "g", { groupLabel: "Lisuke" }),
       ingredient("Sekalaiset kasvikset", 800, "g", { groupLabel: "Lisuke" }),
       ingredient("Raejuusto", 300, "g", { groupLabel: "Lisäksi" }),
     ],
     instructions: [
       "Paloittele nakit ja pilko sipuli silpuksi. Ruskista seos pannulla (tilkka vettä estää palamisen).",
-      "Lisää ruokakerma, sinappi ja ketsuppi, ja kuumenna koko seos. Lisää halutessasi lihaliemikuutio tai mausteita.",
+      "Lisää ruokakerma, sinappi, ketsuppi ja lihaliemikuutio, ja kuumenna koko seos. Mausta halutessasi muilla mausteilla.",
       "Keitä perunat ja pilko sivusalaatti.",
       "Tarjoile keitettyjen perunoiden, vihersalaatin ja raejuuston kanssa.",
     ],
@@ -332,7 +333,7 @@ export const recipeSeedData = [
     mealTag: "lunch",
     ...batchServe,
     ingredients: [
-      textIngredient("Spice mix", "2", "rkl", { groupLabel: "Kana" }),
+      textIngredient("Mausteseos", "2", "rkl", { groupLabel: "Kana" }),
       ingredient("Kanan rintafilee", 560, "g", { groupLabel: "Kana" }),
       ingredient("Oliiviöljy", 40, "g", { groupLabel: "Kana" }),
       ingredient("Jasmiiniriisi, kuiva", 160, "g", { groupLabel: "Lisuke" }),
@@ -526,7 +527,7 @@ export const recipeSeedData = [
       "Paista jauheliha sen omassa rasvassa kypsäksi ja mausta oman maun mukaan.",
       "Keitä spagetti pakkauksen ohjeen mukaan.",
       "Lisää tomaattikastike lähes kypsän jauhelihan sekaan ja anna hautua hetki.",
-      "Tarjoile spagetti jauhelihakastikkeen kanssa. Lisää halutessasi kasviksia ja ketsuppia.",
+      "Tarjoile spagetti jauhelihakastikkeen kanssa. Lisää halutessasi kasviksia.",
     ],
   }),
   recipe({
