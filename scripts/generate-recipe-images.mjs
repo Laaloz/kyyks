@@ -183,7 +183,10 @@ async function main() {
         });
         if (up.error) { results.errors.push(`${r.name}: upload ${up.error.message}`); continue; }
         const { data: pub } = supabase.storage.from(BUCKET).getPublicUrl(path);
-        const { error: updErr } = await supabase.from("recipes").update({ image_url: pub.publicUrl }).eq("id", id);
+        // Tiedostopolku ({id}.webp) pysyy samana uudelleenladattaessa, ja kuvilla on vuoden immutable-cache.
+        // Lisätään versioparametri (ajan leima) → URL muuttuu → selaimen ja PWA:n service workerin cache ohittuu.
+        const imageUrl = `${pub.publicUrl}?v=${Date.now()}`;
+        const { error: updErr } = await supabase.from("recipes").update({ image_url: imageUrl }).eq("id", id);
         if (updErr) { results.errors.push(`${r.name}: image_url ${updErr.message}`); continue; }
         // Poista mahdollinen vanha PNG-orpo (aiemmat lataukset käyttivät {id}.png).
         await supabase.storage.from(BUCKET).remove([`${id}.png`]);
