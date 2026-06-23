@@ -349,7 +349,7 @@ export const recipeSeedData = [
       ingredient("Sinappi", 60, "g", { groupLabel: "Kastike" }),
       ingredient("Ketsuppi vähemmän suolaa ja sokeria", 60, "g", { groupLabel: "Kastike" }),
       textIngredient("Lihaliemikuutio", "1–2", "kpl", { groupLabel: "Kastike" }),
-      ingredient("Peruna", 800, "g", { groupLabel: "Lisuke" }),
+      ingredient("Peruna", 800, "g", { groupLabel: "Lisuke", alternatives: ["Perunamuussi"] }),
       ingredient("Sekalaiset kasvikset", 800, "g", { groupLabel: "Lisuke" }),
       ingredient("Raejuusto", 300, "g", { groupLabel: "Lisäksi" }),
     ],

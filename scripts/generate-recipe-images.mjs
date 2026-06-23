@@ -45,23 +45,23 @@ const PROMPTS = {
   "Leipä ja skyr-kulho": "A bowl of skyr yogurt topped with muesli, next to two slices of rye bread with turkey cold cuts",
   "Chia-vanukas mustikoilla": "A small glass bowl of creamy white chia seed pudding topped with fresh blueberries, healthy breakfast on a table",
   "Kana ja riisi": "Sliced pan-seared real chicken breast with light natural grill marks and visible meat fibres (authentic cooked white-meat texture, matte not glossy, not rubbery, not plastic-looking), with white rice and mixed vegetables on a plate",
-  "Kanatortillat": "Chicken fajita wraps with strips of real grilled chicken (authentic cooked meat texture), grated cheese, salsa, lettuce and bell peppers on a plate, with no raw onion slices on top",
+  "Kanatortillat": "An open soft wheat tortilla on a plate, topped only with strips of real grilled chicken (authentic cooked meat texture), shredded lettuce, diced tomato, sliced green bell pepper and a light sprinkle of grated cheese. Only these toppings and nothing else on it",
   "Makaronilaatikko": "Finnish macaroni and minced-beef casserole in a baking dish with a golden cheese crust",
   "Pesto-pasta kanalla": "Pasta with green pesto, grilled chicken pieces and halved cherry tomatoes in a bowl",
   "Kanapyörykät ja riisi": "A plate of round browned chicken meatballs (small round balls, like Swedish meatballs, definitely not chicken fillets and not nuggets) with white rice, pineapple pieces and sweet chili sauce",
-  "Nakkikastike perunoilla": "A plate of boiled potatoes covered in creamy gravy with sliced sausage, comfort food",
+  "Nakkikastike perunoilla": "A plate of whole boiled potato chunks (clearly chunks of peeled boiled potato, absolutely no rice, no rice grains) topped with creamy light-brown sausage gravy with slices of frankfurter hot-dog sausage, Finnish home comfort food",
   "Crispy chicken -salaatti": "A generous green salad bowl with plenty of fresh iceberg lettuce leaves, cherry tomatoes, cucumber, feta cheese cubes and sweetcorn, topped with crispy golden breaded fried chicken strips (crunchy deep-fried coating, not grilled)",
   "VHH-ateria": "A low-carb plate of browned lean minced meat with cottage cheese, steamed broccoli and cherry tomatoes",
   "Helppo ja nopea rahkasetti": "A bowl of quark topped with fresh blueberries, walnuts and a drizzle of honey",
   "Proteiinirahka, hedelmä ja pähkinät": "A cup of plain quark with a whole apple and a few cashew nuts beside it on a plate",
-  "Proteiinivanukas mansikoilla": "A small dessert cup of chocolate mousse topped with fresh sliced strawberries and a few cashew nuts",
-  "Proteiinijauhe, hedelmä ja pähkinät": "A protein shake in a glass with a banana and cashew nuts beside it (food photograph, light neutral background, bright, no text, no people)",
+  "Proteiinivanukas mansikoilla": "A small glass cup of chocolate protein pudding (matte soft real dessert texture, not glossy, not plastic-looking) topped with a few fresh sliced strawberries, simple and natural looking",
+  "Proteiinijauhe, hedelmä ja pähkinät": "A protein shake in a glass with a banana and a few cashew nuts beside it on a plain light neutral surface (no recipe card, no note, no paper, no text or writing anywhere, no kitchen background, no people)",
   "Maissikakut ja proteiinirahka": "Two clearly separate things on a plate: corn rice cakes topped only with turkey cold-cut slices, and beside them a separate small bowl of white protein quark with sliced kiwi on top of the quark (the quark and kiwi sit in their own bowl, never on the turkey or rice cakes)",
   "Skyr-juoma, banaani ja pähkinät": "A tall glass of white drinking yogurt next to a whole banana and a small pile of cashew nuts on a table (food photograph, light neutral background, bright, no text, no people, no car)",
   "Ruisleipää vuolukanalla": "Slices of dark rye bread topped with cheese, sliced chicken, tomato and cucumber on a plate",
   "Mac and cheese kanalla": "Creamy macaroni and cheese in a bowl topped with pieces of real grilled chicken breast with natural char marks and visible meat texture (authentic cooked chicken, matte surface, not glossy, rubbery or plastic-looking)",
   "Spaghetti ja jauhelihakastike": "Spaghetti with tomato minced-meat sauce on a plate",
-  "Uunilohi ja maalaislohkoperunat": "A baked salmon fillet with rustic oven potato wedges and steamed broccoli on a plate",
+  "Uunilohi ja maalaislohkoperunat": "A fully cooked oven-baked salmon fillet (opaque, flaky, cooked-through pink salmon, definitely not raw, not translucent, not glossy sashimi) served on a white plate with rustic oven-roasted potato wedges and bright green steamed broccoli florets",
   "Tulinen kanapasta": "Creamy spicy tomato chicken pasta in a bowl, garnished with parmesan and bell pepper",
   "Makkaraperunat": "French fries generously topped with plenty of clearly visible thick slices of grilled frankfurter hot-dog sausage, with a little cottage cheese, ketchup and a sour cream dip on a plate (lots of sausage pieces, no mushrooms)",
   "Uunifeta kanapasta": "Baked feta pasta with cherry tomatoes, grilled chicken and fresh basil in a bowl",
@@ -77,7 +77,7 @@ const PROMPTS = {
   "Munakas": "Close-up food photo of a classic folded yellow egg omelette on a white plate, garnished with a few cherry tomatoes and fresh green spinach leaves (a cooked omelette dish, food only, no landscape, no scenery)",
   "Banaanipannukakut": "A short stack of small fluffy pancakes on a plate topped with fresh blueberries and a dollop of white vanilla yogurt (not cookies, not biscuits)",
   "Tiramisu-tuorepuuro": "Tiramisu-style overnight oats with a cocoa base and a vanilla yogurt layer in a glass jar, dusted with cocoa",
-  "Banaani-tuorepuuro": "Banana overnight oats with greek yogurt and a dark chocolate drizzle in a glass jar",
+  "Banaani-tuorepuuro": "Chocolate banana overnight oats in a glass jar, the oats mixed with cocoa, topped with banana slices and a dark chocolate drizzle (chocolate flavour, absolutely no berries, no raspberries, no blueberries)",
   "Brownie-tuorepuuro": "Chocolate brownie overnight oats with a cocoa topping in a glass jar",
   "Pastasalaatti": "A bowl of cold pasta salad with chicken, bell peppers, cucumber, tomato and red onion",
 };
@@ -96,7 +96,8 @@ function parseArgs(argv) {
   for (let i = 0; i < argv.length; i += 1) {
     if (argv[i] === "--force") args.force = true;
     else if (argv[i] === "--upload") args.upload = true;
-    else if (argv[i] === "--only") { args.only = (argv[i + 1] || "").split(",").map((s) => s.trim()).filter(Boolean); i += 1; }
+    // Erotin on ';' (ei ',') koska monessa reseptinimessä on pilkku (esim. "Proteiinijauhe, hedelmä ja pähkinät").
+    else if (argv[i] === "--only") { args.only = (argv[i + 1] || "").split(";").map((s) => s.trim()).filter(Boolean); i += 1; }
   }
   return args;
 }
