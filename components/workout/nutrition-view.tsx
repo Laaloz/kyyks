@@ -1,7 +1,7 @@
 "use client";
 
-import { BookOpen, Check, ChevronRight, Loader2, Plus, Repeat2, Search, Sparkles, Trash2 } from "lucide-react";
-import { useMemo, useRef, useState } from "react";
+import { BookOpen, Check, ChevronLeft, ChevronRight, Loader2, Plus, Repeat2, Search, Sparkles, Trash2 } from "lucide-react";
+import { useMemo, useState } from "react";
 
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -17,7 +17,6 @@ import {
   buildPersonalNutritionGoalComparison,
   formatRecipeIngredientAmount,
   formatScaledQuantity,
-  getActiveMealPlanForAthlete,
   getMealSlotGroupForTag,
   getMissingMacroProfileFields,
   getVisibleRecipesForUser,
@@ -34,6 +33,7 @@ import { useAppState } from "@/providers/app-state-provider";
 
 const MEAL_TAG_ORDER: MealTag[] = ["breakfast", "lunch", "snack", "dinner", "evening_snack"];
 const WEEKDAY_LABELS = ["Su", "Ma", "Ti", "Ke", "To", "Pe", "La"];
+const WEEKDAY_FULL = ["Sunnuntai", "Maanantai", "Tiistai", "Keskiviikko", "Torstai", "Perjantai", "Lauantai"];
 
 const missingFieldLabel: Record<"age" | "sex" | "heightCm" | "weightKg", string> = {
   age: "ikä",
@@ -47,6 +47,22 @@ function localDateKey(date: Date) {
   const month = String(date.getMonth() + 1).padStart(2, "0");
   const day = String(date.getDate()).padStart(2, "0");
   return `${year}-${month}-${day}`;
+}
+
+// Siirrä YYYY-MM-DD -avainta deltaDays-päivää (paikallinen aika, kuukauden ylivuoto huomioiden).
+function shiftDateKey(key: string, deltaDays: number) {
+  const [year, month, day] = key.split("-").map(Number);
+  return localDateKey(new Date(year ?? 1970, (month ?? 1) - 1, (day ?? 1) + deltaDays));
+}
+
+// Päivästepperin otsikko: suhteellinen sana (Tänään/Eilen) tai viikonpäivä + lyhyt pvm.
+function dateStepperLabels(selected: string, today: string) {
+  const [year, month, day] = selected.split("-").map(Number);
+  const date = new Date(year ?? 1970, (month ?? 1) - 1, day ?? 1);
+  const sub = `${date.getDate()}.${date.getMonth() + 1}.`;
+  const main =
+    selected === today ? "Tänään" : selected === shiftDateKey(today, -1) ? "Eilen" : WEEKDAY_FULL[date.getDay()];
+  return { main, sub };
 }
 
 type Macros = { kcal: number; p: number; c: number; f: number };
@@ -149,46 +165,21 @@ export function NutritionView({
         }
       : null,
   );
-  const [isMaterializing, setIsMaterializing] = useState(false);
-  const isMaterializingRef = useRef(false);
-  const [materializeMessage, setMaterializeMessage] = useState("");
   const [pendingId, setPendingId] = useState<string | null>(null);
 
   const todayKey = useMemo(() => localDateKey(new Date()), []);
+  // Päivä-näkymä toimii valitulle päivälle (oletus tänään); Viikko-listasta voi hypätä
+  // minkä tahansa päivän muokkaukseen, ja stepperillä selata päiviä ‹ ›.
+  const [selectedDate, setSelectedDate] = useState(todayKey);
+  const isSelectedToday = selectedDate === todayKey;
+  // Stepperi rajataan samaan 7 päivän ikkunaan kuin Viikko-näkymä (tänään + 6 edellistä).
+  // YYYY-MM-DD vertautuu merkkijonona oikein, joten reunat voi tarkistaa suoraan.
+  const oldestDate = useMemo(() => shiftDateKey(todayKey, -6), [todayKey]);
+  const isSelectedOldest = selectedDate <= oldestDate;
+  const stepperLabels = dateStepperLabels(selectedDate, todayKey);
   const catalog = state.ingredientsCatalog;
   const visibleRecipeSource = useMemo(() => getVisibleRecipesForUser(state, user), [state, user]);
   const recipeById = useMemo(() => new Map(visibleRecipeSource.map((recipe) => [recipe.id, recipe])), [visibleRecipeSource]);
-  const assignedPlan = useMemo(() => getActiveMealPlanForAthlete(state, user.id), [state, user.id]);
-  const basePlan = useMemo(
-    () =>
-      assignedPlan
-        ? assignedPlan.items
-            .slice()
-            .sort((left, right) => left.sortOrder - right.sortOrder)
-            .flatMap((item) => {
-              const recipe = recipeById.get(item.recipeId);
-              return recipe ? [{ mealTag: item.mealTag, recipe }] : [];
-            })
-        : [],
-    [assignedPlan, recipeById],
-  );
-  // Jaettu ateriapohja on valikko, ei valmis päivä: yhdellä ateriatyypillä voi
-  // olla useita reseptejä. Esikatselu ja "Kokoa" käyttävät tästä yhtä reseptiä
-  // per ateriatyyppi (ensimmäinen sortOrderin mukaan), ateriatyyppijärjestyksessä.
-  const plannedDay = useMemo(() => {
-    const seen = new Set<MealTag>();
-    const picked: { mealTag: MealTag; recipe: Recipe }[] = [];
-    for (const item of basePlan) {
-      if (seen.has(item.mealTag)) {
-        continue;
-      }
-      seen.add(item.mealTag);
-      picked.push(item);
-    }
-    return picked.sort(
-      (left, right) => MEAL_TAG_ORDER.indexOf(left.mealTag) - MEAL_TAG_ORDER.indexOf(right.mealTag),
-    );
-  }, [basePlan]);
   const nutritionProfile = state.nutritionProfiles.find((profile) => profile.userId === user.id) ?? null;
   const nutritionComparison = buildPersonalNutritionGoalComparison(user, nutritionProfile);
   const macroTarget = nutritionComparison?.activeTarget ?? null;
@@ -200,7 +191,7 @@ export function NutritionView({
   const dayRows = useMemo(
     () =>
       (state.dayMealPlans ?? [])
-        .filter((entry) => entry.athleteId === user.id && entry.planDate === todayKey)
+        .filter((entry) => entry.athleteId === user.id && entry.planDate === selectedDate)
         .sort((left, right) => {
           const tagDelta = MEAL_TAG_ORDER.indexOf(left.mealTag) - MEAL_TAG_ORDER.indexOf(right.mealTag);
           if (tagDelta !== 0) return tagDelta;
@@ -210,7 +201,7 @@ export function NutritionView({
           const createdDelta = (left.createdAt ?? "").localeCompare(right.createdAt ?? "");
           return createdDelta !== 0 ? createdDelta : left.id.localeCompare(right.id);
         }),
-    [state.dayMealPlans, todayKey, user.id],
+    [state.dayMealPlans, selectedDate, user.id],
   );
   const hasDay = dayRows.length > 0;
   const eatenRows = dayRows.filter((entry) => entry.eatenAt);
@@ -297,42 +288,6 @@ export function NutritionView({
     [visibleRecipeSource, filter, query],
   );
 
-  const materializeFromPlan = async () => {
-    if (isMaterializingRef.current) {
-      return;
-    }
-
-    isMaterializingRef.current = true;
-    setIsMaterializing(true);
-    setMaterializeMessage("");
-    try {
-      const existingPlanMealTags = new Set(
-        dayRows
-          .filter((entry) => entry.source === "plan")
-          .map((entry) => entry.mealTag),
-      );
-      const rowsToAdd = plannedDay
-        .map((item, index) => ({ item, position: index }))
-        .filter(({ item }) => !existingPlanMealTags.has(item.mealTag));
-      if (rowsToAdd.length === 0) {
-        return;
-      }
-
-      const results = await Promise.all(
-        rowsToAdd.map(({ item, position }) =>
-          addDayMeal({ planDate: todayKey, mealTag: item.mealTag, recipeId: item.recipe.id, source: "plan", position }),
-        ),
-      );
-      const failed = results.find((result) => !result.ok);
-      if (failed) {
-        setMaterializeMessage(failed.message);
-      }
-    } finally {
-      isMaterializingRef.current = false;
-      setIsMaterializing(false);
-    }
-  };
-
   return (
     <Card className="max-w-full overflow-x-clip [contain:inline-size]">
       <Segmented
@@ -348,6 +303,41 @@ export function NutritionView({
 
       {seg === "day" ? (
         <div className="mt-5">
+          <div className="mb-4 flex items-center justify-between gap-2">
+            <button
+              type="button"
+              className="grid size-9 shrink-0 place-items-center rounded-full bg-[var(--surface-2)] text-[var(--text)] transition hover:text-[var(--accent)] disabled:opacity-35 disabled:hover:text-[var(--text)]"
+              aria-label="Edellinen päivä"
+              disabled={isSelectedOldest}
+              onClick={() => setSelectedDate((current) => (current <= oldestDate ? current : shiftDateKey(current, -1)))}
+            >
+              <ChevronLeft className="size-4" aria-hidden="true" />
+            </button>
+            <button
+              type="button"
+              className="min-w-0 flex-1 text-center disabled:cursor-default"
+              disabled={isSelectedToday}
+              aria-label={isSelectedToday ? undefined : "Siirry tähän päivään"}
+              onClick={() => setSelectedDate(todayKey)}
+            >
+              <p className="font-[family-name:var(--font-display)] text-sm font-bold text-[var(--text)]">
+                {stepperLabels.main}
+              </p>
+              <p className="text-xs tabular-nums text-[var(--text-subtle)]">
+                {stepperLabels.sub}
+                {isSelectedToday ? "" : " · palaa tähän päivään"}
+              </p>
+            </button>
+            <button
+              type="button"
+              className="grid size-9 shrink-0 place-items-center rounded-full bg-[var(--surface-2)] text-[var(--text)] transition hover:text-[var(--accent)] disabled:opacity-35 disabled:hover:text-[var(--text)]"
+              aria-label="Seuraava päivä"
+              disabled={isSelectedToday}
+              onClick={() => setSelectedDate((current) => shiftDateKey(current, 1))}
+            >
+              <ChevronRight className="size-4" aria-hidden="true" />
+            </button>
+          </div>
           {macroTarget ? (
             <div className="rounded-2xl bg-[var(--surface-2)] p-4">
               <p className="font-[family-name:var(--font-display)] text-4xl font-bold leading-none tabular-nums text-[var(--text)]">
@@ -407,57 +397,17 @@ export function NutritionView({
 
           {!hasDay ? (
             <div className="mt-3">
-              {plannedDay.length > 0 ? (
-                <>
-                  <div className="divide-y divide-[var(--border)]">
-                    {plannedDay.map((item, index) => (
-                      <div key={`${item.recipe.id}-${index}`} className="flex items-center justify-between gap-3 py-2.5">
-                        <div className="min-w-0">
-                          <p className="truncate text-sm font-semibold text-[var(--text)]">{item.recipe.name}</p>
-                          <p className="text-xs text-[var(--text-subtle)]">{mealTagLabel(item.mealTag)}</p>
-                        </div>
-                        <span className="shrink-0 font-[family-name:var(--font-display)] text-sm tabular-nums text-[var(--text-subtle)]">
-                          {servingMacros(item.recipe, catalog).kcal} kcal
-                        </span>
-                      </div>
-                    ))}
+              <div className="rounded-2xl border border-dashed border-[var(--border)] bg-[var(--surface-2)] px-4 py-5 text-center">
+                <p className="text-sm text-[var(--text-subtle)]">Ei vielä aterioita tälle päivälle.</p>
+                {!readOnly ? (
+                  <div className="mt-4 grid gap-2">
+                    <Button type="button" variant="secondary" className="w-full gap-2" onClick={() => setAddMenuOpen(true)}>
+                      <Plus className="size-4" aria-hidden="true" />
+                      Lisää ateria
+                    </Button>
                   </div>
-                  {!readOnly ? (
-                    <div className="mt-4 grid gap-2">
-                      <Button
-                        type="button"
-                        className="w-full"
-                        loading={isMaterializing}
-                        loadingText="Kootaan päivää..."
-                        onClick={() => void materializeFromPlan()}
-                      >
-                        Kokoa tämän päivän ateriat
-                      </Button>
-                      {materializeMessage ? (
-                        <p className="text-sm text-[var(--danger)]" role="alert">
-                          {materializeMessage}
-                        </p>
-                      ) : null}
-                      <Button type="button" variant="secondary" className="w-full gap-2" onClick={() => setAddMenuOpen(true)}>
-                        <Plus className="size-4" aria-hidden="true" />
-                        Lisää ateria
-                      </Button>
-                    </div>
-                  ) : null}
-                </>
-              ) : (
-                <div className="rounded-2xl border border-dashed border-[var(--border)] bg-[var(--surface-2)] px-4 py-5 text-center">
-                  <p className="text-sm text-[var(--text-subtle)]">Ei vielä aterioita tälle päivälle.</p>
-                  {!readOnly ? (
-                    <div className="mt-4 grid gap-2">
-                      <Button type="button" variant="secondary" className="w-full gap-2" onClick={() => setAddMenuOpen(true)}>
-                        <Plus className="size-4" aria-hidden="true" />
-                        Lisää ateria
-                      </Button>
-                    </div>
-                  ) : null}
-                </div>
-              )}
+                ) : null}
+              </div>
             </div>
           ) : (
             <>
@@ -620,7 +570,15 @@ export function NutritionView({
         </div>
       ) : seg === "week" ? (
         <div className="mt-5">
-          <WeekOverview days={weekDays} targetKcal={weekTargetKcal} avgKcal={weekAvgKcal} />
+          <WeekOverview
+            days={weekDays}
+            targetKcal={weekTargetKcal}
+            avgKcal={weekAvgKcal}
+            onSelectDay={(date) => {
+              setSelectedDate(date);
+              setSeg("day");
+            }}
+          />
         </div>
       ) : (
         <div className="mt-5">
@@ -803,7 +761,7 @@ export function NutritionView({
             const tag = addTag;
             setAddTag(null);
             const position = dayRows.filter((entry) => entry.mealTag === tag).length;
-            await addDayMeal({ planDate: todayKey, mealTag: tag, recipeId, source: "added", position });
+            await addDayMeal({ planDate: selectedDate, mealTag: tag, recipeId, source: "added", position });
           }}
         />
       ) : null}
@@ -818,15 +776,15 @@ export function NutritionView({
           onClose={() => setAddFoodOpen(false)}
           onLogOwnFood={async (ingredientId, grams, mealTag) => {
             const position = dayRows.filter((entry) => entry.mealTag === mealTag).length;
-            return addDayMeal({ planDate: todayKey, mealTag, position, ingredientId, grams });
+            return addDayMeal({ planDate: selectedDate, mealTag, position, ingredientId, grams });
           }}
           onQuickAdd={async (name, mealTag) => {
             const position = dayRows.filter((entry) => entry.mealTag === mealTag).length;
-            return quickAddAiFood({ planDate: todayKey, mealTag, position, name });
+            return quickAddAiFood({ planDate: selectedDate, mealTag, position, name });
           }}
           onQuickAddPhoto={async ({ imageBase64, mimeType, mealTag }) => {
             const position = dayRows.filter((entry) => entry.mealTag === mealTag).length;
-            return quickAddAiFood({ planDate: todayKey, mealTag, position, name: "Kuva-arvio", imageBase64, mimeType });
+            return quickAddAiFood({ planDate: selectedDate, mealTag, position, name: "Kuva-arvio", imageBase64, mimeType });
           }}
         />
       ) : null}
