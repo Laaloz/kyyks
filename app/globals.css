@@ -61,7 +61,7 @@
   --accent-soft: oklch(0.93 0.04 28);
   --accent-contrast: #fff7f4;
   --accent-secondary: oklch(0.58 0.12 55);
-  --success: oklch(0.54 0.13 155);
+  --success: oklch(0.53 0.15 152);
   --warning: oklch(0.6 0.13 80);
   --danger: oklch(0.5 0.2 28);
   color-scheme: light;
@@ -80,7 +80,7 @@
   --accent-soft: oklch(0.93 0.035 65);
   --accent-contrast: #fffaf0;
   --accent-secondary: oklch(0.55 0.1 130);
-  --success: oklch(0.54 0.12 145);
+  --success: oklch(0.52 0.16 150);
   --warning: oklch(0.58 0.13 80);
   --danger: oklch(0.55 0.17 28);
   color-scheme: light;

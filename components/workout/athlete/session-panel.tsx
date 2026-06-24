@@ -1529,7 +1529,7 @@ export function AthleteSessionPanel({
     const isRecord = previousOneRepMax > 0 && liveOneRepMax > previousOneRepMax && logs.some((log) => log.done);
     const instruction = exerciseInstructions.get(group.key)?.trim();
     const activeCardToneClass = allDone
-      ? "border-[color-mix(in_srgb,var(--success)_30%,var(--border))] shadow-[0_12px_28px_-24px_var(--success)]"
+      ? "border-[color-mix(in_srgb,var(--success)_45%,var(--border-strong))] bg-[linear-gradient(180deg,color-mix(in_srgb,var(--success)_16%,var(--surface))_0%,color-mix(in_srgb,var(--success)_6%,var(--surface))_100%)] shadow-[0_12px_28px_-20px_color-mix(in_srgb,var(--success)_60%,transparent)]"
       : isStarted
         ? "border-[color-mix(in_srgb,var(--warning)_30%,var(--border))] shadow-[0_12px_28px_-24px_var(--warning)]"
         : supersetGroup
@@ -1735,7 +1735,7 @@ export function AthleteSessionPanel({
     const instruction = exerciseInstructions.get(exerciseKey)?.trim();
     const isExpanded = getIsExpanded(group);
     const cardToneClass = isComplete
-      ? "border-[color-mix(in_srgb,var(--success)_30%,var(--border))] bg-[var(--surface)] shadow-[0_10px_24px_-22px_var(--success)]"
+      ? "border-[color-mix(in_srgb,var(--success)_45%,var(--border-strong))] bg-[linear-gradient(180deg,color-mix(in_srgb,var(--success)_16%,var(--surface))_0%,color-mix(in_srgb,var(--success)_6%,var(--surface))_100%)] shadow-[0_10px_24px_-18px_color-mix(in_srgb,var(--success)_60%,transparent)]"
       : isStarted
         ? "border-[color-mix(in_srgb,var(--warning)_30%,var(--border))] bg-[var(--surface)] shadow-[0_10px_24px_-22px_var(--warning)]"
         : supersetGroup
