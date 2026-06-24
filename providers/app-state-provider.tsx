@@ -2802,6 +2802,7 @@ export function AppStateProvider({ children }: PropsWithChildren) {
   const dayMealRefreshTimeoutRef = useRef<number | null>(null);
   const dayMealRefreshSettledCallbacksRef = useRef<Array<() => void>>([]);
   const refreshDayMealsPromiseRef = useRef<Promise<void> | null>(null);
+  const refreshPlansPromiseRef = useRef<Promise<void> | null>(null);
   const lastFullSnapshotSyncAtRef = useRef(0);
   const workoutMutationQueueRef = useRef<Map<string, WorkoutMutationQueueState>>(new Map());
   const workoutMutationRunnerRef = useRef<Map<string, Promise<void>>>(new Map());
@@ -3514,6 +3515,44 @@ function findResolvedUserIdInSnapshot(
     } finally {
       if (refreshDayMealsPromiseRef.current === promise) {
         refreshDayMealsPromiseRef.current = null;
+      }
+    }
+  }
+
+  // Kevyt ohjelmien reconciliaatio: hakee vain näkyvät treeniohjelmat (/api/programs,
+  // RLS-rajattu) ja korvaa state.plans kokonaan — sama kuin full-snapshotissa, jossa
+  // plans korvataan suoraan ilman per-rivi-suojausta. Ei lataa katalogia, reseptejä,
+  // treenejä yms. → ohjelman luonti/muokkaus/tilanvaihto näkyy ilman raskasta full-hakua.
+  async function refreshPlans() {
+    if (!supabase) {
+      return;
+    }
+    if (!currentUser?.id) {
+      return;
+    }
+    if (refreshPlansPromiseRef.current) {
+      return refreshPlansPromiseRef.current;
+    }
+
+    const promise = (async () => {
+      const response = await fetch("/api/programs").catch(() => null);
+      if (!response?.ok) {
+        return;
+      }
+      const payload = (await response.json().catch(() => null)) as { plans?: AppState["plans"] } | null;
+      const serverPlans = payload?.plans;
+      if (!serverPlans) {
+        return;
+      }
+      setState((previous) => normalizeState({ ...previous, plans: serverPlans }));
+    })();
+
+    refreshPlansPromiseRef.current = promise;
+    try {
+      await promise;
+    } finally {
+      if (refreshPlansPromiseRef.current === promise) {
+        refreshPlansPromiseRef.current = null;
       }
     }
   }
@@ -6242,7 +6281,7 @@ function findResolvedUserIdInSnapshot(
             return { ok: false, message: payload?.message ?? "Treeniohjelman luonti epäonnistui." };
           }
 
-          void refreshSupabaseVisibleState();
+          void refreshPlans();
           const programId = payload?.programId ?? createdProgram.id;
           warnIfOptimisticServerIdLeak("program", programId);
           return { ok: true, programId };
@@ -6334,7 +6373,7 @@ function findResolvedUserIdInSnapshot(
             return { ok: false, message: payload?.message ?? "Treeniohjelman päivitys epäonnistui." };
           }
 
-          void refreshSupabaseVisibleState();
+          void refreshPlans();
           return { ok: true };
         }
 
@@ -6383,7 +6422,7 @@ function findResolvedUserIdInSnapshot(
             return { ok: false, message: payload?.message ?? "Ohjelman tilan päivitys epäonnistui." };
           }
 
-          void refreshSupabaseVisibleState();
+          void refreshPlans();
           return { ok: true };
         }
 

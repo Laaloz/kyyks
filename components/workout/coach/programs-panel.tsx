@@ -1,6 +1,6 @@
 "use client";
 
-import { Plus } from "lucide-react";
+import { ChevronDown, Plus, RotateCcw } from "lucide-react";
 import { useMemo, useState } from "react";
 
 import { Badge } from "@/components/ui/badge";
@@ -26,6 +26,44 @@ function programWeekLabel(plan: TrainingPlan, reference: Date = new Date()): str
   return `viikko ${current}/${plan.weekCount}`;
 }
 
+type ProgramRow = {
+  key: string;
+  groupPlans: TrainingPlan[];
+  title: string;
+  weekLabel: string | null;
+  workoutCount: number;
+  assignedLabel: string;
+};
+
+// Saman program_group_id:n rivit = yksi ohjelma (mahdollisesti monelle urheilijalle).
+// Käytetään sekä aktiivisille että arkistoiduille riveille.
+function buildProgramRows(
+  plans: TrainingPlan[],
+  currentUserId: string,
+  userNameById: Map<string, string>,
+): ProgramRow[] {
+  const groups = new Map<string, TrainingPlan[]>();
+  plans.forEach((plan) => {
+    const key = plan.programGroupId ?? plan.id;
+    groups.set(key, [...(groups.get(key) ?? []), plan]);
+  });
+
+  return Array.from(groups.values()).map((groupPlans) => {
+    const base = groupPlans[0];
+    const assignedNames = groupPlans.map((plan) =>
+      plan.athleteId === currentUserId ? "Sinä" : (userNameById.get(plan.athleteId) ?? "?").split(/\s+/)[0],
+    );
+    return {
+      key: base.programGroupId ?? base.id,
+      groupPlans,
+      title: base.title,
+      weekLabel: programWeekLabel(base),
+      workoutCount: base.workouts?.length ?? 0,
+      assignedLabel: assignedNames.length ? assignedNames.join(", ") : "Ei urheilijoita",
+    };
+  });
+}
+
 /**
  * Jaettu ohjelmien hallintapaneeli (lista + ProgramEditorOverlay). Sama uusi
  * editori kuin valmentajalla/adminilla; `selfAssignOnly` piilottaa urheilija-
@@ -46,6 +84,8 @@ export function ProgramsPanel({
 }) {
   const { state, createProgram, updateProgram, setProgramStatus, deleteProgram, notify } = useAppState();
   const [editorGroup, setEditorGroup] = useState<TrainingPlan[] | null>(null);
+  const [showArchived, setShowArchived] = useState(false);
+  const [restoringKey, setRestoringKey] = useState<string | null>(null);
 
   // Editorin urheilijavalinnat: itse + valmennettavat.
   const programTargets = useMemo(
@@ -55,30 +95,16 @@ export function ProgramsPanel({
 
   const userNameById = useMemo(() => new Map(state.users.map((user) => [user.id, user.fullName])), [state.users]);
 
-  // Saman program_group_id:n rivit = yksi ohjelma (mahdollisesti monelle urheilijalle).
-  const programRows = useMemo(() => {
-    const activePlans = programs.filter((plan) => isProgramActive(plan));
-    const groups = new Map<string, TrainingPlan[]>();
-    activePlans.forEach((plan) => {
-      const key = plan.programGroupId ?? plan.id;
-      groups.set(key, [...(groups.get(key) ?? []), plan]);
-    });
+  const programRows = useMemo(
+    () => buildProgramRows(programs.filter((plan) => isProgramActive(plan)), currentUser.id, userNameById),
+    [currentUser.id, programs, userNameById],
+  );
 
-    return Array.from(groups.values()).map((groupPlans) => {
-      const base = groupPlans[0];
-      const assignedNames = groupPlans.map((plan) =>
-        plan.athleteId === currentUser.id ? "Sinä" : (userNameById.get(plan.athleteId) ?? "?").split(/\s+/)[0],
-      );
-      return {
-        key: base.programGroupId ?? base.id,
-        groupPlans,
-        title: base.title,
-        weekLabel: programWeekLabel(base),
-        workoutCount: base.workouts?.length ?? 0,
-        assignedLabel: assignedNames.length ? assignedNames.join(", ") : "Ei urheilijoita",
-      };
-    });
-  }, [currentUser.id, programs, userNameById]);
+  // Arkistoidut ("Aiemmat ohjelmat") — palautettavissa takaisin aktiiviseksi.
+  const archivedRows = useMemo(
+    () => buildProgramRows(programs.filter((plan) => getProgramStatus(plan) === "archived"), currentUser.id, userNameById),
+    [currentUser.id, programs, userNameById],
+  );
 
   const handleSaveProgram = async ({
     groupId,
@@ -152,11 +178,24 @@ export function ProgramsPanel({
     return { ok: true };
   };
 
-  // Vain arkistoituja varten näytetään pieni huomautus, jotta tila ei katoa kokonaan.
-  const archivedCount = useMemo(
-    () => programs.filter((plan) => getProgramStatus(plan) === "archived").length,
-    [programs],
-  );
+  // Palauta arkistoitu ohjelma aktiiviseksi. setProgramStatus arkistoi
+  // automaattisesti urheilijan aiemman aktiivisen ohjelman → ei tarvitse
+  // poistaa mitään käsin ensin.
+  const handleRestore = async (row: ProgramRow) => {
+    setRestoringKey(row.key);
+    try {
+      for (const plan of row.groupPlans) {
+        const result = await setProgramStatus(plan.id, "active");
+        if (!result.ok) {
+          notify({ tone: "danger", message: result.message ?? "Ohjelman palautus epäonnistui." });
+          return;
+        }
+      }
+      notify({ tone: "success", message: `Ohjelma "${row.title}" otettiin takaisin käyttöön.` });
+    } finally {
+      setRestoringKey(null);
+    }
+  };
 
   return (
     <div>
@@ -199,8 +238,54 @@ export function ProgramsPanel({
         {selfAssignOnly
           ? "Rakenna oma ohjelmasi — muutokset näkyvät treeneissäsi heti."
           : "Ohjelmia voi luoda ja muokata suoraan mobiilissa — muutokset näkyvät urheilijoille heti."}
-        {archivedCount > 0 ? ` Arkistoituja ohjelmia: ${archivedCount}.` : ""}
       </p>
+
+      {archivedRows.length ? (
+        <div className="mt-5">
+          <button
+            type="button"
+            className="flex w-full items-center justify-between gap-3 px-1 text-left focus-visible:outline-none"
+            aria-expanded={showArchived}
+            onClick={() => setShowArchived((value) => !value)}
+          >
+            <span className="text-xs font-semibold uppercase tracking-[0.06em] text-[var(--text-subtle)]">
+              Aiemmat ohjelmat · {archivedRows.length}
+            </span>
+            <ChevronDown
+              className={`size-4 shrink-0 text-[var(--text-subtle)] transition-transform ${showArchived ? "rotate-180" : ""}`}
+              aria-hidden="true"
+            />
+          </button>
+          {showArchived ? (
+            <Card className="mt-2 divide-y divide-[var(--border)] p-0">
+              {archivedRows.map((row) => (
+                <div key={row.key} className="flex items-center justify-between gap-3 p-4">
+                  <div className="min-w-0">
+                    <p className="truncate font-[family-name:var(--font-display)] text-[15.5px] font-bold text-[var(--text)]">
+                      {row.title}
+                    </p>
+                    <p className="truncate text-[12.5px] text-[var(--text-subtle)]">
+                      {row.workoutCount} treeniä/vko{selfAssignOnly ? "" : ` · ${row.assignedLabel}`}
+                    </p>
+                  </div>
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    className="shrink-0 gap-2 px-3 py-2 text-sm"
+                    loading={restoringKey === row.key}
+                    loadingText="Palautetaan…"
+                    disabled={restoringKey !== null && restoringKey !== row.key}
+                    onClick={() => handleRestore(row)}
+                  >
+                    <RotateCcw className="size-4" aria-hidden="true" />
+                    Palauta
+                  </Button>
+                </div>
+              ))}
+            </Card>
+          ) : null}
+        </div>
+      ) : null}
 
       {editorGroup ? (
         <ProgramEditorOverlay

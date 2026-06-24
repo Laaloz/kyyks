@@ -2,8 +2,40 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 
 import { createRequestTimer } from "@/lib/server/request-timing";
+import { mapPlanRow, type TrainingPlanRow } from "@/lib/server/training-sync";
 import { createProgramOnServer } from "@/lib/server/training-workflows";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
+
+const PLAN_SELECT =
+  "id, coach_id, athlete_id, program_group_id, title, description, status, start_date, week_count, workouts, created_at, updated_at";
+
+// Kevyt synkka: vain näkyvät treeniohjelmat (RLS rajaa samat rivit kuin full-snapshot).
+// Korvaa ohjelmamutaatioiden (luonti/muokkaus/tilanvaihto) raskaan full-refetchin.
+export async function GET() {
+  const supabase = await createSupabaseServerClient();
+  if (!supabase) {
+    return NextResponse.json({ message: "Supabase ei ole käytössä tässä ympäristössä." }, { status: 503 });
+  }
+
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) {
+    return NextResponse.json({ message: "Kirjaudu sisään." }, { status: 401 });
+  }
+
+  const { data, error } = await supabase
+    .from("training_plans")
+    .select(PLAN_SELECT)
+    .order("created_at", { ascending: false })
+    .returns<TrainingPlanRow[]>();
+
+  if (error) {
+    return NextResponse.json({ message: "Ohjelmien haku epäonnistui." }, { status: 500 });
+  }
+
+  return NextResponse.json({ plans: (data ?? []).map(mapPlanRow) });
+}
 
 const customExerciseSchema = z.object({
   id: z.string(),

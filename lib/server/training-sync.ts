@@ -109,7 +109,7 @@ type ExerciseRow = {
   coach_id: string | null;
 };
 
-type TrainingPlanRow = {
+export type TrainingPlanRow = {
   id: string;
   coach_id: string;
   athlete_id: string;
@@ -592,7 +592,7 @@ function mapExerciseRow(entry: ExerciseRow): Exercise {
   };
 }
 
-function mapPlanRow(entry: TrainingPlanRow): TrainingPlan {
+export function mapPlanRow(entry: TrainingPlanRow): TrainingPlan {
   return {
     id: entry.id,
     coachId: entry.coach_id,
