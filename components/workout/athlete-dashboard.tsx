@@ -2039,16 +2039,22 @@ export function AthleteDashboard({
                                         </div>
                                         <div className="mt-1.5 flex flex-wrap gap-1.5">
                                           {group.sets.map((set, index) => (
-                                            <span
-                                              key={index}
-                                              className={cn(
-                                                "rounded-full px-2.5 py-0.5 text-xs font-semibold tabular-nums",
-                                                set.missed
-                                                  ? "bg-[color:color-mix(in_srgb,var(--warning)_16%,var(--surface))] text-[var(--warning)]"
-                                                  : "bg-[var(--surface-2)] text-[var(--text-muted)]",
-                                              )}
-                                            >
-                                              {formatLoadValue(set.load)}×{set.reps}
+                                            <span key={index} className="inline-flex items-center gap-1">
+                                              <span
+                                                className={cn(
+                                                  "rounded-full px-2.5 py-0.5 text-xs font-semibold tabular-nums",
+                                                  set.missed
+                                                    ? "bg-[color:color-mix(in_srgb,var(--warning)_16%,var(--surface))] text-[var(--warning)]"
+                                                    : "bg-[var(--surface-2)] text-[var(--text-muted)]",
+                                                )}
+                                              >
+                                                {formatLoadValue(set.load)}×{set.reps}
+                                              </span>
+                                              {set.load > 0 ? (
+                                                <span className="rounded-full bg-[color:color-mix(in_srgb,var(--surface-2)_60%,transparent)] px-2 py-0.5 text-[11px] font-semibold tabular-nums text-[var(--text-subtle)]">
+                                                  {formatLiftedKgValue(set.load * set.reps)}
+                                                </span>
+                                              ) : null}
                                             </span>
                                           ))}
                                         </div>
