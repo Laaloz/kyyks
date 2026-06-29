@@ -1529,7 +1529,7 @@ export function AthleteSessionPanel({
     const isRecord = previousOneRepMax > 0 && liveOneRepMax > previousOneRepMax && logs.some((log) => log.done);
     const instruction = exerciseInstructions.get(group.key)?.trim();
     const activeCardToneClass = allDone
-      ? "border-[color-mix(in_srgb,var(--success)_45%,var(--border-strong))] bg-[linear-gradient(180deg,color-mix(in_srgb,var(--success)_16%,var(--surface))_0%,color-mix(in_srgb,var(--success)_6%,var(--surface))_100%)] shadow-[0_12px_28px_-20px_color-mix(in_srgb,var(--success)_60%,transparent)]"
+      ? "border-[color-mix(in_srgb,var(--success)_34%,var(--border-strong))] bg-[color-mix(in_srgb,var(--success)_7%,var(--surface))] shadow-[0_12px_28px_-22px_color-mix(in_srgb,var(--success)_40%,transparent)]"
       : isStarted
         ? "border-[color-mix(in_srgb,var(--warning)_30%,var(--border))] shadow-[0_12px_28px_-24px_var(--warning)]"
         : "border-[var(--border)] shadow-[0_12px_30px_-28px_var(--shadow)]";
@@ -2295,13 +2295,17 @@ export function AthleteSessionPanel({
                 const supersetPanelId = `${scheduledWorkoutId}-${safeBlockKey}-active-panel`;
                 const allLogs = block.groups.flatMap((group) => group.logs);
                 const completedInSuperset = allLogs.filter((log) => log.done).length;
+                const supersetAllDone = allLogs.length > 0 && completedInSuperset === allLogs.length;
                 const isExpanded = block.groups.some((group) => getIsExpanded(group));
                 const exerciseNames = block.groups.map((group) => group.exerciseName).join(" + ");
+                const supersetToneClass = supersetAllDone
+                  ? "border-2 border-[color-mix(in_srgb,var(--success)_34%,var(--border-strong))] bg-[color-mix(in_srgb,var(--success)_7%,var(--surface))] shadow-[0_12px_28px_-22px_color-mix(in_srgb,var(--success)_40%,transparent)]"
+                  : "border-2 border-dashed border-[var(--border-strong)] bg-[var(--surface-2)]";
 
                 return (
                   <div
                     key={block.key}
-                    className="min-w-0 max-w-full overflow-hidden rounded-[18px] border-2 border-dashed border-[var(--border-strong)] bg-[var(--surface-2)] p-3"
+                    className={`min-w-0 max-w-full overflow-hidden rounded-[18px] p-3 ${supersetToneClass}`}
                   >
                     <button
                       type="button"
