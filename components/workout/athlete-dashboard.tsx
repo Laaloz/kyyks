@@ -12,7 +12,6 @@ import {
   Clock3,
 } from "lucide-react";
 import {
-  startTransition,
   useEffect,
   useMemo,
   useRef,
@@ -1468,9 +1467,11 @@ export function AthleteDashboard({
                   setWorkoutMessage("Treeni käynnistetty. Sarjaloki luotiin automaattisesti.");
                 }}
                 onUpdate={(logId, patch) => {
-                  startTransition(() => {
-                    void updateWorkoutSet(selectedWorkout.id, logId, patch);
-                  });
+                  // Sarjan kuittaus on kiireellinen suora käyttäjäpalaute, jossa on
+                  // imperatiivisia sivuvaikutuksia (draft-patchit + sync-ajastus).
+                  // startTransition tekisi siitä keskeytettävän, jolloin nopeat
+                  // peräkkäiset kuittaukset voisivat hukkua tai revertoida toisensa.
+                  void updateWorkoutSet(selectedWorkout.id, logId, patch);
                 }}
                 onUpdateDuration={async (durationSeconds) => {
                   const result = await updateWorkoutDuration(selectedWorkout.id, durationSeconds);
