@@ -1532,9 +1532,7 @@ export function AthleteSessionPanel({
       ? "border-[color-mix(in_srgb,var(--success)_45%,var(--border-strong))] bg-[linear-gradient(180deg,color-mix(in_srgb,var(--success)_16%,var(--surface))_0%,color-mix(in_srgb,var(--success)_6%,var(--surface))_100%)] shadow-[0_12px_28px_-20px_color-mix(in_srgb,var(--success)_60%,transparent)]"
       : isStarted
         ? "border-[color-mix(in_srgb,var(--warning)_30%,var(--border))] shadow-[0_12px_28px_-24px_var(--warning)]"
-        : supersetGroup
-          ? "border-[color-mix(in_srgb,var(--accent)_24%,var(--border))] shadow-[0_12px_30px_-28px_var(--accent)]"
-          : "border-[var(--border)] shadow-[0_12px_30px_-28px_var(--shadow)]";
+        : "border-[var(--border)] shadow-[0_12px_30px_-28px_var(--shadow)]";
 
     return (
       <div
@@ -2303,7 +2301,7 @@ export function AthleteSessionPanel({
                 return (
                   <div
                     key={block.key}
-                    className="min-w-0 max-w-full overflow-hidden rounded-[18px] border border-[color-mix(in_srgb,var(--accent)_30%,var(--border))] bg-[color-mix(in_srgb,var(--accent)_5%,var(--surface))] p-3 shadow-[0_14px_32px_-30px_var(--accent)]"
+                    className="min-w-0 max-w-full overflow-hidden rounded-[18px] border-2 border-dashed border-[var(--border-strong)] bg-[var(--surface-2)] p-3"
                   >
                     <button
                       type="button"
@@ -2358,7 +2356,7 @@ export function AthleteSessionPanel({
                 }
 
                 return (
-                  <div key={block.key} className="min-w-0 max-w-full overflow-x-clip rounded-[18px] border border-[var(--accent)] bg-[var(--surface-3)]/60 p-3 [contain:inline-size]">
+                  <div key={block.key} className="min-w-0 max-w-full overflow-x-clip rounded-[18px] border-2 border-dashed border-[var(--border-strong)] bg-[var(--surface-2)] p-3 [contain:inline-size]">
                     <div className="mb-3 flex min-w-0 items-center justify-between gap-3">
                       <div className="inline-flex min-w-0 items-center gap-1.5">
                         <p className="text-sm font-semibold text-[var(--accent)]">
