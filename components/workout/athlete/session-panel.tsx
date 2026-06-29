@@ -1531,13 +1531,13 @@ export function AthleteSessionPanel({
     const activeCardToneClass = allDone
       ? "border-[color-mix(in_srgb,var(--success)_34%,var(--border-strong))] bg-[color-mix(in_srgb,var(--success)_7%,var(--surface))] shadow-[0_12px_28px_-22px_color-mix(in_srgb,var(--success)_40%,transparent)]"
       : isStarted
-        ? "border-[color-mix(in_srgb,var(--warning)_30%,var(--border))] shadow-[0_12px_28px_-24px_var(--warning)]"
-        : "border-[var(--border)] shadow-[0_12px_30px_-28px_var(--shadow)]";
+        ? "border-[color-mix(in_srgb,var(--warning)_30%,var(--border))] bg-[var(--surface)] shadow-[0_12px_28px_-24px_var(--warning)]"
+        : "border-[var(--border)] bg-[var(--surface)] shadow-[0_12px_30px_-28px_var(--shadow)]";
 
     return (
       <div
         key={exerciseKey}
-        className={`min-w-0 max-w-full overflow-hidden rounded-[18px] border bg-[var(--surface)] p-4 ${activeCardToneClass}`}
+        className={`min-w-0 max-w-full overflow-hidden rounded-[18px] border p-4 ${activeCardToneClass}`}
       >
         <div className="flex items-start justify-between gap-3">
           <button
