@@ -2029,37 +2029,44 @@ export function AthleteDashboard({
                                 </div>
                                 {exerciseGroups.length > 0 ? (
                                   <div className="mt-3 space-y-2.5">
-                                    {exerciseGroups.map((group) => (
+                                    {exerciseGroups.map((group) => {
+                                      const groupVolume = group.sets.reduce(
+                                        (sum, set) => sum + (set.load > 0 ? set.load * set.reps : 0),
+                                        0,
+                                      );
+                                      return (
                                       <div key={group.name}>
                                         <div className="flex items-baseline justify-between gap-2">
-                                          <p className="text-sm font-semibold text-[var(--text)]">{group.name}</p>
+                                          <div className="flex items-baseline gap-2">
+                                            <p className="text-sm font-semibold text-[var(--text)]">{group.name}</p>
+                                            {groupVolume > 0 ? (
+                                              <span className="shrink-0 rounded-full bg-[color:color-mix(in_srgb,var(--surface-2)_60%,transparent)] px-2 py-0.5 text-[11px] font-semibold tabular-nums text-[var(--text-subtle)]">
+                                                {formatLiftedKgValue(groupVolume)}
+                                              </span>
+                                            ) : null}
+                                          </div>
                                           <p className="shrink-0 font-[family-name:var(--font-display)] text-xs font-semibold tabular-nums text-[var(--text-subtle)]">
                                             {group.sets.length} × {group.target}
                                           </p>
                                         </div>
                                         <div className="mt-1.5 flex flex-wrap gap-1.5">
                                           {group.sets.map((set, index) => (
-                                            <span key={index} className="inline-flex items-center gap-1">
-                                              <span
-                                                className={cn(
-                                                  "rounded-full px-2.5 py-0.5 text-xs font-semibold tabular-nums",
-                                                  set.missed
-                                                    ? "bg-[color:color-mix(in_srgb,var(--warning)_16%,var(--surface))] text-[var(--warning)]"
-                                                    : "bg-[var(--surface-2)] text-[var(--text-muted)]",
-                                                )}
-                                              >
-                                                {formatLoadValue(set.load)}×{set.reps}
-                                              </span>
-                                              {set.load > 0 ? (
-                                                <span className="rounded-full bg-[color:color-mix(in_srgb,var(--surface-2)_60%,transparent)] px-2 py-0.5 text-[11px] font-semibold tabular-nums text-[var(--text-subtle)]">
-                                                  {formatLiftedKgValue(set.load * set.reps)}
-                                                </span>
-                                              ) : null}
+                                            <span
+                                              key={index}
+                                              className={cn(
+                                                "rounded-full px-2.5 py-0.5 text-xs font-semibold tabular-nums",
+                                                set.missed
+                                                  ? "bg-[color:color-mix(in_srgb,var(--warning)_16%,var(--surface))] text-[var(--warning)]"
+                                                  : "bg-[var(--surface-2)] text-[var(--text-muted)]",
+                                              )}
+                                            >
+                                              {formatLoadValue(set.load)}×{set.reps}
                                             </span>
                                           ))}
                                         </div>
                                       </div>
-                                    ))}
+                                      );
+                                    })}
                                     {hasMissedSet ? (
                                       <p className="text-xs text-[var(--text-subtle)]">Korostettu sarja jäi tavoitetoistoista.</p>
                                     ) : null}
