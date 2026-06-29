@@ -7087,6 +7087,24 @@ function findResolvedUserIdInSnapshot(
         }));
 
         if (supabase) {
+          // Sama suoja kuin kestolla/completellä: flushaa odottavat
+          // sarjaluonnokset ennen päivämäärämutaatiota, jotta sen
+          // expectedUpdatedAt vastaa serverin tuoretta session.updatedAt:ia
+          // eikä törmää stale_session-konfliktiin.
+          const flushPromise = flushPendingWorkoutSetDrafts(scheduledWorkoutId);
+          const flushTimedOut = await new Promise<boolean>((resolve) => {
+            const timeout = window.setTimeout(() => resolve(true), 450);
+            void flushPromise
+              .then(() => resolve(false))
+              .catch(() => resolve(false))
+              .finally(() => window.clearTimeout(timeout));
+          });
+          if (flushTimedOut) {
+            console.info("[workout-ui] date-continues-with-pending-set-sync", {
+              scheduledWorkoutId,
+            });
+          }
+
           return await new Promise<ActionResult>((resolve) => {
             enqueueWorkoutMutation(scheduledWorkoutId, {
               kind: "date",
