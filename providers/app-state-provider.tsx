@@ -7010,6 +7010,26 @@ function findResolvedUserIdInSnapshot(
         }));
 
         if (supabase) {
+          // Historian muokkauksessa sarjat tallennetaan juuri ennen kestoa, mutta
+          // sarjasync on debouncattu omaan jonoonsa. Flushataan odottavat
+          // sarjaluonnokset ensin, jotta keston expectedUpdatedAt vastaa
+          // serverin tuoretta session.updatedAt:ia — muuten kesto törmää
+          // stale_session-konfliktiin ("treeni ehti muuttua"). Sama kuvio kuin
+          // completeWorkoutissa.
+          const flushPromise = flushPendingWorkoutSetDrafts(scheduledWorkoutId);
+          const flushTimedOut = await new Promise<boolean>((resolve) => {
+            const timeout = window.setTimeout(() => resolve(true), 450);
+            void flushPromise
+              .then(() => resolve(false))
+              .catch(() => resolve(false))
+              .finally(() => window.clearTimeout(timeout));
+          });
+          if (flushTimedOut) {
+            console.info("[workout-ui] duration-continues-with-pending-set-sync", {
+              scheduledWorkoutId,
+            });
+          }
+
           return await new Promise<ActionResult>((resolve) => {
             enqueueWorkoutMutation(scheduledWorkoutId, {
               kind: "duration",
