@@ -74,15 +74,40 @@ describe("mergeWorkoutSetDraftPatch", () => {
 });
 
 describe("buildWorkoutSetDraftKey", () => {
-  it("prefers persisted log ids so edited sets cannot drift between exercises", () => {
+  it("prefers persisted (UUID) log ids so edited sets cannot drift between exercises", () => {
+    const persistedLogId = "11111111-2222-4333-8444-555555555555";
     expect(
       buildWorkoutSetDraftKey({
-        logId: "log_1",
+        logId: persistedLogId,
         templateExerciseId: "exercise_1",
         setLabel: "2",
       }),
-    ).toBe("log::log_1");
-    expect(buildWorkoutSetDraftKey({ logId: "log_1" })).toBe("log::log_1");
+    ).toBe(`log::${persistedLogId}`);
+    expect(buildWorkoutSetDraftKey({ logId: persistedLogId })).toBe(`log::${persistedLogId}`);
+  });
+
+  it("keys optimistic temp log ids structurally so a check survives the id remap after start", () => {
+    // Optimistinen id ("log_..." / "temp_...") vaihtuu palvelimen oikeaan
+    // id:hen synkassa, joten avaimen on oltava rakennepohjainen jotta heti
+    // aloituksen jälkeen tehty kuittaus täsmää palvelimella.
+    expect(
+      buildWorkoutSetDraftKey({
+        logId: "log_ab12cd34",
+        templateExerciseId: "exercise_1",
+        setLabel: "2",
+      }),
+    ).toBe("exercise_1::2");
+    expect(
+      buildWorkoutSetDraftKey({
+        logId: "temp_workout_1_exercise_1_2",
+        templateExerciseId: "exercise_1",
+        setLabel: "2",
+      }),
+    ).toBe("exercise_1::2");
+  });
+
+  it("falls back to the optimistic log id when no structural key is available", () => {
+    expect(buildWorkoutSetDraftKey({ logId: "log_ab12cd34" })).toBe("log::log_ab12cd34");
   });
 });
 

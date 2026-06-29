@@ -1733,7 +1733,7 @@ export function AthleteSessionPanel({
     const instruction = exerciseInstructions.get(exerciseKey)?.trim();
     const isExpanded = getIsExpanded(group);
     const cardToneClass = isComplete
-      ? "border-[color-mix(in_srgb,var(--success)_45%,var(--border-strong))] bg-[linear-gradient(180deg,color-mix(in_srgb,var(--success)_16%,var(--surface))_0%,color-mix(in_srgb,var(--success)_6%,var(--surface))_100%)] shadow-[0_10px_24px_-18px_color-mix(in_srgb,var(--success)_60%,transparent)]"
+      ? "border-[color-mix(in_srgb,var(--success)_34%,var(--border-strong))] bg-[color-mix(in_srgb,var(--success)_7%,var(--surface))] shadow-[0_10px_24px_-18px_color-mix(in_srgb,var(--success)_40%,transparent)]"
       : isStarted
         ? "border-[color-mix(in_srgb,var(--warning)_30%,var(--border))] bg-[var(--surface)] shadow-[0_10px_24px_-22px_var(--warning)]"
         : supersetGroup

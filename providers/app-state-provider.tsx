@@ -1437,17 +1437,33 @@ function getNoteForWorkout(state: AppState, scheduledWorkoutId: string) {
   }) ?? null;
 }
 
+// Persistoitu sarjarivin id on palvelimen UUID. Optimistiset id:t ovat
+// "log_..." (aloitus) tai "temp_..." (rakennemuokkaus), ja ne vaihtuvat
+// palvelimen oikeaan id:hen synkassa.
+const PERSISTED_SET_LOG_ID_PATTERN =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
 export function buildWorkoutSetDraftKey(patch: {
   logId?: string;
   templateExerciseId?: string;
   setLabel?: string;
 }) {
-  if (patch.logId) {
+  // Persistoitu (UUID) logId on vakain tunniste eikä valu väärälle sarjalle
+  // vaikka rakennetta muokattaisiin. Optimistinen temp-id vaihtuu kuitenkin
+  // palvelimen oikeaan id:hen heti aloituksen jälkeen, joten silloin avainnetaan
+  // rakenteella (templateExerciseId::setLabel) — muuten heti aloituksen jälkeen
+  // tehty kuittaus jää avaimella jota palvelin ei tunne ja koko synkkaerä
+  // hylätään ("Sarjaa ei löytynyt"), jolloin valinta katoaa.
+  if (patch.logId && PERSISTED_SET_LOG_ID_PATTERN.test(patch.logId)) {
     return `log::${patch.logId}`;
   }
 
   if (patch.templateExerciseId && patch.setLabel) {
     return `${patch.templateExerciseId}::${patch.setLabel}`;
+  }
+
+  if (patch.logId) {
+    return `log::${patch.logId}`;
   }
 
   return null;
