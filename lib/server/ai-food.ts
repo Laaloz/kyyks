@@ -6,13 +6,14 @@ import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { lookupByBarcode, searchByName, type OffMatch } from "@/lib/server/open-food-facts";
 import type { SupabaseClient } from "@supabase/supabase-js";
 
-// gemini-3.5-flash: uusin GA-flash (ei enää preview → oma vakaa kapasiteettipooli), lukee kuvat
-// tarkemmin etenkin monen tuotteen annoksista. Google poistaa malli-ID:itä ajoittain (esim.
-// gemini-2.0-flash → 404), joten GEMINI_MODEL voi ylikirjoittaa oletuksen.
-const DEFAULT_MODEL = "gemini-3.5-flash";
-// Varamalli 503-ruuhkaan: eri (vanhempi GA) malli = eri kapasiteettipooli, joten kun ensisijainen
+// gemini-2.5-flash: vakaa GA-malli ja testattu nopeimmaksi. 3.5-flash ajattelee kuvapolulla
+// raskaammin (oletusbudjetti) → osui GEMINI_IMAGE_TIMEOUT_MS-katkaisuun (504) eikä ehtinyt
+// palauttaa kuva-arviota, joten oletus on takaisin 2.5-flashissa. Google poistaa malli-ID:itä
+// ajoittain (esim. gemini-2.0-flash → 404), joten GEMINI_MODEL voi ylikirjoittaa oletuksen.
+const DEFAULT_MODEL = "gemini-2.5-flash";
+// Varamalli 503-ruuhkaan: eri (uudempi GA) malli = eri kapasiteettipooli, joten kun ensisijainen
 // on hetkellisesti ylikuormitettu, vara saattaa silti vastata. Käytetään vain uusintayrityksessä.
-const FALLBACK_MODEL = "gemini-2.5-flash";
+const FALLBACK_MODEL = "gemini-3.5-flash";
 const DAILY_LIMIT = 30;
 // Gemini-kutsun aikakatkaisut. Tekstihaku on normaalisti ~1 s → katkaistaan tiukasti, jotta
 // kortti ei jää pitkäksi aikaa "Arvioidaan…" -tilaan ruuhkassa. Kuva on epävarmempi ja kestää
