@@ -6,13 +6,13 @@ import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { lookupByBarcode, searchByName, type OffMatch } from "@/lib/server/open-food-facts";
 import type { SupabaseClient } from "@supabase/supabase-js";
 
-// gemini-2.5-flash: vakaa GA-malli, jolla on enemmän kapasiteettia → vähemmän 503-ruuhkavirheitä
-// kuin uudemmalla 3.5-flashilla (testattu: 2.5 nopein ja vakain). Google poistaa malli-ID:itä
-// ajoittain (esim. gemini-2.0-flash → 404), joten GEMINI_MODEL voi ylikirjoittaa oletuksen.
-const DEFAULT_MODEL = "gemini-2.5-flash";
+// gemini-3.5-flash: uusin GA-flash (ei enää preview → oma vakaa kapasiteettipooli), lukee kuvat
+// tarkemmin etenkin monen tuotteen annoksista. Google poistaa malli-ID:itä ajoittain (esim.
+// gemini-2.0-flash → 404), joten GEMINI_MODEL voi ylikirjoittaa oletuksen.
+const DEFAULT_MODEL = "gemini-3.5-flash";
 // Varamalli 503-ruuhkaan: eri (vanhempi GA) malli = eri kapasiteettipooli, joten kun ensisijainen
 // on hetkellisesti ylikuormitettu, vara saattaa silti vastata. Käytetään vain uusintayrityksessä.
-const FALLBACK_MODEL = "gemini-3.5-flash";
+const FALLBACK_MODEL = "gemini-2.5-flash";
 const DAILY_LIMIT = 30;
 // Gemini-kutsun aikakatkaisut. Tekstihaku on normaalisti ~1 s → katkaistaan tiukasti, jotta
 // kortti ei jää pitkäksi aikaa "Arvioidaan…" -tilaan ruuhkassa. Kuva on epävarmempi ja kestää
@@ -138,8 +138,35 @@ async function countTodaysUsage(adminClient: SupabaseClient, userId: string): Pr
     .from("ai_usage_events")
     .select("id", { count: "exact", head: true })
     .eq("user_id", userId)
+    // Vain onnistuneet arviot polttavat vuorokausikiintiön — seurantarivit (gemini_error /
+    // gemini_fallback) eivät saa vähentää käyttäjän kiintiötä.
+    .eq("kind", "food_estimate")
     .gte("created_at", since);
   return count ?? 0;
+}
+
+// Kevyt fire-and-forget-kirjaus ai_usage_events-tauluun. Ei saa hidastaa vastausta eikä kaataa
+// kutsua, jos kirjaus epäonnistuu (Supabase resolvaa virheenkin { error }-muodossa, ei heitä).
+function logAiEvent(
+  adminClient: SupabaseClient,
+  userId: string,
+  kind: string,
+  detail?: Record<string, unknown>,
+): void {
+  // detail lisätään vain kun se on annettu → onnistuneen arvion kiintiörivi ei viittaa detail-
+  // sarakkeeseen, joten se toimii vaikka 062-migraatio ei olisi vielä ajettu.
+  const row: Record<string, unknown> = { user_id: userId, kind };
+  if (detail) {
+    row.detail = detail;
+  }
+  void adminClient
+    .from("ai_usage_events")
+    .insert(row)
+    .then(({ error }) => {
+      if (error) {
+        console.warn(`[ai-food] tapahtuman kirjaus epäonnistui (${kind}): ${error.message}`);
+      }
+    });
 }
 
 // Jaettu Gemini-kutsu: rate limit + kutsu + turvallinen parsinta.
@@ -204,6 +231,13 @@ async function runGeminiEstimate(
     bodyText = await response.text();
   } catch (caught) {
     const timedOut = caught instanceof Error && caught.name === "AbortError";
+    // Seuranta: aikakatkaisu (504) tai yhteysvirhe (502) mallikohtaisesti — ruuhka näkyy usein
+    // juuri timeouteina kun malli vastaa hitaasti.
+    logAiEvent(adminClient, userId, "gemini_error", {
+      status: timedOut ? 504 : 502,
+      model,
+      reason: timedOut ? "timeout" : "network",
+    });
     return {
       ok: false,
       status: timedOut ? 504 : 502,
@@ -217,6 +251,9 @@ async function runGeminiEstimate(
 
   if (!response.ok) {
     console.warn(`[ai-food] Gemini ${response.status} (${model}): ${bodyText.slice(0, 500)}`);
+    // Seuranta: kirjaa aito HTTP-status (esim. 503 = ruuhka) + malli, jotta nähdään kuinka usein
+    // ensisijainen malli ruuhkautuu. Erillinen kind ei polta käyttäjän vuorokausikiintiötä.
+    logAiEvent(adminClient, userId, "gemini_error", { status: response.status, model });
     if (response.status === 429) {
       return {
         ok: false,
@@ -254,8 +291,9 @@ async function runGeminiEstimate(
   }
 
   // Kirjataan vain onnistunut kutsu — epäonnistumiset (esim. Geminin 429) eivät polta omaa
-  // vuorokausikiintiötä. Fire-and-forget: kirjaus ei saa hidastaa vastausta.
-  void adminClient.from("ai_usage_events").insert({ user_id: userId, kind: "food_estimate" });
+  // vuorokausikiintiötä. Fire-and-forget: kirjaus ei saa hidastaa vastausta. Ei detailia, jotta
+  // kiintiön kirjaus ei riipu 062-migraation ajojärjestyksestä (detail-sarake vain seurantariveillä).
+  logAiEvent(adminClient, userId, "food_estimate");
 
   return { ok: true, estimate: parsed.data };
 }
@@ -319,6 +357,10 @@ async function estimateWithModelFallback(
     FALLBACK_MODEL,
     process.env.GEMINI_MODEL || DEFAULT_MODEL,
   ];
+  // Seurantaa varten: kirjataan mallin vaihto (fallback), jotta nähdään kuinka usein ensisijainen
+  // ei vastannut ja jouduttiin varamalliin. runGeminiEstimate luo oman clientinsä; tämä on erillinen
+  // eikä saa kaataa arviota, jos client puuttuu.
+  const adminClient = createSupabaseAdminClient();
   let last: AiFoodResult = { ok: false, status: 502, message: "AI-arvio epäonnistui. Yritä uudelleen." };
   for (let i = 0; i < models.length; i += 1) {
     last = await runGeminiEstimate(userId, parts, { ...opts, model: models[i] });
@@ -326,6 +368,9 @@ async function estimateWithModelFallback(
       return last;
     }
     if (i < models.length - 1) {
+      if (adminClient) {
+        logAiEvent(adminClient, userId, "gemini_fallback", { from: models[i], to: models[i + 1] });
+      }
       await new Promise((resolve) => setTimeout(resolve, 700));
     }
   }
