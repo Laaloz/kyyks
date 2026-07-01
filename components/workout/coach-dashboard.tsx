@@ -8,6 +8,7 @@ import {
   ChevronRight,
   Eye,
   Plus,
+  RotateCcw,
   Search,
   Send,
   UserPlus,
@@ -428,6 +429,8 @@ function CoachTeamView({
     useAppState();
   const [segment, setSegment] = useState<"tiimi" | "ohjelmat">("tiimi");
   const [editorGroup, setEditorGroup] = useState<TrainingPlan[] | null>(null);
+  const [showArchived, setShowArchived] = useState(false);
+  const [restoringKey, setRestoringKey] = useState<string | null>(null);
   const [manageUserId, setManageUserId] = useState<string | null>(null);
   const [isInviteSheetOpen, setIsInviteSheetOpen] = useState(false);
   const [inviteEmail, setInviteEmail] = useState("");
@@ -554,29 +557,60 @@ function CoachTeamView({
 
   const userNameById = useMemo(() => new Map(state.users.map((user) => [user.id, user.fullName])), [state.users]);
   // Saman program_group_id:n rivit = yksi ohjelma monelle urheilijalle.
-  const programRows = useMemo(() => {
-    const activePlans = programs.filter((plan) => isProgramActive(plan));
-    const groups = new Map<string, TrainingPlan[]>();
-    activePlans.forEach((plan) => {
-      const key = plan.programGroupId ?? plan.id;
-      groups.set(key, [...(groups.get(key) ?? []), plan]);
-    });
+  const buildRows = useMemo(() => {
+    return (plans: TrainingPlan[]) => {
+      const groups = new Map<string, TrainingPlan[]>();
+      plans.forEach((plan) => {
+        const key = plan.programGroupId ?? plan.id;
+        groups.set(key, [...(groups.get(key) ?? []), plan]);
+      });
 
-    return Array.from(groups.values()).map((groupPlans) => {
-      const base = groupPlans[0];
-      const assignedNames = groupPlans.map((plan) =>
-        plan.athleteId === currentUser.id ? "Sinä" : (userNameById.get(plan.athleteId) ?? "?").split(/\s+/)[0],
-      );
-      return {
-        key: base.programGroupId ?? base.id,
-        groupPlans,
-        title: base.title,
-        weekLabel: programWeekLabel(base),
-        workoutCount: base.workouts?.length ?? 0,
-        assignedLabel: assignedNames.length ? assignedNames.join(", ") : "Ei urheilijoita",
-      };
-    });
-  }, [currentUser.id, programs, userNameById]);
+      return Array.from(groups.values()).map((groupPlans) => {
+        const base = groupPlans[0];
+        const assignedNames = groupPlans.map((plan) =>
+          plan.athleteId === currentUser.id ? "Sinä" : (userNameById.get(plan.athleteId) ?? "?").split(/\s+/)[0],
+        );
+        return {
+          key: base.programGroupId ?? base.id,
+          groupPlans,
+          title: base.title,
+          weekLabel: programWeekLabel(base),
+          workoutCount: base.workouts?.length ?? 0,
+          assignedLabel: assignedNames.length ? assignedNames.join(", ") : "Ei urheilijoita",
+        };
+      });
+    };
+  }, [currentUser.id, userNameById]);
+
+  const programRows = useMemo(
+    () => buildRows(programs.filter((plan) => isProgramActive(plan))),
+    [buildRows, programs],
+  );
+
+  // Arkistoidut ("Aiemmat ohjelmat") — palautettavissa takaisin aktiiviseksi.
+  const archivedRows = useMemo(
+    () => buildRows(programs.filter((plan) => getProgramStatus(plan) === "archived")),
+    [buildRows, programs],
+  );
+
+  // Palauta arkistoitu ohjelma aktiiviseksi. setProgramStatus arkistoi
+  // automaattisesti urheilijan aiemman aktiivisen ohjelman → ei tarvitse
+  // poistaa mitään käsin ensin.
+  const handleRestore = async (row: (typeof archivedRows)[number]) => {
+    setRestoringKey(row.key);
+    try {
+      for (const plan of row.groupPlans) {
+        const result = await setProgramStatus(plan.id, "active");
+        if (!result.ok) {
+          notify({ tone: "danger", message: result.message ?? "Ohjelman palautus epäonnistui." });
+          return;
+        }
+      }
+      notify({ tone: "success", message: `Ohjelma "${row.title}" otettiin takaisin käyttöön.` });
+    } finally {
+      setRestoringKey(null);
+    }
+  };
 
   const handlePreview = (athleteId: string) => {
     const result = startAthletePreview(athleteId);
@@ -885,6 +919,53 @@ function CoachTeamView({
           <p className="mx-1 mt-3 text-[13px] text-pretty text-[var(--text-subtle)]">
             Ohjelmia voi luoda ja muokata suoraan mobiilissa — muutokset näkyvät urheilijoille heti.
           </p>
+
+          {archivedRows.length ? (
+            <div className="mt-5">
+              <button
+                type="button"
+                className="flex w-full items-center justify-between gap-3 px-1 text-left focus-visible:outline-none"
+                aria-expanded={showArchived}
+                onClick={() => setShowArchived((value) => !value)}
+              >
+                <span className="text-xs font-semibold uppercase tracking-[0.06em] text-[var(--text-subtle)]">
+                  Aiemmat ohjelmat · {archivedRows.length}
+                </span>
+                <ChevronDown
+                  className={`size-4 shrink-0 text-[var(--text-subtle)] transition-transform ${showArchived ? "rotate-180" : ""}`}
+                  aria-hidden="true"
+                />
+              </button>
+              {showArchived ? (
+                <Card className="mt-2 divide-y divide-[var(--border)] p-0">
+                  {archivedRows.map((row) => (
+                    <div key={row.key} className="flex items-center justify-between gap-3 p-4">
+                      <div className="min-w-0">
+                        <p className="truncate font-[family-name:var(--font-display)] text-[15.5px] font-bold text-[var(--text)]">
+                          {row.title}
+                        </p>
+                        <p className="truncate text-[12.5px] text-[var(--text-subtle)]">
+                          {row.workoutCount} treeniä/vko · {row.assignedLabel}
+                        </p>
+                      </div>
+                      <Button
+                        type="button"
+                        variant="secondary"
+                        className="shrink-0 gap-2 px-3 py-2 text-sm"
+                        loading={restoringKey === row.key}
+                        loadingText="Palautetaan…"
+                        disabled={restoringKey !== null && restoringKey !== row.key}
+                        onClick={() => handleRestore(row)}
+                      >
+                        <RotateCcw className="size-4" aria-hidden="true" />
+                        Palauta
+                      </Button>
+                    </div>
+                  ))}
+                </Card>
+              ) : null}
+            </div>
+          ) : null}
         </div>
       )}
 
