@@ -1,11 +1,12 @@
 "use client";
 
-import { Camera, Check, Plus, Search, Sparkles } from "lucide-react";
+import { Camera, Check, MoreHorizontal, Plus, Search, Sparkles } from "lucide-react";
 import { useMemo, useState } from "react";
 
 import { Button } from "@/components/ui/button";
 import { Sheet } from "@/components/ui/sheet";
 import { CameraCapture } from "@/components/workout/camera-capture";
+import { EnergySplit } from "@/components/workout/nutrition/energy-split";
 import { addFoodFormSchema, macroEnergyWarning } from "@/components/workout/schemas";
 import { mealTagLabel } from "@/lib/nutrition";
 import { cn } from "@/lib/utils";
@@ -423,6 +424,61 @@ function FoodFields({ state, setState }: { state: FoodFieldState; setState: (nex
   );
 }
 
+/**
+ * Arvojen lukunäkymä: iso kcal/annos, makrosarakkeet energiaosuuksineen ja jakaumapalkki.
+ * Arvoja ei muokata tässä — muokkaukset avataan kortin ...-valikosta.
+ */
+function FoodMacroSummary({ fields }: { fields: FoodFieldState }) {
+  const toNumber = (value: string) => Number(value.replace(",", ".")) || 0;
+  const gramsNumber = toNumber(fields.grams);
+  const factor = gramsNumber > 0 ? gramsNumber / 100 : 0;
+  const kcal100 = toNumber(fields.kcal);
+  const protein100 = toNumber(fields.protein);
+  const carbs100 = toNumber(fields.carbs);
+  const fat100 = toNumber(fields.fat);
+  const perServing = {
+    kcal: round(kcal100 * factor),
+    p: round(protein100 * factor),
+    c: round(carbs100 * factor),
+    f: round(fat100 * factor),
+  };
+  // Energiaosuudet samalla kaavalla kuin EnergySplit-palkki (4/4/9 kcal per g).
+  const energyTotal = perServing.p * 4 + perServing.c * 4 + perServing.f * 9 || 1;
+  const columns = [
+    { label: "Proteiini", grams: perServing.p, share: (perServing.p * 4) / energyTotal, dot: "bg-[var(--accent)]" },
+    { label: "Hiilihydraatit", grams: perServing.c, share: (perServing.c * 4) / energyTotal, dot: "bg-[var(--accent-secondary)]" },
+    { label: "Rasva", grams: perServing.f, share: (perServing.f * 9) / energyTotal, dot: "bg-[var(--border-strong)]" },
+  ];
+
+  return (
+    <div className="rounded-2xl bg-[var(--surface-2)] p-4" aria-live="polite">
+      <p className="font-[family-name:var(--font-display)] text-3xl font-bold leading-none tabular-nums text-[var(--text)]">
+        {perServing.kcal}
+        <span className="ml-1.5 text-sm font-semibold text-[var(--text-subtle)]">kcal / annos</span>
+      </p>
+      <div className="mt-4 grid grid-cols-3 gap-2">
+        {columns.map((column) => (
+          <div key={column.label} className="min-w-0">
+            <p className="flex items-center gap-1.5 text-xs font-semibold text-[var(--text-subtle)]">
+              <span className={cn("size-2 shrink-0 rounded-full", column.dot)} aria-hidden="true" />
+              <span className="truncate">{column.label}</span>
+            </p>
+            <p className="mt-0.5 text-sm font-bold tabular-nums text-[var(--text)]">
+              {column.grams} g <span className="font-semibold text-[var(--text-subtle)]">{Math.round(column.share * 100)} %</span>
+            </p>
+          </div>
+        ))}
+      </div>
+      <div className="mt-3">
+        <EnergySplit macros={perServing} legend={false} />
+      </div>
+      <p className="mt-3 text-xs text-[var(--text-subtle)]">
+        {round(kcal100)} kcal · P {round(protein100)} g · H {round(carbs100)} g · R {round(fat100)} g / 100 g
+      </p>
+    </div>
+  );
+}
+
 function validateFields(state: FoodFieldState): { values: FoodFormValues } | { error: string } {
   const parsed = addFoodFormSchema.safeParse({
     name: state.name,
@@ -481,10 +537,15 @@ export function FoodEntryEditSheet({
   );
 }
 
+// Muokkauskortin tila: lukunäkymä on oletus, ja yksittäinen muokkaus (nimi / annoskoko / kaikki
+// arvot käsin) avataan ...-valikosta.
+type FoodEntryEditMode = "view" | "name" | "grams" | "manual";
+
 /**
- * Muokattava ruoan lomake. Tallennus tallentaa lomakkeen arvot suoraan. Jos nimi on muuttunut
- * ja AI on käytössä, tallennus ajaa ravintoarvojen uudelleenarvion taustalla (kortti näkyy
- * "Arvioidaan…" -tilassa) — sama malli kuin pikalisäyksessä.
+ * Ruoan muokkauslomake. Arvot näytetään lukunäkymänä (kcal/annos + makrosarakkeet + jakauma) ja
+ * muokkaukset avataan ...-valikosta: nimen muutos ajaa AI-uudelleenarvion taustalla (kortti näkyy
+ * "Arvioidaan…" -tilassa), annoskoon muutos tallentuu suoraan, ja "Muokkaa arvoja itse" avaa
+ * täyden käsilomakkeen. Suoraan käsitilaan mennään, jos arvoja ei ole (esim. AI-arvio epäonnistui).
  */
 function FoodEntryForm({
   initialFields,
@@ -508,6 +569,22 @@ function FoodEntryForm({
   const nameChanged = canReestimate && fields.name.trim().length >= 2 && fields.name.trim() !== baselineName;
   const [fieldError, setFieldError] = useState("");
   const [pending, setPending] = useState(false);
+  const [mode, setMode] = useState<FoodEntryEditMode>(() => ((initialFields?.kcal ?? "").trim() ? "view" : "manual"));
+  const [menuOpen, setMenuOpen] = useState(false);
+
+  const menuItem = (label: string, onPick: () => void) => (
+    <button
+      type="button"
+      role="menuitem"
+      className="w-full rounded-lg px-3 py-2 text-left text-sm text-[var(--text)] hover:bg-[var(--surface-3)]"
+      onClick={() => {
+        setMenuOpen(false);
+        onPick();
+      }}
+    >
+      {label}
+    </button>
+  );
 
   return (
     <form
@@ -528,7 +605,89 @@ function FoodEntryForm({
         }
       }}
     >
-      <FoodFields state={fields} setState={setFields} />
+      {mode === "manual" ? (
+        <FoodFields state={fields} setState={setFields} />
+      ) : (
+        <div className="space-y-3">
+          <div className="flex items-start justify-between gap-3">
+            {mode === "name" ? (
+              <label className="flex min-w-0 flex-1 flex-col gap-1">
+                <span className="text-xs font-semibold text-[var(--text-subtle)]">Nimi</span>
+                <input
+                  type="text"
+                  autoFocus
+                  value={fields.name}
+                  onChange={(event) => setFields({ ...fields, name: event.target.value })}
+                  placeholder="esim. Kaurapuuro"
+                  className="rounded-lg bg-[var(--surface-2)] px-3 py-2 text-sm text-[var(--text)] outline-none placeholder:text-[var(--text-subtle)]"
+                />
+              </label>
+            ) : (
+              <div className="min-w-0">
+                <p className="text-base font-semibold text-[var(--text)] [overflow-wrap:anywhere]">{fields.name || "Ruoka"}</p>
+                {mode === "grams" ? null : (
+                  <p className="mt-0.5 text-xs text-[var(--text-subtle)]">{fields.grams} g</p>
+                )}
+              </div>
+            )}
+
+            <div className="relative shrink-0">
+              <button
+                type="button"
+                aria-haspopup="menu"
+                aria-expanded={menuOpen}
+                aria-label="Avaa muokkausvalinnat"
+                className="grid size-9 place-items-center rounded-full bg-[var(--surface-2)] text-[var(--text-muted)] transition hover:text-[var(--text)]"
+                onClick={() => setMenuOpen((open) => !open)}
+              >
+                <MoreHorizontal className="size-5" aria-hidden="true" />
+              </button>
+              {menuOpen ? (
+                <>
+                  {/* Näkymätön tausta sulkee valikon ulkopuolelta napautettaessa. */}
+                  <button
+                    type="button"
+                    aria-hidden="true"
+                    tabIndex={-1}
+                    className="fixed inset-0 z-10 cursor-default"
+                    onClick={() => setMenuOpen(false)}
+                  />
+                  <div
+                    role="menu"
+                    className="absolute right-0 top-full z-20 mt-1 min-w-44 rounded-xl border border-[var(--border)] bg-[var(--surface)] p-1 shadow-[0_12px_30px_-20px_var(--shadow)]"
+                  >
+                    {canReestimate ? menuItem("Muokkaa nimeä", () => setMode("name")) : null}
+                    {menuItem("Muuta annoskokoa", () => setMode("grams"))}
+                    {menuItem("Muokkaa arvoja itse", () => setMode("manual"))}
+                  </div>
+                </>
+              ) : null}
+            </div>
+          </div>
+
+          {mode === "grams" ? (
+            <label className="flex flex-col gap-1">
+              <span className="text-xs font-semibold text-[var(--text-subtle)]">Annoskoko</span>
+              <div className="flex items-center gap-2 rounded-lg bg-[var(--surface-2)] px-3 py-2">
+                <input
+                  type="number"
+                  inputMode="decimal"
+                  autoFocus
+                  min={1}
+                  max={5000}
+                  value={fields.grams}
+                  onChange={(event) => setFields({ ...fields, grams: event.target.value })}
+                  aria-label="Annoskoko grammoina"
+                  className="min-w-0 flex-1 bg-transparent text-sm text-[var(--text)] outline-none"
+                />
+                <span className="shrink-0 text-xs text-[var(--text-subtle)]">g</span>
+              </div>
+            </label>
+          ) : null}
+
+          <FoodMacroSummary fields={fields} />
+        </div>
+      )}
 
       {initialMealTag !== undefined ? (
         <MealTagChips value={mealTag ?? initialMealTag} onChange={setMealTag} />

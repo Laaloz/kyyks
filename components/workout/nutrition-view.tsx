@@ -26,6 +26,7 @@ import {
   resolveRecipeNutritionPreview,
   splitRecipeInstructions,
 } from "@/lib/nutrition";
+import { EnergySplit, type Macros } from "@/components/workout/nutrition/energy-split";
 import { WeekOverview, type WeekDay } from "@/components/workout/nutrition/week-overview";
 import type { AppState, DayMealPlanEntry, MealTag, Recipe, UserProfile } from "@/lib/types";
 import { isSupabaseConfigured } from "@/lib/config";
@@ -65,8 +66,6 @@ function dateStepperLabels(selected: string, today: string) {
   return { main, sub };
 }
 
-type Macros = { kcal: number; p: number; c: number; f: number };
-
 function servingMacros(recipe: Recipe, catalog: AppState["ingredientsCatalog"]): Macros {
   const n = resolveRecipeNutritionPreview(recipe, catalog).nutritionPerServing;
   return {
@@ -93,34 +92,6 @@ function MacroBar({ label, value, target }: { label: string; value: number; targ
           className={`h-full rounded-full ${over ? "bg-[var(--warning)]" : "bg-[var(--accent)]"}`}
           style={{ width: `${pct}%` }}
         />
-      </div>
-    </div>
-  );
-}
-
-function EnergySplit({ macros }: { macros: Macros }) {
-  const pe = macros.p * 4;
-  const ce = macros.c * 4;
-  const fe = macros.f * 9;
-  const tot = pe + ce + fe || 1;
-  const seg = (v: number) => `${Math.max(2, Math.round((v / tot) * 100))}%`;
-  return (
-    <div>
-      <div className="flex h-2 gap-0.5 overflow-hidden rounded-full">
-        <span style={{ width: seg(pe) }} className="rounded-full bg-[var(--accent)]" />
-        <span style={{ width: seg(ce) }} className="rounded-full bg-[var(--accent-secondary)]" />
-        <span style={{ width: seg(fe) }} className="rounded-full bg-[var(--border-strong)]" />
-      </div>
-      <div className="mt-2 flex gap-4 text-xs font-semibold text-[var(--text-muted)]">
-        <span className="flex items-center gap-1.5">
-          <span className="size-2 rounded-full bg-[var(--accent)]" aria-hidden="true" />P {macros.p} g
-        </span>
-        <span className="flex items-center gap-1.5">
-          <span className="size-2 rounded-full bg-[var(--accent-secondary)]" aria-hidden="true" />H {macros.c} g
-        </span>
-        <span className="flex items-center gap-1.5">
-          <span className="size-2 rounded-full bg-[var(--border-strong)]" aria-hidden="true" />R {macros.f} g
-        </span>
       </div>
     </div>
   );
