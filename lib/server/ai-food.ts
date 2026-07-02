@@ -21,10 +21,13 @@ const DAILY_LIMIT = 30;
 // ~3-4 s (oletusbudjetti), joten sille annetaan enemmän aikaa. Timeout palauttaa 504:n, jota EI
 // yritetä uudelleen.
 const GEMINI_TEXT_TIMEOUT_MS = 8_000;
-// Ajatteleva uusintayritys (vaikea/heikko tekstihaku) kestää kauemmin → väljempi katkaisu.
-// Rajattu thinkingBudget pitää tämän normaalisti muutamassa sekunnissa; 20 s on turvaraja
-// ruuhkaan (route maxDuration kattaa tämän + rinnakkaisen OFF-varahaun).
+// Ajatteleva monikomponenttihaku kestää kauemmin → väljempi katkaisu. Rajattu thinkingBudget
+// pitää tämän normaalisti ~5-6 sekunnissa; 20 s on turvaraja ruuhkaan.
 const GEMINI_TEXT_THINKING_TIMEOUT_MS = 20_000;
+// Heikon pika-arvion uusinta ajetaan rinnakkain OFF-nimihaun kanssa ja pika-arvio on jo
+// varalla → ei ole syytä odottaa jumittunutta uusintaa 20 s. Mitattu kesto rajatulla
+// budjetilla ~5-6 s, joten 12 s riittää hyvin.
+const GEMINI_TEXT_RETRY_TIMEOUT_MS = 12_000;
 const GEMINI_IMAGE_TIMEOUT_MS = 12_000;
 // Rajattu ajattelubudjetti (tokenia) ajattelevalle teksti- ja kuvapolulle. Ilman rajaa malli
 // käyttää dynaamista budjettia (jopa ~24k tokenia) → pitkä häntä osuu aikakatkaisuihin (esim.
@@ -118,7 +121,10 @@ function isComplexQuery(query: string): boolean {
   if (/\d\s*(g|kg|dl|ml|l|kpl|rkl|tl|kcal)\b/i.test(q)) {
     return true; // ilmoitettu määrä → komponentti
   }
-  return q.split(/\s+/).length >= 4; // pitkä syöte → todennäköisesti monikomponentti
+  // Ilman erottimia/määriä 4-5 sanan haku on lähes aina yksi ruokalaji määreillä ("iso annos
+  // kaurapuuroa mustikoilla") — mitattu toimivaksi pikapolulla (~1 s, järkevät annoskoot).
+  // Heikko tulos eskaloituu joka tapauksessa ajattelevalle polulle.
+  return q.split(/\s+/).length >= 6;
 }
 
 /** Heikko arvio: malli "luovutti" (kaikki makrot 0) tai ilmoitti matalan varmuuden. */
@@ -159,7 +165,12 @@ const estimateSchema = z.object({
   carbsPer100: z.coerce.number().min(0).max(100),
   fatPer100: z.coerce.number().min(0).max(100),
   confidence: z.coerce.number().min(0).max(1).optional(),
-  barcode: z.string().trim().optional(),
+  // Siivotaan heti numeroiksi: malli voi palauttaa esim. merkkijonon "null" tai välilyönnillisen
+  // koodin → pelkät numerot, ja tyhjä jää falsyksi (barcode-polku ohitetaan siististi).
+  barcode: z
+    .string()
+    .transform((value) => value.replace(/\D/g, ""))
+    .optional(),
 });
 
 export type AiFoodEstimate = z.infer<typeof estimateSchema>;
@@ -384,11 +395,6 @@ export async function estimateFoodFromImage(args: {
   // kumpikaan yksin.
   hint?: string;
 }): Promise<AiFoodResult> {
-  const quotaError = await checkQuota(args.userId);
-  if (quotaError) {
-    return quotaError;
-  }
-
   const basePrompt = IMAGE_PROMPTS[args.mode ?? "photo"];
   const prompt = args.hint
     ? [
@@ -402,11 +408,19 @@ export async function estimateFoodFromImage(args: {
   // Rajattu thinkingBudget: kuva tarvitsee ajattelua (budjetilla 0 tulos voi olla tyhjä/heikko),
   // mutta ilman rajaa dynaaminen budjetti venyy — mm. 3.5-flash-varamalli osui 12 s katkaisuun
   // eikä varayritys koskaan ehtinyt vastata. Rajaus koskee ketjun kaikkia malleja.
-  const result = await estimateWithModelFallback(
-    args.userId,
-    [{ text: prompt }, { inline_data: { mime_type: args.mimeType, data: args.imageBase64 } }],
-    { thinkingBudget: THINKING_BUDGET_CAPPED, timeoutMs: GEMINI_IMAGE_TIMEOUT_MS },
-  );
+  // Kiintiötarkistus rinnakkain arvion kanssa: Supabase-kierros pois kriittiseltä polulta.
+  // Rajan ylittänyt pyyntö tekee hukkakutsun ennen 429:ää — harvinainen ja hyväksytty hinta.
+  const [quotaError, result] = await Promise.all([
+    checkQuota(args.userId),
+    estimateWithModelFallback(
+      args.userId,
+      [{ text: prompt }, { inline_data: { mime_type: args.mimeType, data: args.imageBase64 } }],
+      { thinkingBudget: THINKING_BUDGET_CAPPED, timeoutMs: GEMINI_IMAGE_TIMEOUT_MS },
+    ),
+  ]);
+  if (quotaError) {
+    return quotaError;
+  }
   if (!result.ok) {
     return result;
   }
@@ -469,13 +483,13 @@ export async function estimateFoodFromText(args: { userId: string; query: string
 
   // Vaikea syöte → ajatellaan heti (503-sietoinen: ensisijainen → varamalli → ensisijainen).
   // Monikomponenttiaterialle OFF-nimihaku ei sovi (ei yhtä tuotetta) → luotetaan Geminiin.
-  // Latenssia hallitsee thinking (sekunteja), joten kiintiötarkistus saa olla sarjassa.
+  // Kiintiötarkistus rinnakkain arvion kanssa, kuten muillakin poluilla.
   if (isComplexQuery(args.query)) {
-    const quotaError = await checkQuota(args.userId);
-    if (quotaError) {
-      return quotaError;
-    }
-    return estimateWithModelFallback(args.userId, fullParts, thinkingOpts);
+    const [quotaError, result] = await Promise.all([
+      checkQuota(args.userId),
+      estimateWithModelFallback(args.userId, fullParts, thinkingOpts),
+    ]);
+    return quotaError ?? result;
   }
 
   // Yksinkertainen syöte: pikapolku (tiivis prompti, thinking pois) vastaa normaalisti ~1 s.
@@ -508,7 +522,12 @@ export async function estimateFoodFromText(args: { userId: string; query: string
     console.warn(`[ai-food] heikko pika-arvio "${args.query}" → uusinta ajattelulla`);
   }
   const [retry, off] = await Promise.all([
-    estimateWithModelFallback(args.userId, fullParts, thinkingOpts),
+    // Tiukempi katkaisu kuin monikomponenttipolulla: pika-arvio on jo varalla ja OFF juoksee
+    // rinnalla, joten jumittunutta uusintaa ei odoteta 20 sekuntia.
+    estimateWithModelFallback(args.userId, fullParts, {
+      thinkingBudget: THINKING_BUDGET_CAPPED,
+      timeoutMs: GEMINI_TEXT_RETRY_TIMEOUT_MS,
+    }),
     searchByName(args.query),
   ]);
   if (retry.ok && !isWeakEstimate(retry.estimate)) {

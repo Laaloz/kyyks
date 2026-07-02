@@ -7684,6 +7684,19 @@ function findResolvedUserIdInSnapshot(
         // Tausta: tallenna pending-rivi, aja AI ja täydennä kortti. EI awaiteta täällä →
         // action palaa heti, sheet sulkeutuu, ja kortti näkyy "Arvioidaan…" kunnes AI valmistuu.
         void (async () => {
+        // AI-arvio ei tarvitse palvelinrivin id:tä → käynnistetään heti RINNAKKAIN rivin luonnin
+        // kanssa, jolloin luontikierros ei pidennä "Arvioidaan…"-aikaa. Jos luonti epäonnistuu
+        // tai rivi perutaan, vastaus jätetään käyttämättä (harvinainen hukkakutsu).
+        const aiBody =
+          input.imageBase64 && input.mimeType
+            ? { imageBase64: input.imageBase64, mimeType: input.mimeType, imageMode: input.imageMode }
+            : { query: initialName };
+        const aiPromise = fetch("/api/nutrition/ai-estimate", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(aiBody),
+        }).catch(() => null);
+
         const createResponse = await fetch("/api/day-meal-plans", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -7741,16 +7754,8 @@ function findResolvedUserIdInSnapshot(
           }
         }
 
-        // 2) Aja AI-arvio (teksti tai kuva).
-        const aiBody =
-          input.imageBase64 && input.mimeType
-            ? { imageBase64: input.imageBase64, mimeType: input.mimeType, imageMode: input.imageMode }
-            : { query: initialName };
-        const aiResponse = await fetch("/api/nutrition/ai-estimate", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(aiBody),
-        }).catch(() => null);
+        // 2) Odota rinnakkain käynnistetty AI-arvio (teksti tai kuva).
+        const aiResponse = await aiPromise;
         const aiPayload = (aiResponse ? await aiResponse.json().catch(() => null) : null) as
           | {
               estimate?: {
