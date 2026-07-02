@@ -4,8 +4,9 @@
     {
       "name": "kyyks-dev",
       "runtimeExecutable": "npx",
-      "runtimeArgs": ["next", "dev", "-p", "3300"],
-      "port": 3300
+      "runtimeArgs": ["next", "dev"],
+      "port": 3300,
+      "autoPort": true
     }
   ]
 }

@@ -851,6 +851,8 @@ export function upsertRecipe(
     id: current?.id ?? makeId("recipe"),
     name: input.name.trim(),
     description: input.description?.trim() || undefined,
+    // Editori ei käsittele kuvaa → säilytetään olemassa oleva (kuten palvelinkin tekee).
+    imageUrl: current?.imageUrl,
     instructions: input.instructions.trim(),
     mealTag: input.mealTag,
     dietaryFlags: input.dietaryFlags ?? current?.dietaryFlags ?? [],

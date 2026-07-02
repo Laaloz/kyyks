@@ -37,6 +37,7 @@ function MealTagChips({ value, onChange }: { value: MealTag; onChange: (tag: Mea
           <button
             key={tag}
             type="button"
+            aria-pressed={value === tag}
             className={`rounded-full px-3 py-1 text-xs font-semibold transition ${
               value === tag ? "bg-[var(--text)] text-[var(--background)]" : "bg-[var(--surface-2)] text-[var(--text-muted)]"
             }`}
@@ -161,10 +162,10 @@ export function AddFoodSheet({
   };
 
   return (
-    <Sheet ariaLabel="Lisää ateriaan AI:lla" onClose={onClose}>
+    <Sheet ariaLabel="Lisää ateria AI:lla" onClose={onClose}>
       <h2 className="flex items-center gap-2 font-[family-name:var(--font-display)] text-lg font-bold text-[var(--text)]">
         <Sparkles className="size-5 text-[var(--accent)]" aria-hidden="true" />
-        Lisää ateriaan AI:lla
+        Lisää ateria AI:lla
       </h2>
       <p className="mt-1 text-sm text-[var(--text-muted)]">Kirjoita tai kuvaa ruoka — AI arvioi ravintoarvot.</p>
 
@@ -173,6 +174,11 @@ export function AddFoodSheet({
           {error}
         </p>
       ) : null}
+
+      {/* Ateriapaikka heti otsikon alla — sama paikka kaikissa kirjaussheeteissä. */}
+      <div className="mt-3">
+        <MealTagChips value={mealTag} onChange={setMealTag} />
+      </div>
 
       <form
         className="mt-3 flex items-center gap-2"
@@ -210,10 +216,6 @@ export function AddFoodSheet({
         ) : null}
       </form>
 
-      <div className="mt-3">
-        <MealTagChips value={mealTag} onChange={setMealTag} />
-      </div>
-
       {analyzing ? (
         <p className="mt-3 text-sm text-[var(--text-subtle)]" role="status">
           Analysoidaan kuvaa…
@@ -222,18 +224,23 @@ export function AddFoodSheet({
 
       <div className="mt-2 min-h-0 flex-1 overflow-y-auto">
         {ownFoods.length > 0 ? (
-          <OwnFoodPicker
-            foods={ownFoods}
-            onPick={async (ingredientId, grams) => {
-              setError("");
-              const result = await onLogOwnFood(ingredientId, grams, mealTag);
-              if (result.ok) {
-                onClose();
-              } else {
-                setError(result.message ?? "Lisäys epäonnistui.");
-              }
-            }}
-          />
+          <>
+            <p className="mt-1 font-[family-name:var(--font-display)] text-xs font-semibold uppercase tracking-[0.05em] text-[var(--text-subtle)]">
+              Omat tuotteet
+            </p>
+            <OwnFoodPicker
+              foods={ownFoods}
+              onPick={async (ingredientId, grams) => {
+                setError("");
+                const result = await onLogOwnFood(ingredientId, grams, mealTag);
+                if (result.ok) {
+                  onClose();
+                } else {
+                  setError(result.message ?? "Lisäys epäonnistui.");
+                }
+              }}
+            />
+          </>
         ) : null}
 
         {query.trim() ? (
@@ -629,6 +636,11 @@ function FoodEntryForm({
         }
       }}
     >
+      {/* Ateriapaikka heti ylhäällä — sama paikka kaikissa kirjaussheeteissä. */}
+      {initialMealTag !== undefined ? (
+        <MealTagChips value={mealTag ?? initialMealTag} onChange={setMealTag} />
+      ) : null}
+
       {mode === "manual" ? (
         <FoodFields state={fields} setState={setFields} />
       ) : (
@@ -713,10 +725,6 @@ function FoodEntryForm({
         </div>
       )}
 
-      {initialMealTag !== undefined ? (
-        <MealTagChips value={mealTag ?? initialMealTag} onChange={setMealTag} />
-      ) : null}
-
       {fieldError ? (
         <p className="text-sm text-[var(--danger)]" role="alert">
           {fieldError}
@@ -726,7 +734,7 @@ function FoodEntryForm({
       {nameChanged ? (
         <>
           <p className="text-xs text-[var(--text-muted)]">
-            Nimi muuttui — tallennetaan ja ravintoarvot päivitetään tekoälyllä taustalla.
+            Nimi muuttui — tallennetaan ja ravintoarvot päivitetään AI:lla taustalla.
           </p>
           <Button type="submit" className="w-full gap-2" loading={pending}>
             <Sparkles className="size-4" aria-hidden="true" />

@@ -251,7 +251,6 @@ export async function saveRecipeOnServer(requester: Requester, input: RecipeInpu
     meal_tag: input.mealTag,
     dietary_flags: input.dietaryFlags ?? [],
     allergies: input.allergies ?? [],
-    owner_role: ownerRole,
     default_servings: input.defaultServings,
     min_servings: input.minServings,
     max_servings: input.maxServings,
@@ -259,6 +258,8 @@ export async function saveRecipeOnServer(requester: Requester, input: RecipeInpu
   };
 
   if (recipeId) {
+    // owner_role asetetaan vain luonnissa: adminin muokkaus treenaajan omaan
+    // reseptiin ei saa siirtää sitä jaettuun katalogiin (eikä päinvastoin).
     const { error } = await supabase.from("recipes").update(recipePayload).eq("id", recipeId);
     if (error) {
       return { ok: false as const, message: error.message || "Reseptin tallennus epäonnistui." };
@@ -271,7 +272,7 @@ export async function saveRecipeOnServer(requester: Requester, input: RecipeInpu
   } else {
     const { data, error } = await supabase
       .from("recipes")
-      .insert({ ...recipePayload, created_by: requester.id, created_at: timestamp })
+      .insert({ ...recipePayload, owner_role: ownerRole, created_by: requester.id, created_at: timestamp })
       .select("id")
       .single<{ id: string }>();
     if (error || !data) {

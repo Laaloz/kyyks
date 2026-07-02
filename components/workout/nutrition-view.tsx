@@ -1,6 +1,6 @@
 "use client";
 
-import { BookOpen, Check, ChevronLeft, ChevronRight, Loader2, Plus, Repeat2, Search, Sparkles, Trash2 } from "lucide-react";
+import { BookOpen, Check, ChevronDown, ChevronLeft, ChevronRight, Loader2, Plus, Repeat2, Search, Sparkles, Trash2 } from "lucide-react";
 import { useMemo, useState } from "react";
 
 import { Button } from "@/components/ui/button";
@@ -109,7 +109,9 @@ export function NutritionView({
   onOpenMeasurements?: () => void;
 }) {
   const { state, addDayMeal, swapDayMeal, removeDayMeal, setDayMealEaten, quickAddAiFood, saveDayMealFood } = useAppState();
-  const [seg, setSeg] = useState<"day" | "week" | "recipes">("day");
+  const [seg, setSeg] = useState<"day" | "recipes">("day");
+  // Viikkokatsaus avautuu sheetinä päivästepperin otsikosta (ei omana tabina).
+  const [weekOpen, setWeekOpen] = useState(false);
   const [filter, setFilter] = useState<MealTag | "all">("all");
   const [query, setQuery] = useState("");
   const [editorOpen, setEditorOpen] = useState(false);
@@ -118,25 +120,42 @@ export function NutritionView({
   const [swapTarget, setSwapTarget] = useState<{ entryId: string; mealTag: MealTag; currentRecipeId: string } | null>(null);
   const [addTag, setAddTag] = useState<MealTag | null>(null);
   const [addFoodOpen, setAddFoodOpen] = useState(false);
-  // Yksi "Lisää ateria" -sisäänmeno → valikko (AI:lla / Reseptit).
-  const [addMenuOpen, setAddMenuOpen] = useState(false);
   const [editFoodEntry, setEditFoodEntry] = useState<DayMealPlanEntry | null>(null);
-  // Ravinto-välilehden "+ Oma resepti" nostetaan yläpalkkiin.
+  // "+ Oma resepti" näkyy yläpalkissa vain Reseptit-tabissa — Päiväkirjassa ainoa
+  // lisäystoiminto on aterian kirjaus, ettei kaksi eri "lisää"-käsitettä sekoitu.
   useHeaderAction(
     "nutrition",
-    !readOnly
+    !readOnly && seg === "recipes"
       ? {
           label: "Oma resepti",
           icon: Plus,
           onClick: () => {
-            setSeg("recipes");
             setEditRecipe(null);
             setEditorOpen(true);
           },
         }
       : null,
   );
-  const [pendingId, setPendingId] = useState<string | null>(null);
+  // Poisto kumoamisikkunalla: rivi korvautuu heti "Kumoa"-rivillä ja oikea poisto
+  // ajetaan vasta viiveen jälkeen. Uusi poisto viimeistelee edellisen välittömästi.
+  const [pendingDelete, setPendingDelete] = useState<{ entry: DayMealPlanEntry; timer: number } | null>(null);
+  const requestDelete = (entry: DayMealPlanEntry) => {
+    if (pendingDelete) {
+      window.clearTimeout(pendingDelete.timer);
+      void removeDayMeal(pendingDelete.entry.id);
+    }
+    const timer = window.setTimeout(() => {
+      void removeDayMeal(entry.id);
+      setPendingDelete((current) => (current && current.entry.id === entry.id ? null : current));
+    }, 5000);
+    setPendingDelete({ entry, timer });
+  };
+  const undoDelete = () => {
+    if (pendingDelete) {
+      window.clearTimeout(pendingDelete.timer);
+    }
+    setPendingDelete(null);
+  };
 
   const todayKey = useMemo(() => localDateKey(new Date()), []);
   // Päivä-näkymä toimii valitulle päivälle (oletus tänään); Viikko-listasta voi hypätä
@@ -175,7 +194,10 @@ export function NutritionView({
     [state.dayMealPlans, selectedDate, user.id],
   );
   const hasDay = dayRows.length > 0;
-  const eatenRows = dayRows.filter((entry) => entry.eatenAt);
+  // Kumoamista odottava rivi ei kuulu laskuihin (saanti, x/y syöty) — se on jo "poistettu".
+  const pendingDeleteId = pendingDelete?.entry.id ?? null;
+  const activeDayRows = pendingDeleteId ? dayRows.filter((entry) => entry.id !== pendingDeleteId) : dayRows;
+  const eatenRows = activeDayRows.filter((entry) => entry.eatenAt);
   // Päiväkirjarivin makrot: resepti (reseptin ainekset × annokset) tai ad hoc -ruoka
   // (snapshot per 100 g × grammat). Palauttaa null jos reseptiä ei löydy.
   const entryMacros = (entry: DayMealPlanEntry): Macros | null => {
@@ -259,15 +281,34 @@ export function NutritionView({
     [visibleRecipeSource, filter, query],
   );
 
+  // Molemmat kirjauspolut suoraan näkyviin (ei välivalikkoa) — kirjaus on päivittäin
+  // toistuva ydintoiminto, joten jokainen ylimääräinen näpäytys maksaa.
+  const addMealButtons = (
+    <div className="mt-4 grid gap-2">
+      <Button type="button" variant="secondary" className="w-full gap-2" onClick={() => setAddFoodOpen(true)}>
+        <Sparkles className="size-4 text-[var(--accent)]" aria-hidden="true" />
+        Lisää AI:lla
+      </Button>
+      <Button
+        type="button"
+        variant="secondary"
+        className="w-full gap-2"
+        onClick={() => setAddTag(inferMealTagForTime(new Date()))}
+      >
+        <BookOpen className="size-4" aria-hidden="true" />
+        Lisää resepteistä
+      </Button>
+    </div>
+  );
+
   return (
     <Card className="max-w-full overflow-x-clip [contain:inline-size]">
       <Segmented
-        ariaLabel="Päivä tai reseptit"
+        ariaLabel="Päiväkirja tai reseptit"
         value={seg}
         onChange={setSeg}
         options={[
-          { value: "day", label: "Päivä" },
-          { value: "week", label: "Viikko" },
+          { value: "day", label: "Päiväkirja" },
           { value: "recipes", label: "Reseptit" },
         ]}
       />
@@ -286,18 +327,18 @@ export function NutritionView({
             </button>
             <button
               type="button"
-              className="min-w-0 flex-1 text-center disabled:cursor-default"
-              disabled={isSelectedToday}
-              aria-label={isSelectedToday ? undefined : "Siirry tähän päivään"}
-              onClick={() => setSelectedDate(todayKey)}
+              className="min-w-0 flex-1 text-center"
+              // Näkyvä päivä mukaan labeliin — pelkkä "Avaa viikkokatsaus" ylikirjoittaisi
+              // sisällön eikä ruudunlukija kuulisi mikä päivä on valittuna.
+              aria-label={`${stepperLabels.main} ${stepperLabels.sub} — avaa viikkokatsaus`}
+              aria-haspopup="dialog"
+              onClick={() => setWeekOpen(true)}
             >
-              <p className="font-[family-name:var(--font-display)] text-sm font-bold text-[var(--text)]">
+              <p className="inline-flex items-center gap-1 font-[family-name:var(--font-display)] text-sm font-bold text-[var(--text)]">
                 {stepperLabels.main}
+                <ChevronDown className="size-3.5 text-[var(--text-subtle)]" aria-hidden="true" />
               </p>
-              <p className="text-xs tabular-nums text-[var(--text-subtle)]">
-                {stepperLabels.sub}
-                {isSelectedToday ? "" : " · palaa tähän päivään"}
-              </p>
+              <p className="text-xs tabular-nums text-[var(--text-subtle)]">{stepperLabels.sub}</p>
             </button>
             <button
               type="button"
@@ -309,6 +350,19 @@ export function NutritionView({
               <ChevronRight className="size-4" aria-hidden="true" />
             </button>
           </div>
+          {!isSelectedToday ? (
+            // Pikapaluu + samalla näkyvä signaali siitä, että muokataan mennyttä päivää
+            // (mennyt päivä näyttäisi muuten identtiseltä nykyhetken kanssa).
+            <div className="-mt-1 mb-4 flex justify-center">
+              <button
+                type="button"
+                className="rounded-full bg-[var(--accent-soft)] px-3 py-1 text-xs font-semibold text-[var(--accent)] transition hover:opacity-80"
+                onClick={() => setSelectedDate(todayKey)}
+              >
+                Muokkaat mennyttä päivää · Palaa tähän päivään
+              </button>
+            </div>
+          ) : null}
           {macroTarget ? (
             <div className="rounded-2xl bg-[var(--surface-2)] p-4">
               <p className="font-[family-name:var(--font-display)] text-4xl font-bold leading-none tabular-nums text-[var(--text)]">
@@ -325,6 +379,20 @@ export function NutritionView({
               </div>
             </div>
           ) : (
+            <>
+              {/* Ilman tavoitetta näytetään silti päivän saanti — kirjaaminen ei saa
+                  tuntua turhalta ennen profiilin täyttöä. */}
+              {dayRows.length > 0 ? (
+                <div className="mb-3 rounded-2xl bg-[var(--surface-2)] p-4">
+                  <p className="font-[family-name:var(--font-display)] text-4xl font-bold leading-none tabular-nums text-[var(--text)]">
+                    {Math.round(consumed.kcal)}
+                    <span className="ml-1.5 text-base font-semibold text-[var(--text-subtle)]">kcal syöty</span>
+                  </p>
+                  <p className="mt-2 text-sm tabular-nums text-[var(--text-subtle)]">
+                    P {Math.round(consumed.p)} g · H {Math.round(consumed.c)} g · R {Math.round(consumed.f)} g
+                  </p>
+                </div>
+              ) : null}
             <div className="rounded-2xl bg-[color-mix(in_srgb,var(--warning)_10%,var(--surface))] p-4">
               <p className="text-sm font-semibold text-[var(--text)]">Täydennä tiedot, niin saat makrot näkyviin</p>
               <p className="mt-1 text-sm leading-5 text-[var(--text-muted)]">
@@ -353,6 +421,7 @@ export function NutritionView({
                 ) : null}
               </div>
             </div>
+            </>
           )}
 
           <div className="flex items-baseline justify-between gap-3 mt-5">
@@ -361,7 +430,7 @@ export function NutritionView({
             </p>
             {hasDay ? (
               <p className="font-[family-name:var(--font-display)] text-sm font-semibold tabular-nums text-[var(--text-subtle)]">
-                {eatenRows.length}/{dayRows.length} syöty
+                {eatenRows.length}/{activeDayRows.length} syöty
               </p>
             ) : null}
           </div>
@@ -370,14 +439,7 @@ export function NutritionView({
             <div className="mt-3">
               <div className="rounded-2xl border border-dashed border-[var(--border)] bg-[var(--surface-2)] px-4 py-5 text-center">
                 <p className="text-sm text-[var(--text-subtle)]">Ei vielä aterioita tälle päivälle.</p>
-                {!readOnly ? (
-                  <div className="mt-4 grid gap-2">
-                    <Button type="button" variant="secondary" className="w-full gap-2" onClick={() => setAddMenuOpen(true)}>
-                      <Plus className="size-4" aria-hidden="true" />
-                      Lisää ateria
-                    </Button>
-                  </div>
-                ) : null}
+                {!readOnly ? addMealButtons : null}
               </div>
             </div>
           ) : (
@@ -385,6 +447,23 @@ export function NutritionView({
               <div className="mt-3 divide-y divide-[var(--border)]">
                 {dayRows.map((entry) => {
                   const recipe = entry.recipeId ? recipeById.get(entry.recipeId) : undefined;
+                  if (entry.id === pendingDeleteId) {
+                    // Poistettu rivi korvautuu paikallaan kumoamisrivillä kunnes ikkuna umpeutuu.
+                    return (
+                      <div key={entry.id} role="status" className="flex items-center justify-between gap-3 py-3">
+                        <p className="min-w-0 flex-1 truncate text-sm text-[var(--text-subtle)]">
+                          Poistettu: {recipe?.name ?? entry.foodName ?? "ateria"}
+                        </p>
+                        <button
+                          type="button"
+                          className="shrink-0 rounded-full bg-[var(--surface-2)] px-3 py-1.5 text-xs font-semibold text-[var(--text)] transition hover:text-[var(--accent)]"
+                          onClick={undoDelete}
+                        >
+                          Kumoa
+                        </button>
+                      </div>
+                    );
+                  }
                   const isAdHoc = !entry.recipeId;
                   // Jumiin jäänyt "pending" (esim. AI ei vastannut, sessio katkesi) merkitään
                   // vanhentumisen jälkeen muokattavaksi, ettei se jää ikuisesti "arvioidaan"-tilaan.
@@ -398,12 +477,11 @@ export function NutritionView({
                   // valmistuu (aiStatus=null) tai epäonnistuu (aiFailed / stale), lukko poistuu itsestään.
                   const aiDisabled = aiPending;
                   const isEaten = Boolean(entry.eatenAt);
-                  const isPending = pendingId === entry.id;
                   const m = entryMacros(entry);
                   const title = recipe?.name ?? entry.foodName ?? "Tuntematon ateria";
                   const macroLine = `${mealTagLabel(entry.mealTag)}${isAdHoc && entry.grams ? ` · ${Math.round(entry.grams)} g` : ""}${m ? ` · ${Math.round(m.kcal)} kcal · P ${Math.round(m.p)} g` : ""}`;
                   const subtitle = aiPending
-                    ? "Arvioidaan tekoälyllä…"
+                    ? "Arvioidaan AI:lla…"
                     : aiFailed
                       ? `${mealTagLabel(entry.mealTag)} · arvio ei onnistunut — täytä makrot itse`
                       : macroLine;
@@ -475,8 +553,9 @@ export function NutritionView({
                             <button
                               type="button"
                               className="grid size-8 shrink-0 place-items-center rounded-full bg-[var(--surface-2)] text-[var(--text-subtle)] transition hover:text-[var(--accent)] disabled:opacity-40 disabled:hover:text-[var(--text-subtle)]"
-                              aria-label="Vaihda ateria"
-                              disabled={isEaten || isPending}
+                              aria-label={isEaten ? "Vaihto ei käytössä — peru ensin syöty-merkintä" : "Vaihda ateria"}
+                              title={isEaten ? "Peru ensin syöty-merkintä" : undefined}
+                              disabled={isEaten}
                               onClick={() => setSwapTarget({ entryId: entry.id, mealTag: entry.mealTag, currentRecipeId: recipe.id })}
                             >
                               <Repeat2 className="size-4" aria-hidden="true" />
@@ -486,15 +565,7 @@ export function NutritionView({
                             type="button"
                             className="grid size-8 shrink-0 place-items-center rounded-full text-[var(--text-subtle)] transition hover:text-[var(--danger)] disabled:cursor-not-allowed disabled:opacity-35 disabled:hover:text-[var(--text-subtle)]"
                             aria-label="Poista ateria"
-                            disabled={isEaten || isPending}
-                            onClick={async () => {
-                              setPendingId(entry.id);
-                              try {
-                                await removeDayMeal(entry.id);
-                              } finally {
-                                setPendingId(null);
-                              }
-                            }}
+                            onClick={() => requestDelete(entry)}
                           >
                             <Trash2 className="size-4" aria-hidden="true" />
                           </button>
@@ -513,7 +584,7 @@ export function NutritionView({
                         <button
                           type="button"
                           className="grid size-8 shrink-0 place-items-center rounded-full text-[var(--text-subtle)] transition hover:text-[var(--text)] disabled:cursor-not-allowed disabled:hover:text-[var(--text-subtle)]"
-                          aria-label={aiDisabled ? "Arvioidaan tekoälyllä…" : `Muokkaa: ${title}`}
+                          aria-label={aiDisabled ? "Arvioidaan AI:lla…" : `Muokkaa: ${title}`}
                           disabled={aiDisabled}
                           onClick={() => setEditFoodEntry(entry)}
                         >
@@ -528,28 +599,9 @@ export function NutritionView({
                   );
                 })}
               </div>
-              {!readOnly ? (
-                <div className="mt-4 grid gap-2">
-                  <Button type="button" variant="secondary" className="w-full gap-2" onClick={() => setAddMenuOpen(true)}>
-                    <Plus className="size-4" aria-hidden="true" />
-                    Lisää ateria
-                  </Button>
-                </div>
-              ) : null}
+              {!readOnly ? addMealButtons : null}
             </>
           )}
-        </div>
-      ) : seg === "week" ? (
-        <div className="mt-5">
-          <WeekOverview
-            days={weekDays}
-            targetKcal={weekTargetKcal}
-            avgKcal={weekAvgKcal}
-            onSelectDay={(date) => {
-              setSelectedDate(date);
-              setSeg("day");
-            }}
-          />
         </div>
       ) : (
         <div className="mt-5">
@@ -573,6 +625,7 @@ export function NutritionView({
                 <button
                   key={tag}
                   type="button"
+                  aria-pressed={active}
                   className={`shrink-0 rounded-full px-3 py-1.5 text-xs font-semibold transition ${
                     active ? "bg-[var(--text)] text-[var(--background)]" : "bg-[var(--surface-2)] text-[var(--text-muted)]"
                   }`}
@@ -645,9 +698,12 @@ export function NutritionView({
           }}
           onClose={() => setDetail(null)}
           onEdit={
+            // Treenaaja muokkaa omia reseptejään; admin voi muokata mitä tahansa
+            // katalogin reseptiä (RLS sallii adminin kirjoitukset palvelimella).
             !readOnly &&
-            recipeById.get(detail.recipeId)?.ownerRole === "athlete" &&
-            recipeById.get(detail.recipeId)?.createdBy === user.id
+            (user.role === "admin" ||
+              (recipeById.get(detail.recipeId)?.ownerRole === "athlete" &&
+                recipeById.get(detail.recipeId)?.createdBy === user.id))
               ? () => {
                   const target = recipeById.get(detail.recipeId);
                   if (!target) {
@@ -661,6 +717,25 @@ export function NutritionView({
               : undefined
           }
         />
+      ) : null}
+
+      {weekOpen ? (
+        <Sheet ariaLabel="Viikkokatsaus" onClose={() => setWeekOpen(false)}>
+          <h2 className="font-[family-name:var(--font-display)] text-lg font-bold text-[var(--text)]">Viikko</h2>
+          {/* Dokumentoi saman 7 päivän ikkunan, johon myös stepperin ‹ › rajautuu. */}
+          <p className="mt-0.5 text-xs text-[var(--text-subtle)]">Näytetään 7 viime päivää.</p>
+          <div className="mt-3">
+            <WeekOverview
+              days={weekDays}
+              targetKcal={weekTargetKcal}
+              avgKcal={weekAvgKcal}
+              onSelectDay={(date) => {
+                setSelectedDate(date);
+                setWeekOpen(false);
+              }}
+            />
+          </div>
+        </Sheet>
       ) : null}
 
       {swapTarget ? (
@@ -684,36 +759,6 @@ export function NutritionView({
             await swapDayMeal(entryId, recipeId);
           }}
         />
-      ) : null}
-
-      {addMenuOpen ? (
-        <Sheet ariaLabel="Lisää ateria" onClose={() => setAddMenuOpen(false)}>
-          <h2 className="font-[family-name:var(--font-display)] text-lg font-bold text-[var(--text)]">Lisää ateria</h2>
-          <div className="mt-3 grid gap-2">
-            <button
-              type="button"
-              className="flex items-center gap-3 rounded-xl border border-[var(--border)] bg-[var(--surface-2)] px-4 py-3 text-left transition hover:border-[var(--border-strong)]"
-              onClick={() => {
-                setAddMenuOpen(false);
-                setAddFoodOpen(true);
-              }}
-            >
-              <Sparkles className="size-5 shrink-0 text-[var(--accent)]" aria-hidden="true" />
-              <span className="text-sm font-semibold text-[var(--text)]">AI:lla</span>
-            </button>
-            <button
-              type="button"
-              className="flex items-center gap-3 rounded-xl border border-[var(--border)] bg-[var(--surface-2)] px-4 py-3 text-left transition hover:border-[var(--border-strong)]"
-              onClick={() => {
-                setAddMenuOpen(false);
-                setAddTag("breakfast");
-              }}
-            >
-              <BookOpen className="size-5 shrink-0 text-[var(--text-muted)]" aria-hidden="true" />
-              <span className="text-sm font-semibold text-[var(--text)]">Reseptit</span>
-            </button>
-          </div>
-        </Sheet>
       ) : null}
 
       {addTag ? (
@@ -928,6 +973,14 @@ function RecipeDetailSheet({
               </div>
             </div>
           </div>
+          {entry ? (
+            // Säädin skaalaa vain ainesluetteloa (valmistusapu) — se ei muuta kirjattua
+            // annosta, mikä on helppo luulla väärin päiväkirjasta avattuna.
+            <p className="mt-1 text-xs text-[var(--text-subtle)]">
+              Annosmäärä skaalaa ainesluetteloa valmistusta varten. Päiväkirjaan on kirjattu{" "}
+              {entry.servings === 1 ? "1 annos" : `${entry.servings} annosta`}.
+            </p>
+          ) : null}
           <div className="mt-2 space-y-3">
             {ingredientGroups.map((group) => (
               <div key={group.label || "__ungrouped"}>
@@ -1087,6 +1140,7 @@ function MealPickerSheet({
               <button
                 key={tag}
                 type="button"
+                aria-pressed={tag === mealTag}
                 className={`rounded-full px-3 py-1 text-xs font-semibold transition ${
                   tag === mealTag ? "bg-[var(--text)] text-[var(--background)]" : "bg-[var(--surface-2)] text-[var(--text-muted)]"
                 }`}

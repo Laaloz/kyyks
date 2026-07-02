@@ -26,6 +26,17 @@ type DraftRow = {
   grams: string;
   groupLabel: string;
   alternatives: DraftAlt[];
+  /** Alkuperäinen ainesrivi muokkaustilassa — säilyttää kentät, joita editori ei näytä
+   * (yksikkö, näyttömäärä "2 pkt", rooli, skaalaus, legacy-vaihtoehdot). */
+  original?: RecipeIngredient;
+};
+
+/** Tekstiaines ("suolaa maun mukaan"): ei määrää → editori ei muokkaa sitä, vain säilyttää. */
+const isTextRow = (row: DraftRow) => row.original !== undefined && row.original.quantity === undefined;
+
+const rowUnitLabel = (row: DraftRow) => {
+  const unit = row.original?.unit ?? "g";
+  return unit === "pcs" ? "kpl" : unit;
 };
 
 export function OwnRecipeEditor({
@@ -56,6 +67,7 @@ export function OwnRecipeEditor({
         ingredientName: alt.ingredientName,
         grams: String(alt.grams),
       })),
+      original: ing,
     })),
   );
   const [instructions, setInstructions] = useState(() => initialRecipe?.instructions ?? "");
@@ -191,16 +203,17 @@ export function OwnRecipeEditor({
       .filter((row) => row.ingredientId && Number(row.grams) > 0)
       .map((row, index) => {
         const catalogItem = catalogById.get(row.ingredientId);
-        const grams = Number(row.grams);
+        const quantity = Number(row.grams);
+        const unit = row.original?.unit ?? "g";
         return {
           id: `draft-${index}`,
           ingredientId: row.ingredientId,
           ingredientName: row.ingredientName,
-          quantity: grams,
-          unit: "g" as const,
-          normalizedQuantity: resolveRecipeIngredientNormalizedQuantity(grams, "g", catalogItem),
-          ingredientRole: "main" as const,
-          scalingMode: "linear" as const,
+          quantity,
+          unit,
+          normalizedQuantity: resolveRecipeIngredientNormalizedQuantity(quantity, unit, catalogItem),
+          ingredientRole: row.original?.ingredientRole ?? ("main" as const),
+          scalingMode: row.original?.scalingMode ?? ("linear" as const),
         };
       });
 
@@ -209,12 +222,21 @@ export function OwnRecipeEditor({
     }
 
     return resolveRecipeNutritionPreview(
-      { defaultServings: 1, ingredients: previewIngredients, nutritionPerServing: undefined, nutritionPerRecipe: undefined },
+      {
+        defaultServings: initialRecipe?.defaultServings ?? 1,
+        ingredients: previewIngredients,
+        nutritionPerServing: undefined,
+        nutritionPerRecipe: undefined,
+      },
       mergedCatalog,
     ).nutritionPerServing;
-  }, [rows, catalogById, mergedCatalog]);
+  }, [rows, catalogById, mergedCatalog, initialRecipe?.defaultServings]);
 
-  const canSave = name.trim().length > 0 && rows.some((row) => row.ingredientId && Number(row.grams) > 0);
+  // Tallennettavat rivit: määrälliset ainekset (grammat > 0) sekä säilytettävät tekstiainekset.
+  const isSavableRow = (row: DraftRow) =>
+    isTextRow(row) || (Boolean(row.ingredientId || row.original) && Number(row.grams) > 0);
+
+  const canSave = name.trim().length > 0 && rows.some((row) => isSavableRow(row) && !isTextRow(row));
 
   const handleSave = async () => {
     if (!canSave) {
@@ -223,28 +245,64 @@ export function OwnRecipeEditor({
     setIsSaving(true);
     setError("");
     try {
+      // Muokkaustilassa säilytetään kentät, joita editori ei näytä (kuvaus, ruokavalio-
+      // liput, annosrajat, ainesten yksiköt/näyttömäärät/roolit), jotta olemassa olevan
+      // katalogireseptin tallennus ei hävitä dataa.
       const input: RecipeInput = {
         id: initialRecipe?.id,
         name: name.trim(),
+        description: initialRecipe?.description,
         instructions: instructions.trim(),
         mealTag,
-        defaultServings: 1,
-        minServings: 1,
-        maxServings: 1,
-        ingredients: rows
-          .filter((row) => row.ingredientId && Number(row.grams) > 0)
-          .map((row) => ({
-            ingredientId: row.ingredientId,
+        dietaryFlags: initialRecipe?.dietaryFlags,
+        allergies: initialRecipe?.allergies,
+        defaultServings: initialRecipe?.defaultServings ?? 1,
+        minServings: initialRecipe?.minServings ?? 1,
+        maxServings: initialRecipe?.maxServings ?? 1,
+        ingredients: rows.filter(isSavableRow).map((row) => {
+          const original = row.original;
+          const groupLabel = row.groupLabel.trim() || undefined;
+          const alternativeOptions = row.alternatives
+            .filter((alt) => (alt.ingredientId || alt.ingredientName.trim()) && Number(alt.grams) > 0)
+            .map((alt) => ({
+              ingredientId: alt.ingredientId || undefined,
+              ingredientName: alt.ingredientName,
+              grams: Number(alt.grams),
+            }));
+
+          if (original && isTextRow(row)) {
+            // Tekstiaines kulkee läpi sellaisenaan (vain osio ja vaihtoehdot muokattavissa).
+            return {
+              ingredientId: original.ingredientId,
+              ingredientName: original.ingredientName,
+              groupLabel,
+              alternatives: original.alternatives,
+              alternativeOptions,
+              unit: original.unit,
+              displayQuantity: original.displayQuantity,
+              displayUnit: original.displayUnit,
+              ingredientRole: original.ingredientRole,
+              scalingMode: original.scalingMode,
+            };
+          }
+
+          const quantity = Number(row.grams);
+          // Näyttömäärä ("2 pkt") ei pidä enää paikkaansa jos määrä muuttui → pudotetaan.
+          const quantityChanged = original?.quantity !== quantity;
+          return {
+            ingredientId: row.ingredientId || original?.ingredientId,
             ingredientName: row.ingredientName,
-            groupLabel: row.groupLabel.trim() || undefined,
-            quantity: Number(row.grams),
-            unit: "g" as const,
-            ingredientRole: "main" as const,
-            scalingMode: "linear" as const,
-            alternativeOptions: row.alternatives
-              .filter((alt) => alt.ingredientId && Number(alt.grams) > 0)
-              .map((alt) => ({ ingredientId: alt.ingredientId, ingredientName: alt.ingredientName, grams: Number(alt.grams) })),
-          })),
+            groupLabel,
+            alternatives: original?.alternatives,
+            alternativeOptions,
+            quantity,
+            unit: original?.unit ?? ("g" as const),
+            displayQuantity: quantityChanged ? undefined : original?.displayQuantity,
+            displayUnit: quantityChanged ? undefined : original?.displayUnit,
+            ingredientRole: original?.ingredientRole ?? ("main" as const),
+            scalingMode: original?.scalingMode ?? ("linear" as const),
+          };
+        }),
       };
 
       const result = await saveRecipe(input);
@@ -292,6 +350,7 @@ export function OwnRecipeEditor({
               <button
                 key={tag}
                 type="button"
+                aria-pressed={tag === mealTag}
                 className={`rounded-full px-3 py-1.5 text-xs font-semibold transition ${
                   tag === mealTag ? "bg-[var(--text)] text-[var(--background)]" : "bg-[var(--surface-2)] text-[var(--text-muted)]"
                 }`}
@@ -311,20 +370,28 @@ export function OwnRecipeEditor({
                 <div key={row.key} className="py-2.5">
                   <div className="flex items-center gap-3">
                     <span className="min-w-0 flex-1 truncate text-sm text-[var(--text)]">{row.ingredientName}</span>
-                    <Input
-                      className="h-9 w-20 px-2 text-center text-sm"
-                      type="number"
-                      inputMode="numeric"
-                      min={0}
-                      value={row.grams}
-                      aria-label={`${row.ingredientName} grammat`}
-                      onChange={(event) =>
-                        setRows((previous) =>
-                          previous.map((item) => (item.key === row.key ? { ...item, grams: event.target.value } : item)),
-                        )
-                      }
-                    />
-                    <span className="text-xs text-[var(--text-subtle)]">g</span>
+                    {isTextRow(row) ? (
+                      <span className="text-xs text-[var(--text-subtle)]">
+                        {[row.original?.displayQuantity, row.original?.displayUnit].filter(Boolean).join(" ") || "maun mukaan"}
+                      </span>
+                    ) : (
+                      <>
+                        <Input
+                          className="h-9 w-20 px-2 text-center text-sm"
+                          type="number"
+                          inputMode="numeric"
+                          min={0}
+                          value={row.grams}
+                          aria-label={`${row.ingredientName} määrä (${rowUnitLabel(row)})`}
+                          onChange={(event) =>
+                            setRows((previous) =>
+                              previous.map((item) => (item.key === row.key ? { ...item, grams: event.target.value } : item)),
+                            )
+                          }
+                        />
+                        <span className="text-xs text-[var(--text-subtle)]">{rowUnitLabel(row)}</span>
+                      </>
+                    )}
                     <button
                       type="button"
                       className="grid size-8 shrink-0 place-items-center rounded-full bg-[var(--surface-2)] text-[var(--text-subtle)] transition hover:text-[var(--danger)]"
