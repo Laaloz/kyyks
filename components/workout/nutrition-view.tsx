@@ -136,25 +136,24 @@ export function NutritionView({
         }
       : null,
   );
-  // Poisto kumoamisikkunalla: rivi korvautuu heti "Kumoa"-rivillä ja oikea poisto
-  // ajetaan vasta viiveen jälkeen. Uusi poisto viimeistelee edellisen välittömästi.
-  const [pendingDelete, setPendingDelete] = useState<{ entry: DayMealPlanEntry; timer: number } | null>(null);
+  // Poisto vahvistetaan ensin (sama window.confirm-kuvio kuin muualla sovelluksessa)
+  // ja tapahtuu sitten heti: optimistinen paikallinen poisto + palvelinkutsu taustalla,
+  // jotta se ei huku vaikka sovellus suljettaisiin saman tien. Epäonnistuminen ei saa
+  // jäädä äänettömäksi — rivi palaa listaan ja tämä viesti kertoo miksi.
+  const [deleteError, setDeleteError] = useState<string | null>(null);
   const requestDelete = (entry: DayMealPlanEntry) => {
-    if (pendingDelete) {
-      window.clearTimeout(pendingDelete.timer);
-      void removeDayMeal(pendingDelete.entry.id);
+    const title = entry.recipeId
+      ? recipeById.get(entry.recipeId)?.name ?? "ateria"
+      : entry.foodName?.trim() || "ateria";
+    if (!window.confirm(`Poistetaanko ${title}? Toimintoa ei voi kumota.`)) {
+      return;
     }
-    const timer = window.setTimeout(() => {
-      void removeDayMeal(entry.id);
-      setPendingDelete((current) => (current && current.entry.id === entry.id ? null : current));
-    }, 5000);
-    setPendingDelete({ entry, timer });
-  };
-  const undoDelete = () => {
-    if (pendingDelete) {
-      window.clearTimeout(pendingDelete.timer);
-    }
-    setPendingDelete(null);
+    setDeleteError(null);
+    void removeDayMeal(entry.id).then((result) => {
+      if (!result.ok) {
+        setDeleteError(result.message ?? "Aterian poisto epäonnistui.");
+      }
+    });
   };
 
   const todayKey = useMemo(() => localDateKey(new Date()), []);
@@ -194,10 +193,7 @@ export function NutritionView({
     [state.dayMealPlans, selectedDate, user.id],
   );
   const hasDay = dayRows.length > 0;
-  // Kumoamista odottava rivi ei kuulu laskuihin (saanti, x/y syöty) — se on jo "poistettu".
-  const pendingDeleteId = pendingDelete?.entry.id ?? null;
-  const activeDayRows = pendingDeleteId ? dayRows.filter((entry) => entry.id !== pendingDeleteId) : dayRows;
-  const eatenRows = activeDayRows.filter((entry) => entry.eatenAt);
+  const eatenRows = dayRows.filter((entry) => entry.eatenAt);
   // Päiväkirjarivin makrot: resepti (reseptin ainekset × annokset) tai ad hoc -ruoka
   // (snapshot per 100 g × grammat). Palauttaa null jos reseptiä ei löydy.
   const entryMacros = (entry: DayMealPlanEntry): Macros | null => {
@@ -430,10 +426,16 @@ export function NutritionView({
             </p>
             {hasDay ? (
               <p className="font-[family-name:var(--font-display)] text-sm font-semibold tabular-nums text-[var(--text-subtle)]">
-                {eatenRows.length}/{activeDayRows.length} syöty
+                {eatenRows.length}/{dayRows.length} syöty
               </p>
             ) : null}
           </div>
+
+          {deleteError ? (
+            <p className="mt-2 text-sm text-[var(--danger)]" role="alert">
+              {deleteError}
+            </p>
+          ) : null}
 
           {!hasDay ? (
             <div className="mt-3">
@@ -447,23 +449,6 @@ export function NutritionView({
               <div className="mt-3 divide-y divide-[var(--border)]">
                 {dayRows.map((entry) => {
                   const recipe = entry.recipeId ? recipeById.get(entry.recipeId) : undefined;
-                  if (entry.id === pendingDeleteId) {
-                    // Poistettu rivi korvautuu paikallaan kumoamisrivillä kunnes ikkuna umpeutuu.
-                    return (
-                      <div key={entry.id} role="status" className="flex items-center justify-between gap-3 py-3">
-                        <p className="min-w-0 flex-1 truncate text-sm text-[var(--text-subtle)]">
-                          Poistettu: {recipe?.name ?? entry.foodName ?? "ateria"}
-                        </p>
-                        <button
-                          type="button"
-                          className="shrink-0 rounded-full bg-[var(--surface-2)] px-3 py-1.5 text-xs font-semibold text-[var(--text)] transition hover:text-[var(--accent)]"
-                          onClick={undoDelete}
-                        >
-                          Kumoa
-                        </button>
-                      </div>
-                    );
-                  }
                   const isAdHoc = !entry.recipeId;
                   // Jumiin jäänyt "pending" (esim. AI ei vastannut, sessio katkesi) merkitään
                   // vanhentumisen jälkeen muokattavaksi, ettei se jää ikuisesti "arvioidaan"-tilaan.

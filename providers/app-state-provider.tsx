@@ -7553,9 +7553,9 @@ function findResolvedUserIdInSnapshot(
         if (!target) {
           return { ok: false, message: "Ateriaa ei löytynyt." };
         }
-        if (target.eatenAt) {
-          return { ok: false, message: "Syötyä ateriaa ei voi poistaa." };
-        }
+        // Myös syödyn aterian saa poistaa: päiväkirjan poisto vahvistetaan käyttäjältä,
+        // joten erillistä suojausta ei enää tarvita (vaihto on eri asia — se muuttaisi
+        // jo syödyksi merkityn sisältöä).
 
         const pendingCreate = pendingDayMealCreatesRef.current.get(entryId);
         if (pendingCreate) {
