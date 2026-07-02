@@ -2836,6 +2836,12 @@ export function AppStateProvider({ children }: PropsWithChildren) {
   const pendingDayMealMutationsRef = useRef<Map<string, PendingDayMealMutation>>(new Map());
   // Estää saman aterian päällekkäiset taustauudelleenarviot (tuplaklikkaus / nopea uudelleenavaus).
   const reestimatingDayMealIdsRef = useRef<Set<string>>(new Set());
+  // Kuvalla lisättyjen ruokien kuvat session ajaksi (serverId → kuva): jos käyttäjä korjaa nimen
+  // heti lisäyksen jälkeen, uudelleenarvio saa kuvan + nimen → nimi ohjaa tunnistusta, kuva
+  // annoskokoa. Vain muistissa (ei tallenneta minnekään); FIFO-katto rajaa muistinkäytön, koska
+  // base64-kuva on ~0,5 MB.
+  const dayMealPhotosRef = useRef<Map<string, { imageBase64: string; mimeType: string }>>(new Map());
+  const DAY_MEAL_PHOTO_CACHE_MAX = 5;
   const dayMealEatenMutationVersionRef = useRef<Map<string, number>>(new Map());
   const dayMealEatenMutationQueueRef = useRef<Map<string, QueuedDayMealEatenMutation>>(new Map());
   const dayMealEatenMutationInFlightRef = useRef<Set<string>>(new Set());
@@ -7717,6 +7723,18 @@ function findResolvedUserIdInSnapshot(
           applyPendingDayMealEatenAfterCreate(optimisticId, serverId, pendingCreate);
         }
 
+        // Kuva talteen session ajaksi: nimen korjaus jälkikäteen voi hyödyntää samaa kuvaa.
+        if (input.imageBase64 && input.mimeType) {
+          dayMealPhotosRef.current.set(serverId, { imageBase64: input.imageBase64, mimeType: input.mimeType });
+          while (dayMealPhotosRef.current.size > DAY_MEAL_PHOTO_CACHE_MAX) {
+            const oldest = dayMealPhotosRef.current.keys().next().value;
+            if (oldest === undefined) {
+              break;
+            }
+            dayMealPhotosRef.current.delete(oldest);
+          }
+        }
+
         // 2) Aja AI-arvio (teksti tai kuva).
         const aiBody =
           input.imageBase64 && input.mimeType
@@ -7892,10 +7910,17 @@ function findResolvedUserIdInSnapshot(
                 }),
               }).catch(() => null);
 
+              // Kuvalla lisätty ruoka, jonka kuva on vielä muistissa → uudelleenarvio kuvan JA
+              // korjatun nimen yhdistelmällä: nimi ohjaa tunnistusta, kuva annoskokoa.
+              const storedPhoto = dayMealPhotosRef.current.get(entryId);
               const aiResponse = await fetch("/api/nutrition/ai-estimate", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ query: input.name }),
+                body: JSON.stringify(
+                  storedPhoto
+                    ? { query: input.name, imageBase64: storedPhoto.imageBase64, mimeType: storedPhoto.mimeType }
+                    : { query: input.name },
+                ),
               }).catch(() => null);
               const aiPayload = (aiResponse ? await aiResponse.json().catch(() => null) : null) as
                 | {

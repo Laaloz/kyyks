@@ -48,19 +48,35 @@ const IMAGE_PROMPT = [
   "Vastaa pelkkä JSON ilman selityksiä.",
 ].join(" ");
 
-// Tekstiprompti: pidetään tiiviinä ja yksiselitteisenä, jotta pikapolku (thinking pois) palauttaa
-// hyvän, ei-nollan arvion jo ensimmäisellä yrityksellä → ei hidasta ajattelevaa uusintaa.
-function textPrompt(query: string): string {
+// Yhteiset ohjerivit molemmille tekstiprompteille: tulostusmuoto, kalibrointi ja "ei nollia".
+const TEXT_PROMPT_TAIL = [
+  'Tulkitse yleiset suomalaiset ruokanimet, lyhenteet ja puhekieli (esim. "rahka", "pyttipannu", "prkl").',
+  "Anna AINA paras mahdollinen arvio tunnistettavasta ruoasta — älä koskaan palauta pelkkiä nollia.",
+  "Palauta: siistitty nimi suomeksi, tyypillinen syöty annos grammoina sekä energia ja makrot PER 100 GRAMMAA (kcal, proteiini, hiilihydraatit, rasva).",
+  "confidence välillä 0–1: 0.8+ kun tunnet tuotteen hyvin, 0.5–0.7 yleisarvio, alle 0.5 epävarma.",
+  "Vastaa pelkkä JSON ilman selityksiä.",
+];
+
+// Pikapolun prompti (yksinkertainen syöte, thinking pois): vain olennainen. Monikomponentti- ja
+// määräohjeet on jätetty pois — ne ovat "banaanille" turhia ja ylimääräinen ohjeistus vain
+// hämmentää nopeaa, ajattelematonta poimintaa.
+function fastTextPrompt(query: string): string {
+  return [
+    `Olet ravitsemusasiantuntija. Arvioi mahdollisimman tarkasti suomalainen ruoka tai juoma: "${query}".`,
+    'Jos kyseessä on brändi- tai kauppatuote (esim. "Coop proteiinivanukas", "Valio"), käytä tuotteen pakkausselosteen tyypillisiä arvoja.',
+    ...TEXT_PROMPT_TAIL,
+  ].join(" ");
+}
+
+// Täysi prompti (monikomponentti/määrät; myös heikon pika-arvion ajatteleva uusinta): mukana
+// purku- ja määräohjeet, jotka vaativat päättelyä.
+function fullTextPrompt(query: string): string {
   return [
     `Olet ravitsemusasiantuntija. Arvioi mahdollisimman tarkasti mitä käyttäjä söi tai joi: "${query}".`,
     'Jos syöte sisältää useita komponentteja (eroteltu pilkulla, sanalla "ja" tai määrillä, esim. "banaani, proteiinivanukas ja 10 g cashewpähkinöitä"), pura se osiin, arvioi kunkin paino ja makrot erikseen ja yhdistä yhdeksi annokseksi: laske yhteispaino grammoina ja per 100 g annoksen painotettuna keskiarvona.',
     'Jos mukana on brändi- tai kauppatuote (esim. "Coop proteiinivanukas", "Valio"), käytä tuotteen pakkausselosteen tyypillisiä arvoja.',
     'Säilytä käyttäjän ilmoittamat määrät ja kappalemäärät (esim. "2 banaania", "10 g pähkinöitä") nimessä ja huomioi ne annoskoossa grammoina.',
-    'Tulkitse yleiset suomalaiset ruokanimet, lyhenteet ja puhekieli (esim. "rahka", "pyttipannu", "prkl").',
-    "Anna AINA paras mahdollinen arvio tunnistettavasta ruoasta — älä koskaan palauta pelkkiä nollia.",
-    "Palauta: siistitty nimi suomeksi, annoskoko grammoina sekä energia ja makrot PER 100 GRAMMAA (kcal, proteiini, hiilihydraatit, rasva).",
-    "confidence välillä 0–1: 0.8+ kun tunnet tuotteen hyvin, 0.5–0.7 yleisarvio, alle 0.5 epävarma.",
-    "Vastaa pelkkä JSON ilman selityksiä.",
+    ...TEXT_PROMPT_TAIL,
   ].join(" ");
 }
 
@@ -196,8 +212,9 @@ function logAiEvent(
     });
 }
 
-// Jaettu Gemini-kutsu: kutsu + turvallinen parsinta. Kiintiö on jo tarkistettu (checkQuota)
-// julkisten funktioiden alussa — ei per yritys. `parts` on Gemini-pyynnön sisältö (teksti ja/tai kuva).
+// Jaettu Gemini-kutsu: kutsu + turvallinen parsinta. Kiintiön tarkistaa checkQuota julkisissa
+// funktioissa (pikapolulla rinnakkain tämän kanssa) — ei per yritys. `parts` on Gemini-pyynnön
+// sisältö (teksti ja/tai kuva).
 async function runGeminiEstimate(
   userId: string,
   parts: unknown[],
@@ -337,18 +354,31 @@ export async function estimateFoodFromImage(args: {
   userId: string;
   imageBase64: string;
   mimeType: string;
+  // Käyttäjän antama nimi/täsmennys (esim. muokkauksen uudelleenarvio kuvalla lisätylle ruoalle).
+  // Nimi kertoo MITÄ ruoka on; kuva kertoo annoskoon ja koostumuksen — yhdessä tarkempi kuin
+  // kumpikaan yksin.
+  hint?: string;
 }): Promise<AiFoodResult> {
   const quotaError = await checkQuota(args.userId);
   if (quotaError) {
     return quotaError;
   }
 
+  const prompt = args.hint
+    ? [
+        IMAGE_PROMPT,
+        `TÄRKEÄÄ: Käyttäjä on itse nimennyt kuvan ruoan: "${args.hint}". Luota käyttäjän nimeen tunnistuksessa`,
+        "(se voi tarkentaa tai korjata sen mitä kuvasta näkyy) ja käytä kuvaa annoskoon ja koostumuksen arviointiin.",
+        "Palauta nimenä käyttäjän antama nimi siistittynä.",
+      ].join(" ")
+    : IMAGE_PROMPT;
+
   // Rajattu thinkingBudget: kuva tarvitsee ajattelua (budjetilla 0 tulos voi olla tyhjä/heikko),
   // mutta ilman rajaa dynaaminen budjetti venyy — mm. 3.5-flash-varamalli osui 12 s katkaisuun
   // eikä varayritys koskaan ehtinyt vastata. Rajaus koskee ketjun kaikkia malleja.
   const result = await estimateWithModelFallback(
     args.userId,
-    [{ text: IMAGE_PROMPT }, { inline_data: { mime_type: args.mimeType, data: args.imageBase64 } }],
+    [{ text: prompt }, { inline_data: { mime_type: args.mimeType, data: args.imageBase64 } }],
     { thinkingBudget: THINKING_BUDGET_CAPPED, timeoutMs: GEMINI_IMAGE_TIMEOUT_MS },
   );
   if (!result.ok) {
@@ -362,9 +392,10 @@ export async function estimateFoodFromImage(args: {
       return { ok: true, estimate: offToEstimate(off, 0.95) };
     }
   }
-  // Ei viivakoodia mutta heikko arvio → kokeile tunnistettua nimeä OFF-nimihaulla.
+  // Ei viivakoodia mutta heikko arvio → OFF-nimihaku. Käyttäjän antama nimi on luotettavampi
+  // hakutermi kuin mallin tunnistama.
   if (isWeakEstimate(result.estimate)) {
-    const off = await searchByName(result.estimate.name);
+    const off = await searchByName(args.hint || result.estimate.name);
     if (off) {
       return { ok: true, estimate: offToEstimate(off, 0.7) };
     }
@@ -406,25 +437,35 @@ async function estimateWithModelFallback(
 }
 
 export async function estimateFoodFromText(args: { userId: string; query: string }): Promise<AiFoodResult> {
-  const quotaError = await checkQuota(args.userId);
-  if (quotaError) {
-    return quotaError;
-  }
-
-  const parts = [{ text: textPrompt(args.query) }];
+  // Täysi prompti: monikomponenttipolku ja heikon pika-arvion ajatteleva uusinta.
+  const fullParts = [{ text: fullTextPrompt(args.query) }];
   const thinkingOpts = { thinkingBudget: THINKING_BUDGET_CAPPED, timeoutMs: GEMINI_TEXT_THINKING_TIMEOUT_MS };
 
   // Vaikea syöte → ajatellaan heti (503-sietoinen: ensisijainen → varamalli → ensisijainen).
   // Monikomponenttiaterialle OFF-nimihaku ei sovi (ei yhtä tuotetta) → luotetaan Geminiin.
+  // Latenssia hallitsee thinking (sekunteja), joten kiintiötarkistus saa olla sarjassa.
   if (isComplexQuery(args.query)) {
-    return estimateWithModelFallback(args.userId, parts, thinkingOpts);
+    const quotaError = await checkQuota(args.userId);
+    if (quotaError) {
+      return quotaError;
+    }
+    return estimateWithModelFallback(args.userId, fullParts, thinkingOpts);
   }
 
-  // Yksinkertainen syöte: pikapolku (thinking pois) vastaa normaalisti ~1 s.
-  const fast = await runGeminiEstimate(args.userId, parts, {
-    thinkingBudget: 0,
-    timeoutMs: GEMINI_TEXT_TIMEOUT_MS,
-  });
+  // Yksinkertainen syöte: pikapolku (tiivis prompti, thinking pois) vastaa normaalisti ~1 s.
+  // Kiintiötarkistus rinnakkain Gemini-kutsun kanssa: Supabase-kierros (~0,1-0,3 s) poistuu
+  // kriittiseltä polulta. Rajan ylittänyt pyyntö tekee tällöin yhden "hukka-Gemini-kutsun"
+  // ennen 429:ää — harvinainen ja hyväksyttävä hinta siitä, että jokainen normaali haku nopeutuu.
+  const [quotaError, fast] = await Promise.all([
+    checkQuota(args.userId),
+    runGeminiEstimate(args.userId, [{ text: fastTextPrompt(args.query) }], {
+      thinkingBudget: 0,
+      timeoutMs: GEMINI_TEXT_TIMEOUT_MS,
+    }),
+  ]);
+  if (quotaError) {
+    return quotaError;
+  }
   if (fast.ok && !isWeakEstimate(fast.estimate)) {
     return fast;
   }
@@ -441,7 +482,7 @@ export async function estimateFoodFromText(args: { userId: string; query: string
     console.warn(`[ai-food] heikko pika-arvio "${args.query}" → uusinta ajattelulla`);
   }
   const [retry, off] = await Promise.all([
-    estimateWithModelFallback(args.userId, parts, thinkingOpts),
+    estimateWithModelFallback(args.userId, fullParts, thinkingOpts),
     searchByName(args.query),
   ]);
   if (retry.ok && !isWeakEstimate(retry.estimate)) {

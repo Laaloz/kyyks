@@ -32,12 +32,12 @@ export async function POST(request: Request) {
   const imageBase64 = typeof body?.imageBase64 === "string" ? body.imageBase64 : "";
   const mimeType = typeof body?.mimeType === "string" ? body.mimeType : "";
 
-  // Tekstihaku: arvioi makrot ruoan nimen perusteella (haun "ei löytynyt" -polku).
-  if (query) {
-    if (query.length < 2 || query.length > 120) {
-      return NextResponse.json({ message: "Anna ruoan nimi." }, { status: 400 });
-    }
+  if (query && (query.length < 2 || query.length > 120)) {
+    return NextResponse.json({ message: "Anna ruoan nimi." }, { status: 400 });
+  }
 
+  // Tekstihaku: arvioi makrot ruoan nimen perusteella (haun "ei löytynyt" -polku).
+  if (query && !imageBase64) {
     const result = await estimateFoodFromText({
       userId: requesterResult.requester.id,
       query,
@@ -50,7 +50,8 @@ export async function POST(request: Request) {
     return NextResponse.json({ estimate: result.estimate });
   }
 
-  // Kuvahaku.
+  // Kuvahaku. Kuva + teksti yhdessä = täsmennetty kuva-arvio: käyttäjä on nimennyt kuvalla
+  // lisätyn ruoan uudelleen → nimi ohjaa tunnistusta, kuva annoskokoa ja koostumusta.
   if (!imageBase64 || !mimeType) {
     return NextResponse.json({ message: "Anna kuva tai ruoan nimi." }, { status: 400 });
   }
@@ -67,6 +68,7 @@ export async function POST(request: Request) {
     userId: requesterResult.requester.id,
     imageBase64,
     mimeType,
+    hint: query || undefined,
   });
 
   if (!result.ok) {
