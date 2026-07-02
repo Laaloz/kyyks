@@ -4,6 +4,7 @@ import { z } from "zod";
 
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { lookupByBarcode, searchByName, type OffMatch } from "@/lib/server/open-food-facts";
+import type { FoodImageMode } from "@/lib/types";
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 // gemini-2.5-flash: vakaa GA-malli ja testattu nopeimmaksi. 3.5-flash ajattelee kuvapolulla
@@ -31,22 +32,44 @@ const GEMINI_IMAGE_TIMEOUT_MS = 12_000;
 // mutta katkaisee loputtoman pohdinnan.
 const THINKING_BUDGET_CAPPED = 1024;
 
-// Kuvaprompti: selkeä tärkeysjärjestys (taulukko → viivakoodi → brändi → visuaalinen arvio) ohjaa
-// mallin nopeasti oikeaan lähteeseen → vähemmän heikkoja arvioita ja siten vähemmän hidasta OFF-/
-// uusintapolkua. "Anna AINA paras arvio" + kalibroitu confidence pitävät tulokset löydettävinä.
-const IMAGE_PROMPT = [
-  "Olet ravitsemusasiantuntija. Tunnista kuvan ruoka tai juoma ja arvioi ravintosisältö mahdollisimman tarkasti.",
-  "Etene tässä tärkeysjärjestyksessä ja käytä ensimmäistä saatavilla olevaa lähdettä:",
-  "1) Jos näkyy pakkauksen RAVINTOSISÄLTÖTAULUKKO, lue arvot suoraan siitä äläkä arvaa; jos arvot ovat per annos, muunna ne per 100 g.",
-  "2) Jos näkyy viivakoodi, palauta sen numerot kenttään barcode (vain numerot).",
-  '3) Jos tuote on pakattu, lue brändi ja tuotenimi pakkauksesta ja käytä niitä nimessä (esim. pieni Pringles-tölkki → "Pringles Original"). Tunnista myös pienet pakkaukset, pullot ja tölkit.',
-  "4) Muuten arvioi ruoka visuaalisesti suomalaisen ruokakulttuurin tyypillisillä arvoilla.",
-  "Jos kuvassa on useita ruokia, nimeä ne yhdessä ja arvioi koko annos yhtenä kokonaisuutena: yhteispaino grammoina ja makrot per 100 g annoksen painotettuna keskiarvona.",
+// Kuvapromptien yhteinen häntä: "ei nollia", tulostusmuoto ja kalibroitu confidence pitävät
+// tulokset löydettävinä kaikissa kuvaustiloissa.
+const IMAGE_PROMPT_TAIL = [
   "Anna AINA paras mahdollinen arvio tunnistettavasta ruoasta — älä koskaan palauta pelkkiä nollia.",
   "Palauta: nimi suomeksi, annoskoko grammoina sekä energia ja makrot PER 100 GRAMMAA (kcal, proteiini, hiilihydraatit, rasva).",
-  "confidence välillä 0–1: 0.9+ kun arvot on luettu pakkausselosteesta, 0.6–0.8 selkeästi tunnistettu ruoka, alle 0.5 epävarma.",
+  "confidence välillä 0–1: 0.9+ kun arvot on luettu pakkausselosteesta tai viivakoodi on luettu varmasti, 0.6–0.8 selkeästi tunnistettu ruoka, alle 0.5 epävarma.",
   "Vastaa pelkkä JSON ilman selityksiä.",
-].join(" ");
+];
+
+// Kuvaustilan mukainen prompti: kun käyttäjä kertoo kamerassa mitä kuvaa, malli ohjataan suoraan
+// oikeaan lähteeseen sen sijaan, että yleisprompti arvailisi tärkeysjärjestyksen. "photo" (annos)
+// on oletus ja säilyttää tärkeysjärjestyksen, koska annoskuvassakin voi näkyä pakkaus.
+const IMAGE_PROMPTS: Record<FoodImageMode, string> = {
+  photo: [
+    "Olet ravitsemusasiantuntija. Tunnista kuvan ruoka tai juoma ja arvioi ravintosisältö mahdollisimman tarkasti.",
+    "Etene tässä tärkeysjärjestyksessä ja käytä ensimmäistä saatavilla olevaa lähdettä:",
+    "1) Jos näkyy pakkauksen RAVINTOSISÄLTÖTAULUKKO, lue arvot suoraan siitä äläkä arvaa; jos arvot ovat per annos, muunna ne per 100 g.",
+    "2) Jos näkyy viivakoodi, palauta sen numerot kenttään barcode (vain numerot).",
+    '3) Jos tuote on pakattu, lue brändi ja tuotenimi pakkauksesta ja käytä niitä nimessä (esim. pieni Pringles-tölkki → "Pringles Original"). Tunnista myös pienet pakkaukset, pullot ja tölkit.',
+    "4) Muuten arvioi ruoka visuaalisesti suomalaisen ruokakulttuurin tyypillisillä arvoilla.",
+    "Jos kuvassa on useita ruokia, nimeä ne yhdessä ja arvioi koko annos yhtenä kokonaisuutena: yhteispaino grammoina ja makrot per 100 g annoksen painotettuna keskiarvona.",
+    ...IMAGE_PROMPT_TAIL,
+  ].join(" "),
+  label: [
+    "Olet ravitsemusasiantuntija. Kuvassa on elintarvikepakkaus ja sen RAVINTOSISÄLTÖTAULUKKO.",
+    "Lue energia ja makrot suoraan taulukosta äläkä arvaa. Jos arvot ovat per annos, muunna ne per 100 g.",
+    "Lue brändi ja tuotenimi pakkauksesta nimeen. Jos kuvassa näkyy myös viivakoodi, palauta sen numerot kenttään barcode.",
+    "Annoskoko grammoina: käytä pakkauksen ilmoittamaa annoskokoa tai pakkauskokoa jos se näkyy, muuten tuotteen tyypillinen annos.",
+    ...IMAGE_PROMPT_TAIL,
+  ].join(" "),
+  barcode: [
+    "Olet ravitsemusasiantuntija. Kuvassa on tuotteen VIIVAKOODI.",
+    "Tärkein tehtäväsi: lue viivakoodin numerot tarkasti ja palauta ne kenttään barcode (vain numerot, tyypillisesti 8 tai 13 numeroa).",
+    "Tarkista numerot huolellisesti — yksikin väärä numero estää tuotteen löytymisen tietokannasta.",
+    "Lue lisäksi brändi ja tuotenimi pakkauksesta jos ne näkyvät, ja anna paras arviosi ravintosisällöstä.",
+    ...IMAGE_PROMPT_TAIL,
+  ].join(" "),
+};
 
 // Yhteiset ohjerivit molemmille tekstiprompteille: tulostusmuoto, kalibrointi ja "ei nollia".
 const TEXT_PROMPT_TAIL = [
@@ -354,6 +377,8 @@ export async function estimateFoodFromImage(args: {
   userId: string;
   imageBase64: string;
   mimeType: string;
+  // Kuvaustila kamerasta: kohdistettu prompti (annos / etiketti / viivakoodi). Oletus "photo".
+  mode?: FoodImageMode;
   // Käyttäjän antama nimi/täsmennys (esim. muokkauksen uudelleenarvio kuvalla lisätylle ruoalle).
   // Nimi kertoo MITÄ ruoka on; kuva kertoo annoskoon ja koostumuksen — yhdessä tarkempi kuin
   // kumpikaan yksin.
@@ -364,14 +389,15 @@ export async function estimateFoodFromImage(args: {
     return quotaError;
   }
 
+  const basePrompt = IMAGE_PROMPTS[args.mode ?? "photo"];
   const prompt = args.hint
     ? [
-        IMAGE_PROMPT,
+        basePrompt,
         `TÄRKEÄÄ: Käyttäjä on itse nimennyt kuvan ruoan: "${args.hint}". Luota käyttäjän nimeen tunnistuksessa`,
         "(se voi tarkentaa tai korjata sen mitä kuvasta näkyy) ja käytä kuvaa annoskoon ja koostumuksen arviointiin.",
         "Palauta nimenä käyttäjän antama nimi siistittynä.",
       ].join(" ")
-    : IMAGE_PROMPT;
+    : basePrompt;
 
   // Rajattu thinkingBudget: kuva tarvitsee ajattelua (budjetilla 0 tulos voi olla tyhjä/heikko),
   // mutta ilman rajaa dynaaminen budjetti venyy — mm. 3.5-flash-varamalli osui 12 s katkaisuun

@@ -435,6 +435,11 @@ export type DayMealSource = "plan" | "swapped" | "added";
 export type DayMealFoodSource = "manual" | "ai" | "fineli";
 export type DayMealAiStatus = "pending" | "failed";
 
+// AI-kuva-arvion kuvaustila: käyttäjä kertoo kamerassa mitä kuvaa → palvelin valitsee
+// kohdistetun promptin. "photo" = annos (oletus), "label" = ravintosisältötaulukko,
+// "barcode" = viivakoodi.
+export type FoodImageMode = "photo" | "label" | "barcode";
+
 export interface DayMealPlanEntry {
   id: string;
   athleteId: string;

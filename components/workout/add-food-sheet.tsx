@@ -10,7 +10,7 @@ import { EnergySplit } from "@/components/workout/nutrition/energy-split";
 import { addFoodFormSchema, macroEnergyWarning } from "@/components/workout/schemas";
 import { mealTagLabel } from "@/lib/nutrition";
 import { cn } from "@/lib/utils";
-import type { AppState, DayMealPlanEntry, MealTag } from "@/lib/types";
+import type { AppState, DayMealPlanEntry, FoodImageMode, MealTag } from "@/lib/types";
 
 const MEAL_TAGS: MealTag[] = ["breakfast", "lunch", "snack", "dinner", "evening_snack"];
 
@@ -65,7 +65,7 @@ export function AddFoodSheet({
   onClose: () => void;
   onLogOwnFood: (ingredientId: string, grams: number, mealTag: MealTag) => Promise<ActionOutcome>;
   onQuickAdd: (name: string, mealTag: MealTag) => Promise<ActionOutcome>;
-  onQuickAddPhoto: (input: { imageBase64: string; mimeType: string; mealTag: MealTag }) => Promise<ActionOutcome>;
+  onQuickAddPhoto: (input: { imageBase64: string; mimeType: string; imageMode: FoodImageMode; mealTag: MealTag }) => Promise<ActionOutcome>;
 }) {
   const [query, setQuery] = useState("");
   const [analyzing, setAnalyzing] = useState(false);
@@ -105,8 +105,8 @@ export function AddFoodSheet({
     }
   };
 
-  const analyzeAndAdd = async (base64: string, mimeType: string) => {
-    const result = await onQuickAddPhoto({ imageBase64: base64, mimeType, mealTag });
+  const analyzeAndAdd = async (base64: string, mimeType: string, imageMode: FoodImageMode) => {
+    const result = await onQuickAddPhoto({ imageBase64: base64, mimeType, imageMode, mealTag });
     if (result.ok) {
       onClose();
     } else {
@@ -115,13 +115,13 @@ export function AddFoodSheet({
   };
 
   // Tiedostopolku (galleria / fallback): skaalaa ensin, sitten arvioi.
-  const runPhoto = async (file: File) => {
+  const runPhoto = async (file: File, imageMode: FoodImageMode) => {
     setCameraOpen(false);
     setAnalyzing(true);
     setError("");
     try {
       const { base64, mimeType } = await fileToScaledBase64(file);
-      await analyzeAndAdd(base64, mimeType);
+      await analyzeAndAdd(base64, mimeType, imageMode);
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "Kuvan käsittely epäonnistui.");
     } finally {
@@ -130,12 +130,12 @@ export function AddFoodSheet({
   };
 
   // In-app-kamera: kuva on jo skaalattu canvasilla.
-  const runCapturedPhoto = async (base64: string, mimeType: string) => {
+  const runCapturedPhoto = async (base64: string, mimeType: string, imageMode: FoodImageMode) => {
     setCameraOpen(false);
     setAnalyzing(true);
     setError("");
     try {
-      await analyzeAndAdd(base64, mimeType);
+      await analyzeAndAdd(base64, mimeType, imageMode);
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "Kuvan käsittely epäonnistui.");
     } finally {
@@ -235,8 +235,8 @@ export function AddFoodSheet({
 
       {cameraOpen ? (
         <CameraCapture
-          onCapture={({ base64, mimeType }) => void runCapturedPhoto(base64, mimeType)}
-          onPickFile={(file) => void runPhoto(file)}
+          onCapture={({ base64, mimeType, mode }) => void runCapturedPhoto(base64, mimeType, mode)}
+          onPickFile={(file, mode) => void runPhoto(file, mode)}
           onClose={() => setCameraOpen(false)}
         />
       ) : null}

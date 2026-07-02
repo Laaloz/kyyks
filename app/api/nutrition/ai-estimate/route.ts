@@ -18,8 +18,16 @@ const ALLOWED_MIME = /^image\/(jpeg|png|webp|heic|heif)$/i;
 type BodyPayload = {
   imageBase64?: string;
   mimeType?: string;
+  imageMode?: string;
   query?: string;
 };
+
+const IMAGE_MODES = ["photo", "label", "barcode"] as const;
+type ImageMode = (typeof IMAGE_MODES)[number];
+
+function parseImageMode(value: unknown): ImageMode | undefined {
+  return IMAGE_MODES.includes(value as ImageMode) ? (value as ImageMode) : undefined;
+}
 
 export async function POST(request: Request) {
   const requesterResult = await getNutritionRequester();
@@ -68,6 +76,8 @@ export async function POST(request: Request) {
     userId: requesterResult.requester.id,
     imageBase64,
     mimeType,
+    // Tuntematon/puuttuva tila → palvelin käyttää yleistä annos-promptia.
+    mode: parseImageMode(body?.imageMode),
     hint: query || undefined,
   });
 

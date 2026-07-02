@@ -5,10 +5,20 @@ import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 
 import { Button } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
+import type { FoodImageMode } from "@/lib/types";
 
 // "denied" = käyttäjä on estänyt kameraluvan (selaimen/laitteen asetukset), "no-camera" = laitteessa
 // ei kameraa, "error" = muu virhe. Eroteltu, koska denied vaatii erilaisen ohjeen kuin tekninen vika.
 type CaptureStatus = "starting" | "ready" | "unsupported" | "denied" | "no-camera" | "error";
+
+// Kuvaustilat: käyttäjä kertoo mitä kuvaa → AI saa kohdistetun promptin. "photo" (annos) on
+// oletus, koska ateriakuva on yleisin käyttötapaus.
+const CAPTURE_MODES: { mode: FoodImageMode; label: string; hint: string }[] = [
+  { mode: "barcode", label: "Viivakoodi", hint: "Kuvaa tuotteen viivakoodi — arvot haetaan tuotetietokannasta." },
+  { mode: "label", label: "Etiketti", hint: "Kuvaa ravintosisältötaulukko — arvot luetaan suoraan etiketistä." },
+  { mode: "photo", label: "Annos", hint: "Kuvaa ruoka tai juoma — AI arvioi sisällön ja määrän." },
+];
 
 /**
  * Sovelluksen sisäinen kamera (getUserMedia). Toimii myös asennetussa Android-PWA:ssa,
@@ -23,14 +33,15 @@ export function CameraCapture({
   onPickFile,
   onClose,
 }: {
-  onCapture: (input: { base64: string; mimeType: string }) => void;
-  onPickFile: (file: File) => void;
+  onCapture: (input: { base64: string; mimeType: string; mode: FoodImageMode }) => void;
+  onPickFile: (file: File, mode: FoodImageMode) => void;
   onClose: () => void;
 }) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
   const [facing, setFacing] = useState<"environment" | "user">("environment");
+  const [mode, setMode] = useState<FoodImageMode>("photo");
   const [status, setStatus] = useState<CaptureStatus>("starting");
   // Kasvatetaan "Yritä uudelleen" -napista → effect ajaa getUserMedian uudelleen (esim. kun
   // käyttäjä on juuri sallinut luvan asetuksista). Pysyvästi estetty lupa ei silti palaudu ilman tätä.
@@ -113,9 +124,11 @@ export function CameraCapture({
     ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
     const base64 = canvas.toDataURL("image/jpeg", 0.85).split(",")[1] ?? "";
     if (base64) {
-      onCapture({ base64, mimeType: "image/jpeg" });
+      onCapture({ base64, mimeType: "image/jpeg", mode });
     }
   };
+
+  const activeMode = CAPTURE_MODES.find((entry) => entry.mode === mode) ?? CAPTURE_MODES[2]!;
 
   return createPortal(
     <div className="fixed inset-0 z-[200] flex flex-col bg-black" role="dialog" aria-label="Kamera">
@@ -178,7 +191,7 @@ export function CameraCapture({
         </div>
       </div>
 
-      <div className="flex items-center justify-center bg-black p-6 pb-[calc(1.5rem+env(safe-area-inset-bottom))]">
+      <div className="flex flex-col items-center gap-4 bg-black p-6 pb-[calc(1.5rem+env(safe-area-inset-bottom))]">
         <button
           type="button"
           aria-label="Ota kuva"
@@ -188,6 +201,27 @@ export function CameraCapture({
         >
           <Camera className="size-7 text-white" aria-hidden="true" />
         </button>
+
+        <div className="flex rounded-full bg-white/10 p-1" role="radiogroup" aria-label="Kuvaustila">
+          {CAPTURE_MODES.map((entry) => (
+            <button
+              key={entry.mode}
+              type="button"
+              role="radio"
+              aria-checked={mode === entry.mode}
+              className={cn(
+                "rounded-full px-4 py-1.5 text-sm font-semibold transition",
+                mode === entry.mode ? "bg-white/25 text-white" : "text-white/60",
+              )}
+              onClick={() => setMode(entry.mode)}
+            >
+              {entry.label}
+            </button>
+          ))}
+        </div>
+        <p className="text-xs text-white/60" aria-live="polite">
+          {activeMode.hint}
+        </p>
       </div>
 
       <input
@@ -198,7 +232,7 @@ export function CameraCapture({
         onChange={(event) => {
           const file = event.target.files?.[0];
           if (file) {
-            onPickFile(file);
+            onPickFile(file, mode);
           }
           event.target.value = "";
         }}

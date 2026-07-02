@@ -753,9 +753,9 @@ export function NutritionView({
             const position = dayRows.filter((entry) => entry.mealTag === mealTag).length;
             return quickAddAiFood({ planDate: selectedDate, mealTag, position, name });
           }}
-          onQuickAddPhoto={async ({ imageBase64, mimeType, mealTag }) => {
+          onQuickAddPhoto={async ({ imageBase64, mimeType, imageMode, mealTag }) => {
             const position = dayRows.filter((entry) => entry.mealTag === mealTag).length;
-            return quickAddAiFood({ planDate: selectedDate, mealTag, position, name: "Kuva-arvio", imageBase64, mimeType });
+            return quickAddAiFood({ planDate: selectedDate, mealTag, position, name: "Kuva-arvio", imageBase64, mimeType, imageMode });
           }}
         />
       ) : null}

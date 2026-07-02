@@ -65,6 +65,7 @@ import type {
   DayMealSource,
   Exercise,
   ExtraActivityType,
+  FoodImageMode,
   IngredientInput,
   MealTag,
   InviteInput,
@@ -2726,6 +2727,7 @@ interface AppStateContextValue {
     name: string;
     imageBase64?: string;
     mimeType?: string;
+    imageMode?: FoodImageMode;
   }) => Promise<ActionResult>;
   // Ad hoc -ruoan muokkaus (muokkausnäkymä).
   saveDayMealFood: (
@@ -2840,7 +2842,7 @@ export function AppStateProvider({ children }: PropsWithChildren) {
   // heti lisäyksen jälkeen, uudelleenarvio saa kuvan + nimen → nimi ohjaa tunnistusta, kuva
   // annoskokoa. Vain muistissa (ei tallenneta minnekään); FIFO-katto rajaa muistinkäytön, koska
   // base64-kuva on ~0,5 MB.
-  const dayMealPhotosRef = useRef<Map<string, { imageBase64: string; mimeType: string }>>(new Map());
+  const dayMealPhotosRef = useRef<Map<string, { imageBase64: string; mimeType: string; imageMode?: FoodImageMode }>>(new Map());
   const DAY_MEAL_PHOTO_CACHE_MAX = 5;
   const dayMealEatenMutationVersionRef = useRef<Map<string, number>>(new Map());
   const dayMealEatenMutationQueueRef = useRef<Map<string, QueuedDayMealEatenMutation>>(new Map());
@@ -7725,7 +7727,11 @@ function findResolvedUserIdInSnapshot(
 
         // Kuva talteen session ajaksi: nimen korjaus jälkikäteen voi hyödyntää samaa kuvaa.
         if (input.imageBase64 && input.mimeType) {
-          dayMealPhotosRef.current.set(serverId, { imageBase64: input.imageBase64, mimeType: input.mimeType });
+          dayMealPhotosRef.current.set(serverId, {
+            imageBase64: input.imageBase64,
+            mimeType: input.mimeType,
+            imageMode: input.imageMode,
+          });
           while (dayMealPhotosRef.current.size > DAY_MEAL_PHOTO_CACHE_MAX) {
             const oldest = dayMealPhotosRef.current.keys().next().value;
             if (oldest === undefined) {
@@ -7738,7 +7744,7 @@ function findResolvedUserIdInSnapshot(
         // 2) Aja AI-arvio (teksti tai kuva).
         const aiBody =
           input.imageBase64 && input.mimeType
-            ? { imageBase64: input.imageBase64, mimeType: input.mimeType }
+            ? { imageBase64: input.imageBase64, mimeType: input.mimeType, imageMode: input.imageMode }
             : { query: initialName };
         const aiResponse = await fetch("/api/nutrition/ai-estimate", {
           method: "POST",
@@ -7918,7 +7924,12 @@ function findResolvedUserIdInSnapshot(
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify(
                   storedPhoto
-                    ? { query: input.name, imageBase64: storedPhoto.imageBase64, mimeType: storedPhoto.mimeType }
+                    ? {
+                        query: input.name,
+                        imageBase64: storedPhoto.imageBase64,
+                        mimeType: storedPhoto.mimeType,
+                        imageMode: storedPhoto.imageMode,
+                      }
                     : { query: input.name },
                 ),
               }).catch(() => null);
