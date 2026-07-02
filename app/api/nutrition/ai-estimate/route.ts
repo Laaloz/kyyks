@@ -15,6 +15,15 @@ export const maxDuration = 60;
 const MAX_BASE64_LENGTH = 8_000_000;
 const ALLOWED_MIME = /^image\/(jpeg|png|webp|heic|heif)$/i;
 
+// Lämmityskutsu: asiakas kutsuu tätä AI-lisäysnäkymän avautuessa, jolloin serverless-funktion
+// kylmäkäynnistys (~1-3 s Vercelillä: instanssin boottaus + moduulien lataus) tapahtuu käyttäjän
+// kirjoittaessa/kuvatessa — varsinainen POST osuu lämpimään instanssiin. Ei autentikointia eikä
+// sisältöä: pelkkä 204. Next ei välimuistita route-GETiä oletuksena, joten kutsu saavuttaa
+// funktion joka kerta.
+export async function GET() {
+  return new Response(null, { status: 204 });
+}
+
 type BodyPayload = {
   imageBase64?: string;
   mimeType?: string;

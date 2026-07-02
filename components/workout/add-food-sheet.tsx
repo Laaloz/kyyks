@@ -1,7 +1,7 @@
 "use client";
 
 import { Camera, Check, MoreHorizontal, Plus, Search, Sparkles } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 import { Button } from "@/components/ui/button";
 import { Sheet } from "@/components/ui/sheet";
@@ -15,6 +15,17 @@ import type { AppState, DayMealPlanEntry, FoodImageMode, MealTag } from "@/lib/t
 const MEAL_TAGS: MealTag[] = ["breakfast", "lunch", "snack", "dinner", "evening_snack"];
 
 type ActionOutcome = { ok: boolean; message?: string };
+
+// Lämmitä AI-arvion serverless-funktio heti kun näkymä avataan: kylmäkäynnistys (~1-3 s
+// Vercelillä) tapahtuu käyttäjän kirjoittaessa/kuvatessa eikä pidennä itse arviota. Kevyt
+// 204-GET, virheet ohitetaan (pelkkä optimointi).
+function warmUpAiEstimate() {
+  try {
+    void fetch("/api/nutrition/ai-estimate", { method: "GET" }).catch(() => {});
+  } catch {
+    // Pelkkä optimointi — jos fetch puuttuu tai hylkää URL:n (esim. testiympäristö), ohitetaan.
+  }
+}
 
 /** Ateriapaikan valitsin (chipit). Jaettu lisäys- ja muokkausnäkymän kesken. */
 function MealTagChips({ value, onChange }: { value: MealTag; onChange: (tag: MealTag) => void }) {
@@ -73,6 +84,12 @@ export function AddFoodSheet({
   const [error, setError] = useState("");
   const [cameraOpen, setCameraOpen] = useState(false);
   const [mealTag, setMealTag] = useState<MealTag>(defaultMealTag);
+
+  useEffect(() => {
+    if (aiEnabled) {
+      warmUpAiEstimate();
+    }
+  }, [aiEnabled]);
 
   // Suodata omat tuotteet koko katalogista vain kerran (ei joka näppäimenpainalluksella) —
   // koko katalogin läpikäynti per painallus aiheutti turhaa muisti-/CPU-painetta mobiilissa.
@@ -507,6 +524,13 @@ export function FoodEntryEditSheet({
   onSave: (values: FoodFormValues, source: "manual" | "ai") => Promise<ActionOutcome>;
 }) {
   const [error, setError] = useState("");
+
+  // Nimen muutos ajaa AI-uudelleenarvion → lämmitetään funktio jo sheetin avautuessa.
+  useEffect(() => {
+    if (aiEnabled) {
+      warmUpAiEstimate();
+    }
+  }, [aiEnabled]);
 
   return (
     <Sheet ariaLabel="Muokkaa ruokaa" onClose={onClose}>
