@@ -147,8 +147,27 @@ export async function lookupByBarcode(barcode: string): Promise<OffMatch | null>
 }
 
 /**
- * Nimihaku (search-a-licious -palvelu). Vapaatekstihaku on meluisaa → palautetaan ensimmäinen
- * tulos, jolla on täydelliset makrot. Sopii yksittäistuotteille, ei monikomponenttiaterioille.
+ * Vapaatekstihaku on meluisaa → hyväksy tulos vain, jos jokin haetun termin sana esiintyy
+ * tuotenimessä. Ilman tätä ensimmäinen täysimakroinen osuma voi olla ihan väärä tuote
+ * ("rahka" → satunnainen jogurtti), joka saisi silti korkeahkon varmuuden (0.7). Vertailu
+ * tehdään 4 merkin sanavartalolla, jotta taivutus ja lähikielinen nimi ("banaani" / "Banana")
+ * eivät hylkää aiheetta — väljä osuma on ok, koska tämä on vain varapolku.
+ */
+function nameMatchesQuery(productName: string, term: string): boolean {
+  const name = productName.toLowerCase();
+  const tokens = term
+    .toLowerCase()
+    .split(/[^a-zåäö0-9]+/)
+    .filter((token) => token.length >= 3);
+  if (!tokens.length) {
+    return true; // ei vertailukelpoisia sanoja → älä hylkää turhaan
+  }
+  return tokens.some((token) => name.includes(token.slice(0, 4)));
+}
+
+/**
+ * Nimihaku (search-a-licious -palvelu). Palautetaan ensimmäinen tulos, jolla on täydelliset
+ * makrot JA jonka nimi vastaa hakutermiä. Sopii yksittäistuotteille, ei monikomponenttiaterioille.
  */
 export async function searchByName(name: string): Promise<OffMatch | null> {
   const term = name.trim();
@@ -163,7 +182,7 @@ export async function searchByName(name: string): Promise<OffMatch | null> {
   }
   for (const product of data.hits) {
     const match = mapProduct(product);
-    if (match) {
+    if (match && nameMatchesQuery(match.name, term)) {
       return match;
     }
   }

@@ -21,10 +21,15 @@ const DAILY_LIMIT = 30;
 // yritetä uudelleen.
 const GEMINI_TEXT_TIMEOUT_MS = 8_000;
 // Ajatteleva uusintayritys (vaikea/heikko tekstihaku) kestää kauemmin → väljempi katkaisu.
-// Monikomponenttihaku ("piirakka, leipä, rahka") vaatii mallilta purkamista, joka voi viedä yli
-// 14 s → annetaan reilusti aikaa (route maxDuration kattaa tämän + mahdollisen OFF-varahaun).
+// Rajattu thinkingBudget pitää tämän normaalisti muutamassa sekunnissa; 20 s on turvaraja
+// ruuhkaan (route maxDuration kattaa tämän + rinnakkaisen OFF-varahaun).
 const GEMINI_TEXT_THINKING_TIMEOUT_MS = 20_000;
 const GEMINI_IMAGE_TIMEOUT_MS = 12_000;
+// Rajattu ajattelubudjetti (tokenia) ajattelevalle teksti- ja kuvapolulle. Ilman rajaa malli
+// käyttää dynaamista budjettia (jopa ~24k tokenia) → pitkä häntä osuu aikakatkaisuihin (esim.
+// 3.5-flash kuvapolulla 12 s → 504). 1024 riittää monikomponenttipurkuun ja kuvan tulkintaan,
+// mutta katkaisee loputtoman pohdinnan.
+const THINKING_BUDGET_CAPPED = 1024;
 
 // Kuvaprompti: selkeä tärkeysjärjestys (taulukko → viivakoodi → brändi → visuaalinen arvio) ohjaa
 // mallin nopeasti oikeaan lähteeseen → vähemmän heikkoja arvioita ja siten vähemmän hidasta OFF-/
@@ -102,6 +107,9 @@ const RESPONSE_SCHEMA = {
     barcode: { type: "string" },
   },
   required: ["name", "grams", "kcalPer100", "proteinPer100", "carbsPer100", "fatPer100"],
+  // Googlen ohjeiden mukainen kenttäjärjestys parantaa schema-adherenssia (vähemmän
+  // "puutteellinen arvio" -katkoja).
+  propertyOrdering: ["name", "grams", "kcalPer100", "proteinPer100", "carbsPer100", "fatPer100", "confidence", "barcode"],
 };
 
 const estimateSchema = z.object({
@@ -146,6 +154,24 @@ async function countTodaysUsage(adminClient: SupabaseClient, userId: string): Pr
   return count ?? 0;
 }
 
+// Kiintiö- ja ympäristötarkistus kerran per käyttäjäpyyntö. Aiemmin countTodaysUsage ajettiin
+// jokaisella runGeminiEstimate-kutsulla, eli uusinta-/varamalliketjussa jopa 3 kertaa — turhaa
+// latenssia (~0,1-0,3 s / kysely). Palauttaa virhetuloksen tai null (= saa jatkaa).
+async function checkQuota(userId: string): Promise<AiFoodResult | null> {
+  if (!process.env.GEMINI_API_KEY) {
+    return { ok: false, status: 503, message: "AI-haku ei ole käytössä tässä ympäristössä." };
+  }
+  const adminClient = createSupabaseAdminClient();
+  if (!adminClient) {
+    return { ok: false, status: 503, message: "Palvelu ei ole käytettävissä." };
+  }
+  const used = await countTodaysUsage(adminClient, userId);
+  if (used >= DAILY_LIMIT) {
+    return { ok: false, status: 429, message: "AI-arvioiden vuorokausiraja täynnä. Lisää ateriaan haulla tai täytä arvot itse." };
+  }
+  return null;
+}
+
 // Kevyt fire-and-forget-kirjaus ai_usage_events-tauluun. Ei saa hidastaa vastausta eikä kaataa
 // kutsua, jos kirjaus epäonnistuu (Supabase resolvaa virheenkin { error }-muodossa, ei heitä).
 function logAiEvent(
@@ -170,8 +196,8 @@ function logAiEvent(
     });
 }
 
-// Jaettu Gemini-kutsu: rate limit + kutsu + turvallinen parsinta.
-// `parts` on Gemini-pyynnön sisältö (teksti ja/tai kuva).
+// Jaettu Gemini-kutsu: kutsu + turvallinen parsinta. Kiintiö on jo tarkistettu (checkQuota)
+// julkisten funktioiden alussa — ei per yritys. `parts` on Gemini-pyynnön sisältö (teksti ja/tai kuva).
 async function runGeminiEstimate(
   userId: string,
   parts: unknown[],
@@ -187,14 +213,8 @@ async function runGeminiEstimate(
     return { ok: false, status: 503, message: "Palvelu ei ole käytettävissä." };
   }
 
-  // Rate limit: suojaa ilmaiskiintiötä per käyttäjä per vuorokausi.
-  const used = await countTodaysUsage(adminClient, userId);
-  if (used >= DAILY_LIMIT) {
-    return { ok: false, status: 429, message: "AI-arvioiden vuorokausiraja täynnä. Lisää ateriaan haulla tai täytä arvot itse." };
-  }
-
   const model = options?.model || process.env.GEMINI_MODEL || DEFAULT_MODEL;
-  const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`;
 
   const generationConfig: Record<string, unknown> = {
     responseMimeType: "application/json",
@@ -203,10 +223,10 @@ async function runGeminiEstimate(
     // joskus ei" -satunnaisuuden. Ravintoarvio on faktapoiminta, ei luovuutta vaativa tehtävä.
     temperature: 0,
   };
-  // Tekstihaku on muistinvaraista poimintaa → thinking pois (thinkingBudget 0) pitää sen
-  // nopeana (~1s) ilman laatuhaittaa. Kuvahaku taas on epävarmempaa visuaalista arviointia
-  // (esim. monta tuotetta samassa kuvassa), ja budjetilla 0 malli voi palauttaa tyhjän/heikon
-  // tuloksen → kuvalle annetaan ajatella (ei thinkingConfigia = mallin oletusbudjetti).
+  // Tekstin pikapolku on muistinvaraista poimintaa → thinking pois (thinkingBudget 0) pitää sen
+  // nopeana (~1s) ilman laatuhaittaa. Kuvahaku ja ajatteleva tekstipolku tarvitsevat päättelyä
+  // (budjetilla 0 kuvatulos voi olla tyhjä/heikko), mutta budjetti rajataan
+  // (THINKING_BUDGET_CAPPED), ettei dynaaminen oletusbudjetti veny aikakatkaisuun asti.
   if (typeof options?.thinkingBudget === "number") {
     generationConfig.thinkingConfig = { thinkingBudget: options.thinkingBudget };
   }
@@ -222,7 +242,8 @@ async function runGeminiEstimate(
   try {
     response = await fetch(url, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      // Avain headerissa (ei URL:ssa), jottei se päädy lokeihin/traceihin URL:ien mukana.
+      headers: { "Content-Type": "application/json", "x-goog-api-key": apiKey },
       body: JSON.stringify({
         contents: [{ parts }],
         generationConfig,
@@ -317,12 +338,18 @@ export async function estimateFoodFromImage(args: {
   imageBase64: string;
   mimeType: string;
 }): Promise<AiFoodResult> {
-  // Ei thinkingBudgetia → malli saa ajatella: parantaa kuvan (etenkin monen tuotteen)
-  // tunnistuksen luotettavuutta. Latenssi maltillinen (~3-4s), kuvalle hyväksyttävä.
+  const quotaError = await checkQuota(args.userId);
+  if (quotaError) {
+    return quotaError;
+  }
+
+  // Rajattu thinkingBudget: kuva tarvitsee ajattelua (budjetilla 0 tulos voi olla tyhjä/heikko),
+  // mutta ilman rajaa dynaaminen budjetti venyy — mm. 3.5-flash-varamalli osui 12 s katkaisuun
+  // eikä varayritys koskaan ehtinyt vastata. Rajaus koskee ketjun kaikkia malleja.
   const result = await estimateWithModelFallback(
     args.userId,
     [{ text: IMAGE_PROMPT }, { inline_data: { mime_type: args.mimeType, data: args.imageBase64 } }],
-    { timeoutMs: GEMINI_IMAGE_TIMEOUT_MS },
+    { thinkingBudget: THINKING_BUDGET_CAPPED, timeoutMs: GEMINI_IMAGE_TIMEOUT_MS },
   );
   if (!result.ok) {
     return result;
@@ -379,41 +406,54 @@ async function estimateWithModelFallback(
 }
 
 export async function estimateFoodFromText(args: { userId: string; query: string }): Promise<AiFoodResult> {
+  const quotaError = await checkQuota(args.userId);
+  if (quotaError) {
+    return quotaError;
+  }
+
   const parts = [{ text: textPrompt(args.query) }];
-  const complex = isComplexQuery(args.query);
+  const thinkingOpts = { thinkingBudget: THINKING_BUDGET_CAPPED, timeoutMs: GEMINI_TEXT_THINKING_TIMEOUT_MS };
 
-  // 1) Gemini: pikapolku yksinkertaiselle, ajatteleva vaikealle/heikolle.
-  let result: AiFoodResult;
-  if (!complex) {
-    const fast = await runGeminiEstimate(args.userId, parts, {
-      thinkingBudget: 0,
-      timeoutMs: GEMINI_TEXT_TIMEOUT_MS,
-    });
-    if (fast.ok && !isWeakEstimate(fast.estimate)) {
-      return fast;
-    }
-    if (!fast.ok && fast.status !== 502) {
-      // Kova virhe (429/503/504) ei hyödy ajattelevasta uusinnasta → siirry suoraan OFF-fallbackiin.
-      result = fast;
-    } else {
-      if (fast.ok) {
-        console.warn(`[ai-food] heikko pika-arvio "${args.query}" → uusinta ajattelulla`);
-      }
-      result = await estimateWithModelFallback(args.userId, parts, { timeoutMs: GEMINI_TEXT_THINKING_TIMEOUT_MS });
-    }
-  } else {
-    // Vaikea syöte → ajatellaan heti (503-sietoinen: ensisijainen → varamalli → ensisijainen).
-    result = await estimateWithModelFallback(args.userId, parts, { timeoutMs: GEMINI_TEXT_THINKING_TIMEOUT_MS });
+  // Vaikea syöte → ajatellaan heti (503-sietoinen: ensisijainen → varamalli → ensisijainen).
+  // Monikomponenttiaterialle OFF-nimihaku ei sovi (ei yhtä tuotetta) → luotetaan Geminiin.
+  if (isComplexQuery(args.query)) {
+    return estimateWithModelFallback(args.userId, parts, thinkingOpts);
   }
 
-  // 2) Yksittäistuote, jolle Gemini epäonnistui/antoi heikon arvion → Open Food Facts -nimihaku.
-  //    Monikomponenttiaterialle OFF ei sovi (ei yhtä tuotetta) → ohitetaan ja luotetaan Geminiin.
-  if (!complex && (!result.ok || isWeakEstimate(result.estimate))) {
+  // Yksinkertainen syöte: pikapolku (thinking pois) vastaa normaalisti ~1 s.
+  const fast = await runGeminiEstimate(args.userId, parts, {
+    thinkingBudget: 0,
+    timeoutMs: GEMINI_TEXT_TIMEOUT_MS,
+  });
+  if (fast.ok && !isWeakEstimate(fast.estimate)) {
+    return fast;
+  }
+
+  // Kova virhe (429/503/504) ei hyödy ajattelevasta uusinnasta → suoraan OFF-varahakuun.
+  if (!fast.ok && fast.status !== 502) {
     const off = await searchByName(args.query);
-    if (off) {
-      return { ok: true, estimate: offToEstimate(off, 0.7) };
-    }
+    return off ? { ok: true, estimate: offToEstimate(off, 0.7) } : fast;
   }
 
-  return result;
+  // Heikko pika-arvio tai 502 → ajatteleva uusinta ja OFF-nimihaku RINNAKKAIN. Sarjassa nämä
+  // veivät pahimmillaan 20 s + 6 s (yli routen maxDurationin); rinnakkain enintään ~20 s.
+  if (fast.ok) {
+    console.warn(`[ai-food] heikko pika-arvio "${args.query}" → uusinta ajattelulla`);
+  }
+  const [retry, off] = await Promise.all([
+    estimateWithModelFallback(args.userId, parts, thinkingOpts),
+    searchByName(args.query),
+  ]);
+  if (retry.ok && !isWeakEstimate(retry.estimate)) {
+    return retry;
+  }
+  if (off) {
+    return { ok: true, estimate: offToEstimate(off, 0.7) };
+  }
+  if (retry.ok) {
+    return retry;
+  }
+  // Uusinta epäonnistui eikä OFF löytänyt → heikko pika-arvio on silti parempi kuin virhe
+  // (kuvapolku toimii jo samoin: heikko arvio jää voimaan, jos varapolut eivät tuota parempaa).
+  return fast.ok ? fast : retry;
 }
