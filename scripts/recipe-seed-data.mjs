@@ -958,7 +958,7 @@ export const recipeSeedData = [
     ingredients: [
       ingredient("Kaurahiutale", 50, "g", { groupLabel: "Pohja" }),
       ingredient("Kreikkalainen jogurtti 0%", 150, "g", { groupLabel: "Pohja" }),
-      ingredient("Rasvaton maito", 100, "ml", { groupLabel: "Pohja", alternatives: ["Vähärasvainen kauramaito"] }),
+      ingredient("Rasvaton maito", 100, "ml", { groupLabel: "Pohja", alternatives: ["Vähärasvainen kauramaito", "Mantelimaito"] }),
       ingredient("Vaniljaproteiinijauhe", 20, "g", { groupLabel: "Pohja" }),
       ingredient("Chian siemenet", 5, "g", { groupLabel: "Pohja" }),
       ingredient("Kaakaojauhe", 10, "g", { groupLabel: "Pohja" }),
