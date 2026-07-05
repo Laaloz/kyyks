@@ -120,8 +120,8 @@ function calculateRecipeMacros(recipe: RecipeSeed) {
 }
 
 describe("recipe seed data", () => {
-  it("keeps Banaani-tuorepuuro instructions and macros aligned with a breakfast slot", () => {
-    const recipe = (recipeSeedData as RecipeSeed[]).find((item) => item.name === "Banaani-tuorepuuro");
+  it("keeps Snickers-tuorepuuro instructions and macros aligned with a breakfast slot", () => {
+    const recipe = (recipeSeedData as RecipeSeed[]).find((item) => item.name === "Snickers-tuorepuuro");
 
     expect(recipe).toBeDefined();
     if (!recipe) {
@@ -134,16 +134,19 @@ describe("recipe seed data", () => {
       recipe.ingredients.find((item) => item.ingredientName === ingredientName && (!groupLabel || item.groupLabel === groupLabel));
 
     expect(macros.missingIngredients).toEqual([]);
-    expect(macros.kcal).toBeGreaterThanOrEqual(300);
-    expect(macros.kcal).toBeLessThanOrEqual(520);
-    expect(macros.proteinG).toBeGreaterThanOrEqual(20);
-    expect(ingredient("Kaurahiutale")?.quantity).toBe(40);
+    expect(macros.kcal).toBeGreaterThanOrEqual(600);
+    expect(macros.kcal).toBeLessThanOrEqual(760);
+    expect(macros.proteinG).toBeGreaterThanOrEqual(40);
+    expect(ingredient("Kaurahiutale")?.quantity).toBe(50);
+    expect(ingredient("Kreikkalainen jogurtti 0%")?.quantity).toBe(150);
+    expect(ingredient("Vaniljaproteiinijauhe")?.quantity).toBe(20);
+    expect(ingredient("Maapähkinävoi 99%")?.quantity).toBe(15);
+    expect(ingredient("Paahdetut maapähkinät")?.quantity).toBe(10);
     expect(ingredient("Tumma suklaa")?.quantity).toBe(10);
-    expect(ingredient("Saksanpähkinä")).toBeUndefined();
-    expect(ingredient("Banaani", "Pohja")).toMatchObject({ quantity: 0.5, unit: "pcs", displayQuantity: "½", displayUnit: "kpl" });
-    expect(ingredient("Banaani", "Hedelmäkerros")).toMatchObject({ quantity: 0.5, unit: "pcs", displayQuantity: "½", displayUnit: "kpl" });
-    expect(ingredient("Voi")?.alternatives).toContain("Kookosöljy");
-    expect(steps.at(-1)).toContain("Anna tekeytyä jääkaapissa");
+    expect(ingredient("Banaani", "Täytteet")).toMatchObject({ quantity: 0.5, unit: "pcs", displayQuantity: "½", displayUnit: "kpl" });
+    expect(ingredient("Sormisuola")?.scalingMode).toBe("text_only");
+    expect(steps.some((step) => step.includes("Anna tekeytyä jääkaapissa") || step.includes("anna tekeytyä jääkaapissa"))).toBe(true);
+    expect(steps.at(-1)).toContain("sormisuolaa");
   });
 
   it("keeps chicken tortilla preparation order and portion size practical", () => {

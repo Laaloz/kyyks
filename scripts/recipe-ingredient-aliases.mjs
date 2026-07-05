@@ -38,6 +38,9 @@ export const ingredientAliases = {
     "maapähkinävoi 99%",
     "maapähkinävoi",
   ],
+  "paahdetut maapahkinat": [
+    "maapähkinät",
+  ],
   "maissikakku chian siemenia ja suolaa friggs": [
     "maissikakku chian siemeniä ja suolaa friggs",
     "maissikakku",

@@ -77,7 +77,7 @@ const PROMPTS = {
   "Munakas": "Close-up food photo of a classic folded yellow egg omelette on a white plate, garnished with a few cherry tomatoes and fresh green spinach leaves (a cooked omelette dish, food only, no landscape, no scenery)",
   "Banaanipannukakut": "A short stack of small fluffy pancakes on a plate topped with fresh blueberries and a dollop of white vanilla yogurt (not cookies, not biscuits)",
   "Tiramisu-tuorepuuro": "Tiramisu-style overnight oats with a cocoa base and a vanilla yogurt layer in a glass jar, dusted with cocoa",
-  "Banaani-tuorepuuro": "Chocolate banana overnight oats in a glass jar, the oats mixed with cocoa, topped with banana slices and a dark chocolate drizzle (chocolate flavour, absolutely no berries, no raspberries, no blueberries)",
+  "Snickers-tuorepuuro": "Chocolate banana overnight oats in a glass jar, the oats mixed with cocoa, topped with banana slices, a swirl of peanut butter, crushed roasted peanut crumble and a dark chocolate drizzle (chocolate flavour, absolutely no berries, no raspberries, no blueberries)",
   "Brownie-tuorepuuro": "Chocolate brownie overnight oats with a cocoa topping in a glass jar",
   "Pastasalaatti": "A bowl of cold pasta salad with chicken, bell peppers, cucumber, tomato and red onion",
 };
