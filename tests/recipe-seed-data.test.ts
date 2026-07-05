@@ -25,6 +25,7 @@ type RecipeIngredientSeed = {
   displayQuantity?: string;
   displayUnit?: string;
   alternatives?: string[];
+  alternativeOptions?: { ingredientName: string; grams: number }[];
   groupLabel?: string;
   scalingMode: "linear" | "gentle" | "fixed" | "text_only";
 };
@@ -139,6 +140,9 @@ describe("recipe seed data", () => {
     expect(macros.proteinG).toBeGreaterThanOrEqual(40);
     expect(ingredient("Kaurahiutale")?.quantity).toBe(40);
     expect(ingredient("Kreikkalainen jogurtti 0%")?.quantity).toBe(150);
+    expect(ingredient("Mantelimaito")?.quantity).toBe(100);
+    expect(ingredient("Mantelimaito")?.alternativeOptions).toEqual([{ ingredientName: "Rasvaton maito", grams: 100 }]);
+    expect(ingredient("Mantelimaito")?.alternatives).toContain("Vähärasvainen kauramaito");
     expect(ingredient("Vaniljaproteiinijauhe")?.quantity).toBe(20);
     expect(ingredient("Maapähkinävoi 99%")?.quantity).toBe(10);
     expect(ingredient("Paahdetut maapähkinät")?.quantity).toBe(5);

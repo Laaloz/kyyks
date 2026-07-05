@@ -958,7 +958,7 @@ export const recipeSeedData = [
     ingredients: [
       ingredient("Kaurahiutale", 40, "g", { groupLabel: "Pohja" }),
       ingredient("Kreikkalainen jogurtti 0%", 150, "g", { groupLabel: "Pohja" }),
-      ingredient("Rasvaton maito", 100, "ml", { groupLabel: "Pohja", alternatives: ["Vähärasvainen kauramaito", "Mantelimaito"] }),
+      ingredient("Mantelimaito", 100, "ml", { groupLabel: "Pohja", alternatives: ["Rasvaton maito (100 g)", "Vähärasvainen kauramaito"] }),
       ingredient("Vaniljaproteiinijauhe", 20, "g", { groupLabel: "Pohja" }),
       ingredient("Chian siemenet", 5, "g", { groupLabel: "Pohja" }),
       ingredient("Kaakaojauhe", 10, "g", { groupLabel: "Pohja" }),
@@ -973,7 +973,7 @@ export const recipeSeedData = [
       "Sekoita kaikki pohjan ainekset tasaiseksi purkissa tai kulhossa.",
       "Sulje purkki ja anna tekeytyä jääkaapissa vähintään 4 tuntia, mieluiten yön yli.",
       "Lisää aamulla päälle banaaniviipaleet, maapähkinävoi ja paahdetut maapähkinät.",
-      "Sulata tumma suklaa mikrossa noin 15–20 sekuntia ja valuta se annoksen päälle.",
+      "Sulata tumma suklaa mikrossa noin 15–20 sekuntia ja valuta se annoksen päälle — tai pilko suklaa pieniksi paloiksi ja ripottele sellaisenaan.",
       "Ripottele halutessasi päälle pieni ripaus sormisuolaa, anna suklaan jähmettyä hetki ja nauti.",
     ],
   }),
