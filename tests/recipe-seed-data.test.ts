@@ -134,15 +134,15 @@ describe("recipe seed data", () => {
       recipe.ingredients.find((item) => item.ingredientName === ingredientName && (!groupLabel || item.groupLabel === groupLabel));
 
     expect(macros.missingIngredients).toEqual([]);
-    expect(macros.kcal).toBeGreaterThanOrEqual(600);
-    expect(macros.kcal).toBeLessThanOrEqual(760);
+    expect(macros.kcal).toBeGreaterThanOrEqual(520);
+    expect(macros.kcal).toBeLessThanOrEqual(640);
     expect(macros.proteinG).toBeGreaterThanOrEqual(40);
-    expect(ingredient("Kaurahiutale")?.quantity).toBe(50);
+    expect(ingredient("Kaurahiutale")?.quantity).toBe(40);
     expect(ingredient("Kreikkalainen jogurtti 0%")?.quantity).toBe(150);
     expect(ingredient("Vaniljaproteiinijauhe")?.quantity).toBe(20);
-    expect(ingredient("Maapähkinävoi 99%")?.quantity).toBe(15);
-    expect(ingredient("Paahdetut maapähkinät")?.quantity).toBe(10);
-    expect(ingredient("Tumma suklaa")?.quantity).toBe(10);
+    expect(ingredient("Maapähkinävoi 99%")?.quantity).toBe(10);
+    expect(ingredient("Paahdetut maapähkinät")?.quantity).toBe(5);
+    expect(ingredient("Tumma suklaa")?.quantity).toBe(5);
     expect(ingredient("Banaani", "Täytteet")).toMatchObject({ quantity: 0.5, unit: "pcs", displayQuantity: "½", displayUnit: "kpl" });
     expect(ingredient("Sormisuola")?.scalingMode).toBe("text_only");
     expect(steps.some((step) => step.includes("Anna tekeytyä jääkaapissa") || step.includes("anna tekeytyä jääkaapissa"))).toBe(true);
