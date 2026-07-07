@@ -80,6 +80,9 @@ const PROMPTS = {
   "Banaani-tuorepuuro": "Chocolate banana overnight oats in a glass jar, the oats mixed with cocoa, topped with banana slices and a dark chocolate drizzle (chocolate flavour, absolutely no berries, no raspberries, no blueberries)",
   "Brownie-tuorepuuro": "Chocolate brownie overnight oats with a cocoa topping in a glass jar",
   "Pastasalaatti": "A bowl of cold pasta salad with chicken, bell peppers, cucumber, tomato and red onion",
+  "Snickers-tuorepuuro": "Snickers-style chocolate overnight oats in a glass jar, topped with banana slices, a drizzle of peanut butter, chopped roasted peanuts and a dark chocolate drizzle (chocolate flavour, no berries)",
+  "Valkosipulivoikana ja kermaiset perunat": "A meal-prep plate with two components side by side: golden pan-fried bite-sized cubes of real chicken breast (authentic cooked white-meat texture, matte not glossy, not rubbery, not plastic-looking) glazed in garlic butter and sprinkled with fresh chopped parsley, next to crispy oven-roasted small potato cubes folded in a smooth creamy garlic-herb sauce. Only these two things on the plate, no rice, no extra vegetables",
+  "Välimeren kanabowl": "A fresh Mediterranean chicken bowl in a round bowl, arranged in sections: fluffy white basmati rice, sliced oven-baked real chicken breast (authentic cooked white-meat texture, matte not glossy, not rubbery, not plastic-looking), and a fresh salad of cucumber chunks, halved cherry tomatoes, thin red onion slices and crumbled white feta cheese, with a dollop of white garlic-lemon yogurt sauce and a sprinkle of fresh parsley",
 };
 
 function slugify(name) {

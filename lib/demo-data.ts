@@ -354,6 +354,14 @@ export const defaultGlobalExercises: AppState["exercises"] = [
     scope: "global",
   },
   {
+    id: "ex_pulldown",
+    name: "Pulldown",
+    category: "Selkä",
+    equipment: "Ylätalja",
+    cue: "Ota tangosta hartioita leveämpi ote ja pidä rintakehä ylhäällä. Vedä tanko ylärinnan suuntaan latseilla, kyynärpäät alas ja taakse, ja jarruta palautus hallitusti yläasentoon.",
+    scope: "global",
+  },
+  {
     id: "ex_pull_up",
     name: "Leuanveto myötäotteella",
     category: "Selkä",

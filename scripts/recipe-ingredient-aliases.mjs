@@ -236,4 +236,19 @@ export const ingredientAliases = {
     "kanan fileesuikaleet",
     "kanan rintafilee",
   ],
+  "kevytvoi 60": [
+    "Blended Spread 60%, Benecol Voi & Rypsi",
+    "kevytvoi",
+    "voi 60%",
+  ],
+  "valkosipuli yrttituorejuusto": [
+    "Philadelphia Light 11%",
+    "Tuorejuusto 11%",
+  ],
+  "fetajuusto": [
+    "Fetajuusto 22%",
+  ],
+  "paahdetut maapahkinat": [
+    "Maapähkinät",
+  ],
 };
