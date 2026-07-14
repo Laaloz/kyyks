@@ -401,9 +401,9 @@ export function calculateMacroTarget(input: {
     gain: 1.85,
   }[input.goal];
   const fatPerKg = {
-    lose: 0.66,
-    maintain: 0.76,
-    gain: 0.82,
+    lose: 0.75,
+    maintain: 0.8,
+    gain: 0.85,
   }[input.goal];
 
   const proteinG = Math.max(90, roundNutrition(weightKg * proteinPerKg));
