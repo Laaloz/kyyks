@@ -1684,14 +1684,6 @@ export function AthleteDashboard({
                   weekStart.setDate(weekStart.getDate() - ((weekStart.getDay() + 6) % 7));
                   return athletePrograms.map((program) => {
                     const workouts = program.workouts ?? [];
-                    const nextWorkoutId = workouts.find((workout) => {
-                      const completion = currentUser
-                        ? getLatestWorkoutCompletionDate(state, currentUser.id, { programWorkoutId: workout.id })
-                        : undefined;
-                      const doneThisWeek = completion ? new Date(completion) >= weekStart : false;
-                      const active = activeScheduledByProgramWorkoutKey.get(`${program.id}::${workout.id}`);
-                      return !doneThisWeek && !active;
-                    })?.id;
                     return (
                       <div key={program.id} className="mb-4">
                         <div className="flex flex-wrap items-baseline justify-between px-1">
@@ -1720,10 +1712,12 @@ export function AthleteDashboard({
                               const completion = currentUser
                                 ? getLatestWorkoutCompletionDate(state, currentUser.id, { programWorkoutId: workout.id })
                                 : undefined;
+                              const completionCount = currentUser
+                                ? countWorkoutCompletions(state, currentUser.id, { programWorkoutId: workout.id })
+                                : 0;
                               const doneThisWeek = completion ? new Date(completion) >= weekStart : false;
                               const doneWeekday = doneThisWeek && completion ? weekdayShort[new Date(completion).getDay()] : null;
                               const isActiveRow = Boolean(activeScheduledId || resumableScheduledId);
-                              const isNext = workout.id === nextWorkoutId;
                               const isLockedByAnotherWorkout = Boolean(blockingWorkout && blockingWorkout.programWorkoutId !== workout.id);
 
                               return (
@@ -1733,8 +1727,10 @@ export function AthleteDashboard({
                                       <span className="truncate font-semibold text-[var(--text)]">{workout.name}</span>
                                       {isActiveRow ? (
                                         <span className="shrink-0 rounded-full bg-[var(--accent-soft)] px-2 py-0.5 text-[11px] font-semibold text-[var(--accent)]">Kesken</span>
-                                      ) : isNext && !doneThisWeek ? (
-                                        <span className="shrink-0 rounded-full bg-[var(--accent-soft)] px-2 py-0.5 text-[11px] font-semibold text-[var(--accent)]">Seuraava</span>
+                                      ) : completionCount > 0 ? (
+                                        <span className="shrink-0 rounded-full bg-[var(--surface-2)] px-2 py-0.5 text-[11px] font-semibold tabular-nums text-[var(--text-subtle)]">
+                                          {completionCount}× tehty
+                                        </span>
                                       ) : null}
                                     </div>
                                     <p className="mt-0.5 text-xs text-[var(--text-subtle)]">
@@ -1753,7 +1749,8 @@ export function AthleteDashboard({
                                     </button>
                                     {doneThisWeek && !isActiveRow ? (
                                       <Check className="size-5 shrink-0 text-[var(--success)]" aria-label="Tehty tällä viikolla" />
-                                    ) : readOnly ? (
+                                    ) : null}
+                                    {readOnly ? (
                                       <span className="shrink-0 rounded-full bg-[var(--surface-2)] px-2.5 py-0.5 text-xs font-semibold text-[var(--text-muted)]">Tulossa</span>
                                     ) : activeScheduledId ? (
                                       <Button type="button" variant="primary" className="h-9 shrink-0 px-4 text-sm" onClick={() => openWorkoutView(activeScheduledId)}>
@@ -1762,7 +1759,7 @@ export function AthleteDashboard({
                                     ) : (
                                       <Button
                                         type="button"
-                                        variant={isNext || resumableScheduledId ? "primary" : "secondary"}
+                                        variant="primary"
                                         className="h-9 shrink-0 px-4 text-sm"
                                         disabled={
                                           isLockedByAnotherWorkout ||
