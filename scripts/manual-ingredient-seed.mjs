@@ -76,7 +76,7 @@ const manualIngredientSeedBase = [
   { name: "Valkosipulimauste", source: "manual", defaultPurchaseUnit: "g", kcalPer100: 331, proteinPer100: 17, carbsPer100: 73, fatPer100: 0.7 },
   { name: "Kaneli", source: "manual", defaultPurchaseUnit: "g", kcalPer100: 247, proteinPer100: 4.0, carbsPer100: 56, fatPer100: 1.2 },
   { name: "Tuorejuusto 11%", source: "manual", defaultPurchaseUnit: "pack", gramsPerUnit: 175, kcalPer100: 160, proteinPer100: 7.5, carbsPer100: 6.0, fatPer100: 11 },
-  { name: "Aamupala Kevyenraikas 5% sulatejuustoviipale", source: "manual", defaultPurchaseUnit: "pack", gramsPerUnit: 20, kcalPer100: 180, proteinPer100: 16, carbsPer100: 7, fatPer100: 5 },
+  { name: "Aamupala Kevyenraikas 5% sulatejuustoviipale", source: "manual", defaultPurchaseUnit: "pack", gramsPerUnit: 20, kcalPer100: 140, proteinPer100: 23, carbsPer100: 1.6, fatPer100: 5 },
   { name: "100% kauraleipä", source: "manual", defaultPurchaseUnit: "pack", gramsPerUnit: 38, kcalPer100: 245, proteinPer100: 10, carbsPer100: 36, fatPer100: 5 },
   { name: "Margariini alle 50% rasvaa", source: "manual", defaultPurchaseUnit: "pack", gramsPerUnit: 10, kcalPer100: 360, proteinPer100: 0.5, carbsPer100: 1, fatPer100: 40 },
   { name: "Kalkkunaviipaleet", source: "manual", defaultPurchaseUnit: "pack", gramsPerUnit: 100, kcalPer100: 105, proteinPer100: 18, carbsPer100: 2, fatPer100: 2.5 },
@@ -157,7 +157,7 @@ const manualIngredientSeedBase = [
   { name: "Apetina juustokuutiot 10%", source: "manual", defaultPurchaseUnit: "pack", gramsPerUnit: 200, kcalPer100: 140, proteinPer100: 12.5, carbsPer100: 1.5, fatPer100: 9.5 },
   { name: "Rypsiöljy", source: "manual", defaultPurchaseUnit: "l", kcalPer100: 884, proteinPer100: 0, carbsPer100: 0, fatPer100: 100 },
   { name: "Kermaviili 6%", source: "manual", defaultPurchaseUnit: "pack", gramsPerUnit: 200, kcalPer100: 84, proteinPer100: 2.9, carbsPer100: 4.0, fatPer100: 6.0 },
-  { name: "Risella valmisriisi", source: "manual", defaultPurchaseUnit: "pack", gramsPerUnit: 250, kcalPer100: 165, proteinPer100: 3.5, carbsPer100: 35, fatPer100: 1.2 },
+  { name: "Risella valmisriisi", source: "manual", defaultPurchaseUnit: "pack", gramsPerUnit: 250, kcalPer100: 192, proteinPer100: 3.6, carbsPer100: 40, fatPer100: 2.4 },
   { name: "Kanan jauheliha", source: "manual", defaultPurchaseUnit: "kg", kcalPer100: 148, proteinPer100: 19, carbsPer100: 0, fatPer100: 8 },
   { name: "Kookoshiutaleet", source: "manual", defaultPurchaseUnit: "pack", gramsPerUnit: 200, kcalPer100: 660, proteinPer100: 7, carbsPer100: 12, fatPer100: 65 },
 ];
