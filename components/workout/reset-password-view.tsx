@@ -113,8 +113,11 @@ export function ResetPasswordView({ token }: { token: string }) {
             <Button type="submit" disabled={isSubmitting} loading={isSubmitting} loadingText="Päivitetään salasanaa...">
               Päivitä salasana
             </Button>
+            {/* replace (ei push): kertakäyttöinen nollauslinkki ei jää historiaan, joten
+                selaimen "edellinen sivu" ei palaa jo käytetylle nollauslomakkeelle. */}
             <Link
               href="/"
+              replace
               className="rounded-xl border-2 border-[var(--border)] bg-[var(--surface-2)] px-4 py-2.5 text-sm font-semibold text-[var(--text)]"
             >
               Takaisin kirjautumiseen

@@ -138,7 +138,9 @@ export function InviteAcceptView({ token, initialInvite }: { token: string; init
 
               if (result.ok) {
                 window.setTimeout(() => {
-                  router.push("/");
+                  // replace (ei push): poistetaan kutsusivu historiasta, jotta selaimen
+                  // "edellinen sivu" ei palaa aktivoinnin jälkeen "Viimeistele tunnus" -näkymään.
+                  router.replace("/");
                 }, 900);
               }
             })}
