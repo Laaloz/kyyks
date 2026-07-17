@@ -1541,7 +1541,7 @@ CREATE TABLE IF NOT EXISTS "public"."training_plans" (
     "status" "text" DEFAULT 'active'::"text" NOT NULL,
     "program_group_id" "uuid",
     CONSTRAINT "training_plans_status_check" CHECK (("status" = ANY (ARRAY['active'::"text", 'archived'::"text", 'removed'::"text"]))),
-    CONSTRAINT "training_plans_week_count_check" CHECK (("week_count" > 0))
+    CONSTRAINT "training_plans_week_count_check" CHECK (("week_count" >= 0))
 );
 
 
