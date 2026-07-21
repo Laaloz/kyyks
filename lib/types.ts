@@ -246,6 +246,11 @@ export interface Exercise {
   cue: string;
   scope: ExerciseScope;
   coachId?: string;
+  /** Liikkeen alku- ja loppuasennon kuvat. UI ristihäivyttää parin liikeradan havainnollistamiseksi. */
+  imageStartUrl?: string;
+  imageEndUrl?: string;
+  /** Vaiheittainen suoritusohje. Täydentää cue:ta, ei korvaa sitä. */
+  instructionSteps?: string[];
 }
 
 export interface TemplateSetPrescription {

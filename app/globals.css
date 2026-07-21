@@ -273,3 +273,62 @@ legend {
   -webkit-text-fill-color: transparent;
   animation: ai-shimmer 1.8s ease-in-out infinite;
 }
+
+/* Liikkeen esimerkkikuvat: alku- ja loppuasento päällekkäin ristihäivytettynä, jolloin
+   liikerata hahmottuu ilman videota. Lähdekuvat ovat 3:2, joten object-fit ei rajaa mitään.
+   Kuvat pinotaan gridillä (grid-area: 1/1) eikä absoluuttisella asemoinnilla — niin
+   reduced-motion-vaihto rinnakkaisnäkymään on pelkkä sarakemäärän muutos. */
+@keyframes exercise-demo-crossfade {
+  0%,
+  42% {
+    opacity: 0;
+  }
+  58%,
+  92% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+  }
+}
+
+.exercise-demo {
+  position: relative;
+  display: grid;
+  aspect-ratio: 3 / 2;
+  overflow: hidden;
+  border-radius: 0.75rem;
+  background: var(--surface-muted, var(--surface));
+}
+
+.exercise-demo-frame {
+  grid-area: 1 / 1;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.exercise-demo-end {
+  animation: exercise-demo-crossfade 3.2s ease-in-out infinite;
+}
+
+/* Liikerata ei välity animaationa jos käyttäjä on pyytänyt vähemmän liikettä. Globaali
+   reduced-motion-sääntö (yllä) pysäyttäisi häivytyksen tilaan jossa loppuasento jää
+   näkymättömiin, joten asennot näytetään sen sijaan rinnakkain. */
+@media (prefers-reduced-motion: reduce) {
+  .exercise-demo {
+    grid-template-columns: 1fr 1fr;
+    gap: 0.375rem;
+    aspect-ratio: 3 / 1;
+  }
+
+  .exercise-demo-frame {
+    grid-area: auto;
+    border-radius: 0.5rem;
+  }
+
+  .exercise-demo-end {
+    animation: none;
+    opacity: 1;
+  }
+}

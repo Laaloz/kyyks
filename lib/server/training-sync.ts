@@ -107,6 +107,9 @@ type ExerciseRow = {
   cue: string;
   scope: Exercise["scope"];
   coach_id: string | null;
+  image_start_url: string | null;
+  image_end_url: string | null;
+  instruction_steps: string[] | null;
 };
 
 export type TrainingPlanRow = {
@@ -589,6 +592,9 @@ function mapExerciseRow(entry: ExerciseRow): Exercise {
     cue: entry.cue,
     scope: entry.scope,
     coachId: entry.coach_id ?? undefined,
+    imageStartUrl: entry.image_start_url ?? undefined,
+    imageEndUrl: entry.image_end_url ?? undefined,
+    instructionSteps: entry.instruction_steps?.length ? entry.instruction_steps : undefined,
   };
 }
 
@@ -815,7 +821,9 @@ export async function loadVisibleSupabaseAppState(
     mode === "full" || mode === "workouts"
       ? supabase
           .from("exercises")
-          .select("id, external_key, name, category, equipment, cue, scope, coach_id")
+          .select(
+            "id, external_key, name, category, equipment, cue, scope, coach_id, image_start_url, image_end_url, instruction_steps",
+          )
           .order("name", { ascending: true })
       : Promise.resolve({ data: [] as ExerciseRow[], error: null }),
     mode === "full" || mode === "workouts"

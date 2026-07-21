@@ -121,15 +121,51 @@ function getWorkoutFieldId(
   return `${scheduledWorkoutId}-${logId}-${field}`;
 }
 
+// Liikkeen alku- ja loppuasento ristihäivytettynä. Lähdekuvat ovat public domain
+// (free-exercise-db) ja tarjoillaan omasta exercise-media-bucketista. Osalla liikkeistä
+// ei ole vastinetta lähdedatassa — silloin tätä ei renderöidä lainkaan.
+function ExerciseDemo({ exercise }: { exercise: Exercise }) {
+  if (!exercise.imageStartUrl || !exercise.imageEndUrl) {
+    return null;
+  }
+
+  return (
+    <div className="exercise-demo mt-3 border border-[var(--border)]">
+      <img
+        className="exercise-demo-frame"
+        src={exercise.imageStartUrl}
+        alt={`${exercise.name}: alkuasento`}
+        width={640}
+        height={427}
+        loading="lazy"
+        decoding="async"
+      />
+      <img
+        className="exercise-demo-frame exercise-demo-end"
+        src={exercise.imageEndUrl}
+        alt={`${exercise.name}: loppuasento`}
+        width={640}
+        height={427}
+        loading="lazy"
+        decoding="async"
+      />
+    </div>
+  );
+}
+
 function CoachInstructionDialog({
   exerciseName,
   instruction,
+  exercise,
   onClose,
 }: {
   exerciseName: string;
   instruction: string;
+  exercise?: Exercise;
   onClose: () => void;
 }) {
+  const steps = exercise?.instructionSteps ?? [];
+
   return (
     <Sheet onClose={onClose} ariaLabelledby="coach-instruction-title" ariaDescribedby="coach-instruction-description">
         <p className="text-sm font-semibold text-[var(--accent)]">Valmentajan ohje</p>
@@ -139,12 +175,25 @@ function CoachInstructionDialog({
         >
           {exerciseName}
         </h3>
-        <p
-          id="coach-instruction-description"
-          className="mt-3 max-h-[60vh] overflow-y-auto whitespace-pre-line text-sm leading-6 text-[var(--text-muted)]"
-        >
-          {instruction}
-        </p>
+        <div className="mt-3 max-h-[60vh] overflow-y-auto">
+          <p
+            id="coach-instruction-description"
+            className="whitespace-pre-line text-sm leading-6 text-[var(--text-muted)]"
+          >
+            {instruction}
+          </p>
+          {exercise ? <ExerciseDemo exercise={exercise} /> : null}
+          {steps.length ? (
+            <>
+              <p className="mt-4 text-sm font-semibold text-[var(--text)]">Suoritus</p>
+              <ol className="mt-2 list-decimal space-y-1.5 pl-5 text-sm leading-6 text-[var(--text-muted)]">
+                {steps.map((step, index) => (
+                  <li key={index}>{step}</li>
+                ))}
+              </ol>
+            </>
+          ) : null}
+        </div>
     </Sheet>
   );
 }
@@ -744,7 +793,13 @@ export function AthleteSessionPanel({
   const [restExerciseKey, setRestExerciseKey] = useState<string | null>(null);
   const [restExerciseName, setRestExerciseName] = useState<string | null>(null);
   const [expandedExerciseKeys, setExpandedExerciseKeys] = useState<Record<string, boolean>>({});
-  const [openInstruction, setOpenInstruction] = useState<{ exerciseName: string; instruction: string } | null>(null);
+  // exerciseId talletetaan id:nä eikä olio-viitteenä, jotta sheetin sisältö seuraa
+  // katalogin päivittymistä (kuvat saapuvat app-staten mukana taustalla).
+  const [openInstruction, setOpenInstruction] = useState<{
+    exerciseName: string;
+    instruction: string;
+    exerciseId?: string;
+  } | null>(null);
   const [openExerciseStructure, setOpenExerciseStructure] = useState<
     | {
         mode: "edit";
@@ -1575,7 +1630,7 @@ export function AthleteSessionPanel({
                 aria-label={`${exerciseName} ohje`}
                 title="Ohje"
                 className="grid size-8 place-items-center rounded-full border border-[color-mix(in_srgb,var(--accent)_22%,var(--border))] bg-[color-mix(in_srgb,var(--accent)_7%,var(--surface))] text-[var(--accent)] transition hover:bg-[color-mix(in_srgb,var(--accent)_12%,var(--surface))]"
-                onClick={() => setOpenInstruction({ exerciseName, instruction })}
+                onClick={() => setOpenInstruction({ exerciseName, instruction, exerciseId: logs[0]?.exerciseId })}
               >
                 <BookOpen className="size-3.5" aria-hidden="true" />
               </button>
@@ -1787,7 +1842,7 @@ export function AthleteSessionPanel({
                 aria-label={`${exerciseName} ohje`}
                 title="Ohje"
                 className="inline-flex size-8.5 items-center justify-center rounded-full border border-[color-mix(in_srgb,var(--accent)_22%,var(--border))] bg-[color-mix(in_srgb,var(--accent)_7%,var(--surface))] text-[var(--accent)] shadow-[0_4px_12px_-14px_var(--accent)] transition hover:border-[color-mix(in_srgb,var(--accent)_36%,var(--border))] hover:bg-[color-mix(in_srgb,var(--accent)_10%,var(--surface))] hover:opacity-95"
-                onClick={() => setOpenInstruction({ exerciseName, instruction })}
+                onClick={() => setOpenInstruction({ exerciseName, instruction, exerciseId: logs[0]?.exerciseId })}
               >
                 <BookOpen className="size-3.5" aria-hidden="true" />
               </button>
@@ -2402,6 +2457,7 @@ export function AthleteSessionPanel({
         <CoachInstructionDialog
           exerciseName={openInstruction.exerciseName}
           instruction={openInstruction.instruction}
+          exercise={availableExercises.find((candidate) => candidate.id === openInstruction.exerciseId)}
           onClose={() => setOpenInstruction(null)}
         />
       ) : null}

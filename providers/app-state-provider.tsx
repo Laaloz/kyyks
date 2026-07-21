@@ -958,6 +958,9 @@ function normalizeState(raw: AppState): AppState {
   normalizedExercises.forEach((exercise) => {
     const defaultExercise = mergedExerciseById.get(exercise.id);
     if (defaultExercise && exercise.scope === "global") {
+      // Bundle voittaa globaalien suomenkielisen tekstin (nimi, kategoria, cue) — se on
+      // niiden totuuslähde. Mediakenttiä (imageStartUrl, instructionSteps) ei ole bundlessa
+      // lainkaan, joten ne säilyvät kannasta: spread ylikirjoittaa vain olemassa olevat avaimet.
       mergedExerciseById.set(exercise.id, {
         ...exercise,
         ...defaultExercise,
