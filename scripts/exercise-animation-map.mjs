@@ -15,6 +15,19 @@
 //
 // 125/133 liikkeellä on animaatio.
 
+// Valmentajien omat liikkeet, joille löytyi vastine liikepankista. Avaimena on kannan UUID,
+// EI external_key: mapExerciseRow palauttaa `external_key ?? id`, joten external_keyn
+// asettaminen jälkikäteen vaihtaisi liikkeen id:n ja irrottaisi sen treenihistoriasta
+// (workout_set_logs.exercise_id viittaa UUID:hen).
+//
+// "Vatsarutistus GHR penkissä" jätetty tarkoituksella pois — lähin vastine on "decline crunch",
+// joka on eri väline. Väärä kuva opettaisi väärin.
+export const customExerciseAnimationMap = {
+  "763d82df-f997-4918-961f-a0be5280c4c8": "Hx1WC8I", // Ojentajapunnerrus taljassa vinopenkillä → cable incline triceps extension
+  "a531d2cc-2e32-4cba-ac3d-e8861a99a287": "aTNKZiC", // Vipunosto vinopenkillä → dumbbell incline one arm lateral raise
+  "d8617e5a-8f5d-4f9b-a079-c345ae15f640": "SpYC0Kp", // Penkkipunnerrus käsipainoilla → dumbbell bench press (sama kuin globaali Käsipainopenkki)
+};
+
 export const exerciseAnimationMap = {
   ex_back_squat: "qXTaZnJ",  // Takakyykky → barbell full squat
   ex_front_squat: "zG0zs85",  // Etukyykky → barbell front squat

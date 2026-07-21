@@ -21,7 +21,7 @@ import { mkdtempSync, writeFileSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import { exerciseAnimationMap } from "./exercise-animation-map.mjs";
+import { exerciseAnimationMap, customExerciseAnimationMap } from "./exercise-animation-map.mjs";
 
 const BUCKET = "exercise-media";
 const SOURCE = "exercisedb-gymvisual";
@@ -66,14 +66,20 @@ async function main() {
 
   const { data: rows, error } = await supabase
     .from("exercises")
-    .select("id, external_key, name, animation_url")
-    .not("external_key", "is", null);
+    .select("id, external_key, name, animation_url");
   if (error) throw new Error(`liikkeiden haku epäonnistui: ${error.message}`);
 
-  const rowByKey = new Map(rows.map((row) => [row.external_key, row]));
+  // Globaalit avataan external_keyllä, valmentajien omat UUID:llä (ks. map-tiedoston selitys).
+  const rowByKey = new Map();
+  rows.forEach((row) => {
+    if (row.external_key) rowByKey.set(row.external_key, row);
+    rowByKey.set(row.id, row);
+  });
+
+  const allMappings = { ...exerciseAnimationMap, ...customExerciseAnimationMap };
   const results = { imported: 0, skipped: 0, missing: [], errors: [], bytesBefore: 0, bytesAfter: 0 };
 
-  for (const [exerciseKey, mediaId] of Object.entries(exerciseAnimationMap)) {
+  for (const [exerciseKey, mediaId] of Object.entries(allMappings)) {
     if (args.only && exerciseKey !== args.only) continue;
 
     const row = rowByKey.get(exerciseKey);
