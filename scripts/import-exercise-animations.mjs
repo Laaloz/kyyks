@@ -51,6 +51,33 @@ function toWebp(jpegBuffer) {
   }
 }
 
+// Lähdeanimaatiot pysähtyvät kokonaiseksi sekunniksi molempiin ääriasentoihin ja vilauttavat
+// liikkeen niiden välillä 100 ms:n kehyksillä. Kaksi kolmasosaa silmukasta on siis pysäytyskuvaa,
+// ja lopputulos näyttää kahdelta valokuvalta eikä liikkeeltä.
+//
+// Ääriasentojen pito lyhennetään 400 ms:iin ja välikehyksiä pidennetään hieman: silmukka
+// lyhenee 3,0 s → 1,9 s ja liikkeen osuus nousee 33 %:sta 55 %:iin. Asennot ehtii silti
+// rekisteröidä.
+//
+// Viiveet ovat GIFin Graphic Control Extensionissa (21 F9 04 <packed> <delay-lo> <delay-hi>),
+// joten ne voi kirjoittaa suoraan tavuina — erillistä työkalua ei tarvita.
+const HOLD_CS = 40; // 400 ms ääriasennoille
+const STEP_CS = 11; // 110 ms välikehyksille
+const HOLD_THRESHOLD_CS = 50; // yli 500 ms lähteessä = tarkoituksellinen pito
+
+function retimeGif(gifBuffer) {
+  const buffer = Buffer.from(gifBuffer);
+  for (let i = 0; i < buffer.length - 8; i += 1) {
+    if (buffer[i] === 0x21 && buffer[i + 1] === 0xf9 && buffer[i + 2] === 0x04) {
+      const current = buffer[i + 4] | (buffer[i + 5] << 8);
+      const next = current >= HOLD_THRESHOLD_CS ? HOLD_CS : STEP_CS;
+      buffer[i + 4] = next & 0xff;
+      buffer[i + 5] = (next >> 8) & 0xff;
+    }
+  }
+  return buffer;
+}
+
 function toAnimatedWebp(gifBuffer) {
   const dir = mkdtempSync(join(tmpdir(), "exercise-anim-"));
   const inPath = join(dir, "in.gif");
@@ -85,10 +112,18 @@ async function main() {
   const { createClient } = await import("@supabase/supabase-js");
   const supabase = createClient(url, serviceKey, { auth: { persistSession: false, autoRefreshToken: false } });
 
-  const { data: rows, error } = await supabase
-    .from("exercises")
-    .select("id, external_key, name, animation_url");
-  if (error) throw new Error(`liikkeiden haku epäonnistui: ${error.message}`);
+  // PostgREST palauttaa oletuksena enintään 1000 riviä ja katalogi ylittää sen, joten
+  // rivit haetaan sivuttain — muuten osa liikkeistä jää hiljaa käsittelemättä.
+  const rows = [];
+  for (let from = 0; ; from += 1000) {
+    const { data, error } = await supabase
+      .from("exercises")
+      .select("id, external_key, name, animation_url")
+      .range(from, from + 999);
+    if (error) throw new Error(`liikkeiden haku epäonnistui: ${error.message}`);
+    rows.push(...(data ?? []));
+    if (!data || data.length < 1000) break;
+  }
 
   // Globaalit avataan external_keyllä, valmentajien omat UUID:llä (ks. map-tiedoston selitys).
   const rowByKey = new Map();
@@ -111,7 +146,7 @@ async function main() {
       const res = await fetch(`${GIF_BASE}/${mediaId}.gif`);
       if (!res.ok) { results.errors.push(`${row.name}: GIF HTTP ${res.status}`); continue; }
       const gif = Buffer.from(await res.arrayBuffer());
-      const webp = toAnimatedWebp(gif);
+      const webp = toAnimatedWebp(retimeGif(gif));
 
       results.bytesBefore += gif.length;
       results.bytesAfter += webp.length;

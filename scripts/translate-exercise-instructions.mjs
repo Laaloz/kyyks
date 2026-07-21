@@ -96,10 +96,18 @@ async function main() {
   const { createClient } = await import("@supabase/supabase-js");
   const supabase = createClient(url, serviceKey, { auth: { persistSession: false, autoRefreshToken: false } });
 
-  const { data: rows, error } = await supabase
-    .from("exercises")
-    .select("id, external_key, name, instruction_steps");
-  if (error) throw new Error(`liikkeiden haku epäonnistui: ${error.message}`);
+  // PostgREST palauttaa oletuksena enintään 1000 riviä ja katalogi ylittää sen, joten
+  // rivit haetaan sivuttain — muuten osa liikkeistä jää hiljaa käsittelemättä.
+  const rows = [];
+  for (let from = 0; ; from += 1000) {
+    const { data, error } = await supabase
+      .from("exercises")
+      .select("id, external_key, name, instruction_steps")
+      .range(from, from + 999);
+    if (error) throw new Error(`liikkeiden haku epäonnistui: ${error.message}`);
+    rows.push(...(data ?? []));
+    if (!data || data.length < 1000) break;
+  }
 
   const rowByKey = new Map();
   rows.forEach((row) => {

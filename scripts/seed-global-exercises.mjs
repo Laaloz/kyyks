@@ -41,11 +41,19 @@ async function main() {
   const { createClient } = await import("@supabase/supabase-js");
   const supabase = createClient(url, serviceKey, { auth: { persistSession: false, autoRefreshToken: false } });
 
-  const { data: existing, error: existingError } = await supabase
-    .from("exercises")
-    .select("external_key")
-    .eq("scope", "global");
-  if (existingError) throw new Error(`nykytilan haku epäonnistui: ${existingError.message}`);
+  // PostgREST palauttaa oletuksena enintään 1000 riviä ja globaaleja on enemmän, joten
+  // nykytila haetaan sivuttain — muuten seed yrittäisi lisätä jo olemassa olevia rivejä.
+  const existing = [];
+  for (let from = 0; ; from += 1000) {
+    const { data, error: existingError } = await supabase
+      .from("exercises")
+      .select("external_key")
+      .eq("scope", "global")
+      .range(from, from + 999);
+    if (existingError) throw new Error(`nykytilan haku epäonnistui: ${existingError.message}`);
+    existing.push(...(data ?? []));
+    if (!data || data.length < 1000) break;
+  }
 
   const existingKeys = new Set((existing ?? []).map((row) => row.external_key));
   const toInsert = exerciseSeedData.filter((exercise) => !existingKeys.has(exercise.id));
