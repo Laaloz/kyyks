@@ -2249,7 +2249,21 @@ export function reconcileSupabaseVisibleState(
     mealPlanTemplates: snapshotMode === "workouts" ? previous.mealPlanTemplates : (filteredSnapshot.mealPlanTemplates ?? previous.mealPlanTemplates),
     assignedMealPlans: snapshotMode === "workouts" ? previous.assignedMealPlans : (filteredSnapshot.assignedMealPlans ?? previous.assignedMealPlans),
     assignments: snapshotMode === "workouts" ? previous.assignments : (filteredSnapshot.assignments ?? previous.assignments),
-    exercises: snapshotMode === "workouts" ? previous.exercises : (filteredSnapshot.exercises ?? previous.exercises),
+    // Liikkeet otetaan snapshotista myös "workouts"-tilassa: palvelin lataa ne kummassakin
+    // tilassa, ja aiemmin ne hylättiin, jolloin localStorageen tallennettu vanha katalogi jäi
+    // pysyvästi voimaan. Käytännössä se tarkoitti ettei liikkeille lisätty media koskaan
+    // näkynyt käyttäjälle joka oli avannut sovelluksen kertaakaan aiemmin.
+    //
+    // Yhdistetään korvaamisen sijaan, jotta optimistisesti lisätty oma liike ei katoa ennen
+    // kuin se on ehtinyt tallentua palvelimelle.
+    exercises: (() => {
+      const snapshotExercises = filteredSnapshot.exercises;
+      if (!snapshotExercises) {
+        return previous.exercises;
+      }
+      const snapshotIds = new Set(snapshotExercises.map((exercise) => exercise.id));
+      return [...snapshotExercises, ...previous.exercises.filter((exercise) => !snapshotIds.has(exercise.id))];
+    })(),
     templates: snapshotMode === "workouts" ? previous.templates : (filteredSnapshot.templates ?? previous.templates),
     plans: snapshotMode === "workouts" ? previous.plans : (filteredSnapshot.plans ?? previous.plans),
     scheduledWorkouts: resolvedScheduledWorkouts,
