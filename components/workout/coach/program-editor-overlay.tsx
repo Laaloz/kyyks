@@ -1,6 +1,6 @@
 "use client";
 
-import { BookOpen, ChevronLeft, Plus, Search, Trash2 } from "lucide-react";
+import { BookOpen, ChevronLeft, Plus, Repeat2, Search, Trash2 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 
 import { Button } from "@/components/ui/button";
@@ -163,6 +163,10 @@ export function ProgramEditorOverlay({
   });
   const [workouts, setWorkouts] = useState<DraftWorkout[]>(() => planWorkoutsToDraft(basePlan, exercises));
   const [pickerForWorkout, setPickerForWorkout] = useState<string | null>(null);
+  // Kun tämä on asetettu, valitsimesta valittu liike korvaa olemassa olevan sen sijaan että
+  // lisättäisiin uusi. Sarjat, toistot, tauko ja superset säilyvät — vaihdetaan liike, ei
+  // ohjelmointia.
+  const [replaceTargetUid, setReplaceTargetUid] = useState<string | null>(null);
   const [pickerQuery, setPickerQuery] = useState("");
   const [newMuscle, setNewMuscle] = useState<MuscleGroupKey | "">("");
   const [openInstructionUid, setOpenInstructionUid] = useState<string | null>(null);
@@ -234,7 +238,17 @@ export function ProgramEditorOverlay({
 
   const closePicker = () => {
     setPickerForWorkout(null);
+    setReplaceTargetUid(null);
     setPickerQuery("");
+    setNewMuscle("");
+  };
+
+  // Avaa valitsimen liikkeen vaihtoa varten: hakukenttä esitäytetään nykyisellä nimellä,
+  // jolloin lähivariantit (esim. eri ote tai väline) ovat heti näkyvissä.
+  const openReplacePicker = (workoutUid: string, exercise: DraftExercise) => {
+    setPickerForWorkout(workoutUid);
+    setReplaceTargetUid(exercise.uid);
+    setPickerQuery(exercise.name);
     setNewMuscle("");
   };
 
@@ -252,13 +266,58 @@ export function ProgramEditorOverlay({
     closePicker();
   };
 
-  const addExerciseFromBank = (exercise: Exercise) =>
+  // Vaihtaa liikkeen paikallaan: sarjat, toistot, tauko ja superset säilyvät — vaihdetaan
+  // liike, ei ohjelmointia.
+  const replaceWithPatch = (patch: Partial<DraftExercise>) => {
+    setWorkouts((current) =>
+      current.map((workout) =>
+        workout.uid !== pickerForWorkout
+          ? workout
+          : {
+              ...workout,
+              exercises: workout.exercises.map((entry) =>
+                entry.uid === replaceTargetUid ? { ...entry, ...patch } : entry,
+              ),
+            },
+      ),
+    );
+    closePicker();
+  };
+
+  const replaceExercise = (exercise: Exercise) => {
+    const target = workouts
+      .find((workout) => workout.uid === pickerForWorkout)
+      ?.exercises.find((entry) => entry.uid === replaceTargetUid);
+    // Valmentajan itse kirjoittama ohje säilyy; automaattisesti tuotu cue korvataan uuden
+    // liikkeen omalla, koska vanha kuvaisi väärää liikettä.
+    const keepInstruction = Boolean(target?.instruction?.trim()) && target?.instruction?.trim() !== target?.name;
+    replaceWithPatch({
+      exerciseId: exercise.id,
+      name: exercise.name,
+      instruction: keepInstruction ? target?.instruction : exercise.cue,
+      isCustom: false,
+      muscleGroup: undefined,
+    });
+  };
+
+  const addExerciseFromBank = (exercise: Exercise) => {
+    if (replaceTargetUid) {
+      replaceExercise(exercise);
+      return;
+    }
     // Tuo liikkeen oma vakio-ohje (cue) valmiiksi kenttään — muokattavissa.
     appendExercise({ exerciseId: exercise.id, name: exercise.name, instruction: exercise.cue, sets: 3, repsMin: 8, repsMax: 8, restSeconds: 90, supersetGroup: "" });
+  };
 
   const addCustomExercise = () => {
     const name = pickerQuery.trim();
     if (!name) {
+      return;
+    }
+    // Vaihtotilassa myös oma liike korvaa kohteen — muuten valitsin jättäisi vanhan rivin
+    // paikalleen ja lisäisi uuden sen viereen.
+    if (replaceTargetUid) {
+      replaceWithPatch({ name, exerciseId: undefined, isCustom: true, muscleGroup: newMuscle || undefined });
       return;
     }
     appendExercise({
@@ -322,10 +381,16 @@ export function ProgramEditorOverlay({
       (workouts.find((workout) => workout.uid === pickerForWorkout)?.exercises ?? []).map((exercise) => exercise.name),
     );
     const query = pickerQuery.trim().toLowerCase();
-    const source = query.length >= 2 ? searchResults : exercises;
-    return source
+
+    // Paikalliset osumat ensin: ne ovat jo muistissa, näkyvät heti ja toimivat myös silloin
+    // kun palvelinhaku ei ole käytettävissä (demo-tila, offline, kirjautuminen vanhentunut).
+    // Palvelimen tulokset täydentävät niitä koko katalogista.
+    const local = query ? exercises.filter((exercise) => exercise.name.toLowerCase().includes(query)) : exercises;
+    const seen = new Set(local.map((exercise) => exercise.id));
+    const combined = [...local, ...searchResults.filter((exercise) => !seen.has(exercise.id))];
+
+    return combined
       .filter((exercise) => !used.has(exercise.name))
-      .filter((exercise) => query.length >= 2 || !query || exercise.name.toLowerCase().includes(query))
       .sort((a, b) => a.name.localeCompare(b.name, "fi"));
   }, [exercises, pickerForWorkout, pickerQuery, searchResults, workouts]);
 
@@ -599,6 +664,15 @@ export function ProgramEditorOverlay({
                     </button>
                     <button
                       type="button"
+                      className="grid size-8 place-items-center rounded-full text-[var(--text-subtle)] transition hover:text-[var(--accent)]"
+                      aria-label={`Vaihda liike: ${exercise.name}`}
+                      title="Vaihda liike"
+                      onClick={() => openReplacePicker(workout.uid, exercise)}
+                    >
+                      <Repeat2 className="size-4" aria-hidden="true" />
+                    </button>
+                    <button
+                      type="button"
                       className="grid size-8 place-items-center rounded-full text-[var(--text-subtle)] transition hover:text-[var(--danger)]"
                       aria-label={`Poista ${exercise.name}`}
                       onClick={() => removeExercise(workout.uid, exercise.uid)}
@@ -761,7 +835,9 @@ export function ProgramEditorOverlay({
           <button type="button" className="flex-1" aria-label="Sulje" onClick={closePicker} />
           <div className="max-h-[70%] overflow-y-auto rounded-t-3xl bg-[var(--surface)] p-4 pb-[calc(env(safe-area-inset-bottom)+1rem)]">
             <div className="flex items-center justify-between gap-3">
-              <h2 className="font-[family-name:var(--font-display)] text-xl font-bold text-[var(--text)]">Lisää liike</h2>
+              <h2 className="font-[family-name:var(--font-display)] text-xl font-bold text-[var(--text)]">
+                {replaceTargetUid ? "Vaihda liike" : "Lisää liike"}
+              </h2>
             </div>
             <div className="relative mt-2">
               <Search className="pointer-events-none absolute left-3.5 top-1/2 size-[18px] -translate-y-1/2 text-[var(--text-subtle)]" aria-hidden="true" />

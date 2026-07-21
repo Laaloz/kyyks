@@ -260,14 +260,23 @@ export function ProgramsPanel({
             <Card className="mt-2 divide-y divide-[var(--border)] p-0">
               {archivedRows.map((row) => (
                 <div key={row.key} className="flex items-center justify-between gap-3 p-4">
-                  <div className="min-w-0">
+                  {/* Arkistoidun ohjelman voi avata muokattavaksi suoraan: palauttaminen
+                      arkistoisi urheilijan nykyisen aktiivisen ohjelman sivuvaikutuksena,
+                      mikä on liian raskas hinta pelkästä sisällön katsomisesta tai
+                      hienosäädöstä. */}
+                  <button
+                    type="button"
+                    className="min-w-0 flex-1 rounded-lg text-left transition hover:opacity-80 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)]"
+                    aria-label={`Muokkaa arkistoitua ohjelmaa: ${row.title}`}
+                    onClick={() => setEditorGroup(row.groupPlans)}
+                  >
                     <p className="truncate font-[family-name:var(--font-display)] text-[15.5px] font-bold text-[var(--text)]">
                       {row.title}
                     </p>
                     <p className="truncate text-[12.5px] text-[var(--text-subtle)]">
                       {row.workoutCount} treeniä/vko{selfAssignOnly ? "" : ` · ${row.assignedLabel}`}
                     </p>
-                  </div>
+                  </button>
                   <Button
                     type="button"
                     variant="secondary"
