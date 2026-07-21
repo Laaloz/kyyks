@@ -32,6 +32,7 @@ import {
   shouldSyncSupabaseAuthEvent,
   preserveActiveWorkoutShells,
   markVisibleConversationEntriesRead,
+  parsePersistedSession,
   resolveSupabaseAuthUserAfterPasswordSignIn,
 } from "@/providers/app-state-provider";
 
@@ -1811,5 +1812,38 @@ describe("applyPartialUserMeasurementUpdate", () => {
     expect(newestMeasurement?.heightCm).toBeUndefined();
     expect(newestMeasurement?.weightKg).toBe(78.5);
     expect(newestMeasurement?.waistCm).toBeUndefined();
+  });
+});
+
+describe("parsePersistedSession", () => {
+  it("restores a local demo session so the app stays on the localStorage path", () => {
+    const session = parsePersistedSession(
+      JSON.stringify({
+        authenticatedUserId: "user_athlete_1",
+        impersonatedUserId: null,
+        isPreviewMode: false,
+        isDemoSession: true,
+      }),
+    );
+
+    expect(session.authenticatedUserId).toBe("user_athlete_1");
+    expect(session.isDemoSession).toBe(true);
+  });
+
+  it("defaults to a real Supabase session when the demo flag is missing", () => {
+    const session = parsePersistedSession(
+      JSON.stringify({ authenticatedUserId: "user_athlete_1", impersonatedUserId: null }),
+    );
+
+    expect(session.isDemoSession).toBe(false);
+  });
+
+  it("keeps the legacy plain-string payload on the Supabase path", () => {
+    expect(parsePersistedSession("user_athlete_1")).toEqual({
+      authenticatedUserId: "user_athlete_1",
+      impersonatedUserId: null,
+      isPreviewMode: false,
+      isDemoSession: false,
+    });
   });
 });

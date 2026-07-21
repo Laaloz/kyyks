@@ -109,6 +109,10 @@ type PersistedSession = {
   authenticatedUserId: string | null;
   impersonatedUserId: string | null;
   isPreviewMode: boolean;
+  // Lokaali demokirjautuminen (demo-nappi tai demoPassword localhostissa). Demokäyttäjällä ei
+  // ole Supabase-sessiota, joten server routet vastaisivat 401 — tämä lippu pudottaa istunnon
+  // localStorage-polulle vaikka Supabase-ympäristömuuttujat olisivat asetettuina.
+  isDemoSession: boolean;
 };
 
 function shiftIsoTimestamp(value: string | undefined, deltaMs: number) {
@@ -1184,9 +1188,9 @@ function removeUserFromState(previous: AppState, targetUser: UserProfile): AppSt
   };
 }
 
-function parsePersistedSession(rawSession: string | null): PersistedSession {
+export function parsePersistedSession(rawSession: string | null): PersistedSession {
   if (!rawSession) {
-    return { authenticatedUserId: null, impersonatedUserId: null, isPreviewMode: false };
+    return { authenticatedUserId: null, impersonatedUserId: null, isPreviewMode: false, isDemoSession: false };
   }
 
   try {
@@ -1199,13 +1203,16 @@ function parsePersistedSession(rawSession: string | null): PersistedSession {
         impersonatedUserId,
         // Esikatselu säilyy refreshissä vain jos impersonointi on yhä voimassa.
         isPreviewMode: Boolean(impersonatedUserId) && parsed.isPreviewMode === true,
+        // Demoistunto elpyy vain lokaalissa, jottei tuotantodomainille jäänyt tila
+        // voisi koskaan katkaista oikeaa Supabase-yhteyttä.
+        isDemoSession: parsed.isDemoSession === true && isLocalDevelopmentHost(),
       };
     }
   } catch {
     // Backward compatibility for legacy payload where only user id was stored as a plain string.
   }
 
-  return { authenticatedUserId: rawSession, impersonatedUserId: null, isPreviewMode: false };
+  return { authenticatedUserId: rawSession, impersonatedUserId: null, isPreviewMode: false, isDemoSession: false };
 }
 
 export function shouldPreserveStoredSessionDuringSupabaseBootstrap(
@@ -2795,13 +2802,16 @@ export function AppStateProvider({ children }: PropsWithChildren) {
   // Käyttää samaa impersonointikytkintä (impersonatedUserId), mutta merkitsee
   // istunnon read-onlyksi eikä mutatoivia toimintoja sallita.
   const [isPreviewMode, setIsPreviewMode] = useState(false);
+  const [isDemoSession, setIsDemoSession] = useState(false);
   const [isAuthTransitionPending, setIsAuthTransitionPending] = useState(false);
   const [isStorageHydrated, setIsStorageHydrated] = useState(false);
   const [isSupabaseAuthResolved, setIsSupabaseAuthResolved] = useState(false);
   const [didAttemptBootstrapRevalidation, setDidAttemptBootstrapRevalidation] = useState(false);
   const [didBootstrapTimeout, setDidBootstrapTimeout] = useState(false);
   const [toast, setToast] = useState<{ id: number; tone: "success" | "danger" | "info"; message: string } | null>(null);
-  const supabase = useMemo(() => createSupabaseBrowserClient(), []);
+  // Demoistunnossa klientti pidetään nullina: koko provider haarautuu `if (supabase)`
+  // -ehdolla, joten tämä yksi kytkin ohjaa kaikki toiminnot localStorage-polulle.
+  const supabase = useMemo(() => (isDemoSession ? null : createSupabaseBrowserClient()), [isDemoSession]);
   const stateRef = useRef(state);
   const lastResolvedAuthenticatedUserRef = useRef<UserProfile | null>(null);
   const lastResolvedCurrentUserRef = useRef<UserProfile | null>(null);
@@ -2881,6 +2891,7 @@ export function AppStateProvider({ children }: PropsWithChildren) {
     setAuthenticatedUserId(session.authenticatedUserId);
     setImpersonatedUserId(session.impersonatedUserId);
     setIsPreviewMode(session.isPreviewMode);
+    setIsDemoSession(session.isDemoSession);
 
     setIsStorageHydrated(true);
   }, []);
@@ -2903,6 +2914,7 @@ export function AppStateProvider({ children }: PropsWithChildren) {
         authenticatedUserId,
         impersonatedUserId,
         isPreviewMode,
+        isDemoSession,
       };
       window.localStorage.setItem(
         SESSION_KEY,
@@ -2911,7 +2923,7 @@ export function AppStateProvider({ children }: PropsWithChildren) {
     } else {
       window.localStorage.removeItem(SESSION_KEY);
     }
-  }, [authenticatedUserId, impersonatedUserId, isStorageHydrated]);
+  }, [authenticatedUserId, impersonatedUserId, isDemoSession, isPreviewMode, isStorageHydrated]);
 
   useEffect(() => {
     if (!isStorageHydrated) {
@@ -2941,6 +2953,7 @@ export function AppStateProvider({ children }: PropsWithChildren) {
         setAuthenticatedUserId(session.authenticatedUserId);
         setImpersonatedUserId(session.impersonatedUserId);
         setIsPreviewMode(session.isPreviewMode);
+        setIsDemoSession(session.isDemoSession);
       }
     };
 
@@ -4697,6 +4710,7 @@ function findResolvedUserIdInSnapshot(
           localUser.status === "active" &&
           localUser.demoPassword === password
         ) {
+          setIsDemoSession(true);
           setAuthenticatedUserId(localUser.id);
           setImpersonatedUserId(null);
           return { ok: true };
@@ -4718,6 +4732,7 @@ function findResolvedUserIdInSnapshot(
           return { ok: false, message: "Väärä salasana." };
         }
 
+        setIsDemoSession(true);
         setAuthenticatedUserId(localUser.id);
         setImpersonatedUserId(null);
         return { ok: true };
@@ -4736,11 +4751,13 @@ function findResolvedUserIdInSnapshot(
         setIsAuthTransitionPending(false);
         setAuthenticatedUserId(null);
         setImpersonatedUserId(null);
+        setIsDemoSession(false);
       },
       loginAsDemoUser(userId) {
         isLoggingOutRef.current = false;
         authEpochRef.current += 1;
         setIsAuthTransitionPending(false);
+        setIsDemoSession(true);
         setAuthenticatedUserId(userId);
         setImpersonatedUserId(null);
       },

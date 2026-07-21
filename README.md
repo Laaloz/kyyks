@@ -20,7 +20,11 @@ Sovellus tukee tällä hetkellä ainakin nämä ydinkäyttäjäpolut:
 ## Käyttötilat
 
 ### 1. Demo-tila
-Jos Supabase-ympäristömuuttujia ei ole asetettu, sovellus käynnistyy demo-fallbackilla. Tämä on hyödyllinen UI- ja domain-kehityksessä.
+Sovellus käyttää demo-fallbackia (localStorage) kahdessa tapauksessa:
+- Supabase-ympäristömuuttujia ei ole asetettu, tai
+- olet localhostissa ja kirjaudut demotunnuksella (demolista kirjautumissivulla tai `demo123`-salasana).
+
+Demokirjautuminen pudottaa istunnon localStorage-polulle **vaikka `.env` osoittaisi tuotantoon**: demokäyttäjällä ei ole Supabase-sessiota, joten server routet vastaisivat muuten 401 heti ensimmäisestä kirjoituksesta (treenin aloitus, sarjakuittaus, ohjelmamuutos). Näin koko treeni- ja ohjelmapolun voi ajaa läpi lokaalisti koskematta tuotantodataan. Demoistunto päättyy uloskirjautumiseen.
 
 Demo-käyttäjät:
 - `admin@rooki.fit` / `demo123`
@@ -30,6 +34,8 @@ Demo-käyttäjät:
 
 ### 2. Supabase-tila
 Kun Supabase on konfiguroitu, sovellus käyttää server routeja authiin, kutsuihin, salasanan nollaukseen ja näkyvän applikaatiotilan synkronointiin.
+
+Lokaalissa hCaptcha ohitetaan, joten omilla oikeilla tunnuksilla kirjautuminen `localhost`-osoitteesta toimii ja käyttää `.env`:n mukaista Supabase-projektia. Huomaa että tällöin kaikki kirjaukset menevät oikeaan kantaan.
 
 ## Käynnistys
 1. `source ~/.nvm/nvm.sh`
