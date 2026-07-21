@@ -108,6 +108,7 @@ type ExerciseRow = {
   scope: Exercise["scope"];
   coach_id: string | null;
   animation_url: string | null;
+  thumbnail_url: string | null;
   image_start_url: string | null;
   image_end_url: string | null;
   instruction_steps: string[] | null;
@@ -594,6 +595,7 @@ function mapExerciseRow(entry: ExerciseRow): Exercise {
     scope: entry.scope,
     coachId: entry.coach_id ?? undefined,
     animationUrl: entry.animation_url ?? undefined,
+    thumbnailUrl: entry.thumbnail_url ?? undefined,
     imageStartUrl: entry.image_start_url ?? undefined,
     imageEndUrl: entry.image_end_url ?? undefined,
     instructionSteps: entry.instruction_steps?.length ? entry.instruction_steps : undefined,
@@ -824,7 +826,7 @@ export async function loadVisibleSupabaseAppState(
       ? supabase
           .from("exercises")
           .select(
-            "id, external_key, name, category, equipment, cue, scope, coach_id, animation_url, image_start_url, image_end_url, instruction_steps",
+            "id, external_key, name, category, equipment, cue, scope, coach_id, animation_url, thumbnail_url, image_start_url, image_end_url, instruction_steps",
           )
           .order("name", { ascending: true })
       : Promise.resolve({ data: [] as ExerciseRow[], error: null }),

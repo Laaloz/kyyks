@@ -170,6 +170,53 @@ function ExerciseDemo({ exercise }: { exercise: Exercise }) {
   );
 }
 
+// Liikerivin tunnistekuva. Ensisijaisesti animaation staattinen versio: se on
+// korkeakontrastista viivagrafiikkaa keskitettynä, mikä lukeutuu 44 pikselissä selvästi
+// paremmin kuin tumma salivalokuva. Animaatiota itseään ei käytetä — kymmenen toistuvaa
+// WebP:tä veisi huomion sarjakuittauksesta. Klikkaus avaa ohjesheetin, jossa animaatio
+// näkyy täysikokoisena.
+function ExerciseThumbnail({
+  exercise,
+  onOpen,
+}: {
+  exercise?: Exercise;
+  onOpen?: () => void;
+}) {
+  const src = exercise?.thumbnailUrl ?? exercise?.imageStartUrl;
+  if (!src) {
+    return null;
+  }
+
+  const image = (
+    <img
+      src={src}
+      alt=""
+      aria-hidden="true"
+      width={44}
+      height={44}
+      loading="lazy"
+      decoding="async"
+      className="size-11 shrink-0 rounded-[10px] border border-[var(--border)] bg-white object-contain"
+    />
+  );
+
+  if (!onOpen) {
+    return image;
+  }
+
+  return (
+    <button
+      type="button"
+      aria-label={`${exercise?.name ?? "Liike"} ohje`}
+      title="Ohje"
+      className="shrink-0 rounded-[10px] transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)] hover:opacity-80"
+      onClick={onOpen}
+    >
+      {image}
+    </button>
+  );
+}
+
 function CoachInstructionDialog({
   exerciseName,
   instruction,
@@ -817,6 +864,10 @@ export function AthleteSessionPanel({
     instruction: string;
     exerciseId?: string;
   } | null>(null);
+  const exerciseById = useMemo(
+    () => new Map(availableExercises.map((exercise) => [exercise.id, exercise])),
+    [availableExercises],
+  );
   const [openExerciseStructure, setOpenExerciseStructure] = useState<
     | {
         mode: "edit";
@@ -1612,6 +1663,10 @@ export function AthleteSessionPanel({
         className={`min-w-0 max-w-full overflow-hidden rounded-[18px] border p-4 ${activeCardToneClass}`}
       >
         <div className="flex items-start justify-between gap-3">
+          <ExerciseThumbnail
+            exercise={exerciseById.get(logs[0]?.exerciseId ?? "")}
+            onOpen={instruction ? () => setOpenInstruction({ exerciseName, instruction, exerciseId: logs[0]?.exerciseId }) : undefined}
+          />
           <button
             type="button"
             id={disclosureButtonId}
@@ -1832,6 +1887,10 @@ export function AthleteSessionPanel({
         className={`min-w-0 max-w-full overflow-hidden rounded-[18px] border p-3 md:p-3.5 ${cardToneClass}`}
       >
         <div className="flex min-w-0 items-start gap-2 px-1">
+          <ExerciseThumbnail
+            exercise={exerciseById.get(logs[0]?.exerciseId ?? "")}
+            onOpen={instruction ? () => setOpenInstruction({ exerciseName, instruction, exerciseId: logs[0]?.exerciseId }) : undefined}
+          />
           <button
             type="button"
             className="group min-w-0 flex-1 rounded-[1rem] py-0 text-left text-inherit transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--background)]"
