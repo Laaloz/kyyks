@@ -433,6 +433,42 @@ function mergeServerSessionWithLocalSetInputs(
   return { ...serverSession, setLogs: mergedSetLogs };
 }
 
+// Peruu optimistisen "treeni valmis" -merkinnän kun palvelin hylkäsi
+// viimeistelyn. Ilman tätä optimistinen tila jää elämään (reconcile suosii
+// uudempaa paikallista aikaleimaa), UI raportoi valheellisen onnistumisen ja
+// treeni + sessio ajautuvat eri tilaan. Sarjojen kirjaustila säilytetään
+// sellaisenaan — vain valmistumiskentät palautetaan.
+export function revertOptimisticWorkoutCompletion(
+  state: AppState,
+  scheduledWorkoutId: string,
+  previousWorkout?: ScheduledWorkout,
+  previousSession?: WorkoutSession,
+): AppState {
+  return {
+    ...state,
+    scheduledWorkouts: state.scheduledWorkouts.map((workout) =>
+      workout.id === scheduledWorkoutId
+        ? {
+            ...workout,
+            status: previousWorkout?.status ?? "in_progress",
+            completedAt: previousWorkout?.completedAt,
+            updatedAt: previousWorkout?.updatedAt ?? workout.updatedAt,
+          }
+        : workout,
+    ),
+    sessions: state.sessions.map((session) =>
+      session.scheduledWorkoutId === scheduledWorkoutId
+        ? {
+            ...session,
+            completedAt: previousSession?.completedAt,
+            pausedAt: previousSession?.pausedAt,
+            updatedAt: previousSession?.updatedAt ?? session.updatedAt,
+          }
+        : session,
+    ),
+  };
+}
+
 // Suodata palvelimen snapshotista pois extra-treenit jotka käyttäjä juuri poisti
 // optimistisesti — muuten lennossa ollut (poistoa edeltänyt) refresh palauttaisi
 // poistetun rivin takaisin. Aikaikkuna kuten muillakin optimistisilla poistoilla.
@@ -1101,6 +1137,7 @@ const PUBLIC_PASSWORD_RESET_RESPONSE =
 const WORKOUT_SET_SYNC_DEBOUNCE_MS = 500;
 const WORKOUT_SET_SYNC_RETRY_BASE_MS = 1000;
 const WORKOUT_SET_SYNC_RETRY_MAX_MS = 30_000;
+const WORKOUT_SET_DRAFT_FLUSH_WAIT_MS = 4000;
 const FULL_SNAPSHOT_FOCUS_REFRESH_INTERVAL_MS = 5 * 60_000;
 
 type UserSettingsInput = {
@@ -2085,6 +2122,116 @@ export function reconcileSupabaseVisibleState(
     snapshotMode === "workouts" ? new Map() : recentlyConfirmedMeasurements,
   );
 
+  // Treeni ja sen sessio ratkaistaan parina: aiemmin ne käytiin läpi täysin
+  // erillisillä säännöillä, jolloin epäonnistunut viimeistely saattoi jättää
+  // treenin paikallisesti valmiiksi mutta palauttaa session palvelimen
+  // keskeneräiseen versioon. Silloin tila hajosi (treeni valmis, sessiolta
+  // puuttuu completedAt) ja esim. valmiin treenin keston muokkaus kaatui.
+  const resolvedScheduledWorkouts = withActiveWorkoutShells.scheduledWorkouts.map((workout) => {
+    const localWorkout = previousScheduledWorkoutsById.get(workout.id);
+    if (!localWorkout) {
+      return workout;
+    }
+
+    if (pendingWorkoutIds.has(workout.id)) {
+      return localWorkout;
+    }
+
+    const recentlyConfirmedUpdatedAt = recentlyConfirmedSetLogs?.get(workout.id);
+    if (recentlyConfirmedUpdatedAt) {
+      const localUpdatedAt = Date.parse(localWorkout.updatedAt);
+      const serverUpdatedAt = Date.parse(workout.updatedAt);
+      const confirmedUpdatedAt = Date.parse(recentlyConfirmedUpdatedAt);
+      if (
+        Number.isFinite(localUpdatedAt) &&
+        Number.isFinite(serverUpdatedAt) &&
+        Number.isFinite(confirmedUpdatedAt) &&
+        localUpdatedAt >= confirmedUpdatedAt &&
+        serverUpdatedAt < confirmedUpdatedAt
+      ) {
+        return localWorkout;
+      }
+    }
+
+    const localUpdatedAt = Date.parse(localWorkout.updatedAt);
+    const serverUpdatedAt = Date.parse(workout.updatedAt);
+    return Number.isFinite(localUpdatedAt) && Number.isFinite(serverUpdatedAt) && localUpdatedAt > serverUpdatedAt
+      ? localWorkout
+      : workout;
+  });
+  const resolvedWorkoutsById = new Map(resolvedScheduledWorkouts.map((workout) => [workout.id, workout]));
+
+  const resolvedSessions = withActiveWorkoutShells.sessions.map((session) => {
+    // Varatäsmäys scheduledWorkoutId:llä: juuri aloitetulla optimistisella
+    // sessiolla on eri (väliaikainen) id kuin palvelimella, joten pelkkä
+    // id-haku ei löytäisi paikallisia sarja-arvoja ja palvelimen sessio
+    // ylikirjoittaisi ne hiljaa.
+    const localSession =
+      previousSessionsById.get(session.id) ?? previousSessionsByWorkoutId.get(session.scheduledWorkoutId);
+    if (!localSession) {
+      return session;
+    }
+
+    if (pendingSessionWorkoutIds.has(session.scheduledWorkoutId)) {
+      return localSession;
+    }
+
+    const recentlyConfirmedUpdatedAt = recentlyConfirmedSetLogs?.get(session.scheduledWorkoutId);
+    if (recentlyConfirmedUpdatedAt) {
+      const localUpdatedAt = Date.parse(localSession.updatedAt);
+      const serverUpdatedAt = Date.parse(session.updatedAt);
+      const confirmedUpdatedAt = Date.parse(recentlyConfirmedUpdatedAt);
+      if (
+        Number.isFinite(localUpdatedAt) &&
+        Number.isFinite(serverUpdatedAt) &&
+        Number.isFinite(confirmedUpdatedAt) &&
+        localUpdatedAt >= confirmedUpdatedAt &&
+        serverUpdatedAt < confirmedUpdatedAt
+      ) {
+        return localSession;
+      }
+    }
+
+    const resolvedWorkout = resolvedWorkoutsById.get(session.scheduledWorkoutId);
+    const resolvedWorkoutIsCompleted = resolvedWorkout
+      ? resolvedWorkout.status === "completed"
+      : undefined;
+
+    // Kesken kirjattava treeni: säilytä paikalliset sarja-arvot mutta ota
+    // palvelimen rakennemuutokset, jottei snapshot revertoi toistoja/painoja.
+    if (activeLoggingWorkoutIds.has(session.scheduledWorkoutId)) {
+      const mergedSession = mergeServerSessionWithLocalSetInputs(session, localSession);
+      // Jos treeni ratkesi valmiiksi, sessio ei saa jäädä keskeneräiseksi:
+      // muuten valmiilta treeniltä puuttuu completedAt.
+      if (resolvedWorkoutIsCompleted && localSession.completedAt && !session.completedAt) {
+        return {
+          ...mergedSession,
+          completedAt: localSession.completedAt,
+          pausedAt: undefined,
+          updatedAt: localSession.updatedAt,
+        };
+      }
+
+      return mergedSession;
+    }
+
+    const localUpdatedAt = Date.parse(localSession.updatedAt);
+    const serverUpdatedAt = Date.parse(session.updatedAt);
+    const localSessionWins =
+      Number.isFinite(localUpdatedAt) && Number.isFinite(serverUpdatedAt) && localUpdatedAt > serverUpdatedAt;
+    if (!localSessionWins) {
+      return session;
+    }
+
+    // Vastakkainen suunta: älä säilytä vahvistamatonta paikallista
+    // valmistumista, jos treeni itse ratkesi keskeneräiseksi.
+    if (resolvedWorkoutIsCompleted === false && localSession.completedAt && !session.completedAt) {
+      return session;
+    }
+
+    return localSession;
+  });
+
   return normalizeState({
     ...previous,
     users: [...(snapshotMode === "workouts" ? (snapshot.users ?? previous.users) : mergedMeasurements.users), ...preservedInvitedUsers],
@@ -2098,81 +2245,8 @@ export function reconcileSupabaseVisibleState(
     exercises: snapshotMode === "workouts" ? previous.exercises : (filteredSnapshot.exercises ?? previous.exercises),
     templates: snapshotMode === "workouts" ? previous.templates : (filteredSnapshot.templates ?? previous.templates),
     plans: snapshotMode === "workouts" ? previous.plans : (filteredSnapshot.plans ?? previous.plans),
-    scheduledWorkouts: withActiveWorkoutShells.scheduledWorkouts.map((workout) => {
-      const localWorkout = previousScheduledWorkoutsById.get(workout.id);
-      if (!localWorkout) {
-        return workout;
-      }
-
-      if (pendingWorkoutIds.has(workout.id)) {
-        return localWorkout;
-      }
-
-      const recentlyConfirmedUpdatedAt = recentlyConfirmedSetLogs?.get(workout.id);
-      if (recentlyConfirmedUpdatedAt) {
-        const localUpdatedAt = Date.parse(localWorkout.updatedAt);
-        const serverUpdatedAt = Date.parse(workout.updatedAt);
-        const confirmedUpdatedAt = Date.parse(recentlyConfirmedUpdatedAt);
-        if (
-          Number.isFinite(localUpdatedAt) &&
-          Number.isFinite(serverUpdatedAt) &&
-          Number.isFinite(confirmedUpdatedAt) &&
-          localUpdatedAt >= confirmedUpdatedAt &&
-          serverUpdatedAt < confirmedUpdatedAt
-        ) {
-          return localWorkout;
-        }
-      }
-
-      const localUpdatedAt = Date.parse(localWorkout.updatedAt);
-      const serverUpdatedAt = Date.parse(workout.updatedAt);
-      return Number.isFinite(localUpdatedAt) && Number.isFinite(serverUpdatedAt) && localUpdatedAt > serverUpdatedAt
-        ? localWorkout
-        : workout;
-    }),
-    sessions: withActiveWorkoutShells.sessions.map((session) => {
-      // Varatäsmäys scheduledWorkoutId:llä: juuri aloitetulla optimistisella
-      // sessiolla on eri (väliaikainen) id kuin palvelimella, joten pelkkä
-      // id-haku ei löytäisi paikallisia sarja-arvoja ja palvelimen sessio
-      // ylikirjoittaisi ne hiljaa.
-      const localSession =
-        previousSessionsById.get(session.id) ?? previousSessionsByWorkoutId.get(session.scheduledWorkoutId);
-      if (!localSession) {
-        return session;
-      }
-
-      if (pendingSessionWorkoutIds.has(session.scheduledWorkoutId)) {
-        return localSession;
-      }
-
-      const recentlyConfirmedUpdatedAt = recentlyConfirmedSetLogs?.get(session.scheduledWorkoutId);
-      if (recentlyConfirmedUpdatedAt) {
-        const localUpdatedAt = Date.parse(localSession.updatedAt);
-        const serverUpdatedAt = Date.parse(session.updatedAt);
-        const confirmedUpdatedAt = Date.parse(recentlyConfirmedUpdatedAt);
-        if (
-          Number.isFinite(localUpdatedAt) &&
-          Number.isFinite(serverUpdatedAt) &&
-          Number.isFinite(confirmedUpdatedAt) &&
-          localUpdatedAt >= confirmedUpdatedAt &&
-          serverUpdatedAt < confirmedUpdatedAt
-        ) {
-          return localSession;
-        }
-      }
-
-      // Kesken kirjattava treeni: säilytä paikalliset sarja-arvot mutta ota
-      // palvelimen rakennemuutokset, jottei snapshot revertoi toistoja/painoja.
-      if (activeLoggingWorkoutIds.has(session.scheduledWorkoutId)) {
-        return mergeServerSessionWithLocalSetInputs(session, localSession);
-      }
-
-      const localUpdatedAt = Date.parse(localSession.updatedAt);
-      const serverUpdatedAt = Date.parse(session.updatedAt);
-      return Number.isFinite(localUpdatedAt) && Number.isFinite(serverUpdatedAt) && localUpdatedAt > serverUpdatedAt
-        ? localSession
-        : session;
-    }),
+    scheduledWorkouts: resolvedScheduledWorkouts,
+    sessions: resolvedSessions,
     notes: (() => {
       const snapshotNotes = snapshot.notes ?? previous.notes;
       const snapshotSessions = snapshot.sessions ?? previous.sessions;
@@ -4072,6 +4146,31 @@ function findResolvedUserIdInSnapshot(
     }
     await flushWorkoutSetDrafts(scheduledWorkoutId);
   }, [flushWorkoutSetDrafts]);
+
+  // Viimeistely, kesto ja päivämäärä lähettävät session versioleiman
+  // (expectedUpdatedAt), joten odottavat sarjaluonnokset on synkattava ensin.
+  // Katkaisu on vain jumiutuneen pyynnön varalta: aiempi 450 ms ehti
+  // säännöllisesti umpeutua hitaassa mobiiliverkossa, jolloin mutaatio lähti
+  // vanhalla leimalla ja törmäsi stale_session-konfliktiin.
+  const waitForPendingWorkoutSetDrafts = useCallback(
+    async (scheduledWorkoutId: string, label: string) => {
+      const flushPromise = flushPendingWorkoutSetDrafts(scheduledWorkoutId);
+      const flushTimedOut = await new Promise<boolean>((resolve) => {
+        const timeout = window.setTimeout(() => resolve(true), WORKOUT_SET_DRAFT_FLUSH_WAIT_MS);
+        void flushPromise
+          .then(() => resolve(false))
+          .catch(() => resolve(false))
+          .finally(() => window.clearTimeout(timeout));
+      });
+
+      if (flushTimedOut) {
+        console.info(`[workout-ui] ${label}-continues-with-pending-set-sync`, {
+          scheduledWorkoutId,
+        });
+      }
+    },
+    [flushPendingWorkoutSetDrafts],
+  );
 
   const ensureWorkoutMutationQueue = useCallback((scheduledWorkoutId: string) => {
     const existing = workoutMutationQueueRef.current.get(scheduledWorkoutId);
@@ -7041,19 +7140,7 @@ function findResolvedUserIdInSnapshot(
           // serverin tuoretta session.updatedAt:ia — muuten kesto törmää
           // stale_session-konfliktiin ("treeni ehti muuttua"). Sama kuvio kuin
           // completeWorkoutissa.
-          const flushPromise = flushPendingWorkoutSetDrafts(scheduledWorkoutId);
-          const flushTimedOut = await new Promise<boolean>((resolve) => {
-            const timeout = window.setTimeout(() => resolve(true), 450);
-            void flushPromise
-              .then(() => resolve(false))
-              .catch(() => resolve(false))
-              .finally(() => window.clearTimeout(timeout));
-          });
-          if (flushTimedOut) {
-            console.info("[workout-ui] duration-continues-with-pending-set-sync", {
-              scheduledWorkoutId,
-            });
-          }
+          await waitForPendingWorkoutSetDrafts(scheduledWorkoutId, "duration");
 
           return await new Promise<ActionResult>((resolve) => {
             enqueueWorkoutMutation(scheduledWorkoutId, {
@@ -7116,19 +7203,7 @@ function findResolvedUserIdInSnapshot(
           // sarjaluonnokset ennen päivämäärämutaatiota, jotta sen
           // expectedUpdatedAt vastaa serverin tuoretta session.updatedAt:ia
           // eikä törmää stale_session-konfliktiin.
-          const flushPromise = flushPendingWorkoutSetDrafts(scheduledWorkoutId);
-          const flushTimedOut = await new Promise<boolean>((resolve) => {
-            const timeout = window.setTimeout(() => resolve(true), 450);
-            void flushPromise
-              .then(() => resolve(false))
-              .catch(() => resolve(false))
-              .finally(() => window.clearTimeout(timeout));
-          });
-          if (flushTimedOut) {
-            console.info("[workout-ui] date-continues-with-pending-set-sync", {
-              scheduledWorkoutId,
-            });
-          }
+          await waitForPendingWorkoutSetDrafts(scheduledWorkoutId, "date");
 
           return await new Promise<ActionResult>((resolve) => {
             enqueueWorkoutMutation(scheduledWorkoutId, {
@@ -8438,19 +8513,7 @@ function findResolvedUserIdInSnapshot(
         }
 
         if (supabase) {
-          const flushPromise = flushPendingWorkoutSetDrafts(scheduledWorkoutId);
-          const flushTimedOut = await new Promise<boolean>((resolve) => {
-            const timeout = window.setTimeout(() => resolve(true), 450);
-            void flushPromise
-              .then(() => resolve(false))
-              .catch(() => resolve(false))
-              .finally(() => window.clearTimeout(timeout));
-          });
-          if (flushTimedOut) {
-            console.info("[workout-ui] complete-continues-with-pending-set-sync", {
-              scheduledWorkoutId,
-            });
-          }
+          await waitForPendingWorkoutSetDrafts(scheduledWorkoutId, "complete");
 
           const refreshedState = stateRef.current;
           if (!canCompleteSession(refreshedState, scheduledWorkoutId)) {
@@ -8461,6 +8524,11 @@ function findResolvedUserIdInSnapshot(
             return { ok: false, message: "Treeniä ei voitu merkitä valmiiksi." };
           }
 
+          const workoutBeforeCompletion = refreshedState.scheduledWorkouts.find((item) => item.id === scheduledWorkoutId);
+          const sessionBeforeCompletion = refreshedState.sessions.find(
+            (item) => item.scheduledWorkoutId === scheduledWorkoutId,
+          );
+
           setState((current) => domainCompleteSession(current, scheduledWorkoutId));
           const result = await new Promise<ActionResult>((resolve) => {
             enqueueWorkoutMutation(scheduledWorkoutId, {
@@ -8470,12 +8538,22 @@ function findResolvedUserIdInSnapshot(
           });
 
           if (!result.ok) {
+            // Vain palvelin ratkaisee onnistuiko viimeistely. Aiemmin tässä
+            // tarkistettiin paikallista tilaa uudelleen, mutta se ei erota
+            // "palvelin vahvisti" ja "oma optimistinen merkintä jäi henkiin"
+            // -tapauksia toisistaan → epäonnistuminen raportoitui
+            // onnistumisena. Jo valmiiksi merkityn treenin uudelleenmerkintä
+            // palautuu palvelimelta ok:na (recoverCompletedWorkoutState),
+            // joten paikallista varmistusta ei tarvita.
+            setState((current) =>
+              revertOptimisticWorkoutCompletion(
+                current,
+                scheduledWorkoutId,
+                workoutBeforeCompletion,
+                sessionBeforeCompletion,
+              ),
+            );
             await refreshSupabaseVisibleState();
-            const postRefreshState = stateRef.current;
-            const completedWorkout = postRefreshState.scheduledWorkouts.find((item) => item.id === scheduledWorkoutId);
-            if (completedWorkout?.status === "completed") {
-              return { ok: true };
-            }
           }
 
           return result;

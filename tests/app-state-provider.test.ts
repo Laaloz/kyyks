@@ -34,6 +34,7 @@ import {
   markVisibleConversationEntriesRead,
   parsePersistedSession,
   resolveSupabaseAuthUserAfterPasswordSignIn,
+  revertOptimisticWorkoutCompletion,
 } from "@/providers/app-state-provider";
 
 describe("collectPendingWorkoutMutationKinds", () => {
@@ -733,6 +734,204 @@ describe("shouldPreserveStoredSessionDuringSupabaseBootstrap", () => {
     // ...mutta palvelimen rakennemuutos (uusi sarja) tulee läpi.
     expect(nextState.sessions[0]?.setLogs).toHaveLength(2);
     expect(nextState.sessions[0]?.setLogs[1]?.id).toBe("log_local_2");
+  });
+
+  it("does not leave a workout completed while its session reverts to in progress", () => {
+    // Epäonnistunut viimeistely: paikallisesti treeni + sessio on merkitty
+    // valmiiksi klientin kellolla, palvelin tuntee ne yhä keskeneräisinä.
+    const state = cloneDemoState();
+    const serverWorkout = {
+      id: "workout_local",
+      athleteId: "user_athlete_1",
+      coachId: "user_coach_1",
+      title: "Jalkapäivä",
+      scheduledDate: "2026-03-24T08:00:00.000Z",
+      status: "in_progress" as const,
+      createdAt: "2026-03-24T08:00:00.000Z",
+      updatedAt: "2026-03-24T08:12:00.000Z",
+    };
+    const serverSession: WorkoutSession = {
+      id: "session_local",
+      scheduledWorkoutId: "workout_local",
+      athleteId: "user_athlete_1",
+      startedAt: "2026-03-24T08:00:00.000Z",
+      updatedAt: "2026-03-24T08:12:00.000Z",
+      setLogs: [],
+    };
+
+    state.scheduledWorkouts = [
+      { ...serverWorkout, status: "completed", completedAt: "2026-03-24T08:13:00.000Z", updatedAt: "2026-03-24T08:13:00.000Z" },
+    ];
+    state.sessions = [
+      { ...serverSession, completedAt: "2026-03-24T08:13:00.000Z", updatedAt: "2026-03-24T08:13:00.000Z" },
+    ];
+
+    const nextState = reconcileSupabaseVisibleState(state, {
+      users: state.users,
+      bodyMeasurements: state.bodyMeasurements,
+      assignments: state.assignments,
+      exercises: state.exercises,
+      templates: state.templates,
+      plans: state.plans,
+      scheduledWorkouts: [serverWorkout],
+      sessions: [serverSession],
+      notes: state.notes,
+      conversationEntries: state.conversationEntries,
+    });
+
+    const workout = nextState.scheduledWorkouts.find((item) => item.id === "workout_local");
+    const session = nextState.sessions.find((item) => item.scheduledWorkoutId === "workout_local");
+
+    // Treeni ja sessio ovat samassa tilassa — kumpi tahansa niistä voittaa,
+    // hajonnut välitila (treeni valmis, sessiolta puuttuu completedAt) ei ole
+    // sallittu, koska valmiin treenin keston muokkaus kaatuisi siihen.
+    expect(Boolean(workout?.status === "completed")).toBe(Boolean(session?.completedAt));
+  });
+
+  it("keeps a completed workout and its session paired when a stale in-progress snapshot lands", () => {
+    // Onnistunut viimeistely, mutta jo lennossa ollut snapshot laskeutuu vasta
+    // sen jälkeen ja tuntee treenin yhä keskeneräisenä.
+    const state = cloneDemoState();
+    const serverWorkout = {
+      id: "workout_local",
+      athleteId: "user_athlete_1",
+      coachId: "user_coach_1",
+      title: "Jalkapäivä",
+      scheduledDate: "2026-03-24T08:00:00.000Z",
+      status: "in_progress" as const,
+      createdAt: "2026-03-24T08:00:00.000Z",
+      updatedAt: "2026-03-24T08:12:00.000Z",
+    };
+    const serverSession: WorkoutSession = {
+      id: "session_local",
+      scheduledWorkoutId: "workout_local",
+      athleteId: "user_athlete_1",
+      startedAt: "2026-03-24T08:00:00.000Z",
+      updatedAt: "2026-03-24T08:12:00.000Z",
+      setLogs: [],
+    };
+
+    // Palvelimen vahvistama valmistuminen: leimat ovat palvelimen omia ja
+    // uudempia kuin vanhentuneessa snapshotissa.
+    state.scheduledWorkouts = [
+      { ...serverWorkout, status: "completed", completedAt: "2026-03-24T08:14:00.000Z", updatedAt: "2026-03-24T08:14:00.000Z" },
+    ];
+    state.sessions = [
+      { ...serverSession, completedAt: "2026-03-24T08:14:00.000Z", updatedAt: "2026-03-24T08:14:00.000Z" },
+    ];
+
+    const nextState = reconcileSupabaseVisibleState(state, {
+      users: state.users,
+      bodyMeasurements: state.bodyMeasurements,
+      assignments: state.assignments,
+      exercises: state.exercises,
+      templates: state.templates,
+      plans: state.plans,
+      scheduledWorkouts: [serverWorkout],
+      sessions: [serverSession],
+      notes: state.notes,
+      conversationEntries: state.conversationEntries,
+    });
+
+    const workout = nextState.scheduledWorkouts.find((item) => item.id === "workout_local");
+    const session = nextState.sessions.find((item) => item.scheduledWorkoutId === "workout_local");
+
+    expect(workout?.status).toBe("completed");
+    expect(session?.completedAt).toBe("2026-03-24T08:14:00.000Z");
+  });
+});
+
+describe("revertOptimisticWorkoutCompletion", () => {
+  const baseWorkout = {
+    id: "workout_local",
+    athleteId: "user_athlete_1",
+    coachId: "user_coach_1",
+    title: "Jalkapäivä",
+    scheduledDate: "2026-03-24T08:00:00.000Z",
+    status: "in_progress" as const,
+    createdAt: "2026-03-24T08:00:00.000Z",
+    updatedAt: "2026-03-24T08:12:00.000Z",
+  };
+  const baseSession: WorkoutSession = {
+    id: "session_local",
+    scheduledWorkoutId: "workout_local",
+    athleteId: "user_athlete_1",
+    startedAt: "2026-03-24T08:00:00.000Z",
+    updatedAt: "2026-03-24T08:12:00.000Z",
+    setLogs: [
+      {
+        id: "log_local_1",
+        scheduledWorkoutId: "workout_local",
+        templateExerciseId: "exercise_1",
+        setId: "set_1",
+        exerciseId: "exercise_1",
+        exerciseName: "Kyykky",
+        setLabel: "1",
+        targetReps: 5,
+        actualReps: 8,
+        actualLoad: 120,
+        done: true,
+      },
+    ],
+  };
+
+  it("restores the pre-completion status and clears the optimistic completion timestamps", () => {
+    const state = cloneDemoState();
+    state.scheduledWorkouts = [
+      { ...baseWorkout, status: "completed", completedAt: "2026-03-24T08:13:00.000Z", updatedAt: "2026-03-24T08:13:00.000Z" },
+    ];
+    state.sessions = [
+      { ...baseSession, completedAt: "2026-03-24T08:13:00.000Z", updatedAt: "2026-03-24T08:13:00.000Z" },
+    ];
+
+    const reverted = revertOptimisticWorkoutCompletion(state, "workout_local", baseWorkout, baseSession);
+
+    expect(reverted.scheduledWorkouts[0]).toMatchObject({
+      status: "in_progress",
+      updatedAt: "2026-03-24T08:12:00.000Z",
+    });
+    expect(reverted.scheduledWorkouts[0]?.completedAt).toBeUndefined();
+    expect(reverted.sessions[0]?.completedAt).toBeUndefined();
+    expect(reverted.sessions[0]?.updatedAt).toBe("2026-03-24T08:12:00.000Z");
+  });
+
+  it("keeps set inputs logged during the failed completion attempt", () => {
+    const state = cloneDemoState();
+    state.scheduledWorkouts = [
+      { ...baseWorkout, status: "completed", completedAt: "2026-03-24T08:13:00.000Z", updatedAt: "2026-03-24T08:13:00.000Z" },
+    ];
+    state.sessions = [
+      {
+        ...baseSession,
+        completedAt: "2026-03-24T08:13:00.000Z",
+        updatedAt: "2026-03-24T08:13:00.000Z",
+        setLogs: [{ ...baseSession.setLogs[0]!, actualReps: 10, actualLoad: 140 }],
+      },
+    ];
+
+    const reverted = revertOptimisticWorkoutCompletion(state, "workout_local", baseWorkout, baseSession);
+
+    expect(reverted.sessions[0]?.setLogs[0]).toMatchObject({
+      actualReps: 10,
+      actualLoad: 140,
+      done: true,
+    });
+  });
+
+  it("falls back to in_progress when no pre-completion snapshot is available", () => {
+    const state = cloneDemoState();
+    state.scheduledWorkouts = [
+      { ...baseWorkout, status: "completed", completedAt: "2026-03-24T08:13:00.000Z", updatedAt: "2026-03-24T08:13:00.000Z" },
+    ];
+    state.sessions = [
+      { ...baseSession, completedAt: "2026-03-24T08:13:00.000Z", updatedAt: "2026-03-24T08:13:00.000Z" },
+    ];
+
+    const reverted = revertOptimisticWorkoutCompletion(state, "workout_local");
+
+    expect(reverted.scheduledWorkouts[0]?.status).toBe("in_progress");
+    expect(reverted.scheduledWorkouts[0]?.completedAt).toBeUndefined();
+    expect(reverted.sessions[0]?.completedAt).toBeUndefined();
   });
 
   it("preserves a recently confirmed workout note until the server snapshot catches up", () => {
