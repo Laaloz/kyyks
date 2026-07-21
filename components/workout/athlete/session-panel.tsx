@@ -2078,8 +2078,16 @@ export function AthleteSessionPanel({
     );
   }
 
+  // Lepoajastin on fixed-elementti näkymän alareunassa, joten sivun sisällölle
+  // varataan sen verran tyhjää ettei "Merkitse valmiiksi" jää ajastimen alle.
+  const isRestTimerVisible = status !== "completed" && restTotalSeconds > 0 && Boolean(restExerciseKey);
+
   return (
-    <div className={`${activeLoggingView ? "mt-0 space-y-3" : "mt-6 space-y-5"} min-w-0 max-w-full overflow-x-clip [contain:inline-size]`}>
+    <div
+      className={`${activeLoggingView ? "mt-0 space-y-3" : "mt-6 space-y-5"} min-w-0 max-w-full overflow-x-clip [contain:inline-size]${
+        isRestTimerVisible ? " pb-[calc(env(safe-area-inset-bottom)+5rem)]" : ""
+      }`}
+    >
       {activeLoggingView ? (
         <>
           <div className="fixed inset-x-0 top-0 z-40 bg-[var(--background)] m-0">

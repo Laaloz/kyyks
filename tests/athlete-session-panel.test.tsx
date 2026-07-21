@@ -260,6 +260,11 @@ describe("AthleteSessionPanel", () => {
     expect(timerShell?.className).not.toContain("sticky");
     expect(timerShell?.className).toContain("w-[min(100%,calc(100dvw-2rem))]");
     expect(timer).toHaveClass("overflow-hidden");
+
+    // Ajastin peittäisi muuten "Merkitse valmiiksi" -napin.
+    const completeButton = screen.getByRole("button", { name: "Merkitse valmiiksi" });
+    const panelRoot = completeButton.closest("[class*='overflow-x-clip']");
+    expect(panelRoot?.className).toContain("pb-[calc(env(safe-area-inset-bottom)+5rem)]");
   });
 
   it("starts completed workout in edit mode without toggle and allows date save", async () => {
