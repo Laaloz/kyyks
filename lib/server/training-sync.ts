@@ -828,6 +828,10 @@ export async function loadVisibleSupabaseAppState(
           .select(
             "id, external_key, name, category, equipment, cue, scope, coach_id, animation_url, thumbnail_url, image_start_url, image_end_url, instruction_steps",
           )
+          // Vain omat/valmentajan liikkeet: globaali katalogi on satoja liikkeitä eikä sitä
+          // enää lähetetä kokonaan. Ohjelmissa käytetyt globaalit haetaan erikseen alempana,
+          // ja valitsin hakee loput /api/exercises/search-endpointista.
+          .eq("scope", "coach_custom")
           .order("name", { ascending: true })
       : Promise.resolve({ data: [] as ExerciseRow[], error: null }),
     mode === "full" || mode === "workouts"
@@ -1016,12 +1020,49 @@ export async function loadVisibleSupabaseAppState(
   const assignments = (assignmentsResult.data ?? []).map((entry) =>
     mapAssignmentRow(entry as AssignmentRow),
   );
-  const exercises = (exercisesResult.data ?? []).map((entry) => mapExerciseRow(entry as ExerciseRow));
+  const customExercises = (exercisesResult.data ?? []).map((entry) => mapExerciseRow(entry as ExerciseRow));
   const templates: AppState["templates"] = [];
   const plans = ((plansResult.data ?? []) as TrainingPlanRow[]).map((entry) => mapPlanRow(entry));
 
   const scheduledWorkouts = ((scheduledWorkoutsResult.data ?? []) as ScheduledWorkoutRow[]).map((entry) =>
     mapScheduledWorkoutRow(entry),
+  );
+
+  // Globaali katalogi ei mahdu payloadiin (satoja liikkeitä ohjeineen ja kuva-URLeineen),
+  // joten mukaan otetaan vain ne joihin käyttäjän omat ohjelmat ja treenilokit viittaavat.
+  // Loput löytyvät /api/exercises/search-endpointista kun valmentaja etsii liikettä.
+  const referencedExerciseKeys = new Set<string>();
+  plans.forEach((plan) => {
+    plan.workouts?.forEach((workout) => {
+      workout.exercises?.forEach((exercise) => {
+        if (exercise.exerciseId) referencedExerciseKeys.add(exercise.exerciseId);
+      });
+    });
+  });
+  ((setLogsResult.data ?? []) as WorkoutSetLogRow[]).forEach((entry) => {
+    if (entry.exercise_id) referencedExerciseKeys.add(entry.exercise_id);
+  });
+
+  // Omat liikkeet ovat jo mukana (coach_custom haettiin yllä), joten tässä haetaan vain
+  // globaalit. Ne tunnistaa external_key-muodosta — omiin viitataan UUID:llä.
+  const customExerciseIds = new Set(customExercises.map((exercise) => exercise.id));
+  const missingGlobalKeys = [...referencedExerciseKeys].filter(
+    (key) => !customExerciseIds.has(key) && key.startsWith("ex_"),
+  );
+
+  let referencedExercises: Exercise[] = [];
+  if (missingGlobalKeys.length) {
+    const { data: referencedRows } = await supabase
+      .from("exercises")
+      .select(
+        "id, external_key, name, category, equipment, cue, scope, coach_id, animation_url, thumbnail_url, image_start_url, image_end_url, instruction_steps",
+      )
+      .in("external_key", missingGlobalKeys);
+    referencedExercises = (referencedRows ?? []).map((entry) => mapExerciseRow(entry as ExerciseRow));
+  }
+
+  const exercises = [...customExercises, ...referencedExercises].sort((a, b) =>
+    a.name.localeCompare(b.name, "fi"),
   );
 
   const setLogsBySessionId = new Map<string, WorkoutSession["setLogs"]>();

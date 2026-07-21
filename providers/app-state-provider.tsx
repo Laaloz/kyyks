@@ -961,6 +961,10 @@ function normalizeState(raw: AppState): AppState {
       // Bundle voittaa globaalien suomenkielisen tekstin (nimi, kategoria, cue) — se on
       // niiden totuuslähde. Mediakenttiä (imageStartUrl, instructionSteps) ei ole bundlessa
       // lainkaan, joten ne säilyvät kannasta: spread ylikirjoittaa vain olemassa olevat avaimet.
+      //
+      // Palvelin lähettää enää omat liikkeet + ohjelmissa viitatut globaalit (training-sync.ts),
+      // joten bundle toimii samalla aina saatavilla olevana perusjoukkona. Sen ulkopuoliset
+      // liikkeet löytyvät /api/exercises/search-endpointista.
       mergedExerciseById.set(exercise.id, {
         ...exercise,
         ...defaultExercise,
