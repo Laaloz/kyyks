@@ -2,7 +2,6 @@
 
 import {
   ArrowLeft,
-  Check,
   ChevronDown,
   ChevronRight,
   ChevronUp,
@@ -1747,9 +1746,6 @@ export function AthleteDashboard({
                                     >
                                       <Info className="size-4" aria-hidden="true" />
                                     </button>
-                                    {doneThisWeek && !isActiveRow ? (
-                                      <Check className="size-5 shrink-0 text-[var(--success)]" aria-label="Tehty tällä viikolla" />
-                                    ) : null}
                                     {readOnly ? (
                                       <span className="shrink-0 rounded-full bg-[var(--surface-2)] px-2.5 py-0.5 text-xs font-semibold text-[var(--text-muted)]">Tulossa</span>
                                     ) : activeScheduledId ? (
