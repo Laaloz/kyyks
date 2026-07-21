@@ -246,7 +246,9 @@ export interface Exercise {
   cue: string;
   scope: ExerciseScope;
   coachId?: string;
-  /** Liikkeen alku- ja loppuasennon kuvat. UI ristihäivyttää parin liikeradan havainnollistamiseksi. */
+  /** Animoitu liikedemo. Ensisijainen esitys: näyttää koko liikeradan ja korostaa työskentelevät lihakset. */
+  animationUrl?: string;
+  /** Alku- ja loppuasennon kuvat. Varaesitys niille liikkeille joilta animaatio puuttuu; UI ristihäivyttää parin. */
   imageStartUrl?: string;
   imageEndUrl?: string;
   /** Vaiheittainen suoritusohje. Täydentää cue:ta, ei korvaa sitä. */

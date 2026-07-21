@@ -121,10 +121,27 @@ function getWorkoutFieldId(
   return `${scheduledWorkoutId}-${logId}-${field}`;
 }
 
-// Liikkeen alku- ja loppuasento ristihäivytettynä. Lähdekuvat ovat public domain
-// (free-exercise-db) ja tarjoillaan omasta exercise-media-bucketista. Osalla liikkeistä
-// ei ole vastinetta lähdedatassa — silloin tätä ei renderöidä lainkaan.
+// Liikkeen visuaalinen demo. Ensisijaisesti animaatio (näyttää koko liikeradan ja korostaa
+// työskentelevät lihakset); jos sitä ei ole, alku- ja loppuasento ristihäivytettynä.
+// Lähteillä on eri aukot, joten ne täydentävät toisiaan — 130/133 liikkeellä on jompikumpi.
+// Kolmelta puuttuu molemmat, jolloin sheetissä näkyy pelkkä ohjeteksti kuten ennenkin.
 function ExerciseDemo({ exercise }: { exercise: Exercise }) {
+  if (exercise.animationUrl) {
+    return (
+      <div className="exercise-demo exercise-demo--animation mt-3 border border-[var(--border)]">
+        <img
+          className="exercise-demo-frame"
+          src={exercise.animationUrl}
+          alt={`${exercise.name}: suoritus`}
+          width={180}
+          height={180}
+          loading="lazy"
+          decoding="async"
+        />
+      </div>
+    );
+  }
+
   if (!exercise.imageStartUrl || !exercise.imageEndUrl) {
     return null;
   }

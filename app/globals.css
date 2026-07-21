@@ -312,6 +312,20 @@ legend {
   animation: exercise-demo-crossfade 3.2s ease-in-out infinite;
 }
 
+/* Animoitu demo on neliö (180x180) viivagrafiikkaa tummilla viivoilla. Tausta pakotetaan
+   vaaleaksi myös tummassa teemassa: piirros katoaisi muuten tummaa vasten, ja lähteen
+   läpinäkyvyys vaihtelee kehyksittäin. contain, koska ylösskaalattu viivagrafiikka ei
+   siedä rajausta ja hahmon jalat/tanko jäisivät coverilla ulos. */
+.exercise-demo--animation {
+  aspect-ratio: 1 / 1;
+  background: #fff;
+}
+
+.exercise-demo--animation .exercise-demo-frame {
+  object-fit: contain;
+  padding: 4px;
+}
+
 /* Liikerata ei välity animaationa jos käyttäjä on pyytänyt vähemmän liikettä. Globaali
    reduced-motion-sääntö (yllä) pysäyttäisi häivytyksen tilaan jossa loppuasento jää
    näkymättömiin, joten asennot näytetään sen sijaan rinnakkain. */
