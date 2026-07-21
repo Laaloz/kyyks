@@ -1,7 +1,7 @@
 "use client";
 
 import { BookOpen, ChevronLeft, Plus, Search, Trash2 } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 import { Button } from "@/components/ui/button";
 import { DragNumber } from "@/components/ui/drag-number";
@@ -273,6 +273,47 @@ export function ProgramEditorOverlay({
     });
   };
 
+  // Liikevalitsin hakee palvelimelta eikä suodata koko katalogia muistista: katalogi on
+  // satoja liikkeitä, eikä sitä enää lähetetä app-statessa kokonaisuudessaan.
+  // Lyhyellä hakusanalla näytetään app-statessa jo olevat liikkeet (ohjelmissa käytetyt),
+  // jotta valitsin ei ole tyhjä ennen kirjoittamista.
+  const [searchResults, setSearchResults] = useState<Exercise[]>([]);
+  const [isSearching, setIsSearching] = useState(false);
+
+  useEffect(() => {
+    const query = pickerQuery.trim();
+    if (!pickerForWorkout || query.length < 2) {
+      setSearchResults([]);
+      setIsSearching(false);
+      return;
+    }
+
+    const controller = new AbortController();
+    setIsSearching(true);
+    const timer = setTimeout(async () => {
+      try {
+        const response = await fetch(`/api/exercises/search?q=${encodeURIComponent(query)}`, {
+          signal: controller.signal,
+        });
+        if (!response.ok) {
+          setSearchResults([]);
+          return;
+        }
+        const payload = (await response.json()) as { exercises: Exercise[] };
+        setSearchResults(payload.exercises ?? []);
+      } catch {
+        // Keskeytetty haku tai verkkovirhe → valitsin putoaa paikalliseen listaan.
+      } finally {
+        setIsSearching(false);
+      }
+    }, 220);
+
+    return () => {
+      controller.abort();
+      clearTimeout(timer);
+    };
+  }, [pickerForWorkout, pickerQuery]);
+
   const bankResults = useMemo(() => {
     if (!pickerForWorkout) {
       return [];
@@ -281,11 +322,12 @@ export function ProgramEditorOverlay({
       (workouts.find((workout) => workout.uid === pickerForWorkout)?.exercises ?? []).map((exercise) => exercise.name),
     );
     const query = pickerQuery.trim().toLowerCase();
-    return exercises
+    const source = query.length >= 2 ? searchResults : exercises;
+    return source
       .filter((exercise) => !used.has(exercise.name))
-      .filter((exercise) => !query || exercise.name.toLowerCase().includes(query))
+      .filter((exercise) => query.length >= 2 || !query || exercise.name.toLowerCase().includes(query))
       .sort((a, b) => a.name.localeCompare(b.name, "fi"));
-  }, [exercises, pickerForWorkout, pickerQuery, workouts]);
+  }, [exercises, pickerForWorkout, pickerQuery, searchResults, workouts]);
 
   const instructionTarget = openInstructionUid
     ? workouts
@@ -775,7 +817,13 @@ export function ProgramEditorOverlay({
                 </button>
               ))}
               {bankResults.length === 0 ? (
-                <p className="py-3 text-sm text-[var(--text-subtle)]">Ei liikkeitä tällä haulla.</p>
+                <p className="py-3 text-sm text-[var(--text-subtle)]">
+                  {isSearching
+                    ? "Haetaan…"
+                    : pickerQuery.trim().length < 2
+                      ? "Hae liikettä nimellä — katalogissa on satoja liikkeitä."
+                      : "Ei liikkeitä tällä haulla."}
+                </p>
               ) : null}
             </div>
           </div>
