@@ -36,19 +36,19 @@ export const exerciseAnimationMap = {
   ex_hack_squat: "Qa55kX1",  // Hack-kyykky → sled hack squat
   ex_split_squat: "9E25EOx",  // Bulgarialainen askelkyykky → split squats
   ex_walking_lunge: "IZVHb27",  // Kävelyaskelkyykky → walking lunge
-  ex_step_up: "Kxquu2E",  // Step-up → barbell step-up
+  ex_step_up: "aXtJhlg",  // dumbbell step-up  (korjattu: väline ei täsmännyt)
   ex_romanian_deadlift: "wQ2c4XD",  // Romanialainen maastaveto → barbell romanian deadlift
   ex_deadlift: "ila4NZS",  // Maastaveto → barbell deadlift
   ex_sumo_deadlift: "KgI0tqW",  // Sumomaastaveto → barbell sumo deadlift
   ex_good_morning: "XlZ4lAC",  // Good morning → barbell good morning
   // EI OSUMAA: ex_hip_thrust  (Hip thrust)
-  ex_glute_bridge: "GibBPPg",  // Glute bridge → glute bridge march
+  ex_glute_bridge: "qKBpF7I",  // barbell glute bridge  (korjattu: väline ei täsmännyt)
   ex_leg_curl: "17lJ1kr",  // Takareisikoukistus → lever lying leg curl
   ex_leg_extension: "my33uHU",  // Jalanojennus → lever leg extension
-  ex_calf_raise_standing: "yl2IYyy",  // Pohjenousu seisten → cable standing calf raise
+  ex_calf_raise_standing: "ykUOVze",  // lever standing calf raise  (korjattu: väline ei täsmännyt)
   ex_calf_raise_seated: "bOOdeyc",  // Pohjenousu istuen → lever seated calf raise
-  ex_hip_abduction_machine: "7WaDzyL",  // Lonkan loitonnus laitteessa → side hip abduction
-  ex_hip_adduction_machine: "hBGWILP",  // Lonkan lähennys laitteessa → cable hip adduction
+  ex_hip_abduction_machine: "CHpahtl",  // lever seated hip abduction  (korjattu: väline ei täsmännyt)
+  ex_hip_adduction_machine: "oHsrypV",  // lever seated hip adduction  (korjattu: väline ei täsmännyt)
   ex_bench_press: "EIeI8Vf",  // Penkkipunnerrus → barbell bench press
   ex_incline_bench_press: "3TZduzM",  // Vinopenkki tangolla → barbell incline bench press
   ex_decline_bench_press: "GrO65fd",  // Alavinopenkki tangolla → barbell decline bench press
@@ -68,14 +68,14 @@ export const exerciseAnimationMap = {
   ex_upright_row: "cALKspW",  // Pystysoutu → cable upright row
   ex_row: "BJ0Hz5L",  // Kulmasoutu → dumbbell bent over row
   ex_barbell_row: "eZyBC3j",  // Kulmasoutu tangolla → barbell bent over row
-  ex_chest_supported_row: "dmgMp3n",  // Rintasoutu penkiltä → barbell incline row
+  ex_chest_supported_row: "7vG5o25",  // dumbbell incline row  (korjattu: väline ei täsmännyt)
   ex_seated_cable_row: "fUBheHs",  // käsin valittu → cable seated row
-  ex_low_cable_row: "km0sQC0",  // Alatalja → band one arm standing low row
+  ex_low_cable_row: "hvV79Si",  // cable low seated row  (korjattu: väline ei täsmännyt)
   ex_lat_pulldown: "RVwzP10",  // Ylätalja → cable pulldown
   ex_pulldown: "RVwzP10",  // Pulldown → cable pulldown
   ex_pull_up: "lBDjFxJ",  // Leuanveto myötäotteella → pull-up
   ex_chin_up: "T2mxWqc",  // Leuanveto vastaotteella → chin-up
-  ex_single_arm_cable_row: "bKWbrTA",  // Yhden käden soutu taljassa → one arm towel row
+  ex_single_arm_cable_row: "EIsE3u8",  // cable one arm bent over row  (korjattu: väline ei täsmännyt)
   ex_face_pull: "wqNPGCg",  // käsin valittu → cable rear delt row (with rope)
   ex_shrug: "Eg98Ft9",  // Hartiannosto → cable shrug
   ex_straight_arm_pulldown: "x69MAlq",  // Suorin käsin ylätaljaveto → cable straight arm pulldown
@@ -97,7 +97,7 @@ export const exerciseAnimationMap = {
   ex_russian_twist: "XVDdcoj",  // Russian twist → russian twist
   ex_pallof_press: "G7PXMlT",  // Pallof press → band vertical pallof press
   ex_farmers_walk: "qPEzJjA",  // Farmer's walk → farmers walk
-  ex_sled_push: "XDOiFns",  // Kelkan työntö → sled forward angled calf raise
+  // EI OSUMAA: ex_sled_push (Kelkan työntö) — pankin "sled" tarkoittaa jalkaprässiä, ei työntökelkkaa; still-parissa on oikea kuva
   ex_kettlebell_swing: "UHJlbu3",  // Kahvakuulaheilautus → kettlebell swing
   ex_thruster: "f7Y9eDZ",  // Thruster → barbell thruster
   ex_smith_squat: "jFtipLl",  // Kyykky smith-laitteessa → smith squat
@@ -105,22 +105,22 @@ export const exerciseAnimationMap = {
   // EI OSUMAA: ex_belt_squat  (Vyökyykky)
   ex_sissy_squat: "xdYPUtE",  // Sissy-kyykky → sissy squat
   ex_pistol_squat: "5bpPTHv",  // Pistoolikyykky → kettlebell pistol squat
-  ex_reverse_lunge: "VaP75jl",  // Taakse-askelkyykky → barbell rear lunge
+  ex_reverse_lunge: "SSsBDwB",  // dumbbell rear lunge  (korjattu: väline ei täsmännyt)
   ex_single_leg_press: "WWD6FzI",  // Yhden jalan jalkaprässi → sled 45 degrees one leg press
   ex_seated_leg_curl: "Zg3XY7P",  // Istuva takareisikoukistus → lever seated leg curl
   ex_calf_press: "7B4F5nZ",  // Pohkeet prässissä → lever calf press
   ex_trap_bar_deadlift: "jQGwmxN",  // Trap bar -maastaveto → trap bar deadlift
   ex_rack_pull: "za9Ni4z",  // Rack pull → barbell rack pull
-  ex_single_leg_rdl: "gEyURal",  // Yhden jalan romanialainen maastaveto → barbell single leg deadlift
+  ex_single_leg_rdl: "gKozT8X",  // dumbbell single leg deadlift  (korjattu: väline ei täsmännyt)
   ex_nordic_curl: "Vvwjz6N",  // Nordic hamstring curl → glute-ham raise
   ex_back_extension: "zhMwOwE",  // Selän ojennus → hyperextension
-  ex_cable_pull_through: "BmrwWzo",  // Taljaveto jalkojen välistä → dumbbell sumo pull through
-  ex_cable_kickback: "HEJ6DIX",  // käsin valittu → cable kickback
+  ex_cable_pull_through: "OM46QHm",  // cable pull through (with rope)  (korjattu: väline ei täsmännyt)
+  ex_cable_kickback: "Kpajagk",  // cable standing hip extension  (korjattu: osoitti ojentajapotkuun)
   ex_machine_chest_press: "T0yTjgW",  // Penkkipunnerrus laitteessa → lever chest press
   ex_smith_incline_press: "5v7KYld",  // Vinopenkki smith-laitteessa → smith incline bench press
   ex_cable_crossover: "0CXGHya",  // Taljaveto ristiin → cable cross-over variation
   ex_incline_cable_fly: "tBWXbIT",  // Vinofly taljassa → cable incline fly
-  ex_db_pullover: "4U7iLb5",  // Pullover käsipainolla → lever pullover
+  ex_db_pullover: "9XjtHvS",  // dumbbell pullover  (korjattu: väline ei täsmännyt)
   ex_decline_push_up: "i5cEhka",  // Jalat koholla -punnerrus → decline push-up
   ex_svend_press: "I1OBLnn",  // Svend press → weighted svend press
   ex_machine_shoulder_press: "67n3r98",  // Pystypunnerrus laite → lever shoulder press
@@ -141,11 +141,11 @@ export const exerciseAnimationMap = {
   ex_diamond_push_up: "soIB2rj",  // Timanttipunnerrus → diamond push-up
   ex_db_kickback: "W6PxUkg",  // Ojentajapotku käsipainolla → dumbbell kickback
   ex_incline_db_curl: "ae9UoXQ",  // Hauiskääntö vinopenkissä → dumbbell incline curl
-  ex_concentration_curl: "NvfE43H",  // Keskittynyt hauiskääntö → cable concentration curl
+  ex_concentration_curl: "gvsWLQw",  // dumbbell concentration curl  (korjattu: väline ei täsmännyt)
   ex_spider_curl: "Ye5Qxb0",  // Spider-hauiskääntö → ez barbell spider curl
-  ex_reverse_curl: "eOG0r6v",  // Käänteinen hauiskääntö → cable reverse curl
+  ex_reverse_curl: "xNrS20v",  // barbell reverse curl  (korjattu: väline ei täsmännyt)
   ex_machine_curl: "q6y3OhV",  // Hauiskääntö laitteessa → lever bicep curl
-  ex_wrist_curl: "LrV4s90",  // Ranteenkoukistus → cable wrist curl
+  ex_wrist_curl: "SJAA2IQ",  // barbell palms up wrist curl over a bench  (korjattu: väline ei täsmännyt)
   ex_ab_crunch_machine: "Wgaz7pm",  // Vatsarutistus laitteessa → lever seated crunch
   ex_hanging_knee_raise: "03lzqwk",  // Polvennosto roikkuen → assisted hanging knee raise
   ex_decline_sit_up: "9Ap7miY",  // Vatsarutistus alavinopenkillä → decline crunch

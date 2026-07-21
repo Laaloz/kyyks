@@ -19,6 +19,7 @@
 import { readFileSync } from "node:fs";
 
 import { exerciseAnimationMap, customExerciseAnimationMap } from "./exercise-animation-map.mjs";
+import { exerciseMediaMap } from "./exercise-media-map.mjs";
 
 const MODEL = process.env.GEMINI_MODEL || "gemini-2.5-flash";
 const BATCH_SIZE = 8;
@@ -88,6 +89,9 @@ async function main() {
   if (!url || !serviceKey) throw new Error("NEXT_PUBLIC_SUPABASE_URL ja SUPABASE_SERVICE_ROLE_KEY vaaditaan.");
 
   const stepsByMediaId = JSON.parse(readFileSync(args.source, "utf8"));
+  // Varalähde niille liikkeille joilla ei ole animaatiota: still-parin oma lähde
+  // (free-exercise-db). Ilman tätä ne jäisivät kokonaan ilman "Suoritus"-osiota.
+  const fallbackSteps = JSON.parse(readFileSync("scripts/data/exercise-instructions-fallback.json", "utf8"));
 
   const { createClient } = await import("@supabase/supabase-js");
   const supabase = createClient(url, serviceKey, { auth: { persistSession: false, autoRefreshToken: false } });
@@ -104,14 +108,25 @@ async function main() {
   });
 
   // Kerää käännettävät: liike → englanninkieliset askeleet.
-  const pending = [];
+  // Ensisijainen lähde on animaatiota vastaava liike (teksti ja kuva samasta suorituksesta);
+  // jos animaatiota ei ole, käytetään still-parin lähdettä.
+  const sources = new Map();
   for (const [key, mediaId] of Object.entries({ ...exerciseAnimationMap, ...customExerciseAnimationMap })) {
+    const steps = stepsByMediaId[mediaId];
+    if (steps?.length) sources.set(key, steps);
+  }
+  for (const [key, sourceId] of Object.entries(exerciseMediaMap)) {
+    if (sources.has(key)) continue;
+    const steps = fallbackSteps[sourceId];
+    if (steps?.length) sources.set(key, steps);
+  }
+
+  const pending = [];
+  for (const [key, steps] of sources) {
     if (args.only && key !== args.only) continue;
     const row = rowByKey.get(key);
     if (!row) continue;
     if (row.instruction_steps?.length && !args.force) continue;
-    const steps = stepsByMediaId[mediaId];
-    if (!steps?.length) continue;
     pending.push({ key, row, steps });
   }
 
