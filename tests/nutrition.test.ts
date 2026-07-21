@@ -99,6 +99,52 @@ describe("nutrition helpers", () => {
     expect(target).toBeNull();
   });
 
+  it("keeps the fat energy share inside the intended band for every goal and activity level", () => {
+    const goals = ["lose", "maintain", "gain"] as const;
+    const activityLevels = ["low", "moderate", "high"] as const;
+    const bodies = [
+      { age: 30, sex: "male", heightCm: 180, weightKg: 98 },
+      { age: 29, sex: "female", heightCm: 168, weightKg: 67.8 },
+    ] as const;
+
+    for (const body of bodies) {
+      for (const activityLevel of activityLevels) {
+        const shares = goals.map((goal) => {
+          const target = calculateMacroTarget({ ...body, goal, activityLevel });
+          expect(target).not.toBeNull();
+          return (target!.fatG * 9) / target!.kcal * 100;
+        });
+
+        for (const share of shares) {
+          // fatPerKg is a fixed g/kg value while kcal moves with goal and activity,
+          // so the resulting share has to be checked, not assumed from the g/kg number.
+          expect(share).toBeGreaterThanOrEqual(20);
+          expect(share).toBeLessThanOrEqual(32);
+        }
+
+        // The g/kg table is tuned so the fat share stays flat across goals; a lone
+        // coefficient bump shows up here as the cut drifting away from maintenance.
+        expect(Math.max(...shares) - Math.min(...shares)).toBeLessThanOrEqual(1.5);
+      }
+    }
+  });
+
+  it("leaves a cut enough carbohydrate to support training", () => {
+    for (const activityLevel of ["moderate", "high"] as const) {
+      const target = calculateMacroTarget({
+        age: 30,
+        sex: "male",
+        heightCm: 180,
+        weightKg: 98,
+        goal: "lose",
+        activityLevel,
+      });
+
+      expect(target).not.toBeNull();
+      expect(target!.carbsG / 98).toBeGreaterThanOrEqual(2.35);
+    }
+  });
+
   it("sets lower calorie target for weight-loss than maintenance", () => {
     const maintain = calculateMacroTarget({
       age: 31,
