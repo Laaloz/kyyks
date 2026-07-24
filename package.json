@@ -15,7 +15,9 @@
     "import:fineli": "node --env-file-if-exists=.env scripts/import-fineli.mjs",
     "import:manual-ingredients": "node --env-file-if-exists=.env scripts/import-manual-ingredients.mjs",
     "import:recipes": "node --env-file-if-exists=.env scripts/import-recipe-seed.mjs",
-    "repair:recipe-ingredients": "node --env-file-if-exists=.env scripts/repair-recipe-ingredient-links.mjs"
+    "repair:recipe-ingredients": "node --env-file-if-exists=.env scripts/repair-recipe-ingredient-links.mjs",
+    "generate:recipe-images": "node --env-file-if-exists=.env scripts/generate-recipe-images.mjs",
+    "upload:recipe-image": "node --env-file-if-exists=.env scripts/upload-recipe-image.mjs"
   },
   "dependencies": {
     "@hcaptcha/react-hcaptcha": "^2.0.2",
