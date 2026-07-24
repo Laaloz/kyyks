@@ -9,6 +9,7 @@ function parseArgs(argv) {
   const args = {
     dryRun: false,
     limit: undefined,
+    only: undefined,
     createdBy: undefined,
   };
 
@@ -20,6 +21,13 @@ function parseArgs(argv) {
     }
     if (value === "--limit") {
       args.limit = Number(argv[index + 1]);
+      index += 1;
+      continue;
+    }
+    // Vain nimetyt reseptit. Erotin on ';' (ei ',') koska nimissa on pilkkuja.
+    // --only:n kanssa EI prunata muita reseptejä (osittainen ajo ei saa poistaa mitään).
+    if (value === "--only") {
+      args.only = (argv[index + 1] || "").split(";").map((name) => name.trim()).filter(Boolean);
       index += 1;
       continue;
     }
@@ -301,9 +309,18 @@ async function pruneMissingRecipes(supabase, createdBy, keepRecipeIds) {
 async function main() {
   const args = parseArgs(process.argv.slice(2));
 
-  const recipes = typeof args.limit === "number" && Number.isFinite(args.limit)
-    ? recipeSeedData.slice(0, args.limit)
-    : recipeSeedData;
+  let recipes = recipeSeedData;
+  if (args.only && args.only.length > 0) {
+    const wanted = new Set(args.only);
+    recipes = recipeSeedData.filter((recipe) => wanted.has(recipe.name));
+    const missing = args.only.filter((name) => !recipeSeedData.some((recipe) => recipe.name === name));
+    if (missing.length > 0) {
+      throw new Error(`--only: reseptiä ei löytynyt seed-datasta: ${missing.join(", ")}`);
+    }
+  }
+  if (typeof args.limit === "number" && Number.isFinite(args.limit)) {
+    recipes = recipes.slice(0, args.limit);
+  }
 
   if (args.dryRun) {
     console.log(JSON.stringify({
@@ -355,13 +372,17 @@ async function main() {
     }
   }
 
-  const prunedCount = await pruneMissingRecipes(supabase, createdBy, keptRecipeIds);
+  // Osittaisessa ajossa (--only tai --limit) EI prunata: muuten muut admin-reseptit
+  // poistuisivat koska ne eivät ole keptRecipeIds:ssä. Prune vain täydessä ajossa.
+  const isPartialRun = (args.only && args.only.length > 0) || typeof args.limit === "number";
+  const prunedCount = isPartialRun ? 0 : await pruneMissingRecipes(supabase, createdBy, keptRecipeIds);
 
   console.log(JSON.stringify({
     imported: recipes.length,
     created: createdCount,
     updated: updatedCount,
     pruned: prunedCount,
+    prunedSkipped: isPartialRun,
     unresolvedIngredients: unresolvedByRecipe,
   }, null, 2));
 }
