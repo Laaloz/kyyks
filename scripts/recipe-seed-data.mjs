@@ -514,6 +514,31 @@ export const recipeSeedData = [
       "Viimeistele tomaatilla ja kurkulla.",
     ],
   }),
+  recipe({
+    name: "Suklainen proteiinijogurtti ja mansikat",
+    description:
+      "Kermainen, suklainen ja runsasproteiininen jälkiruoka. Pohjaksi käy kreikkalainen jogurtti tai Profeel-proteiinivanukas (jälkimmäinen on jo makeutettu, joten hunajan ja vaniljasokerin voi jättää pois). Suklaakuoren kookosöljyn voi vaihtaa voihin.",
+    mealTag: "snack",
+    ...singleServe,
+    ingredients: [
+      ingredient("Kreikkalainen jogurtti 0%", 170, "g", {
+        groupLabel: "Pohja",
+        alternatives: ["Profeel proteiinivanukas (180 g)"],
+      }),
+      ingredient("Kaakaojauhe", 6, "g", { groupLabel: "Pohja" }),
+      ingredient("Hunaja", 7, "g", { groupLabel: "Pohja", alternatives: ["Vaahterasiirappi"] }),
+      ingredient("Vaniljasokeri", 4, "g", { groupLabel: "Pohja" }),
+      ingredient("Mansikka", 60, "g", { groupLabel: "Päälle" }),
+      ingredient("Tumma suklaa", 10, "g", { groupLabel: "Suklaakuori" }),
+      ingredient("Kookosöljy", 3, "g", { groupLabel: "Suklaakuori", alternatives: ["Voi (3 g)"] }),
+    ],
+    instructions: [
+      "Sekoita kreikkalainen jogurtti (tai proteiinivanukas), kaakaojauhe, hunaja ja vaniljasokeri tasaiseksi.",
+      "Lisää mansikat päälle.",
+      "Sulata tumma suklaa ja kookosöljy, ja valuta seos jogurtin päälle.",
+      "Anna hyytyä pari minuuttia ennen tarjoilua.",
+    ],
+  }),
 
   // ===== ILLALLINEN (~550 kcal / annos) =====
   recipe({
