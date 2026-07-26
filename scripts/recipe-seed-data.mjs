@@ -1131,7 +1131,7 @@ export const recipeSeedData = [
   recipe({
     name: "Kermainen kana-Alfredo ja uuniperunat",
     description:
-      "Runsasproteiininen ja kevyempi versio klassikosta: maustettua kanaa silkkisessä Alfredo-kastikkeessa rapeiden yrttiperunoiden päällä. Täydellinen meal prep -illallinen. Kastikkeen kevyt margariini toimii voin sijaan ja maito voi olla kevyt- tai täysmaitoa. Valinnaisena lisukkeena paahdettua parsakaalia.",
+      "Runsasproteiininen ja kevyempi versio klassikosta: maustettua kanaa silkkisessä juustokermakastikkeessa rapeiden yrttiperunoiden päällä. Täydellinen meal prep -illallinen. Kastikkeessa on voin sijaan kevyttä margariinia, rasvatonta maitoa ja kevyttä 12 % juustoraastetta (esim. Kepeä Kadett). Valinnaisena lisukkeena paahdettua parsakaalia.",
     mealTag: "dinner",
     ...batchServe,
     ingredients: [
@@ -1151,9 +1151,9 @@ export const recipeSeedData = [
       gentleIngredient("Mustapippuri", 2, "g", { groupLabel: "Alfredo-kastike", ingredientRole: "spice" }),
       textIngredient("Valkoviini", "60", "ml", { groupLabel: "Alfredo-kastike" }),
       ingredient("Vehnäjauho", 12, "g", { groupLabel: "Alfredo-kastike", displayQuantity: "1½", displayUnit: "rkl" }),
-      ingredient("Kevyt maito", 360, "ml", { groupLabel: "Alfredo-kastike", alternatives: ["Rasvaton maito (360 g)", "Täysmaito (360 g)"] }),
+      ingredient("Rasvaton maito", 360, "ml", { groupLabel: "Alfredo-kastike", alternatives: ["Kevyt maito (360 g)", "Täysmaito (360 g)"] }),
       ingredient("Ruokakerma kevyt ja paksu 4%", 80, "ml", { groupLabel: "Alfredo-kastike" }),
-      ingredient("Parmesaani", 50, "g", { groupLabel: "Alfredo-kastike" }),
+      ingredient("Juustoraaste 12%", 50, "g", { groupLabel: "Alfredo-kastike", alternatives: ["Parmesaani (50 g)"] }),
       ingredient("Persilja", 15, "g", { groupLabel: "Alfredo-kastike", displayQuantity: "¼", displayUnit: "kuppi" }),
       ingredient("Peruna", 1000, "g", { groupLabel: "Perunat" }),
       textIngredient("Ruoanlaittosuihke", "muutama", "suihkaus", { groupLabel: "Perunat" }),
