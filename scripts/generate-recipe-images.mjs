@@ -81,7 +81,7 @@ const PROMPTS = {
   "Banaani-tuorepuuro": "Chocolate banana overnight oats in a glass jar, the oats mixed with cocoa, topped with banana slices and a dark chocolate drizzle (chocolate flavour, absolutely no berries, no raspberries, no blueberries)",
   "Brownie-tuorepuuro": "Chocolate brownie overnight oats with a cocoa topping in a glass jar",
   "Pastasalaatti": "A bowl of cold pasta salad with chicken, bell peppers, cucumber, tomato and red onion",
-  "Kermainen kana-Alfredo ja uuniperunat": "Pieces of pan-seared real chicken breast (authentic cooked white-meat texture, matte not glossy, not rubbery, not plastic-looking) in a silky white creamy cheese Alfredo sauce, spooned over a bed of crispy golden herb-roasted potato chunks (clearly chunks of oven-roasted potato, absolutely no rice, no pasta), sprinkled with chopped fresh parsley and cracked black pepper, on a plate",
+  "Kermainen kana-Alfredo ja uuniperunat": "Pieces of pan-seared real chicken breast (authentic cooked white-meat texture, matte not glossy, not rubbery, not plastic-looking) in a silky white parmesan cream Alfredo sauce, spooned over a bed of crispy golden herb-roasted potato chunks (clearly chunks of oven-roasted potato, absolutely no rice, no pasta), sprinkled with chopped fresh parsley and cracked black pepper, on a plate",
 };
 
 function slugify(name) {
