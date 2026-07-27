@@ -160,6 +160,9 @@ const manualIngredientSeedBase = [
   { name: "Risella valmisriisi", source: "manual", defaultPurchaseUnit: "pack", gramsPerUnit: 250, kcalPer100: 165, proteinPer100: 3.5, carbsPer100: 35, fatPer100: 1.2 },
   { name: "Kanan jauheliha", source: "manual", defaultPurchaseUnit: "kg", kcalPer100: 148, proteinPer100: 19, carbsPer100: 0, fatPer100: 8 },
   { name: "Kookoshiutaleet", source: "manual", defaultPurchaseUnit: "pack", gramsPerUnit: 200, kcalPer100: 660, proteinPer100: 7, carbsPer100: 12, fatPer100: 65 },
+  { name: "Broilerin koipi-reisifilee", source: "manual", defaultPurchaseUnit: "kg", kcalPer100: 120, proteinPer100: 18.5, carbsPer100: 0, fatPer100: 5 },
+  { name: "Seesamiöljy", source: "manual", defaultPurchaseUnit: "pack", gramsPerUnit: 250, kcalPer100: 884, proteinPer100: 0, carbsPer100: 0, fatPer100: 100 },
+  { name: "Kanaluuliemi", source: "manual", defaultPurchaseUnit: "l", kcalPer100: 15, proteinPer100: 3, carbsPer100: 0.5, fatPer100: 0.2 },
 ];
 
 const displayNameOverrides = {

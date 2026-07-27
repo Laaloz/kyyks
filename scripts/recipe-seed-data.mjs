@@ -1070,4 +1070,29 @@ export const recipeSeedData = [
       "Viimeistele: lisää kana takaisin pannulle ja lämmitä läpikotaisin minuutin ajan. Sekoita joukkoon persilja ja tarkista maku. Annostele kermainen kana-Alfredo rapeiden yrttiperunoiden päälle ja viimeistele persiljalla sekä rouhitulla mustapippurilla. Tarjoile halutessasi paahdetun parsakaalin kanssa.",
     ],
   }),
+  recipe({
+    name: "Riisinkeittimen gochujang-kana ja riisi",
+    description:
+      "Edullinen ja runsasproteiininen korealaistyylinen ateria, joka kypsyy kokonaan riisinkeittimessä: gochujang-marinoitua broilerin koipi-reisifilettä kypsyy riisin päällä, ja liemi imeytyy riisiin. Marinoi kana valmiiksi, kaada kaikki keittimeen ja käynnistä. Jos haluat enemmän riisiä, lisää samassa suhteessa kanaluuliemta ja gochujangia. Broilerin koipi-reisifilee kannattaa ostaa nahattomana ja luuttomana.",
+    mealTag: "dinner",
+    ...batchServe,
+    ingredients: [
+      ingredient("Broilerin koipi-reisifilee", 720, "g", { groupLabel: "Kana ja marinadi" }),
+      ingredient("Soijakastike", 60, "g", { groupLabel: "Kana ja marinadi", displayQuantity: "4", displayUnit: "rkl" }),
+      ingredient("Seesamiöljy", 20, "g", { groupLabel: "Kana ja marinadi", displayQuantity: "4", displayUnit: "tl" }),
+      ingredient("Gochujang pippuritahna", 40, "g", { groupLabel: "Kana ja marinadi", displayQuantity: "2½", displayUnit: "rkl" }),
+      ingredient("Hunaja", 20, "g", { groupLabel: "Kana ja marinadi", displayQuantity: "1", displayUnit: "rkl" }),
+      ingredient("Riisi", 260, "g", { groupLabel: "Riisinkeittimeen", alternatives: ["Basmatiriisi", "Jasmiiniriisi, kuiva"] }),
+      ingredient("Kanaluuliemi", 260, "ml", { groupLabel: "Riisinkeittimeen", alternatives: ["Vedellä laimennettu kanaliemikuutio", "Kasvisliemi"] }),
+      ingredient("Valkosipuli", 40, "g", { groupLabel: "Riisinkeittimeen", displayQuantity: "4", displayUnit: "kynttä", alternatives: ["Valkosipulimurska"] }),
+      ingredient("Sekalaiset kasvikset", 200, "g", { groupLabel: "Riisinkeittimeen", displayQuantity: "200", displayUnit: "g pakastevihanneksia (valinnainen)" }),
+    ],
+    instructions: [
+      "Marinoi kana: sekoita kulhossa soijakastike, seesamiöljy, gochujang ja hunaja. Lisää joukkoon paloiteltu broilerin koipi-reisifilee ja sekoita niin, että marinadi peittää lihan. Anna maustua vähintään 15 minuuttia (mielellään pidempään jääkaapissa).",
+      "Valmistele riisi: huuhtele riisi riisinkeittimen kulhossa kylmällä vedellä, kunnes vesi kirkastuu, ja valuta. Lisää kulhoon kanaluuliemi ja murskattu valkosipuli.",
+      "Lisää halutessasi pakastevihannekset riisin joukkoon ja sekoita hyvin.",
+      "Asettele marinoitu kana riisin päälle yhteen kerrokseen ja kaada loput marinadista mukaan.",
+      "Käynnistä riisinkeitin normaalilla valkoisen riisin ohjelmalla. Anna kypsyä ohjelman loppuun, sekoita ainekset keskenään ja tarkista, että kana on kypsää. Nauti.",
+    ],
+  }),
 ];

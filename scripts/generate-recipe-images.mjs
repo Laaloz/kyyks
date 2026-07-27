@@ -82,6 +82,7 @@ const PROMPTS = {
   "Brownie-tuorepuuro": "Chocolate brownie overnight oats with a cocoa topping in a glass jar",
   "Pastasalaatti": "A bowl of cold pasta salad with chicken, bell peppers, cucumber, tomato and red onion",
   "Kermainen kana-Alfredo ja uuniperunat": "Pieces of pan-seared real chicken breast (authentic cooked white-meat texture, matte not glossy, not rubbery, not plastic-looking) in a silky white parmesan cream Alfredo sauce, spooned over a bed of crispy golden herb-roasted potato chunks (clearly chunks of oven-roasted potato, absolutely no rice, no pasta), sprinkled with chopped fresh parsley and cracked black pepper, on a plate",
+  "Riisinkeittimen gochujang-kana ja riisi": "A bowl of Korean-style gochujang chicken and rice cooked together in a rice cooker: glossy red-brown gochujang-glazed boneless skinless chicken thigh pieces (real cooked chicken, not wings, no bones) resting on a bed of fluffy steamed white rice with some mixed vegetables, sprinkled with sesame seeds and sliced spring onion, in a bowl",
 };
 
 function slugify(name) {
