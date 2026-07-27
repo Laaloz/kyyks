@@ -931,7 +931,7 @@ export const recipeSeedData = [
     ingredients: [
       ingredient("Skyr", 200, "g", { alternatives: ["Kreikkalainen jogurtti 2% (200 g)"] }),
       ingredient("Chian siemenet", 12, "g", { displayQuantity: "1", displayUnit: "rkl" }),
-      ingredient("Heraproteiinijauhe", 25, "g"),
+      ingredient("Heraproteiinijauhe", 20, "g"),
       ingredient("Hasselpähkinälevite", 30, "g", { displayQuantity: "1", displayUnit: "rkl" }),
     ],
     instructions: [
