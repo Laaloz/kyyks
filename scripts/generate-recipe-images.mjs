@@ -83,6 +83,8 @@ const PROMPTS = {
   "Pastasalaatti": "A bowl of cold pasta salad with chicken, bell peppers, cucumber, tomato and red onion",
   "Kermainen kana-Alfredo ja uuniperunat": "Pieces of pan-seared real chicken breast (authentic cooked white-meat texture, matte not glossy, not rubbery, not plastic-looking) in a silky white parmesan cream Alfredo sauce, spooned over a bed of crispy golden herb-roasted potato chunks (clearly chunks of oven-roasted potato, absolutely no rice, no pasta), sprinkled with chopped fresh parsley and cracked black pepper, on a plate",
   "Riisinkeittimen gochujang-kana ja riisi": "A bowl of Korean-style gochujang chicken and rice cooked together in a rice cooker: glossy red-brown gochujang-glazed boneless skinless chicken thigh pieces (real cooked chicken, not wings, no bones) resting on a bed of fluffy steamed white rice with some mixed vegetables, sprinkled with sesame seeds and sliced spring onion, in a bowl",
+  "Kinder Bueno -proteiinivanukas": "A glass dish of thick creamy chocolate-hazelnut protein pudding (smooth mousse-like texture, light milk-chocolate brown colour) with a spoon resting in it, topped with a few chopped hazelnuts, close-up",
+  "Proteiini-mansikkakääryle": "A high-protein strawberry roll cake sliced to reveal the spiral cross-section: a soft pale sponge rolled around white skyr cream and fresh red strawberry pieces, two slices on a plate with fresh strawberries beside them",
 };
 
 function slugify(name) {

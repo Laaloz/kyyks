@@ -922,6 +922,52 @@ export const recipeSeedData = [
       "Tarjoile mustikoiden ja vaniljaskyrin (tai proteiinivanukkaan) kanssa.",
     ],
   }),
+  recipe({
+    name: "Kinder Bueno -proteiinivanukas",
+    description:
+      "Nopea ja täyttävä iltapala, kun tekee mieli jotain makeaa mutta haluaa proteiinia. Kermainen hasselpähkinäinen proteiinivanukas skyristä, chian siemenistä ja proteiinijauheesta – maistuu Kinder Bueno -patukalta. Skyrin voi vaihtaa kreikkalaiseen jogurttiin, ja proteiinijauheeksi sopii mikä tahansa (hasselpähkinänmakuinen sopii parhaiten).",
+    mealTag: "evening_snack",
+    ...singleServe,
+    ingredients: [
+      ingredient("Skyr", 200, "g", { alternatives: ["Kreikkalainen jogurtti 2% (200 g)"] }),
+      ingredient("Chian siemenet", 12, "g", { displayQuantity: "1", displayUnit: "rkl" }),
+      ingredient("Heraproteiinijauhe", 30, "g"),
+      ingredient("Hasselpähkinälevite", 30, "g", { displayQuantity: "1", displayUnit: "rkl" }),
+    ],
+    instructions: [
+      "Sekoita kaikki ainekset kulhossa tasaiseksi vanukkaaksi.",
+      "Anna halutessasi tekeytyä jääkaapissa noin 15 minuuttia, jolloin chian siemenet paksuntavat rakennetta.",
+      "Nauti sellaisenaan tai koristele halutessasi rouhitulla hasselpähkinällä.",
+    ],
+  }),
+  recipe({
+    name: "Proteiini-mansikkakääryle",
+    description:
+      "Kahvilatyylinen mutta runsasproteiininen mansikkakääryle: uunissa paistettu rahkapohja täytettynä skyrillä ja tuoreilla mansikoilla, rullattuna kääryleeksi. Maistuu jälkiruoalta. Rahkan tilalla voi käyttää raejuustoa ja skyrin voi vaihtaa vaniljaskyriin. Makeuta täyte maun mukaan makeutusaineella, siirapilla tai hunajalla.",
+    mealTag: "evening_snack",
+    defaultServings: 2,
+    minServings: 2,
+    maxServings: 2,
+    ingredients: [
+      ingredient("Maitorahka 0,2%", 250, "g", { groupLabel: "Pohja", alternatives: ["Raejuusto (250 g)"] }),
+      ingredient("Kananmuna", 1, "pcs", { groupLabel: "Pohja" }),
+      ingredient("Kevyt maito", 100, "ml", { groupLabel: "Pohja" }),
+      ingredient("Heraproteiinijauhe", 30, "g", { groupLabel: "Pohja" }),
+      ingredient("Maissitärkkelys", 20, "g", { groupLabel: "Pohja", displayQuantity: "2½", displayUnit: "rkl" }),
+      ingredient("Skyr", 250, "g", { groupLabel: "Täyte", alternatives: ["Vaniljaskyr"] }),
+      ingredient("Mansikka", 300, "g", { groupLabel: "Täyte" }),
+      textIngredient("Makeutusaine", "maun mukaan", "", { groupLabel: "Täyte" }),
+    ],
+    instructions: [
+      "Kuumenna uuni 180 asteeseen. Sekoita pohjan ainekset (maitorahka, kananmuna, kevyt maito, heraproteiinijauhe ja maissitärkkelys) tehosekoittimessa tasaiseksi.",
+      "Levitä taikina leivinpaperille ohueksi suorakaiteeksi.",
+      "Paista 180 asteessa 20–25 minuuttia.",
+      "Anna pohjan jäähtyä hetki.",
+      "Sekoita täytettä varten skyr ja paloitellut mansikat. Makeuta maun mukaan makeutusaineella (tai siirapilla/hunajalla).",
+      "Levitä täyte pohjalle, lisää päälle vielä mansikoita ja kääri pohja varovasti rullaksi.",
+      "Anna vetäytyä jääkaapissa ennen viipalointia.",
+    ],
+  }),
 
   // ===== Lisäreseptit (eivät tässä PDF:ssä, säilytetty entisellään) =====
   recipe({
