@@ -1,7 +1,7 @@
 "use client";
 
 import { BookOpen, Check, ChevronDown, ChevronLeft, ChevronRight, Loader2, Plus, Repeat2, Search, Sparkles, Trash2 } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -108,7 +108,15 @@ export function NutritionView({
   onOpenSettings?: () => void;
   onOpenMeasurements?: () => void;
 }) {
-  const { state, addDayMeal, swapDayMeal, removeDayMeal, setDayMealEaten, quickAddAiFood, saveDayMealFood } = useAppState();
+  const { state, refreshData, addDayMeal, swapDayMeal, removeDayMeal, setDayMealEaten, quickAddAiFood, saveDayMealFood } = useAppState();
+  // Ravinto/resepti-näkymä mountataan vasta kun välilehti avataan (view === "nutrition"),
+  // joten pakotetaan tässä yksi täysi snapshot-refresh. Muuten jo auki oleva PWA näyttäisi
+  // uudet reseptit vasta uudelleenlatauksessa tai focus-portin (5 min) jälkeen, koska
+  // tavallinen focus-refresh hakee vain treenit. Ajetaan vain kerran mountissa.
+  useEffect(() => {
+    void refreshData();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
   const [seg, setSeg] = useState<"day" | "recipes">("day");
   // Viikkokatsaus avautuu sheetinä päivästepperin otsikosta (ei omana tabina).
   const [weekOpen, setWeekOpen] = useState(false);

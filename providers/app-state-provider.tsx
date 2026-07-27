@@ -2721,6 +2721,10 @@ interface AppStateContextValue {
   isPreviewMode: boolean;
   isHydrated: boolean;
   notify: (input: { tone: "success" | "danger" | "info"; message: string }) => void;
+  // Pakota täysi snapshot-refresh (ainekatalogi + reseptit). Kutsutaan mm. kun
+  // ravinto/resepti-näkymä avataan, jotta uudet reseptit näkyvät heti eikä vasta
+  // seuraavassa focus-portin täydessä synkassa.
+  refreshData: () => Promise<boolean>;
   login: (email: string, password: string, options?: { captchaToken?: string }) => Promise<LoginResult>;
   logout: () => Promise<void>;
   loginAsDemoUser: (userId: string) => void;
@@ -4819,6 +4823,7 @@ function findResolvedUserIdInSnapshot(
       isPreviewMode,
       isHydrated,
       notify,
+      refreshData: () => refreshSupabaseVisibleState(),
       async login(email, password, options) {
         isLoggingOutRef.current = false;
         authEpochRef.current += 1;
