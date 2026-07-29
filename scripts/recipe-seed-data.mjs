@@ -925,14 +925,14 @@ export const recipeSeedData = [
   recipe({
     name: "Kinder Bueno -proteiinivanukas",
     description:
-      "Nopea ja täyttävä iltapala, kun tekee mieli jotain makeaa mutta haluaa proteiinia. Kermainen hasselpähkinäinen proteiinivanukas skyristä, chian siemenistä ja proteiinijauheesta – maistuu Kinder Bueno -patukalta. Skyrin voi vaihtaa kreikkalaiseen jogurttiin, ja proteiinijauheeksi sopii mikä tahansa (hasselpähkinänmakuinen sopii parhaiten).",
+      "Nopea ja täyttävä iltapala: kermainen hasselpähkinäinen proteiinivanukas skyristä, chian siemenistä, proteiinijauheesta ja hasselpähkinälevitteestä – maistuu Kinder Bueno -patukalta. Makeusvinkki: käytä maustamatonta skyriä ja hasselpähkinän- tai maustamatonmakuista proteiinijauhetta. Vaniljaskyr ja vaniljaproteiini yhdessä levitteen kanssa tekevät vanukkaasta helposti liian makean. Skyrin voi vaihtaa paksuun kreikkalaiseen jogurttiin. Makeuta tarvittaessa makeutusaineella maun mukaan.",
     mealTag: "evening_snack",
     ...singleServe,
     ingredients: [
       ingredient("Skyr", 200, "g", { alternatives: ["Kreikkalainen jogurtti 2% (200 g)"] }),
       ingredient("Chian siemenet", 12, "g", { displayQuantity: "1", displayUnit: "rkl" }),
       ingredient("Heraproteiinijauhe", 20, "g"),
-      ingredient("Hasselpähkinälevite", 30, "g", { displayQuantity: "1", displayUnit: "rkl" }),
+      ingredient("Hasselpähkinälevite", 15, "g", { displayQuantity: "1", displayUnit: "rkl" }),
     ],
     instructions: [
       "Sekoita kaikki ainekset kulhossa tasaiseksi vanukkaaksi.",
