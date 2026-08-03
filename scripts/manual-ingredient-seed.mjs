@@ -162,6 +162,7 @@ const manualIngredientSeedBase = [
   { name: "Seesamiöljy", source: "manual", defaultPurchaseUnit: "pack", gramsPerUnit: 250, kcalPer100: 884, proteinPer100: 0, carbsPer100: 0, fatPer100: 100 },
   { name: "Kanaluuliemi", source: "manual", defaultPurchaseUnit: "l", kcalPer100: 15, proteinPer100: 3, carbsPer100: 0.5, fatPer100: 0.2 },
   { name: "Hasselpähkinälevite", source: "manual", defaultPurchaseUnit: "pack", gramsPerUnit: 400, kcalPer100: 540, proteinPer100: 6.5, carbsPer100: 56, fatPer100: 31 },
+  { name: "Valkoiset pavut (säilyke)", source: "manual", defaultPurchaseUnit: "pack", gramsPerUnit: 230, kcalPer100: 105, proteinPer100: 7.5, carbsPer100: 14, fatPer100: 0.6 },
 ];
 
 const displayNameOverrides = {
