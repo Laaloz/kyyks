@@ -129,6 +129,23 @@ export const recipeSeedData = [
     ],
   }),
   recipe({
+    name: "Paistetut kananmunat ja valkoiset pavut",
+    description:
+      "Runsasproteiininen ja täyttävä lautasellinen: kolme paistettua kananmunaa ja puolikas purkillinen valkoisia papuja. Nopea proteiinipommi aamupalaksi tai lounaaksi. Kananmunat voi paistaa haluamallaan kypsyydellä ja pavut lämmittää pannulla tai mikrossa.",
+    mealTag: "breakfast",
+    ...singleServe,
+    ingredients: [
+      ingredient("Kananmuna", 3, "pcs", { groupLabel: "Paistetut kananmunat" }),
+      ingredient("Rypsiöljy", 7, "g", { groupLabel: "Paistetut kananmunat", displayQuantity: "½", displayUnit: "rkl" }),
+      ingredient("Valkoiset pavut (säilyke)", 150, "g", { groupLabel: "Lisäksi", displayQuantity: "½", displayUnit: "purkki" }),
+    ],
+    instructions: [
+      "Kuumenna öljy pannulla ja paista kananmunat haluamallasi kypsyydellä (esim. pehmeä keltuainen).",
+      "Lämmitä valutetut valkoiset pavut pannulla tai mikrossa. Mausta suolalla ja pippurilla.",
+      "Annostele kananmunat ja pavut lautaselle ja tarjoile heti. Lisää halutessasi tuoretta chiliä, tuoreyrttejä tai kasviksia.",
+    ],
+  }),
+  recipe({
     name: "Leipä ja proteiinivanukas",
     description: "Nopea aamupala leivällä, kalkkunalla ja proteiinivanukkaalla.",
     mealTag: "breakfast",

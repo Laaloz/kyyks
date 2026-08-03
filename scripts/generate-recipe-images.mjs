@@ -85,6 +85,7 @@ const PROMPTS = {
   "Riisinkeittimen gochujang-kana ja riisi": "A bowl of Korean-style gochujang chicken and rice cooked together in a rice cooker: glossy red-brown gochujang-glazed boneless skinless chicken thigh pieces (real cooked chicken, not wings, no bones) resting on a bed of fluffy steamed white rice with some mixed vegetables, sprinkled with sesame seeds and sliced spring onion, in a bowl",
   "Kinder Bueno -proteiinivanukas": "A glass dish of thick creamy chocolate-hazelnut protein pudding (smooth mousse-like texture, light milk-chocolate brown colour) with a spoon resting in it, topped with a few chopped hazelnuts, close-up",
   "Proteiini-mansikkakääryle": "A high-protein strawberry roll cake sliced to reveal the spiral cross-section: a soft pale sponge rolled around white skyr cream and fresh red strawberry pieces, two slices on a plate with fresh strawberries beside them",
+  "Paistetut kananmunat ja valkoiset pavut": "Three sunny-side-up fried eggs with soft runny yolks on a plate next to a generous portion of plain white beans (cannellini/navy beans, no tomato sauce), a hearty high-protein meal sprinkled with black pepper and a little fresh chopped herbs",
 };
 
 function slugify(name) {
